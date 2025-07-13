@@ -1,61 +1,123 @@
-trading_system/
+schwab_trader/
 │
-├── core/                       # Core engine components (backtester, executor, router)
-│   ├── backtester.py           # Backtest loop, trade logic
-│   ├── executor.py             # Real-time or simulated order execution
-│   ├── strategy_router.py      # Handles CUSTOM_ROUTER logic + dynamic strategy routing
-│   └── portfolio.py            # Tracks capital, positions, returns
+├── core/                             # Core trading engine components
+│   ├── backtester.py                 # Backtest loop, trade logic
+│   ├── eventhandler.py               # Handles system events (trade fills, signals)
+│   ├── position_sizer.py             # Capital allocation and sizing logic
 │
-├── strategies/                # All strategy definitions
-│   ├── base_strategy.py        # Abstract base class
-│   ├── sma_strategy.py
-│   ├── momentum_strategy.py
-│   ├── lightgbm_strategy.py    # ML strategy interface
+├── strategies/                       # Strategy interface and implementations
+│   ├── base_strategy.py              # Abstract base class for all strategies
+│   ├── patterns/                     # Pattern-based strategies
+│   │   └── patern.py
+│   └── strategy_registry/           # All registered strategy classes
+│       ├── adx_strategy.py
+│       ├── bollinger_strategy.py
+│       ├── breakout_strategy.py
+│       ├── combined_strategy.py
+│       ├── donchian_strategy.py
+│       ├── ema_strategy.py
+│       ├── ichimoku_strategy.py
+│       ├── logistic_regression_strategy.py
+│       ├── macd_strategy.py
+│       ├── mean_reversion_strategy.py
+│       ├── momentum_strategy.py
+│       ├── psar_strategy.py
+│       ├── rsi_strategy.py
+│       ├── sma_strategy.py
+│       ├── stochastic_strategy.py
+│       ├── vwap_strategy.py
+│       └── __init__.py
+│
+├── indicators/                       # Technical indicator classes
+│   ├── atr.py
+│   ├── base_indicator.py
+│   ├── bollinger.py
+│   ├── ema.py
+│   ├── macd.py
+│   ├── momentum.py
+│   ├── obv.py
+│   ├── percent_change.py
+│   ├── price_change.py
+│   ├── psar.py
+│   ├── roc.py
+│   ├── rsi.py
+│   ├── sma.py
+│   ├── technical_indicators.py
+│   └── vwap.py
+│
+├── data/                             # Data ingestion, transformation, storage
+│   ├── aggregate.py
+│   ├── datapipeline.py
+│   ├── datastorage.py
+│   ├── datautils.py
+│   ├── processor.py
+│   ├── output/
+│   │   └── writer.py
+│   ├── streaming/                    # Real-time streaming integrations
+│   │   ├── authenticator.py
+│   │   ├── schwab_client.py
+│   │   └── streamer.py
+│   └── data_storage/                 # Local data persistence
+│       ├── raw_data/
+│       └── proc_data/
+│
+├── utils/                            # Utility modules and shared tools
+│   ├── configloader.py
+│   ├── framemanager.py
+│   ├── logger.py
+│   ├── risk_metrics.py
+│   └── logs/                         # Utility logs
+│       └── app.log
+│
+├── logs/                             # Application and system logs
+│   ├── app.log
+│   ├── backtest.log
+│   ├── coinbase.log
+│   └── coinbase_ws.log
+│
+├── monitoring/                       # Monitoring system state or bot behavior
+│   └── monitor.py
+│
+├── tests/                            # Unit tests and test harnesses
+│   ├── test_aggregator.py
+│   ├── test_authenticator.py
+│   ├── test_back_test.py
+│   ├── test_datastore.py
+│   ├── test_indicators.py
+│   ├── test_logger.py
+│   ├── test_monitor.py
+│   ├── test_patern.py
+│   ├── test_processor.py
+│   ├── test_schwab_client.py
+│   ├── test_strategy.py
+│   ├── test_streamer.py
+│   ├── test_trader.py
+│   ├── test_writter.py
 │   └── __init__.py
 │
-├── indicators/                # Technical indicators or feature builders
-│   ├── macd.py
-│   ├── rsi.py
-│   ├── bollinger.py
-│   └── feature_engineering.py
+├── exploration/                      # Research, analysis, and prototyping
+│   ├── backtest_1.py
+│   ├── logistic_regress_tst.py
+│   ├── sentiment_analyzer.py
+│   ├── sp500.py
+│   ├── trader.py
+│   ├── backtest_report.pdf
+│   ├── sma_plot.png
+│   ├── logs/
+│   │   └── backtest.log
+│   └── test1.py to test8.py          # Test scripts
 │
-├── models/                    # ML models, loaders, and training scripts
-│   ├── model_runner.py         # Applies models for signal generation
-│   ├── train_lightgbm.py
-│   └── saved_models/           # Pickled models (if under size limit)
-│       └── ...
+├── notebooks/                        # Jupyter notebooks for EDA and model dev
+│   └── (your_notebooks_here).ipynb
 │
-├── data/                      # Data handling (loading, preprocessing, APIs)
-│   ├── data_loader.py
-│   ├── preprocess.py
-│   └── streaming/              # Real-time data interfaces (e.g. Schwab, Alpaca)
-│       ├── schwab_api.py
-│       └── coinbase_ws.py
+├── tokens/                           # Token storage (Schwab, OAuth)
+│   └── token_file
 │
-├── utils/                     # Helpers, logging, timing, config loading
-│   ├── logger.py
-│   ├── config.py
-│   └── risk_metrics.py         # Sharpe, Sortino, Kelly, Alpha, Beta, VaR
+├── archive/                          # Old or deprecated code
+│   ├── indicators.py
+│   └── strategy.py
 │
-├── reports/                   # Report generation, visualization, summaries
-│   ├── report_generator.py
-│   ├── plotter.py
-│   └── pdf_export.py
-│
-├── tests/                     # Unit tests for each module
-│   ├── test_backtester.py
-│   ├── test_router.py
-│   └── ...
-│
-├── configs/                   # YAML or JSON configs for runtime
-│   ├── strategy_config.yaml
-│   ├── router_config.yaml
-│   └── regime_thresholds.yaml
-│
-├── notebooks/                 # Research, exploration, EDA (optional)
-│   └── regime_analysis.ipynb
-│
-├── run.py                     # CLI entry point
-├── requirements.txt
 ├── .gitignore
-└── README.md
+├── layout.txt
+├── requirements.txt
+├── __init__.py
