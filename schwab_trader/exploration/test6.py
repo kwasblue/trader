@@ -1,4 +1,13 @@
 #%%
+import sys
+import os
+
+# Dynamically set root path (one level up from 'exploration')
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+#%%
 import asyncio
 from data.streaming.authenticator import Authenticator
 async def main():

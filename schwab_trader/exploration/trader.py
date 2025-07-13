@@ -12,7 +12,7 @@ from datetime import datetime
 from data.streaming.schwab_client import SchwabClient
 from data.streaming.streamer import SchwabStreamingClient
 from monitoring.monitor import monitor_log_directory
-from strategies.signal.sma_strategy import SMAStrategy
+from strategies.strategy_registry.sma_strategy import SMAStrategy
 from data.datautils import DictHandler
 
 class Trader:

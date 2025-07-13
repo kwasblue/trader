@@ -1,5 +1,5 @@
 import requests
-from utils.authenticator import Authenticator
+from data.streaming.authenticator import Authenticator
 from utils.logger import Logger
 from utils.configloader import ConfigLoader
 

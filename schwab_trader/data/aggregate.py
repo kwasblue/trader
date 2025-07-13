@@ -1,12 +1,12 @@
 import os
 import json
 import pandas as pd
-from utils.writer import FileWriter
-from utils.datastorage import DataStore
-from alpha.schwab_client import SchwabClient
-from utils.authenticator import Authenticator
+from data.output.writer import FileWriter
+from data.datastorage import DataStore
+from data.streaming.schwab_client import SchwabClient
+from data.streaming.authenticator import Authenticator
 from utils.logger import Logger
-from alpha.processor import Processor
+from data.processor import Processor
 from utils.configloader import ConfigLoader
 from utils.framemanager import DataFrameManager
 
@@ -30,7 +30,7 @@ class Aggregator:
         self.logger.info(f"Fetching raw data for {stock}")
         try:
             data = self.session.daily_price_history(stock, start=start, end=end)
-            filepath = f'{self.authenticator.program_path}/data/'
+            filepath = f'{self.authenticator.program_path}/data/data_storage/raw_data'
             self.writer.write_json(target_path=filepath, target_file=f'raw_{stock}_file.json', data=data)
             self.logger.info(f"Raw data for {stock} stored successfully")
             return "File Generated!"
@@ -53,7 +53,7 @@ class Aggregator:
 
             data_to_save = processed_data.to_dict(orient="records")
 
-            filepath = f'{self.authenticator.program_path}/proc_data/'
+            filepath = f'{self.authenticator.program_path}/data/data_storage/proc_data/'
 
             self.writer.write_json(target_path=filepath, target_file=f'proc_{stock}_file.json', data=data_to_save)
 
@@ -62,7 +62,7 @@ class Aggregator:
             self.logger.error(f"Error storing processed data for {stock}: {str(e)}")
 
     def get_processed_data_files(self, stock):
-        filepath = f'{self.authenticator.program_path}/proc_data/'
+        filepath = f'{self.authenticator.program_path}/data/data_storage/proc_data/'
         file = self.writer.find(f'proc_{stock}_file.json', filepath)
 
         if not file or not os.path.exists(file):
@@ -129,7 +129,7 @@ class Aggregator:
         Retrieve raw data from JSON file.
         """
         try:
-            filepath = f"{self.config['folders']['data']}/raw_{stock}_file.json"
+            filepath = f"{self.config['folders']['data']}data_storage/raw_data/raw_{stock}_file.json"
             return self._read_raw_data(filepath)
         except FileNotFoundError:
             self.logger.error(f"Raw data file for {stock} not found.")

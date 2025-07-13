@@ -4,11 +4,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from fpdf import FPDF
-from alpha.strategy import Strategy
-from alpha.risk import RiskQuantifier
+from strategies.strategy_registry import load_strategy, list_strategies
+from utils.risk_metrics import RiskQuantifier
 from utils.logger import Logger
-from utils.position_sizer import DynamicPositionSizer
-from utils.datautils import epoch_to_date
+from core.position_sizer import DynamicPositionSizer
+from data.datautils import epoch_to_date
 
 
 class Backtester:
@@ -29,7 +29,6 @@ class Backtester:
         self.transaction_cost = transaction_cost  
         self.risk_free_rate = risk_free_rate
         self.logger = Logger("backtest.log", "Backtester", log_dir=os.path.join(os.getcwd(), "logs")).get_logger()
-        self.strategy = Strategy()
         self.risk_quantifier = RiskQuantifier()
         self.trade_log = []
         self.portfolio_history = []
@@ -58,7 +57,7 @@ class Backtester:
         if 'Signal' in self.data.columns:
             strat_data = self.data.copy()
         else:
-            strat_data = self.strategy._apply_strategy(self.data.copy(), strategy_name, **strategy_params)
+            strat_data = self._apply_strategy(self.data.copy(), strategy_name, **strategy_params)
 
         required_columns = {'Date', 'Close', 'ATR', 'Signal'}
         if not required_columns.issubset(strat_data.columns):
@@ -292,3 +291,22 @@ class Backtester:
             self.logger.error(f"Error generating report: {e}")
             return ""
 
+    def _apply_strategy(self, data: pd.DataFrame, strategy_name: str, **kwargs) -> pd.DataFrame:
+        """
+        Apply a modular strategy to the data using its name and parameters.
+        """
+        self.logger.info(f"Running strategy '{strategy_name}' with parameters: {kwargs}")
+        try:
+
+            #print(list_strategies())
+            strategy = load_strategy(strategy_name, params=kwargs)
+            result = strategy.generate_signal(data.copy())
+        except Exception as e:
+            self.logger.error(f"Failed to apply strategy '{strategy_name}': {e}")
+            return pd.DataFrame()
+
+        if 'Signal' not in result.columns:
+            self.logger.warning(f"Strategy '{strategy_name}' did not return a 'Signal' column.")
+            return pd.DataFrame()
+
+        return result

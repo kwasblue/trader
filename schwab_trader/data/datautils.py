@@ -2,19 +2,21 @@ import time
 import os
 from datetime import datetime
 import pandas as pd
-from utils.aggregate import Aggregator 
+from data.aggregate import Aggregator 
 from dotenv import load_dotenv
 from pathlib import Path
-from utils.authenticator import Authenticator
+from data.streaming.authenticator import Authenticator
+from utils.configloader import ConfigLoader
+import os
 
-parent_directory = Path.cwd().parent
-# Build the path to the .env file
-env_file_path = parent_directory / '.venv' / 'env' / '.env'
+apikey = os.getenv("API_KEY")
+secret = os.getenv("API_SECRET")
+config = ConfigLoader.load_config()
+env_file_path = config["folders"]["env"]  # Already resolved to absolute path
 # Load the .env file
-load_dotenv(env_file_path)
 auth = Authenticator()
-apikey = auth.apikey
-secret = auth.secret
+
+
 
 class DictHandler:
     def __init__(self, data=None):

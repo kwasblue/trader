@@ -6,7 +6,7 @@ import asyncio
 import aiohttp
 import json
 from dotenv import load_dotenv
-from utils.writer import FileWriter
+from data.output.writer import FileWriter
 from utils.logger import Logger
 from utils.configloader import ConfigLoader
 from urllib.parse import urlencode

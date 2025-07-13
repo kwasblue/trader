@@ -1,6 +1,6 @@
 #%%
-from utils.authenticator import Authenticator
-from alpha.schwab_client import SchwabClient
+from data.streaming.authenticator import Authenticator
+from data.streaming.schwab_client import SchwabClient
 from dotenv import load_dotenv
 from pathlib import Path
 import asyncio

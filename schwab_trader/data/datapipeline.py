@@ -3,9 +3,9 @@
 from pathlib import Path
 from dotenv import load_dotenv
 from concurrent.futures import ThreadPoolExecutor
-from utils.authenticator import Authenticator
-from utils.aggregate import Aggregator
-from alpha.processor import Processor
+from data.streaming.authenticator import Authenticator
+from data.aggregate import Aggregator
+from data.processor import Processor
 from utils.logger import Logger
 from utils.configloader import ConfigLoader
 import time
