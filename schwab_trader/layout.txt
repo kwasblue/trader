@@ -1,0 +1,61 @@
+trading_system/
+│
+├── core/                       # Core engine components (backtester, executor, router)
+│   ├── backtester.py           # Backtest loop, trade logic
+│   ├── executor.py             # Real-time or simulated order execution
+│   ├── strategy_router.py      # Handles CUSTOM_ROUTER logic + dynamic strategy routing
+│   └── portfolio.py            # Tracks capital, positions, returns
+│
+├── strategies/                # All strategy definitions
+│   ├── base_strategy.py        # Abstract base class
+│   ├── sma_strategy.py
+│   ├── momentum_strategy.py
+│   ├── lightgbm_strategy.py    # ML strategy interface
+│   └── __init__.py
+│
+├── indicators/                # Technical indicators or feature builders
+│   ├── macd.py
+│   ├── rsi.py
+│   ├── bollinger.py
+│   └── feature_engineering.py
+│
+├── models/                    # ML models, loaders, and training scripts
+│   ├── model_runner.py         # Applies models for signal generation
+│   ├── train_lightgbm.py
+│   └── saved_models/           # Pickled models (if under size limit)
+│       └── ...
+│
+├── data/                      # Data handling (loading, preprocessing, APIs)
+│   ├── data_loader.py
+│   ├── preprocess.py
+│   └── streaming/              # Real-time data interfaces (e.g. Schwab, Alpaca)
+│       ├── schwab_api.py
+│       └── coinbase_ws.py
+│
+├── utils/                     # Helpers, logging, timing, config loading
+│   ├── logger.py
+│   ├── config.py
+│   └── risk_metrics.py         # Sharpe, Sortino, Kelly, Alpha, Beta, VaR
+│
+├── reports/                   # Report generation, visualization, summaries
+│   ├── report_generator.py
+│   ├── plotter.py
+│   └── pdf_export.py
+│
+├── tests/                     # Unit tests for each module
+│   ├── test_backtester.py
+│   ├── test_router.py
+│   └── ...
+│
+├── configs/                   # YAML or JSON configs for runtime
+│   ├── strategy_config.yaml
+│   ├── router_config.yaml
+│   └── regime_thresholds.yaml
+│
+├── notebooks/                 # Research, exploration, EDA (optional)
+│   └── regime_analysis.ipynb
+│
+├── run.py                     # CLI entry point
+├── requirements.txt
+├── .gitignore
+└── README.md

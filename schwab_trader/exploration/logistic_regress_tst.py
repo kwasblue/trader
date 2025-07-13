@@ -18,7 +18,7 @@ from sklearn.metrics import (
     auc, confusion_matrix
 )
 
-from utils.datautils import load_stock_Data
+from data.datautils import load_stock_Data
 from sp500 import sp500_tickers
 
 # %% Load and Preprocess

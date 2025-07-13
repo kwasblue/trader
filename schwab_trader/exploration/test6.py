@@ -1,6 +1,6 @@
 #%%
 import asyncio
-from utils.authenticator import Authenticator
+from data.streaming.authenticator import Authenticator
 async def main():
     auth = Authenticator()  # Initialize the Authenticator class
     await auth.token_renewal()  # Run the token renewal process

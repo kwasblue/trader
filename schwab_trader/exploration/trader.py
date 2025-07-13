@@ -6,14 +6,14 @@ import json
 import asyncio
 from dotenv import load_dotenv
 from utils.logger import Logger
-from utils.authenticator import Authenticator   
+from data.streaming.authenticator import Authenticator   
 from asyncio import run
 from datetime import datetime
-from alpha.schwab_client import SchwabClient
-from alpha.streamer import SchwabStreamingClient
-from utils.monitor import monitor_log_directory
-from alpha.strategy import Strategy
-from utils.datautils import DictHandler
+from data.streaming.schwab_client import SchwabClient
+from data.streaming.streamer import SchwabStreamingClient
+from monitoring.monitor import monitor_log_directory
+from strategies.signal.sma_strategy import SMAStrategy
+from data.datautils import DictHandler
 
 class Trader:
     def __init__(self, apikey: str, secretkey: str, log_file='trader.log', logger_name='TraderLogger', log_dir='logs'):
@@ -26,7 +26,6 @@ class Trader:
         self.logger.info("Initializing trader with real account data.")
         self.streaming_client = SchwabStreamingClient(apikey, secretkey)
         self.realtime_data = {}
-        self.strategy = Strategy()
         self.data = None
         self.signals = None
         self.auth = Authenticator()

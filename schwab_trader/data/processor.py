@@ -1,13 +1,13 @@
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from utils.logger import Logger
 from utils.configloader import ConfigLoader
-from alpha.indicators import TechnicalIndicators
+from indicators.technical_indicators import TechnicalIndicators
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from scipy.fft import fft, ifft
 import numpy as np
 import pandas as pd
-import pywt
+
 
 import pandas as pd
 class Processor:
@@ -54,7 +54,7 @@ class Processor:
         try:
             df = self.clean_stock_data()
             indicators = TechnicalIndicators(df)
-            return indicators.build_frame(sma_window=sma_window, ema_window=ema_window)
+            return indicators.apply_all(sma_window=sma_window, ema_window=ema_window)
         except ValueError as e:
             self.logger.error(f"ValueError: {e}. Please ensure the window sizes and data are valid.")
             return pd.DataFrame()

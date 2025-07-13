@@ -15,7 +15,7 @@ from sklearn.metrics import (
     roc_auc_score, precision_recall_curve, auc, confusion_matrix
 )
 
-from utils.datautils import load_stock_Data
+from data.datautils import load_stock_Data
 from sp500 import sp500_tickers
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.neighbors import KNeighborsClassifier
