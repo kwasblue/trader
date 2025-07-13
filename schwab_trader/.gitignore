@@ -1,0 +1,57 @@
+# === Python bytecode & cache ===
+__pycache__/
+*.py[cod]
+*.pyo
+
+# === Virtual environments ===
+.venv/
+env/
+venv/
+
+# === Jupyter notebooks (optional)
+.ipynb_checkpoints/
+
+# === Logs and temporary files ===
+*.log
+*.tmp
+
+# === Model and binary artifacts ===
+*.pkl
+*.joblib
+*.h5
+*.sav
+*.onnx
+*.tflite
+
+# === Data files ===
+*.csv
+*.tsv
+*.xlsx
+*.xls
+*.json
+*.parquet
+*.zip
+*.gz
+*.hdf5
+*.feather
+*.npy
+*.npz
+
+# === Local models and results ===
+model_results/
+saved_models/
+models/
+tokens/
+
+# === Config and secrets ===
+.env
+*.key
+*.pem
+*.crt
+credentials.json
+
+# === OS and IDE-specific ===
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
