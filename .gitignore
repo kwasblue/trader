@@ -49,10 +49,10 @@ tokens/
 *.pem
 *.crt
 credentials.json
-.zip
 
 # === OS and IDE-specific ===
 .DS_Store
 Thumbs.db
 .vscode/
 .idea/
+.zip
