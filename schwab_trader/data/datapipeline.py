@@ -8,6 +8,7 @@ from data.aggregate import Aggregator
 from data.processor import Processor
 from utils.logger import Logger
 from utils.configloader import ConfigLoader
+from cache.cache import CacheManager
 import time
 import os
 import pandas as pd
@@ -34,28 +35,34 @@ class StockDataPipeline:
         self.processor = Processor()
         self.log_dir = self.config["folders"]["logs"]
         self.logger = Logger('app.log', 'StockDataPipeline', log_dir=self.log_dir).get_logger()
+        self.cache = CacheManager()
 
     def fetch_data(self):
-        """Fetch raw data in parallel with retries."""
+        """Fetch raw data in parallel with retries and return only updated stocks."""
+        updated_stocks = {}
+
         def fetch(stock):
             attempts = 0
             while attempts < self.max_retries:
                 try:
-                    self.aggregator.raw_data_store(stock)  # API Call
-                    return stock, "Success"
+                    result = self.aggregator.raw_data_store(stock)
+                    if result == "File Generated!":
+                        updated_stocks[stock] = result
+                    elif result == "No Update Needed":
+                        self.logger.info(f"{stock}: No update needed.")
+                    return
                 except Exception as e:
                     self.logger.error(f"Error fetching data for {stock} (Attempt {attempts + 1}/{self.max_retries}): {e}")
                     attempts += 1
-                    time.sleep(2)  # Wait before retrying
-
+                    time.sleep(2)
             self.logger.warning(f"Skipping {stock} after {self.max_retries} failed attempts.")
             self.skipped_stocks.append(stock)
-            return stock, "Failed"
 
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            results = executor.map(fetch, self.watch_list)
+            executor.map(fetch, self.watch_list)
 
-        return dict(results)
+        return updated_stocks
+
 
     def gather_data(self):
         """Fetch and structure stock data in parallel with retries."""
@@ -98,26 +105,52 @@ class StockDataPipeline:
             self.aggregator.store_processed_data_files(stock, data)
 
     def run(self):
-        """Execute the full pipeline."""
         start_time = time.time()
+        self.logger.info("Checking cache for outdated stocks...")
 
-        self.logger.info("Fetching data...")
+        filtered_watchlist = []
+        today = pd.Timestamp.utcnow().normalize().tz_localize(None)
+
+        for stock in self.watch_list:
+            last_date = self.cache.get_last_processed_date("stock_files", stock)
+            if not last_date:
+                filtered_watchlist.append(stock)
+            else:
+                last_date_ts = pd.to_datetime(last_date, unit='ms').normalize().tz_localize(None)
+                if last_date_ts < today - pd.Timedelta(days=1):  # using yesterday logic
+                    filtered_watchlist.append(stock)
+                else:
+                    self.logger.info(f"{stock} is already up-to-date.")
+
+        if not filtered_watchlist:
+            self.logger.info("All stocks up to date. Pipeline skipped.")
+            return
+
+        self.watch_list = filtered_watchlist
+        self.logger.info(f"Running pipeline for: {', '.join(self.watch_list)}")
+
+        # 🛠 Fetch only stocks that need updates
         fetch_results = self.fetch_data()
+        updated_stocks = list(fetch_results.keys())
 
-        self.logger.info("Gathering data...")
+        if not updated_stocks:
+            self.logger.info("No stocks had new data. Skipping processing.")
+            return
+
+        # ⛏ Only gather/process/store for those
+        self.watch_list = updated_stocks
         gathered_data = self.gather_data()
-
-        self.logger.info("Processing data...")
         processed_data = self.process_data(gathered_data)
-
-        self.logger.info("Storing data...")
         self.store_data(processed_data)
+
+        self.cache._save_cache()
 
         end_time = time.time()
         self.logger.info(f"Pipeline completed in {end_time - start_time:.2f} seconds.")
 
         if self.skipped_stocks:
             self.logger.warning(f"Skipped stocks: {', '.join(self.skipped_stocks)}")
-            
+
+                
 
 

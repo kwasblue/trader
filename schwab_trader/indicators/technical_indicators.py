@@ -18,17 +18,18 @@ class TechnicalIndicators:
         self.df = dataframe
 
     def apply_all(self, sma_window=20, ema_window=20):
-        self.df = SMAIndicator().calculate(self.df, sma_window)
-        self.df = EMAIndicator().calculate(self.df, ema_window)
-        self.df = MACDIndicator().calculate(self.df)
-        self.df = RSIIndicator().calculate(self.df)
-        self.df = ATRIndicator().calculate(self.df)
-        self.df = VWAPIndicator().calculate(self.df)
-        self.df = OBVIndicator().calculate(self.df)
-        self.df = MomentumIndicator().calculate(self.df)
-        self.df = ROCIndicator().calculate(self.df)
-        self.df = BollingerBandsIndicator().calculate(self.df)
-        self.df = PSARIndicator().calculate(self.df)
-        self.df = PriceChangeIndicator().calculate(self.df)
-        self.df = PercentChangeIndicator().calculate(self.df)
-        return self.df
+        df = self.df.copy()
+        df = SMAIndicator(df, window=sma_window).compute()
+        df = EMAIndicator(df, window=ema_window).compute()
+        df = MACDIndicator(df).compute()
+        df = RSIIndicator(df).compute()
+        df = ATRIndicator(df).compute()
+        df = VWAPIndicator(df).compute()
+        df = OBVIndicator(df).compute()
+        df = MomentumIndicator(df).compute()
+        df = ROCIndicator(df).compute()
+        df = BollingerBandsIndicator(df).compute()
+        df = PSARIndicator(df).compute()
+        df = PriceChangeIndicator(df).compute()
+        df = PercentChangeIndicator(df).compute()
+        return df

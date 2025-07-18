@@ -6,7 +6,7 @@ class ConfigLoader:
     _config = None
 
     @staticmethod
-    def load_config(config_filename='utils/config.json'):
+    def load_config(config_filename='utils/schwab_config.json'):
         if ConfigLoader._config is None:
             raw_config_path = os.getenv("CONFIG_PATH", config_filename)
 

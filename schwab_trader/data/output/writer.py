@@ -47,16 +47,31 @@ class FileWriter:
             if os.path.exists(target_file_path):
                 with open(target_file_path, 'r', encoding='utf-8') as f:
                     existing_data = json.load(f)
-                existing_data.update(new_data)
+
+                for key, value in new_data.items():
+                    if isinstance(value, list) and key in existing_data and isinstance(existing_data[key], list):
+                        # Merge lists by unique datetime if list of dicts with datetime key
+                        existing_items = {item["datetime"]: item for item in existing_data[key] if isinstance(item, dict) and "datetime" in item}
+                        new_items = {item["datetime"]: item for item in value if isinstance(item, dict) and "datetime" in item}
+                        merged_items = {**existing_items, **new_items}
+                        existing_data[key] = sorted(merged_items.values(), key=lambda x: x["datetime"])
+                    else:
+                        # Shallow update for other keys
+                        existing_data[key] = value
+
                 with open(target_file_path, 'w', encoding='utf-8') as f:
                     json.dump(existing_data, f, ensure_ascii=False, indent=4)
-                self.logger.info(f"JSON file modified: {target_file_path}")
+
+                self.logger.info(f"Modified JSON file: {target_file_path}")
             else:
                 with open(target_file_path, 'w', encoding='utf-8') as f:
                     json.dump(new_data, f, ensure_ascii=False, indent=4)
+
                 self.logger.info(f"New JSON file created: {target_file_path}")
+
         except Exception as e:
             self.logger.error(f"Failed to modify JSON file: {str(e)}")
+
 
     def write_file(self, target_path: str, target_file: str, data, file_format='json'):
         try:

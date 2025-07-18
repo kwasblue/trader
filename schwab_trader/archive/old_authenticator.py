@@ -12,9 +12,6 @@ from utils.configloader import ConfigLoader
 from urllib.parse import urlencode
 
 
-
-
-
 class Authenticator:
     _instance = None
 
@@ -30,9 +27,9 @@ class Authenticator:
         self.config =  ConfigLoader().load_config()
         env_path = self.config["folders"]["env"]
         load_dotenv(dotenv_path=env_path)
-        self.apikey = os.getenv('SCHWAB_API_KEY')
-        self.secret = os.getenv('SCHWAB_SECRET')
-        self.redirect_url = os.getenv('SCHWAB_REDIRECT_URL')
+        self.apikey = os.getenv('API_KEY')
+        self.secret = os.getenv('SECRET')
+        self.redirect_url = os.getenv('REDIRECT_URL')
         self.auth_url = self.config["auth"]["authentication_url"]
         self.logs_dir = self.config["folders"]["logs"]
         self.token_endpoint = self.config["auth"]["token_endpoint"]

@@ -1,6 +1,7 @@
 import os
 import json
 import pandas as pd
+from pandas import Timestamp, to_datetime
 from data.output.writer import FileWriter
 from data.datastorage import DataStore
 from data.streaming.schwab_client import SchwabClient
@@ -9,6 +10,7 @@ from utils.logger import Logger
 from data.processor import Processor
 from utils.configloader import ConfigLoader
 from utils.framemanager import DataFrameManager
+from cache.cache import CacheManager
 
 class Aggregator:
     def __init__(self, apikey: str, secret: str, database='stock_base.db'):
@@ -22,18 +24,71 @@ class Aggregator:
         self.writer = FileWriter(log_file='app.log', logger_name='FileWriter', log_dir=self.log_dir)
         self.table_name = 'stock_table'
         self.frame_manager = DataFrameManager()
+        self.cache = CacheManager()
 
-    def raw_data_store(self, stock: str, start: int = '', end: int = '') -> str:
+    def is_stock_outdated(self, last_saved_ms: int, today: pd.Timestamp = None) -> bool:
         """
-        Store raw data in a JSON file.
+        Returns True if the stock is outdated (i.e., last_saved_date < yesterday).
+        False if data is already up-to-date through yesterday.
+        Accounts for the fact that daily data isn't available until after market close.
         """
-        self.logger.info(f"Fetching raw data for {stock}")
+        if not last_saved_ms:
+            self.logger.debug("Stock marked outdated: no timestamp found.")
+            return True  # Treat as outdated if no timestamp exists
+
+        if today is None:
+            today = pd.Timestamp.utcnow().normalize().tz_localize(None)
+
+        # Subtract one day to align with available market data
+        yesterday = today - pd.Timedelta(days=1)
+
         try:
-            data = self.session.daily_price_history(stock, start=start, end=end)
+            last_saved_date = pd.to_datetime(last_saved_ms, unit='ms').normalize().tz_localize(None)
+            self.logger.debug(f"Comparing last saved date {last_saved_date} to yesterday {yesterday}")
+            is_outdated = last_saved_date < yesterday
+            if is_outdated:
+                self.logger.debug("Stock is outdated.")
+            else:
+                self.logger.debug("Stock is up-to-date.")
+            return is_outdated
+        except Exception as e:
+            self.logger.warning(f"Timestamp comparison failed: {e}. Marking as outdated.")
+            return True
+
+    def raw_data_store(self, stock: str) -> str:
+        try:
+            last_saved_date = self.cache.get_last_processed_date('stock_files', stock)
+            today = pd.Timestamp.utcnow().normalize().tz_localize(None)
+
+            if last_saved_date and not self.is_stock_outdated(last_saved_date, today):
+                self.logger.info(f"{stock} is already up-to-date.")
+                return "No Update Needed"
+
+            start = int(last_saved_date) + 86400000 if last_saved_date else ''
+            data = self.session.daily_price_history(stock, start=start)
+
+            if not data.get("candles"):
+                self.logger.info(f"No new data for {stock}")
+                return "No Update Needed"
+
+            # 🔽 Determine file path
             filepath = f'{self.authenticator.program_path}/data/data_storage/raw_data'
-            self.writer.write_json(target_path=filepath, target_file=f'raw_{stock}_file.json', data=data)
+            filename = f'raw_{stock}_file.json'
+            full_path = os.path.join(filepath, filename)
+
+            # 🔽 Choose whether to write or modify based on file existence
+            if os.path.exists(full_path):
+                self.writer.modify_json(target_path=filepath, target_file=filename, new_data=data)
+            else:
+                self.writer.write_json(target_path=filepath, target_file=filename, data=data)
+
+            # ✅ Update cache with latest date from new candles
+            latest_date = max(c["datetime"] for c in data["candles"] if "datetime" in c)
+            self.cache.update("stock_files", stock, latest_date)
+
             self.logger.info(f"Raw data for {stock} stored successfully")
             return "File Generated!"
+
         except Exception as e:
             self.logger.error(f"Error storing raw data for {stock}: {str(e)}")
             return {"error": str(e)}
@@ -54,12 +109,31 @@ class Aggregator:
             data_to_save = processed_data.to_dict(orient="records")
 
             filepath = f'{self.authenticator.program_path}/data/data_storage/proc_data/'
+            
 
             self.writer.write_json(target_path=filepath, target_file=f'proc_{stock}_file.json', data=data_to_save)
 
             self.logger.info(f"Processed data for {stock} stored successfully in {filepath}")
         except Exception as e:
             self.logger.error(f"Error storing processed data for {stock}: {str(e)}")
+
+    def get_raw_data(self, stock: str) -> dict:
+        """
+        Retrieve raw data from JSON file.
+        """
+        try:
+            filepath = f'{self.authenticator.program_path}/data/data_storage/raw_data/raw_{stock}_file.json'
+            return self._read_raw_data(filepath)
+        except FileNotFoundError:
+            self.logger.error(f"Raw data file for {stock} not found.")
+            return {}
+        except Exception as e:
+            self.logger.error(f"Error reading raw data for {stock}: {str(e)}")
+            return {}
+
+    def _read_raw_data(self, filepath: str) -> dict:
+        with open(filepath, 'r') as f:
+            return json.load(f)
 
     def get_processed_data_files(self, stock):
         filepath = f'{self.authenticator.program_path}/data/data_storage/proc_data/'
@@ -74,7 +148,7 @@ class Aggregator:
 
         self.frame_manager.add_dataframe(stock, data)
         return self.frame_manager
-
+    
     def store_processed_data(self, stock: str, processed_data: pd.DataFrame) -> str:
         """
         Store processed data in the database.
@@ -123,24 +197,6 @@ class Aggregator:
         except Exception as e:
             self.logger.error(f"Error storing processed data for batch: {str(e)}")
             return {"error": str(e)}
-
-    def get_raw_data(self, stock: str) -> dict:
-        """
-        Retrieve raw data from JSON file.
-        """
-        try:
-            filepath = f"{self.config['folders']['data']}data_storage/raw_data/raw_{stock}_file.json"
-            return self._read_raw_data(filepath)
-        except FileNotFoundError:
-            self.logger.error(f"Raw data file for {stock} not found.")
-            return {}
-        except Exception as e:
-            self.logger.error(f"Error reading raw data for {stock}: {str(e)}")
-            return {}
-
-    def _read_raw_data(self, filepath: str) -> dict:
-        with open(filepath, 'r') as f:
-            return json.load(f)
 
     def aggregate_data(self, stock_list: list[str], start=None, end=None) -> str:
         """
