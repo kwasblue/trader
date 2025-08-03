@@ -218,3 +218,87 @@ class SchwabClient:
         )
         self.logger.info(f'Retrieving custom price history for {symbol}')
         return self._get(endpoint, headers, params)
+
+    def get_order_by_id(self, account_number: str, order_id: str) -> dict:
+        endpoint = f"{self.config['api']['base_url']}/accounts/{account_number}/orders/{order_id}"
+        headers = {'Authorization': f'Bearer {self.authenticator.access_token()}'}
+        return self._get(endpoint, headers, {})
+
+    def cancel_order(self, account_number: str, order_id: str) -> dict:
+        endpoint = f"{self.config['api']['base_url']}/accounts/{account_number}/orders/{order_id}"
+        headers = {'Authorization': f'Bearer {self.authenticator.access_token()}'}
+        return self._request("DELETE", endpoint, headers)
+
+    def replace_order(self, account_number: str, order_id: str, new_order_data: dict) -> dict:
+        endpoint = f"{self.config['api']['base_url']}/accounts/{account_number}/orders/{order_id}"
+        headers = {'Authorization': f'Bearer {self.authenticator.access_token()}'}
+        return self._request("PUT", endpoint, headers, data=new_order_data)
+
+    def all_orders_all_accounts(self) -> dict:
+        endpoint = f"{self.config['api']['base_url']}/orders"
+        headers = {'Authorization': f'Bearer {self.authenticator.access_token()}'}
+        return self._get(endpoint, headers, {})
+
+    def transactions(self, account_number: str) -> dict:
+        endpoint = f"{self.config['api']['base_url']}/accounts/{account_number}/transactions"
+        headers = {'Authorization': f'Bearer {self.authenticator.access_token()}'}
+        return self._get(endpoint, headers, {})
+
+    def transaction_by_id(self, account_number: str, transaction_id: str) -> dict:
+        endpoint = f"{self.config['api']['base_url']}/accounts/{account_number}/transactions/{transaction_id}"
+        headers = {'Authorization': f'Bearer {self.authenticator.access_token()}'}
+        return self._get(endpoint, headers, {})
+
+    def user_preferences(self) -> dict:
+        endpoint = f"{self.config['api']['base_url']}/userPreference"
+        headers = {'Authorization': f'Bearer {self.authenticator.access_token()}'}
+        return self._get(endpoint, headers, {})
+    
+    def close_all_positions(self, account_number: str) -> dict:
+        """
+        Closes all open positions in the specified account.
+
+        Args:
+            account_number (str): The Schwab account number.
+
+        Returns:
+            dict: A dictionary summarizing results of close operations.
+        """
+        positions = self.accounts_number(account_number).get("securitiesAccount", {}).get("positions", [])
+        if not positions:
+            self.logger.info(f"No open positions found for account {account_number}.")
+            return {"status": "No positions to close"}
+
+        results = {}
+        for pos in positions:
+            symbol = pos.get("instrument", {}).get("symbol")
+            quantity = int(float(pos.get("longQuantity", 0) or pos.get("shortQuantity", 0)))
+            asset_type = pos.get("instrument", {}).get("assetType", "EQUITY")
+
+            if quantity == 0:
+                continue
+
+            if pos.get("longQuantity", 0) > 0:
+                instruction = "SELL"
+            elif pos.get("shortQuantity", 0) > 0:
+                instruction = "BUY_TO_COVER"
+            else:
+                self.logger.warning(f"Unable to determine position type for {symbol}")
+                continue
+
+            order_data = self.generate_order(
+                orderType="MARKET",
+                session="NORMAL",
+                duration="DAY",
+                orderStrategyType="SINGLE",
+                instruction=instruction,
+                quantity=quantity,
+                symbol=symbol,
+                assetType=asset_type
+            )
+
+            self.logger.info(f"Closing position for {symbol}: {instruction} {quantity}")
+            response = self.place_orders(account_number, order_data)
+            results[symbol] = response
+
+        return results

@@ -1,10 +1,12 @@
 import json
 import requests
 import websockets
-from utils.authenticator import Authenticator
+from data.streaming.authenticator import Authenticator
 from utils.logger import Logger
 from utils.configloader import ConfigLoader
-
+from data.streaming.schwab_client import SchwabClient   
+from core.eventhandler import EventHandler
+import asyncio
 
 class SchwabStreamingClient():
     def __init__(self, apikey, secretkey):
@@ -18,6 +20,7 @@ class SchwabStreamingClient():
         self.price_dict = {}
 
     async def websocket_client(self, symbols):
+
         url = r"https://api.schwabapi.com/trader/v1/userPreference"
         headers = {'Authorization': f"Bearer {self.authenticator.access_token()}"}
         try:
@@ -108,3 +111,4 @@ class SchwabStreamingClient():
 
     async def run(self, symbols):
         await self.websocket_client(symbols)
+
