@@ -5,6 +5,11 @@ from pathlib import Path
 project_root = Path.cwd().parent
 if str(project_root) not in sys.path:
     sys.path.append(str(project_root))
+
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 #--------------------------------------------------------------------------------------------------------------------------#
 # mock streamer emits bars to the system and we can hadle them via executor shows how we can deal with them just random changes in price
 import asyncio
@@ -907,7 +912,7 @@ def strategy_on_bar(event, strategy_map, executor, handler, plotter: LivePlotter
 # ---------------------------- Main Bootstrap ---------------------------------------------------------#
 if __name__ == "__main__":
     symbols = ["AAPL", "MSFT", "TSLA", "AMD", "META", "AMZN"]
-    hist_path = r"C:\Users\kwasi\OneDrive\Documents\Personal Projects\schwab_trader\data\data_storage\proc_data"
+    hist_path = r'/home/kwasi/Projects/trader/schwab_trader/data/data_storage/proc_data'
 
     # Setup components
     #drawdown_monitor = DrawdownMonitor(max_drawdown=0.20)
