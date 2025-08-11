@@ -2,7 +2,7 @@ import json
 import requests
 import websockets
 from data.streaming.authenticator import Authenticator
-from utils.logger import Logger
+from schwab_trader.logger.logger import Logger
 from utils.configloader import ConfigLoader
 from data.streaming.schwab_client import SchwabClient   
 from core.eventhandler import EventHandler

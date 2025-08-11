@@ -1,5 +1,5 @@
 import numpy as np
-from strategies.base_strategy import BaseStrategy
+from core.base.base_strategy import BaseStrategy
 
 class IchimokuStrategy(BaseStrategy):
     def generate_signal(self, data):

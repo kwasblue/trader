@@ -1,7 +1,7 @@
 import pkgutil
 import importlib
 import inspect
-from ..base_strategy import BaseStrategy
+from core.base.base_strategy import BaseStrategy
 
 STRATEGY_MAP = {}
 

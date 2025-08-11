@@ -1,5 +1,5 @@
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
-from utils.logger import Logger
+from schwab_trader.loggers.logger import Logger
 from utils.configloader import ConfigLoader
 from indicators.technical_indicators import TechnicalIndicators
 from sklearn.decomposition import PCA

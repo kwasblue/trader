@@ -1,0 +1,134 @@
+2025-08-10 17:47:47 - StrategyRouter - DEBUG - Logger initialized.
+2025-08-10 17:47:47 - StrategyRouter - DEBUG - Log file: logs/strategy_router.log
+2025-08-10 17:47:47 - StrategyRouter - DEBUG - Logger name: StrategyRouter
+2025-08-10 17:47:47 - StrategyRouter - INFO - Loaded strategies: ['adx', 'adx_strategy', 'adxstrategy', 'bollinger', 'bollinger_strategy', 'bollingerstrategy', 'breakout', 'breakout_strategy', 'breakoutstrategy', 'combined', 'combined_strategy', 'combinedstrategy', 'default', 'donchian', 'donchian_strategy', 'donchianstrategy', 'ema', 'ema_strategy', 'emastrategy', 'ichimoku', 'ichimoku_strategy', 'ichimokustrategy', 'logistic_regression', 'logistic_regression_strategy', 'logisticregressionstrategy', 'macd', 'macd_strategy', 'macdstrategy', 'mean_reversion', 'mean_reversion_strategy', 'meanreversionstrategy', 'momentum', 'momentum_strategy', 'momentumstrategy', 'psar', 'psar_strategy', 'psarstrategy', 'rsi', 'rsi_strategy', 'rsistrategy', 'sma', 'sma_strategy', 'smastrategy', 'stochastic', 'stochastic_strategy', 'stochasticstrategy', 'vwap', 'vwap_strategy', 'vwapstrategy']
+2025-08-10 17:47:47 - StrategyRouter - INFO - [AAPL][normal] Initialized strategy 'MomentumStrategy' with params: {'lookback': 20}
+2025-08-10 17:47:47 - StrategyRouter - INFO - [MSFT][normal] Initialized strategy 'MomentumStrategy' with params: {}
+2025-08-10 17:47:48 - StrategyRouter - INFO - [AAPL][high_volatility] Initialized strategy 'MeanReversionStrategy' with params: {'window': 14}
+2025-08-10 17:47:48 - StrategyRouter - INFO - [MSFT][low_volatility] Initialized strategy 'SMAStrategy' with params: {}
+2025-08-10 17:47:48 - StrategyRouter - INFO - [MSFT][high_volatility] Initialized strategy 'MeanReversionStrategy' with params: {}
+2025-08-10 17:47:48 - StrategyRouter - INFO - [AAPL][low_volatility] Initialized strategy 'SMAStrategy' with params: {'fast': 10, 'slow': 30}
+2025-08-10 17:58:55 - StrategyRouter - DEBUG - Logger initialized.
+2025-08-10 17:58:55 - StrategyRouter - DEBUG - Log file: logs/strategy_router.log
+2025-08-10 17:58:55 - StrategyRouter - DEBUG - Logger name: StrategyRouter
+2025-08-10 17:58:55 - StrategyRouter - INFO - Loaded strategies: ['adx', 'adx_strategy', 'adxstrategy', 'bollinger', 'bollinger_strategy', 'bollingerstrategy', 'breakout', 'breakout_strategy', 'breakoutstrategy', 'combined', 'combined_strategy', 'combinedstrategy', 'default', 'donchian', 'donchian_strategy', 'donchianstrategy', 'ema', 'ema_strategy', 'emastrategy', 'ichimoku', 'ichimoku_strategy', 'ichimokustrategy', 'logistic_regression', 'logistic_regression_strategy', 'logisticregressionstrategy', 'macd', 'macd_strategy', 'macdstrategy', 'mean_reversion', 'mean_reversion_strategy', 'meanreversionstrategy', 'momentum', 'momentum_strategy', 'momentumstrategy', 'psar', 'psar_strategy', 'psarstrategy', 'rsi', 'rsi_strategy', 'rsistrategy', 'sma', 'sma_strategy', 'smastrategy', 'stochastic', 'stochastic_strategy', 'stochasticstrategy', 'vwap', 'vwap_strategy', 'vwapstrategy']
+2025-08-10 17:58:55 - StrategyRouter - INFO - [AAPL][normal] Initialized strategy 'MomentumStrategy' with params: {'lookback': 20}
+2025-08-10 17:58:55 - StrategyRouter - INFO - [MSFT][normal] Initialized strategy 'MomentumStrategy' with params: {}
+2025-08-10 17:58:56 - StrategyRouter - INFO - [AAPL][high_volatility] Initialized strategy 'MeanReversionStrategy' with params: {'window': 14}
+2025-08-10 17:58:56 - StrategyRouter - INFO - [MSFT][low_volatility] Initialized strategy 'SMAStrategy' with params: {}
+2025-08-10 17:58:58 - StrategyRouter - INFO - [MSFT][high_volatility] Initialized strategy 'MeanReversionStrategy' with params: {}
+2025-08-10 17:58:58 - StrategyRouter - INFO - [AAPL][low_volatility] Initialized strategy 'SMAStrategy' with params: {'fast': 10, 'slow': 30}
+2025-08-10 18:01:40 - StrategyRouter - DEBUG - Logger initialized.
+2025-08-10 18:01:40 - StrategyRouter - DEBUG - Log file: logs/strategy_router.log
+2025-08-10 18:01:40 - StrategyRouter - DEBUG - Logger name: StrategyRouter
+2025-08-10 18:01:40 - StrategyRouter - INFO - Loaded strategies: ['adx', 'adx_strategy', 'adxstrategy', 'bollinger', 'bollinger_strategy', 'bollingerstrategy', 'breakout', 'breakout_strategy', 'breakoutstrategy', 'combined', 'combined_strategy', 'combinedstrategy', 'default', 'donchian', 'donchian_strategy', 'donchianstrategy', 'ema', 'ema_strategy', 'emastrategy', 'ichimoku', 'ichimoku_strategy', 'ichimokustrategy', 'logistic_regression', 'logistic_regression_strategy', 'logisticregressionstrategy', 'macd', 'macd_strategy', 'macdstrategy', 'mean_reversion', 'mean_reversion_strategy', 'meanreversionstrategy', 'momentum', 'momentum_strategy', 'momentumstrategy', 'psar', 'psar_strategy', 'psarstrategy', 'rsi', 'rsi_strategy', 'rsistrategy', 'sma', 'sma_strategy', 'smastrategy', 'stochastic', 'stochastic_strategy', 'stochasticstrategy', 'vwap', 'vwap_strategy', 'vwapstrategy']
+2025-08-10 18:01:40 - StrategyRouter - INFO - [AAPL][normal] Initialized strategy 'MomentumStrategy' with params: {'lookback': 20}
+2025-08-10 18:01:40 - StrategyRouter - INFO - [MSFT][normal] Initialized strategy 'MomentumStrategy' with params: {}
+2025-08-10 18:01:41 - StrategyRouter - INFO - [AAPL][high_volatility] Initialized strategy 'MeanReversionStrategy' with params: {'window': 14}
+2025-08-10 18:01:41 - StrategyRouter - INFO - [MSFT][low_volatility] Initialized strategy 'SMAStrategy' with params: {}
+2025-08-10 18:01:41 - StrategyRouter - INFO - [AAPL][low_volatility] Initialized strategy 'SMAStrategy' with params: {'fast': 10, 'slow': 30}
+2025-08-10 18:01:42 - StrategyRouter - INFO - [MSFT][high_volatility] Initialized strategy 'MeanReversionStrategy' with params: {}
+2025-08-10 18:05:05 - StrategyRouter - DEBUG - Logger initialized.
+2025-08-10 18:05:05 - StrategyRouter - DEBUG - Log file: logs/strategy_router.log
+2025-08-10 18:05:05 - StrategyRouter - DEBUG - Logger name: StrategyRouter
+2025-08-10 18:05:05 - StrategyRouter - INFO - Loaded strategies: ['adx', 'adx_strategy', 'adxstrategy', 'bollinger', 'bollinger_strategy', 'bollingerstrategy', 'breakout', 'breakout_strategy', 'breakoutstrategy', 'combined', 'combined_strategy', 'combinedstrategy', 'default', 'donchian', 'donchian_strategy', 'donchianstrategy', 'ema', 'ema_strategy', 'emastrategy', 'ichimoku', 'ichimoku_strategy', 'ichimokustrategy', 'logistic_regression', 'logistic_regression_strategy', 'logisticregressionstrategy', 'macd', 'macd_strategy', 'macdstrategy', 'mean_reversion', 'mean_reversion_strategy', 'meanreversionstrategy', 'momentum', 'momentum_strategy', 'momentumstrategy', 'psar', 'psar_strategy', 'psarstrategy', 'rsi', 'rsi_strategy', 'rsistrategy', 'sma', 'sma_strategy', 'smastrategy', 'stochastic', 'stochastic_strategy', 'stochasticstrategy', 'vwap', 'vwap_strategy', 'vwapstrategy']
+2025-08-10 18:05:05 - StrategyRouter - INFO - [AAPL][normal] Initialized strategy 'MomentumStrategy' with params: {'lookback': 20}
+2025-08-10 18:05:05 - StrategyRouter - INFO - [MSFT][normal] Initialized strategy 'MomentumStrategy' with params: {}
+2025-08-10 18:05:07 - StrategyRouter - WARNING - [AAPL][low_volatility] Ignoring unknown strategy params for MomentumStrategy: ['fast', 'slow']
+2025-08-10 18:05:07 - StrategyRouter - INFO - [AAPL][low_volatility] Initialized strategy 'MomentumStrategy' with params: {}
+2025-08-10 18:05:07 - StrategyRouter - INFO - [MSFT][high_volatility] Initialized strategy 'MomentumStrategy' with params: {}
+2025-08-10 18:05:08 - StrategyRouter - WARNING - [AAPL][high_volatility] Ignoring unknown strategy params for MomentumStrategy: ['window']
+2025-08-10 18:05:08 - StrategyRouter - INFO - [AAPL][high_volatility] Initialized strategy 'MomentumStrategy' with params: {}
+2025-08-10 18:05:08 - StrategyRouter - INFO - [MSFT][low_volatility] Initialized strategy 'MomentumStrategy' with params: {}
+2025-08-10 18:09:39 - StrategyRouter - DEBUG - Logger initialized.
+2025-08-10 18:09:39 - StrategyRouter - DEBUG - Log file: logs/strategy_router.log
+2025-08-10 18:09:39 - StrategyRouter - DEBUG - Logger name: StrategyRouter
+2025-08-10 18:09:39 - StrategyRouter - INFO - Loaded strategies: ['adx', 'adx_strategy', 'adxstrategy', 'bollinger', 'bollinger_strategy', 'bollingerstrategy', 'breakout', 'breakout_strategy', 'breakoutstrategy', 'combined', 'combined_strategy', 'combinedstrategy', 'default', 'donchian', 'donchian_strategy', 'donchianstrategy', 'ema', 'ema_strategy', 'emastrategy', 'ichimoku', 'ichimoku_strategy', 'ichimokustrategy', 'logistic_regression', 'logistic_regression_strategy', 'logisticregressionstrategy', 'macd', 'macd_strategy', 'macdstrategy', 'mean_reversion', 'mean_reversion_strategy', 'meanreversionstrategy', 'momentum', 'momentum_strategy', 'momentumstrategy', 'psar', 'psar_strategy', 'psarstrategy', 'rsi', 'rsi_strategy', 'rsistrategy', 'sma', 'sma_strategy', 'smastrategy', 'stochastic', 'stochastic_strategy', 'stochasticstrategy', 'vwap', 'vwap_strategy', 'vwapstrategy']
+2025-08-10 18:09:39 - StrategyRouter - INFO - [AAPL][normal] Initialized strategy 'MomentumStrategy' with params: {'lookback': 20}
+2025-08-10 18:09:39 - StrategyRouter - INFO - [MSFT][normal] Initialized strategy 'MomentumStrategy' with params: {}
+2025-08-10 18:09:41 - StrategyRouter - WARNING - [AAPL][high_volatility] Ignoring unknown strategy params for MomentumStrategy: ['window']
+2025-08-10 18:09:41 - StrategyRouter - INFO - [AAPL][high_volatility] Initialized strategy 'MomentumStrategy' with params: {}
+2025-08-10 18:09:41 - StrategyRouter - INFO - [MSFT][low_volatility] Initialized strategy 'MomentumStrategy' with params: {}
+2025-08-10 18:09:43 - StrategyRouter - WARNING - [AAPL][low_volatility] Ignoring unknown strategy params for MomentumStrategy: ['fast', 'slow']
+2025-08-10 18:09:43 - StrategyRouter - INFO - [AAPL][low_volatility] Initialized strategy 'MomentumStrategy' with params: {}
+2025-08-10 18:09:43 - StrategyRouter - INFO - [MSFT][high_volatility] Initialized strategy 'MomentumStrategy' with params: {}
+2025-08-10 18:15:53 - StrategyRouter - DEBUG - Logger initialized.
+2025-08-10 18:15:53 - StrategyRouter - DEBUG - Log file: logs/strategy_router.log
+2025-08-10 18:15:53 - StrategyRouter - DEBUG - Logger name: StrategyRouter
+2025-08-10 18:15:53 - StrategyRouter - INFO - Loaded strategies: ['adx', 'adx_strategy', 'adxstrategy', 'bollinger', 'bollinger_strategy', 'bollingerstrategy', 'breakout', 'breakout_strategy', 'breakoutstrategy', 'combined', 'combined_strategy', 'combinedstrategy', 'default', 'donchian', 'donchian_strategy', 'donchianstrategy', 'ema', 'ema_strategy', 'emastrategy', 'ichimoku', 'ichimoku_strategy', 'ichimokustrategy', 'logistic_regression', 'logistic_regression_strategy', 'logisticregressionstrategy', 'macd', 'macd_strategy', 'macdstrategy', 'mean_reversion', 'mean_reversion_strategy', 'meanreversionstrategy', 'momentum', 'momentum_strategy', 'momentumstrategy', 'psar', 'psar_strategy', 'psarstrategy', 'rsi', 'rsi_strategy', 'rsistrategy', 'sma', 'sma_strategy', 'smastrategy', 'stochastic', 'stochastic_strategy', 'stochasticstrategy', 'vwap', 'vwap_strategy', 'vwapstrategy']
+2025-08-10 18:15:53 - StrategyRouter - INFO - [AAPL][normal] Initialized strategy 'MomentumStrategy' with params: {'lookback': 20}
+2025-08-10 18:15:53 - StrategyRouter - INFO - [MSFT][normal] Initialized strategy 'MomentumStrategy' with params: {}
+2025-08-10 18:15:55 - StrategyRouter - WARNING - [AAPL][low_volatility] Ignoring unknown strategy params for MomentumStrategy: ['fast', 'slow']
+2025-08-10 18:15:55 - StrategyRouter - INFO - [AAPL][low_volatility] Initialized strategy 'MomentumStrategy' with params: {}
+2025-08-10 18:15:55 - StrategyRouter - INFO - [MSFT][low_volatility] Initialized strategy 'MomentumStrategy' with params: {}
+2025-08-10 18:15:56 - StrategyRouter - WARNING - [AAPL][high_volatility] Ignoring unknown strategy params for MomentumStrategy: ['window']
+2025-08-10 18:15:56 - StrategyRouter - INFO - [AAPL][high_volatility] Initialized strategy 'MomentumStrategy' with params: {}
+2025-08-10 18:15:58 - StrategyRouter - INFO - [MSFT][high_volatility] Initialized strategy 'MomentumStrategy' with params: {}
+2025-08-11 07:47:41 - StrategyRouter - DEBUG - Logger initialized.
+2025-08-11 07:47:41 - StrategyRouter - DEBUG - Log file: logs/strategy_router.log
+2025-08-11 07:47:41 - StrategyRouter - DEBUG - Logger name: StrategyRouter
+2025-08-11 07:47:41 - StrategyRouter - INFO - Loaded strategies: ['adx', 'adx_strategy', 'adxstrategy', 'bollinger', 'bollinger_strategy', 'bollingerstrategy', 'breakout', 'breakout_strategy', 'breakoutstrategy', 'combined', 'combined_strategy', 'combinedstrategy', 'default', 'donchian', 'donchian_strategy', 'donchianstrategy', 'ema', 'ema_strategy', 'emastrategy', 'ichimoku', 'ichimoku_strategy', 'ichimokustrategy', 'logistic_regression', 'logistic_regression_strategy', 'logisticregressionstrategy', 'macd', 'macd_strategy', 'macdstrategy', 'mean_reversion', 'mean_reversion_strategy', 'meanreversionstrategy', 'momentum', 'momentum_strategy', 'momentumstrategy', 'psar', 'psar_strategy', 'psarstrategy', 'rsi', 'rsi_strategy', 'rsistrategy', 'sma', 'sma_strategy', 'smastrategy', 'stochastic', 'stochastic_strategy', 'stochasticstrategy', 'vwap', 'vwap_strategy', 'vwapstrategy']
+2025-08-11 07:47:41 - StrategyRouter - INFO - [AAPL][normal] Initialized strategy 'MomentumStrategy' with params: {'lookback': 20}
+2025-08-11 07:47:41 - StrategyRouter - INFO - [MSFT][normal] Initialized strategy 'MomentumStrategy' with params: {}
+2025-08-11 07:47:43 - StrategyRouter - WARNING - [AAPL][high_volatility] Ignoring unknown strategy params for MomentumStrategy: ['window']
+2025-08-11 07:47:43 - StrategyRouter - INFO - [AAPL][high_volatility] Initialized strategy 'MomentumStrategy' with params: {}
+2025-08-11 07:47:43 - StrategyRouter - INFO - [MSFT][low_volatility] Initialized strategy 'MomentumStrategy' with params: {}
+2025-08-11 07:47:44 - StrategyRouter - INFO - [MSFT][high_volatility] Initialized strategy 'MomentumStrategy' with params: {}
+2025-08-11 07:47:44 - StrategyRouter - WARNING - [AAPL][low_volatility] Ignoring unknown strategy params for MomentumStrategy: ['fast', 'slow']
+2025-08-11 07:47:44 - StrategyRouter - INFO - [AAPL][low_volatility] Initialized strategy 'MomentumStrategy' with params: {}
+2025-08-11 08:55:11 - StrategyRouter - DEBUG - Logger initialized.
+2025-08-11 08:55:11 - StrategyRouter - DEBUG - Log file: logs/strategy_router.log
+2025-08-11 08:55:11 - StrategyRouter - DEBUG - Logger name: StrategyRouter
+2025-08-11 08:55:11 - StrategyRouter - INFO - Loaded strategies: ['adx', 'adx_strategy', 'adxstrategy', 'bollinger', 'bollinger_strategy', 'bollingerstrategy', 'breakout', 'breakout_strategy', 'breakoutstrategy', 'combined', 'combined_strategy', 'combinedstrategy', 'default', 'donchian', 'donchian_strategy', 'donchianstrategy', 'ema', 'ema_strategy', 'emastrategy', 'ichimoku', 'ichimoku_strategy', 'ichimokustrategy', 'logistic_regression', 'logistic_regression_strategy', 'logisticregressionstrategy', 'macd', 'macd_strategy', 'macdstrategy', 'mean_reversion', 'mean_reversion_strategy', 'meanreversionstrategy', 'momentum', 'momentum_strategy', 'momentumstrategy', 'psar', 'psar_strategy', 'psarstrategy', 'rsi', 'rsi_strategy', 'rsistrategy', 'sma', 'sma_strategy', 'smastrategy', 'stochastic', 'stochastic_strategy', 'stochasticstrategy', 'vwap', 'vwap_strategy', 'vwapstrategy']
+2025-08-11 08:58:40 - StrategyRouter - DEBUG - Logger initialized.
+2025-08-11 08:58:40 - StrategyRouter - DEBUG - Log file: logs/strategy_router.log
+2025-08-11 08:58:40 - StrategyRouter - DEBUG - Logger name: StrategyRouter
+2025-08-11 08:58:40 - StrategyRouter - INFO - Loaded strategies: ['adx', 'adx_strategy', 'adxstrategy', 'bollinger', 'bollinger_strategy', 'bollingerstrategy', 'breakout', 'breakout_strategy', 'breakoutstrategy', 'combined', 'combined_strategy', 'combinedstrategy', 'default', 'donchian', 'donchian_strategy', 'donchianstrategy', 'ema', 'ema_strategy', 'emastrategy', 'ichimoku', 'ichimoku_strategy', 'ichimokustrategy', 'logistic_regression', 'logistic_regression_strategy', 'logisticregressionstrategy', 'macd', 'macd_strategy', 'macdstrategy', 'mean_reversion', 'mean_reversion_strategy', 'meanreversionstrategy', 'momentum', 'momentum_strategy', 'momentumstrategy', 'psar', 'psar_strategy', 'psarstrategy', 'rsi', 'rsi_strategy', 'rsistrategy', 'sma', 'sma_strategy', 'smastrategy', 'stochastic', 'stochastic_strategy', 'stochasticstrategy', 'vwap', 'vwap_strategy', 'vwapstrategy']
+2025-08-11 08:59:35 - StrategyRouter - DEBUG - Logger initialized.
+2025-08-11 08:59:35 - StrategyRouter - DEBUG - Log file: logs/strategy_router.log
+2025-08-11 08:59:35 - StrategyRouter - DEBUG - Logger name: StrategyRouter
+2025-08-11 08:59:35 - StrategyRouter - INFO - Loaded strategies: ['adx', 'adx_strategy', 'adxstrategy', 'bollinger', 'bollinger_strategy', 'bollingerstrategy', 'breakout', 'breakout_strategy', 'breakoutstrategy', 'combined', 'combined_strategy', 'combinedstrategy', 'default', 'donchian', 'donchian_strategy', 'donchianstrategy', 'ema', 'ema_strategy', 'emastrategy', 'ichimoku', 'ichimoku_strategy', 'ichimokustrategy', 'logistic_regression', 'logistic_regression_strategy', 'logisticregressionstrategy', 'macd', 'macd_strategy', 'macdstrategy', 'mean_reversion', 'mean_reversion_strategy', 'meanreversionstrategy', 'momentum', 'momentum_strategy', 'momentumstrategy', 'psar', 'psar_strategy', 'psarstrategy', 'rsi', 'rsi_strategy', 'rsistrategy', 'sma', 'sma_strategy', 'smastrategy', 'stochastic', 'stochastic_strategy', 'stochasticstrategy', 'vwap', 'vwap_strategy', 'vwapstrategy']
+2025-08-11 08:59:35 - StrategyRouter - INFO - [AAPL][normal] Initialized strategy 'MomentumStrategy' with params: {'lookback': 20}
+2025-08-11 08:59:35 - StrategyRouter - INFO - [MSFT][normal] Initialized strategy 'MomentumStrategy' with params: {}
+2025-08-11 08:59:37 - StrategyRouter - WARNING - [AAPL][high_volatility] Ignoring unknown strategy params for MomentumStrategy: ['window']
+2025-08-11 08:59:37 - StrategyRouter - INFO - [AAPL][high_volatility] Initialized strategy 'MomentumStrategy' with params: {}
+2025-08-11 08:59:37 - StrategyRouter - INFO - [MSFT][high_volatility] Initialized strategy 'MomentumStrategy' with params: {}
+2025-08-11 08:59:37 - StrategyRouter - INFO - [MSFT][low_volatility] Initialized strategy 'MomentumStrategy' with params: {}
+2025-08-11 08:59:39 - StrategyRouter - WARNING - [AAPL][low_volatility] Ignoring unknown strategy params for MomentumStrategy: ['fast', 'slow']
+2025-08-11 08:59:39 - StrategyRouter - INFO - [AAPL][low_volatility] Initialized strategy 'MomentumStrategy' with params: {}
+2025-08-11 09:11:19 - StrategyRouter - DEBUG - Logger initialized.
+2025-08-11 09:11:19 - StrategyRouter - DEBUG - Log file: logs/strategy_router.log
+2025-08-11 09:11:19 - StrategyRouter - DEBUG - Logger name: StrategyRouter
+2025-08-11 09:11:19 - StrategyRouter - INFO - Loaded strategies: ['adx', 'adx_strategy', 'adxstrategy', 'bollinger', 'bollinger_strategy', 'bollingerstrategy', 'breakout', 'breakout_strategy', 'breakoutstrategy', 'combined', 'combined_strategy', 'combinedstrategy', 'default', 'donchian', 'donchian_strategy', 'donchianstrategy', 'ema', 'ema_strategy', 'emastrategy', 'ichimoku', 'ichimoku_strategy', 'ichimokustrategy', 'logistic_regression', 'logistic_regression_strategy', 'logisticregressionstrategy', 'macd', 'macd_strategy', 'macdstrategy', 'mean_reversion', 'mean_reversion_strategy', 'meanreversionstrategy', 'momentum', 'momentum_strategy', 'momentumstrategy', 'psar', 'psar_strategy', 'psarstrategy', 'rsi', 'rsi_strategy', 'rsistrategy', 'sma', 'sma_strategy', 'smastrategy', 'stochastic', 'stochastic_strategy', 'stochasticstrategy', 'vwap', 'vwap_strategy', 'vwapstrategy']
+2025-08-11 09:11:19 - StrategyRouter - INFO - [AAPL][normal] Initialized strategy 'MomentumStrategy' with params: {'lookback': 20}
+2025-08-11 09:11:19 - StrategyRouter - INFO - [MSFT][normal] Initialized strategy 'MomentumStrategy' with params: {}
+2025-08-11 09:11:21 - StrategyRouter - WARNING - [AAPL][high_volatility] Ignoring unknown strategy params for MomentumStrategy: ['window']
+2025-08-11 09:11:21 - StrategyRouter - INFO - [AAPL][high_volatility] Initialized strategy 'MomentumStrategy' with params: {}
+2025-08-11 09:11:22 - StrategyRouter - INFO - [MSFT][high_volatility] Initialized strategy 'MomentumStrategy' with params: {}
+2025-08-11 09:11:22 - StrategyRouter - INFO - [MSFT][low_volatility] Initialized strategy 'MomentumStrategy' with params: {}
+2025-08-11 09:11:22 - StrategyRouter - WARNING - [AAPL][low_volatility] Ignoring unknown strategy params for MomentumStrategy: ['fast', 'slow']
+2025-08-11 09:11:22 - StrategyRouter - INFO - [AAPL][low_volatility] Initialized strategy 'MomentumStrategy' with params: {}
+2025-08-11 09:17:24 - StrategyRouter - DEBUG - Logger initialized.
+2025-08-11 09:17:24 - StrategyRouter - DEBUG - Log file: logs/strategy_router.log
+2025-08-11 09:17:24 - StrategyRouter - DEBUG - Logger name: StrategyRouter
+2025-08-11 09:17:24 - StrategyRouter - INFO - Loaded strategies: ['adx', 'adx_strategy', 'adxstrategy', 'bollinger', 'bollinger_strategy', 'bollingerstrategy', 'breakout', 'breakout_strategy', 'breakoutstrategy', 'combined', 'combined_strategy', 'combinedstrategy', 'default', 'donchian', 'donchian_strategy', 'donchianstrategy', 'ema', 'ema_strategy', 'emastrategy', 'ichimoku', 'ichimoku_strategy', 'ichimokustrategy', 'logistic_regression', 'logistic_regression_strategy', 'logisticregressionstrategy', 'macd', 'macd_strategy', 'macdstrategy', 'mean_reversion', 'mean_reversion_strategy', 'meanreversionstrategy', 'momentum', 'momentum_strategy', 'momentumstrategy', 'psar', 'psar_strategy', 'psarstrategy', 'rsi', 'rsi_strategy', 'rsistrategy', 'sma', 'sma_strategy', 'smastrategy', 'stochastic', 'stochastic_strategy', 'stochasticstrategy', 'vwap', 'vwap_strategy', 'vwapstrategy']
+2025-08-11 09:17:24 - StrategyRouter - INFO - [AAPL][normal] Initialized strategy 'MomentumStrategy' with params: {'lookback': 20}
+2025-08-11 09:17:24 - StrategyRouter - INFO - [MSFT][normal] Initialized strategy 'MomentumStrategy' with params: {}
+2025-08-11 09:17:26 - StrategyRouter - INFO - [MSFT][low_volatility] Initialized strategy 'MomentumStrategy' with params: {}
+2025-08-11 09:17:26 - StrategyRouter - INFO - [MSFT][high_volatility] Initialized strategy 'MomentumStrategy' with params: {}
+2025-08-11 09:17:27 - StrategyRouter - WARNING - [AAPL][low_volatility] Ignoring unknown strategy params for MomentumStrategy: ['fast', 'slow']
+2025-08-11 09:17:27 - StrategyRouter - INFO - [AAPL][low_volatility] Initialized strategy 'MomentumStrategy' with params: {}
+2025-08-11 09:17:27 - StrategyRouter - WARNING - [AAPL][high_volatility] Ignoring unknown strategy params for MomentumStrategy: ['window']
+2025-08-11 09:17:27 - StrategyRouter - INFO - [AAPL][high_volatility] Initialized strategy 'MomentumStrategy' with params: {}
+2025-08-11 09:24:00 - StrategyRouter - DEBUG - Logger initialized.
+2025-08-11 09:24:00 - StrategyRouter - DEBUG - Log file: logs/strategy_router.log
+2025-08-11 09:24:00 - StrategyRouter - DEBUG - Logger name: StrategyRouter
+2025-08-11 09:24:00 - StrategyRouter - INFO - Loaded strategies: ['adx', 'adx_strategy', 'adxstrategy', 'bollinger', 'bollinger_strategy', 'bollingerstrategy', 'breakout', 'breakout_strategy', 'breakoutstrategy', 'combined', 'combined_strategy', 'combinedstrategy', 'default', 'donchian', 'donchian_strategy', 'donchianstrategy', 'ema', 'ema_strategy', 'emastrategy', 'ichimoku', 'ichimoku_strategy', 'ichimokustrategy', 'logistic_regression', 'logistic_regression_strategy', 'logisticregressionstrategy', 'macd', 'macd_strategy', 'macdstrategy', 'mean_reversion', 'mean_reversion_strategy', 'meanreversionstrategy', 'momentum', 'momentum_strategy', 'momentumstrategy', 'psar', 'psar_strategy', 'psarstrategy', 'rsi', 'rsi_strategy', 'rsistrategy', 'sma', 'sma_strategy', 'smastrategy', 'stochastic', 'stochastic_strategy', 'stochasticstrategy', 'vwap', 'vwap_strategy', 'vwapstrategy']
+2025-08-11 09:24:00 - StrategyRouter - INFO - [AAPL][normal] Initialized strategy 'MomentumStrategy' with params: {'lookback': 20}
+2025-08-11 09:24:00 - StrategyRouter - INFO - [MSFT][normal] Initialized strategy 'MomentumStrategy' with params: {}
+2025-08-11 09:24:03 - StrategyRouter - INFO - [MSFT][low_volatility] Initialized strategy 'MomentumStrategy' with params: {}
+2025-08-11 09:24:03 - StrategyRouter - WARNING - [AAPL][high_volatility] Ignoring unknown strategy params for MomentumStrategy: ['window']
+2025-08-11 09:24:03 - StrategyRouter - INFO - [AAPL][high_volatility] Initialized strategy 'MomentumStrategy' with params: {}
+2025-08-11 09:24:03 - StrategyRouter - WARNING - [AAPL][low_volatility] Ignoring unknown strategy params for MomentumStrategy: ['fast', 'slow']
+2025-08-11 09:24:03 - StrategyRouter - INFO - [AAPL][low_volatility] Initialized strategy 'MomentumStrategy' with params: {}
+2025-08-11 09:24:10 - StrategyRouter - INFO - [MSFT][high_volatility] Initialized strategy 'MomentumStrategy' with params: {}

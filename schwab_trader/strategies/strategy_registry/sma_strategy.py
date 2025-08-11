@@ -1,11 +1,18 @@
-import numpy as np
-from strategies.base_strategy import BaseStrategy
+# strategies/strategy_registry/sma_strategy.py
+from core.base.base_strategy import BaseStrategy
+import pandas as pd
 
 class SMAStrategy(BaseStrategy):
-    def generate_signal(self, data):
-        short_window = self.params.get("short_window", 20)
-        long_window = self.params.get("long_window", 50)
-        data["SMA_Short"] = data["Close"].rolling(window=short_window).mean()
-        data["SMA_Long"] = data["Close"].rolling(window=long_window).mean()
-        data["Signal"] = np.where(data["SMA_Short"] > data["SMA_Long"], 1, -1)
-        return data
+    def __init__(self, fast: int = 10, slow: int = 30, **kwargs):
+        super().__init__(**kwargs)
+        self.fast = fast
+        self.slow = slow
+
+    def generate_signal(self, data: pd.DataFrame) -> int:
+        df = data.copy()
+        close = df["Close"] if "Close" in df.columns else df["close"]
+        s_fast = close.rolling(self.fast).mean()
+        s_slow = close.rolling(self.slow).mean()
+        if len(df) < max(self.fast, self.slow):
+            return 0
+        return 1 if s_fast.iloc[-1] > s_slow.iloc[-1] else -1 if s_fast.iloc[-1] < s_slow.iloc[-1] else 0

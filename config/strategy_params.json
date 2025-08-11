@@ -1,0 +1,20 @@
+{
+  "AAPL": {
+    "low_volatility": {
+      "params": {
+        "fast": 10,
+        "slow": 30
+      }
+    },
+    "normal": {
+      "params": {
+        "lookback": 20
+      }
+    },
+    "high_volatility": {
+      "params": {
+        "window": 14
+      }
+    }
+  }
+}

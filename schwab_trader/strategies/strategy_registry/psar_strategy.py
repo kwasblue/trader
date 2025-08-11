@@ -1,6 +1,6 @@
 import numpy as np
 from ta.trend import PSARIndicator
-from strategies.base_strategy import BaseStrategy
+from core.base.base_strategy import BaseStrategy
 
 class PSARStrategy(BaseStrategy):
     def generate_signal(self, data):

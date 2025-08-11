@@ -1,5 +1,5 @@
 import numpy as np
-from indicators.base_indicator import BaseIndicator
+from schwab_trader.core.base.base_indicator import BaseIndicator
 
 class OBVIndicator(BaseIndicator):
     def compute(self):

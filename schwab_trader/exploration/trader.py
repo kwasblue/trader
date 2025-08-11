@@ -5,7 +5,7 @@ import numpy as np
 import json
 import asyncio
 from dotenv import load_dotenv
-from utils.logger import Logger
+from schwab_trader.logger.logger import Logger
 from data.streaming.authenticator import Authenticator   
 from asyncio import run
 from datetime import datetime

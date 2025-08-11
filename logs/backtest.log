@@ -1,0 +1,39 @@
+2025-08-06 21:31:18 - Backtester - DEBUG - Logger initialized.
+2025-08-06 21:31:18 - Backtester - DEBUG - Log file: /home/kwasi/Projects/trader/logs/backtest.log
+2025-08-06 21:31:18 - Backtester - DEBUG - Logger name: Backtester
+2025-08-06 21:31:18 - Backtester - INFO - Running strategy 'sma' with parameters: {'short_window': 20, 'long_window': 50}
+2025-08-06 21:32:46 - Backtester - DEBUG - Logger initialized.
+2025-08-06 21:32:46 - Backtester - DEBUG - Log file: /home/kwasi/Projects/trader/logs/backtest.log
+2025-08-06 21:32:46 - Backtester - DEBUG - Logger name: Backtester
+2025-08-06 21:32:46 - Backtester - INFO - Running strategy 'sma' with parameters: {'short_window': 20, 'long_window': 50}
+2025-08-06 21:33:48 - Backtester - DEBUG - Logger initialized.
+2025-08-06 21:33:48 - Backtester - DEBUG - Log file: /home/kwasi/Projects/trader/logs/backtest.log
+2025-08-06 21:33:48 - Backtester - DEBUG - Logger name: Backtester
+2025-08-06 21:33:48 - Backtester - INFO - Running strategy 'sma' with parameters: {'short_window': 20, 'long_window': 50}
+2025-08-06 21:34:31 - Backtester - DEBUG - Logger initialized.
+2025-08-06 21:34:31 - Backtester - DEBUG - Log file: /home/kwasi/Projects/trader/logs/backtest.log
+2025-08-06 21:34:31 - Backtester - DEBUG - Logger name: Backtester
+2025-08-06 21:34:31 - Backtester - INFO - Running strategy 'sma' with parameters: {'short_window': 20, 'long_window': 50}
+2025-08-06 21:35:06 - Backtester - DEBUG - Logger initialized.
+2025-08-06 21:35:06 - Backtester - DEBUG - Log file: /home/kwasi/Projects/trader/logs/backtest.log
+2025-08-06 21:35:06 - Backtester - DEBUG - Logger name: Backtester
+2025-08-06 21:35:06 - Backtester - INFO - Running strategy 'sma' with parameters: {'short_window': 20, 'long_window': 50}
+2025-08-06 21:35:06 - Backtester - INFO - BUY 25 shares at 151.16966561613438 on 1669183200000 | Stop-Loss 141.5299 | Market high_volatility | Cash 21216.979117956238
+2025-08-06 21:35:06 - Backtester - INFO - BUY 47 shares at 148.0492806149998 on 1669356000000 | Stop-Loss 139.18990000000002 | Market normal | Cash 14251.704612862344
+2025-08-06 21:35:06 - Backtester - INFO - SELL 1 shares at 144.14374819077136 on 1669615200000 | Market normal
+2025-08-06 21:35:06 - Backtester - INFO - SELL 1 shares at 141.11558798832417 on 1669701600000 | Market normal
+2025-08-06 21:35:06 - Backtester - INFO - SELL 1 shares at 147.99366202725 on 1669788000000 | Market high_volatility
+2025-08-06 21:35:06 - Backtester - INFO - SELL 1 shares at 148.44663345385788 on 1669874400000 | Market normal
+2025-08-06 21:35:06 - Backtester - INFO - BUY 37 shares at 147.86873745646773 on 1669960800000 | Stop-Loss 139.9507142857143 | Market normal | Cash 9356.208115715692
+2025-08-06 21:35:06 - Backtester - INFO - BUY 22 shares at 146.6071608770589 on 1670220000000 | Stop-Loss 138.44215714285716 | Market normal | Cash 6127.625218881101
+2025-08-06 21:35:06 - Backtester - INFO - BUY 14 shares at 143.04733013097166 on 1670306400000 | Stop-Loss 134.71215714285714 | Market normal | Cash 4122.959934425664
+2025-08-06 21:35:06 - Backtester - INFO - BUY 9 shares at 140.90715283868306 on 1670392800000 | Stop-Loss 132.65358571428573 | Market normal | Cash 2853.527394501968
+2025-08-06 21:35:06 - Backtester - INFO - BUY 7 shares at 142.50974991717698 on 1670479200000 | Stop-Loss 134.75644285714287 | Market normal | Cash 1854.961576832309
+2025-08-06 21:35:06 - Backtester - INFO - BUY 4 shares at 142.2335513255519 on 1670565600000 | Stop-Loss 133.9893 | Market normal | Cash 1285.4584373247992
+2025-08-06 21:35:06 - Backtester - INFO - BUY 3 shares at 144.51116918262107 on 1670824800000 | Stop-Loss 136.33858571428573 | Market normal | Cash 851.4913962693881
+2025-08-06 21:35:06 - Backtester - INFO - BUY 2 shares at 145.44835229367914 on 1670911200000 | Stop-Loss 136.9994142857143 | Market normal | Cash 560.3037949774425
+2025-08-06 21:35:06 - Backtester - INFO - BUY 1 shares at 143.10312804829132 on 1670997600000 | Stop-Loss 134.31012857142858 | Market normal | Cash 417.0575638011029
+2025-08-06 21:35:06 - Backtester - INFO - BUY 1 shares at 136.47344851034057 on 1671084000000 | Stop-Loss 127.1379857142857 | Market normal | Cash 280.447641842252
+2025-08-06 21:35:06 - Backtester - INFO - BUY 1 shares at 134.4838184410977 on 1671170400000 | Stop-Loss 125.26369999999999 | Market normal | Cash 145.82933958271317
+2025-08-06 21:35:06 - Backtester - INFO - Backtest completed: Final Portfolio Value = 34348.049339582714, Total Fees = 38.257209899661994
+2025-08-06 21:35:07 - Backtester - INFO - Backtest report generated: backtest_report.pdf

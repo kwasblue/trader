@@ -1,6 +1,6 @@
 import sqlite3
 import pandas as pd
-from utils.logger import Logger
+from schwab_trader.loggers.logger import Logger
 from utils.configloader import ConfigLoader
 from threading import Lock
 

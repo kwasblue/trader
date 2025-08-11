@@ -6,7 +6,7 @@ from data.output.writer import FileWriter
 from data.datastorage import DataStore
 from data.streaming.schwab_client import SchwabClient
 from data.streaming.authenticator import Authenticator
-from utils.logger import Logger
+from schwab_trader.loggers.logger import Logger
 from data.processor import Processor
 from utils.configloader import ConfigLoader
 from utils.framemanager import DataFrameManager

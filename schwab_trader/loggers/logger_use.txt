@@ -1,0 +1,36 @@
+initilize the root logger
+from schwab_trader.loggers.bootstrap import init_root_logger
+init_root_logger(log_dir="logs", root_file="app.log", level=20, console=True)
+
+# pull the factory?
+from schwab_trader.loggers.factory import get_module_logger
+
+# have it at the module level
+class AlpacaBroker(...):
+    def __init__(self, ...):
+        self.logger = get_module_logger(__name__, file_key="broker")
+        self.logger.info("AlpacaBroker initialized")
+
+# set file keys?
+from schwab_trader.loggers.factory import get_module_logger
+router_logger = get_module_logger(__name__, file_key="strategy_router")
+router_logger.debug("Router loaded")
+
+
+# default: everything goes to logs/app.log
+python -m schwab_trader.core.runner
+
+# debug broker + executor into their own files *as well* this has be in the .env file
+DEBUG_MODULES=broker,executor python -m schwab_trader.core.runner
+
+logs/
+├── app.log
+├── app.log.1
+├── app.log.2
+├── broker.log            # only if DEBUG_MODULES includes "broker"
+└── executor.log          # only if DEBUG_MODULES includes "executor"
+
+
+2025-08-08 14:31:02 - core.broker.alpaca - INFO - AlpacaBroker initialized
+2025-08-08 14:31:03 - core.logic.strategy_router - DEBUG - Router loaded
+2025-08-08 14:31:05 - core.execution.mock - INFO - [AAPL] Executed mock trade signal: 1 at $225.40

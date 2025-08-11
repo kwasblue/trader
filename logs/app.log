@@ -1,0 +1,483 @@
+2025-08-08 19:28:11 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-08 19:28:11 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-08 19:28:11 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-08 19:29:23 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-08 19:29:23 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-08 19:29:23 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-08 19:30:39 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-08 19:30:39 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-08 19:30:39 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-08 19:31:26 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-08 19:31:26 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-08 19:31:26 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-08 19:32:08 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-08 19:32:08 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-08 19:32:08 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-08 19:32:14 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 2.60% -> 290.37
+2025-08-08 19:32:26 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 2.03% -> 354.55
+2025-08-08 19:32:39 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 2.80% -> 302.44
+2025-08-08 20:21:57 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-08 20:21:57 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-08 20:21:57 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-08 20:21:58 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 1.63% -> 266.96
+2025-08-08 20:22:01 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 1.79% -> 311.33
+2025-08-08 20:22:06 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 2.63% -> 264.70
+2025-08-08 20:22:25 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 1.59% -> 299.67
+2025-08-08 20:29:29 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-08 20:29:29 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-08 20:29:29 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-08 20:29:30 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 1.51% -> 258.17
+2025-08-08 20:31:59 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-08 20:31:59 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-08 20:31:59 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-08 20:32:03 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 1.09% -> 268.47
+2025-08-08 20:32:13 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 2.24% -> 260.56
+2025-08-08 20:32:29 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 1.14% -> 264.40
+2025-08-08 20:32:30 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 1.38% -> 267.38
+2025-08-08 20:33:22 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-08 20:33:22 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-08 20:33:22 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-08 20:33:23 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 2.23% -> 260.43
+2025-08-08 20:33:30 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 2.07% -> 345.10
+2025-08-08 20:33:49 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 2.33% -> 345.73
+2025-08-08 20:37:38 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-08 20:37:38 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-08 20:37:38 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-08 20:37:45 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 1.74% -> 282.17
+2025-08-08 20:37:48 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 1.71% -> 276.65
+2025-08-08 20:45:41 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-08 20:45:41 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-08 20:45:41 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-08 20:45:46 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 1.42% -> 275.21
+2025-08-08 20:45:49 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 2.32% -> 328.25
+2025-08-08 20:46:06 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 2.63% -> 279.72
+2025-08-08 20:54:31 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-08 20:54:31 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-08 20:54:31 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-08 20:54:41 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 2.13% -> 289.43
+2025-08-08 20:54:41 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 2.29% -> 285.72
+2025-08-08 20:54:51 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 1.73% -> 280.13
+2025-08-08 21:08:12 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-08 21:08:12 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-08 21:08:12 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-08 21:08:25 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 1.48% -> 299.04
+2025-08-08 21:08:28 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 1.37% -> 277.76
+2025-08-08 21:08:39 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 2.44% -> 286.04
+2025-08-08 21:18:51 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-08 21:18:51 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-08 21:18:51 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-08 21:19:18 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 2.51% -> 257.95
+2025-08-08 21:19:18 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 2.66% -> 265.83
+2025-08-08 21:23:04 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-08 21:23:04 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-08 21:23:04 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-08 21:23:13 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 1.78% -> 276.86
+2025-08-08 21:23:35 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 2.33% -> 278.63
+2025-08-08 21:30:00 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-08 21:30:00 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-08 21:30:00 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-08 21:32:53 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-08 21:32:53 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-08 21:32:53 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-08 21:32:57 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 1.03% -> 332.64
+2025-08-08 21:46:12 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-08 21:46:12 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-08 21:46:12 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-08 21:46:12 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 2.38% -> 280.98
+2025-08-08 21:46:13 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 1.18% -> 276.62
+2025-08-08 21:46:34 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 2.47% -> 287.29
+2025-08-08 21:46:38 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 3.00% -> 276.32
+2025-08-08 21:46:42 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 1.21% -> 275.31
+2025-08-08 21:49:09 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-08 21:49:09 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-08 21:49:09 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-08 21:49:09 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 2.80% -> 351.56
+2025-08-08 21:49:23 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 2.06% -> 292.55
+2025-08-08 21:49:23 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 2.08% -> 298.80
+2025-08-08 22:06:36 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-08 22:06:36 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-08 22:06:36 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-08 22:06:56 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 1.85% -> 301.10
+2025-08-08 22:12:19 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-08 22:12:19 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-08 22:12:19 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-08 22:12:23 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 2.74% -> 257.79
+2025-08-08 22:12:24 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 2.24% -> 318.12
+2025-08-08 22:12:31 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 2.19% -> 309.46
+2025-08-08 22:13:51 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-08 22:13:51 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-08 22:13:51 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-08 22:14:10 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 2.39% -> 358.05
+2025-08-08 22:14:14 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 2.92% -> 347.41
+2025-08-08 22:14:20 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 1.18% -> 346.17
+2025-08-08 22:18:31 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-08 22:18:31 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-08 22:18:31 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-08 22:18:32 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 1.57% -> 283.01
+2025-08-08 22:18:53 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 1.12% -> 263.25
+2025-08-08 22:28:47 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-08 22:28:47 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-08 22:28:47 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-08 22:29:08 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 1.48% -> 281.52
+2025-08-08 22:35:41 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-08 22:35:41 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-08 22:35:41 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-08 22:35:43 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 1.61% -> 270.50
+2025-08-08 22:38:16 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-08 22:38:16 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-08 22:38:16 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-08 22:38:21 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 2.00% -> 277.24
+2025-08-08 22:38:33 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 1.03% -> 253.74
+2025-08-08 22:38:41 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 1.03% -> 255.55
+2025-08-08 22:42:03 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-08 22:42:03 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-08 22:42:03 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-08 22:42:05 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 2.11% -> 340.56
+2025-08-08 22:42:13 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 2.19% -> 287.58
+2025-08-08 22:42:18 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 2.11% -> 288.68
+2025-08-08 22:42:25 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 2.28% -> 288.42
+2025-08-08 22:42:30 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 2.70% -> 326.72
+2025-08-08 22:44:00 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-08 22:44:00 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-08 22:44:00 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-08 22:44:04 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 1.58% -> 339.66
+2025-08-08 22:44:04 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 2.21% -> 331.13
+2025-08-08 22:44:25 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 2.85% -> 328.98
+2025-08-08 22:44:26 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 1.86% -> 319.14
+2025-08-08 22:51:59 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-08 22:51:59 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-08 22:51:59 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-08 22:52:07 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 1.22% -> 286.77
+2025-08-08 22:52:20 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 1.01% -> 283.19
+2025-08-08 22:56:53 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-08 22:56:53 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-08 22:56:53 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-08 22:57:16 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 1.13% -> 315.79
+2025-08-08 22:57:17 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 1.58% -> 311.73
+2025-08-08 22:57:17 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 2.31% -> 351.56
+2025-08-08 23:01:14 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-08 23:01:14 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-08 23:01:14 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-08 23:01:39 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 1.34% -> 348.36
+2025-08-08 23:01:45 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 1.58% -> 262.08
+2025-08-08 23:15:41 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-08 23:15:41 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-08 23:15:41 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-08 23:15:55 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 1.06% -> 334.06
+2025-08-08 23:17:07 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-08 23:17:07 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-08 23:17:07 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-08 23:17:12 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 1.24% -> 349.73
+2025-08-08 23:27:44 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-08 23:27:44 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-08 23:27:44 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-08 23:27:50 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 1.14% -> 319.23
+2025-08-08 23:27:58 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 2.38% -> 326.49
+2025-08-08 23:28:03 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 1.82% -> 316.06
+2025-08-08 23:28:09 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 1.16% -> 330.64
+2025-08-08 23:28:32 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-08 23:28:32 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-08 23:28:32 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-08 23:28:33 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 2.88% -> 345.90
+2025-08-08 23:38:27 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-08 23:38:27 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-08 23:38:27 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-08 23:38:41 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 2.38% -> 247.15
+2025-08-08 23:38:51 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 2.96% -> 286.98
+2025-08-09 00:02:22 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-09 00:02:22 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-09 00:02:22 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-09 00:02:45 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-09 00:02:45 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-09 00:02:45 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-09 00:12:40 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-09 00:12:40 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-09 00:12:40 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-09 00:13:21 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-09 00:13:21 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-09 00:13:21 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-09 00:13:21 - Drawdown Monitor - DEBUG - Logger initialized.
+2025-08-09 00:13:21 - Drawdown Monitor - DEBUG - Log file: logs/app.log
+2025-08-09 00:13:21 - Drawdown Monitor - DEBUG - Logger name: Drawdown Monitor
+2025-08-09 00:13:44 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 1.53% -> 260.46
+2025-08-09 00:18:20 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-09 00:18:20 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-09 00:18:20 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-09 00:18:21 - Drawdown Monitor - DEBUG - Logger initialized.
+2025-08-09 00:18:21 - Drawdown Monitor - DEBUG - Log file: logs/app.log
+2025-08-09 00:18:21 - Drawdown Monitor - DEBUG - Logger name: Drawdown Monitor
+2025-08-09 00:18:21 - Drawdown Monitor - INFO - [DAILY RESET] Portfolio start set to ,.2f
+2025-08-09 00:18:34 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 1.79% -> 323.86
+2025-08-09 00:18:47 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 2.64% -> 263.45
+2025-08-09 00:25:44 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-09 00:25:44 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-09 00:25:44 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-09 00:25:44 - Drawdown Monitor - DEBUG - Logger initialized.
+2025-08-09 00:25:44 - Drawdown Monitor - DEBUG - Log file: logs/app.log
+2025-08-09 00:25:44 - Drawdown Monitor - DEBUG - Logger name: Drawdown Monitor
+2025-08-09 00:25:44 - Drawdown Monitor - INFO - [DAILY RESET] Portfolio start set to 100,000.00
+2025-08-09 00:25:44 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 2.58% -> 291.98
+2025-08-09 00:26:15 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 1.73% -> 300.22
+2025-08-09 00:26:54 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-09 00:26:54 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-09 00:26:54 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-09 00:26:54 - Drawdown Monitor - DEBUG - Logger initialized.
+2025-08-09 00:26:54 - Drawdown Monitor - DEBUG - Log file: logs/app.log
+2025-08-09 00:26:54 - Drawdown Monitor - DEBUG - Logger name: Drawdown Monitor
+2025-08-09 00:26:54 - Drawdown Monitor - INFO - [DAILY RESET] Portfolio start set to 100,000.00
+2025-08-09 00:26:59 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 2.14% -> 317.33
+2025-08-09 00:27:01 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 2.16% -> 313.85
+2025-08-09 00:27:10 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 2.25% -> 268.33
+2025-08-09 00:34:00 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-09 00:34:00 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-09 00:34:00 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-09 00:34:17 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 2.08% -> 260.23
+2025-08-10 13:40:34 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-10 13:40:34 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-10 13:40:34 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-10 13:40:57 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 2.57% -> 333.69
+2025-08-10 13:41:04 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 1.83% -> 328.79
+2025-08-10 13:41:16 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 1.90% -> 328.34
+2025-08-10 13:41:17 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 1.86% -> 340.84
+2025-08-10 13:41:34 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 2.07% -> 251.27
+2025-08-10 13:41:37 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 2.19% -> 247.44
+2025-08-10 13:41:51 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 2.44% -> 357.72
+2025-08-10 13:42:10 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 2.08% -> 354.85
+2025-08-10 13:47:30 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-10 13:47:30 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-10 13:47:30 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-10 13:47:41 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 1.33% -> 262.38
+2025-08-10 13:47:51 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 2.64% -> 317.35
+2025-08-10 13:47:52 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 1.31% -> 315.53
+2025-08-10 13:48:08 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 1.04% -> 310.05
+2025-08-10 13:48:29 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 2.94% -> 300.65
+2025-08-10 13:48:29 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 2.41% -> 278.37
+2025-08-10 14:07:49 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-10 14:07:49 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-10 14:07:49 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-10 14:07:54 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 1.77% -> 336.11
+2025-08-10 14:08:23 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 2.69% -> 303.97
+2025-08-10 14:08:35 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 1.57% -> 348.95
+2025-08-10 14:08:54 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 2.66% -> 295.50
+2025-08-10 14:08:55 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 1.96% -> 303.88
+2025-08-10 14:08:59 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 1.05% -> 354.70
+2025-08-10 14:09:11 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 1.28% -> 278.23
+2025-08-10 14:09:31 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 1.77% -> 363.27
+2025-08-10 14:10:51 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-10 14:10:51 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-10 14:10:51 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-10 14:11:50 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 1.83% -> 326.65
+2025-08-10 14:12:02 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 1.25% -> 254.79
+2025-08-10 14:12:07 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 1.79% -> 256.66
+2025-08-10 14:12:43 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-10 14:12:43 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-10 14:12:43 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-10 14:12:46 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 2.64% -> 282.47
+2025-08-10 14:13:15 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 1.40% -> 293.09
+2025-08-10 14:13:25 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 1.01% -> 290.89
+2025-08-10 14:13:37 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 2.73% -> 290.80
+2025-08-10 14:13:37 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 2.34% -> 283.79
+2025-08-10 14:13:40 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 2.06% -> 295.29
+2025-08-10 14:14:10 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 2.18% -> 310.42
+2025-08-10 14:40:06 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-10 14:40:06 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-10 14:40:06 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-10 14:40:09 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 1.80% -> 283.19
+2025-08-10 14:40:47 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 2.60% -> 287.27
+2025-08-10 14:41:12 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 2.46% -> 281.51
+2025-08-10 14:41:24 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 1.68% -> 291.26
+2025-08-10 14:41:36 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 1.81% -> 264.69
+2025-08-10 14:41:37 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 1.38% -> 281.97
+2025-08-10 14:41:39 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 2.64% -> 277.22
+2025-08-10 15:09:59 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-10 15:09:59 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-10 15:09:59 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-10 15:10:09 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 1.71% -> 297.94
+2025-08-10 15:10:17 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 2.96% -> 301.95
+2025-08-10 15:10:18 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 1.10% -> 296.00
+2025-08-10 15:11:07 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 2.48% -> 277.33
+2025-08-10 16:33:53 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-10 16:33:53 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-10 16:33:53 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-10 17:08:28 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-10 17:08:28 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-10 17:08:28 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-10 17:10:33 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-10 17:10:33 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-10 17:10:33 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-10 17:11:39 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-10 17:11:39 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-10 17:11:39 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-10 17:11:40 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 2.51% -> 325.93
+2025-08-10 17:11:45 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 2.65% -> 335.45
+2025-08-10 17:12:05 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 2.97% -> 268.46
+2025-08-10 17:12:08 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 1.88% -> 348.63
+2025-08-10 17:12:12 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 2.47% -> 354.21
+2025-08-10 17:12:12 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 1.37% -> 351.78
+2025-08-10 17:12:21 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 1.68% -> 355.58
+2025-08-10 17:12:26 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 2.39% -> 364.93
+2025-08-10 17:12:29 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 1.12% -> 265.71
+2025-08-10 17:12:29 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 1.57% -> 368.99
+2025-08-10 17:12:45 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 1.10% -> 321.29
+2025-08-10 17:13:09 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 1.79% -> 325.85
+2025-08-10 17:18:27 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-10 17:18:27 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-10 17:18:27 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-10 17:18:29 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 1.37% -> 257.45
+2025-08-10 17:18:34 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 1.28% -> 267.06
+2025-08-10 17:19:11 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 2.66% -> 289.11
+2025-08-10 17:19:35 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 1.51% -> 301.47
+2025-08-10 17:19:38 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 2.07% -> 311.05
+2025-08-10 17:19:52 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 1.02% -> 296.68
+2025-08-10 17:20:11 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 1.55% -> 246.14
+2025-08-10 17:22:36 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-10 17:22:36 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-10 17:22:36 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-10 17:22:50 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 2.77% -> 343.95
+2025-08-10 17:22:50 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 2.61% -> 299.45
+2025-08-10 17:23:00 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 1.34% -> 301.07
+2025-08-10 17:23:15 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 1.77% -> 342.38
+2025-08-10 17:23:23 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 2.02% -> 297.69
+2025-08-10 17:23:44 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 1.50% -> 351.35
+2025-08-10 17:23:54 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 1.99% -> 350.77
+2025-08-10 17:24:11 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 1.99% -> 371.24
+2025-08-10 17:24:11 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 1.57% -> 305.14
+2025-08-10 17:24:15 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 2.00% -> 367.93
+2025-08-10 17:32:19 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-10 17:32:19 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-10 17:32:19 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-10 17:32:23 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 1.54% -> 245.72
+2025-08-10 17:32:28 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 1.06% -> 241.04
+2025-08-10 17:32:44 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 1.62% -> 288.89
+2025-08-10 17:32:46 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 2.34% -> 232.24
+2025-08-10 17:32:57 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 2.33% -> 294.68
+2025-08-10 17:33:01 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 1.98% -> 229.53
+2025-08-10 17:33:03 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 2.31% -> 312.14
+2025-08-10 17:33:03 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 2.54% -> 218.30
+2025-08-10 17:33:12 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 2.93% -> 218.38
+2025-08-10 17:33:34 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 1.27% -> 219.38
+2025-08-10 17:33:54 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 2.82% -> 197.36
+2025-08-10 17:33:57 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 1.76% -> 319.85
+2025-08-10 17:37:19 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-10 17:37:19 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-10 17:37:19 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-10 17:37:28 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 1.66% -> 306.07
+2025-08-10 17:38:55 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 1.01% -> 312.79
+2025-08-10 17:39:02 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 2.06% -> 301.70
+2025-08-10 17:39:36 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 1.50% -> 297.55
+2025-08-10 17:41:12 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-10 17:41:12 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-10 17:41:12 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-10 17:41:17 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 2.70% -> 347.43
+2025-08-10 17:41:23 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 2.25% -> 316.83
+2025-08-10 17:41:25 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 2.14% -> 324.51
+2025-08-10 17:41:44 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 1.71% -> 334.34
+2025-08-10 17:41:50 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 1.65% -> 340.11
+2025-08-10 17:42:10 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 2.52% -> 339.99
+2025-08-10 17:42:21 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 2.90% -> 341.84
+2025-08-10 17:42:25 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 1.59% -> 327.37
+2025-08-10 17:42:35 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 2.02% -> 347.53
+2025-08-10 17:42:56 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 2.10% -> 333.53
+2025-08-10 17:43:24 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 1.07% -> 381.94
+2025-08-10 17:43:43 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 2.76% -> 395.50
+2025-08-10 17:47:47 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-10 17:47:47 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-10 17:47:47 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-10 17:48:08 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 1.51% -> 252.59
+2025-08-10 17:48:10 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 2.01% -> 285.38
+2025-08-10 17:48:12 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 2.43% -> 261.01
+2025-08-10 17:48:23 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 1.96% -> 248.70
+2025-08-10 17:48:27 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 1.94% -> 287.63
+2025-08-10 17:48:33 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 1.94% -> 248.35
+2025-08-10 17:48:41 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 1.06% -> 262.96
+2025-08-10 17:48:43 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 2.21% -> 292.46
+2025-08-10 17:48:47 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 2.41% -> 274.66
+2025-08-10 17:48:57 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 2.24% -> 296.53
+2025-08-10 17:49:03 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 1.97% -> 298.04
+2025-08-10 17:49:13 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 1.14% -> 289.30
+2025-08-10 17:49:15 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 1.70% -> 302.73
+2025-08-10 17:49:20 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 1.98% -> 287.30
+2025-08-10 17:58:55 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-10 17:58:55 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-10 17:58:55 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-10 17:59:04 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 2.49% -> 348.01
+2025-08-10 17:59:14 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 1.98% -> 321.97
+2025-08-10 18:00:09 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 2.92% -> 325.98
+2025-08-10 18:00:19 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 2.44% -> 332.45
+2025-08-10 18:00:25 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 1.12% -> 397.35
+2025-08-10 18:00:26 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 2.54% -> 349.86
+2025-08-10 18:01:40 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-10 18:01:40 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-10 18:01:40 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-10 18:01:41 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 2.72% -> 344.33
+2025-08-10 18:01:43 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 1.98% -> 352.85
+2025-08-10 18:02:06 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 1.25% -> 362.70
+2025-08-10 18:02:16 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 1.25% -> 312.70
+2025-08-10 18:02:21 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 1.05% -> 318.50
+2025-08-10 18:02:22 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 2.38% -> 313.76
+2025-08-10 18:02:31 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 2.77% -> 374.22
+2025-08-10 18:02:34 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 2.20% -> 296.57
+2025-08-10 18:02:41 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 2.81% -> 364.28
+2025-08-10 18:02:59 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 1.80% -> 294.97
+2025-08-10 18:03:04 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 2.61% -> 359.81
+2025-08-10 18:03:20 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 2.09% -> 347.37
+2025-08-10 18:03:21 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 2.53% -> 344.12
+2025-08-10 18:05:05 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-10 18:05:05 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-10 18:05:05 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-10 18:05:11 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 1.87% -> 342.08
+2025-08-10 18:05:18 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 1.03% -> 323.83
+2025-08-10 18:05:40 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 2.92% -> 336.76
+2025-08-10 18:05:57 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 1.83% -> 335.57
+2025-08-10 18:06:00 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 1.63% -> 344.79
+2025-08-10 18:09:39 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-10 18:09:39 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-10 18:09:39 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-10 18:10:21 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 1.10% -> 277.09
+2025-08-10 18:11:19 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 1.24% -> 285.69
+2025-08-10 18:15:53 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-10 18:15:53 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-10 18:15:53 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-10 18:16:40 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 2.12% -> 339.62
+2025-08-10 18:17:04 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 1.21% -> 335.31
+2025-08-10 18:17:06 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 2.35% -> 331.72
+2025-08-11 07:47:41 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-11 07:47:41 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-11 07:47:41 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-11 07:49:05 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 2.39% -> 268.98
+2025-08-11 07:49:20 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 1.70% -> 349.77
+2025-08-11 08:55:11 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-11 08:55:11 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-11 08:55:11 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-11 08:58:40 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-11 08:58:40 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-11 08:58:40 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-11 08:59:35 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-11 08:59:35 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-11 08:59:35 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-11 09:11:19 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-11 09:11:19 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-11 09:11:19 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-11 09:11:34 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 1.57% -> 336.96
+2025-08-11 09:11:38 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 2.41% -> 344.00
+2025-08-11 09:11:43 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 2.74% -> 335.15
+2025-08-11 09:12:44 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 1.94% -> 329.91
+2025-08-11 09:12:45 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 1.03% -> 327.71
+2025-08-11 09:17:24 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-11 09:17:24 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-11 09:17:24 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-11 09:17:42 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 2.58% -> 262.75
+2025-08-11 09:17:51 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 2.16% -> 259.40
+2025-08-11 09:17:58 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 1.91% -> 266.66
+2025-08-11 09:18:12 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 1.98% -> 279.30
+2025-08-11 09:18:14 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 1.98% -> 302.64
+2025-08-11 09:18:20 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 1.69% -> 276.83
+2025-08-11 09:18:45 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 1.09% -> 284.00
+2025-08-11 09:18:58 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 2.03% -> 286.60
+2025-08-11 09:24:00 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-11 09:24:00 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-11 09:24:00 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-11 09:24:13 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 2.26% -> 289.57
+2025-08-11 09:24:16 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 2.90% -> 294.76
+2025-08-11 09:24:58 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 2.96% -> 282.58
+2025-08-11 09:25:05 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 1.91% -> 287.07

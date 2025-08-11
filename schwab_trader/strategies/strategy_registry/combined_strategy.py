@@ -1,6 +1,6 @@
 import numpy as np
 import inspect
-from strategies.base_strategy import BaseStrategy
+from core.base.base_strategy import BaseStrategy
 
 class CombinedStrategy(BaseStrategy):
     def generate_signal(self, data):

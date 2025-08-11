@@ -1,4 +1,4 @@
-from indicators.base_indicator import BaseIndicator
+from schwab_trader.core.base.base_indicator import BaseIndicator
 
 class MomentumIndicator(BaseIndicator):
     def __init__(self, df, window=10):

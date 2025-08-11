@@ -276,47 +276,75 @@ class DrawdownMonitor:
     """
     Tracks per-symbol drawdowns and disables trading if drawdown exceeds a threshold.
     Adds cooldown support after unlocking to prevent immediate re-entry.
+    Optionally supports global drawdown and daily drawdown limits.
     """
 
-    def __init__(self, max_drawdown=0.35, cooldown_seconds=20):
+    def __init__(self, max_drawdown=0.35, cooldown_seconds=20, max_daily_drawdown=0.10, global_drawdown=0.25):
         self.max_drawdown = max_drawdown
         self.cooldown_seconds = cooldown_seconds
+        self.max_daily_drawdown = max_daily_drawdown
+        self.global_drawdown = global_drawdown
+
         self.peak = {}
+        self.daily_start_value = {}
         self.locked = defaultdict(lambda: False)
         self.last_unlock_time = {}  # symbol → datetime
+        self.global_peak = None
+        self.global_locked = False
+
         self.logger = logging.getLogger("DrawdownMonitor")
         self.logger.setLevel(logging.DEBUG)
 
-    def update(self, symbol, portfolio_value):
+    def update(self, symbol, portfolio_value, global_portfolio_value=None):
         now = datetime.now(UTC)
 
+        # Init symbol peak and daily start
         if symbol not in self.peak:
             self.peak[symbol] = portfolio_value
+            self.daily_start_value[symbol] = portfolio_value
             self.logger.debug(f"[InitPeak] {symbol} initialized at {portfolio_value:.2f}")
             return True
 
-        # Cooldown logic: if symbol is unlocked but still in cooldown
+        # Daily drawdown limit check
+        if portfolio_value < self.daily_start_value[symbol] * (1 - self.max_daily_drawdown):
+            self.locked[symbol] = True
+            self.logger.warning(f"[DAILY_LOCKED] {symbol} exceeded daily drawdown limit.")
+            return False
+
+        # Global drawdown check
+        if global_portfolio_value is not None:
+            if self.global_peak is None:
+                self.global_peak = global_portfolio_value
+            if global_portfolio_value > self.global_peak:
+                self.global_peak = global_portfolio_value
+
+            global_drawdown = (global_portfolio_value - self.global_peak) / self.global_peak
+            if global_drawdown < -self.global_drawdown:
+                self.global_locked = True
+                self.logger.warning(f"[GLOBAL_LOCKED] Global drawdown exceeded: {global_drawdown:.2%}")
+
+        if self.global_locked:
+            return False
+
+        # Cooldown logic
         if not self.locked[symbol] and symbol in self.last_unlock_time:
             elapsed = (now - self.last_unlock_time[symbol]).total_seconds()
             if elapsed < self.cooldown_seconds:
                 self.logger.warning(f"[COOLDOWN] {symbol} in cooldown ({elapsed:.1f}s elapsed). Trading still disabled.")
-                return False  # block trade during cooldown
+                return False
 
         # Recovery unlock logic
         if self.locked[symbol]:
-            drawdown = (portfolio_value - self.peak[symbol]) / self.peak[symbol]
             if portfolio_value >= 0.85 * self.peak[symbol]:
                 self.locked[symbol] = False
                 self.last_unlock_time[symbol] = now
                 self.logger.info(f"[UNLOCKED] {symbol} trading re-enabled after drawdown recovery. Cooldown started.")
-                return False  # still in cooldown
-            return False  # still locked
+                return False
+            return False
 
-        # Update peak if new high
         if portfolio_value > self.peak[symbol]:
             self.peak[symbol] = portfolio_value
 
-        # Drawdown check
         drawdown = max(((portfolio_value - self.peak[symbol]) / self.peak[symbol]), -1.0)
         if drawdown < -self.max_drawdown:
             self.locked[symbol] = True
@@ -329,7 +357,7 @@ class DrawdownMonitor:
         return True
 
     def is_locked(self, symbol):
-        return self.locked[symbol]
+        return self.locked[symbol] or self.global_locked
 
     def is_in_cooldown(self, symbol):
         if symbol not in self.last_unlock_time:
@@ -356,6 +384,12 @@ class DrawdownMonitor:
         if drawdown < -self.max_drawdown:
             self.locked[symbol] = True
             self.logger.warning(f"[LOCKED] {symbol} drawdown exceeded: {drawdown:.2%}")
+
+    def unlock_global(self):
+        if self.global_locked:
+            self.global_locked = False
+            self.global_peak = None
+            self.logger.info("[GLOBAL UNLOCKED] Global trading unlocked.")
 # ---------------------------- Mock Executor ----------------------------------------------------------#
 class MockExecutor:
     def __init__(self):

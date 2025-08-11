@@ -1,0 +1,20 @@
+{
+  "AAPL": {
+    "low_volatility": "momentum_strategy",
+    "normal": "momentum_strategy",
+    "high_volatility": "momentum_strategy"
+  },
+  "MSFT": {
+    "low_volatility": "momentum_strategy",
+    "normal": "momentum_strategy",
+    "high_volatility": "momentum_strategy"
+  },
+
+  "default": {
+    "low_volatility":  { "trade_logic_class": "default", "params": {} },
+    "normal":          { "trade_logic_class": "default", "params": {} },
+    "high_volatility": { "trade_logic_class": "default", "params": {} }
+  }
+
+  
+}

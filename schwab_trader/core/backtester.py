@@ -6,7 +6,7 @@ import matplotlib.dates as mdates
 from fpdf import FPDF
 from strategies.strategy_registry import load_strategy, list_strategies
 from utils.risk_metrics import RiskQuantifier
-from utils.logger import Logger
+from schwab_trader.loggers.logger import Logger
 from core.position_sizer import DynamicPositionSizer
 from data.datautils import epoch_to_date
 
@@ -101,7 +101,8 @@ class Backtester:
                 stock_price=execution_price,
                 stop_loss_price=stop_loss_price,
                 current_cash=cash,
-                market_conditions=market_conditions
+                market_conditions=market_conditions, 
+                signal = signal
             )
 
             trade_fee = 0.001 * execution_price * quantity  # Example: 0.1% transaction fee

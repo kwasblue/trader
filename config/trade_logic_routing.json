@@ -1,0 +1,16 @@
+{
+  "AAPL": {
+    "low_volatility": {
+      "trade_logic_class": "default",
+      "params": {}
+    },
+    "normal": {
+      "trade_logic_class": "default",
+      "params": {}
+    },
+    "high_volatility": {
+      "trade_logic_class": "default",
+      "params": {}
+    }
+  }
+}

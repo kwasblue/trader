@@ -1,0 +1,135 @@
+schwab_trader/
+│
+├── 📁 core/
+│   ├── backtester.py
+│   ├── executor.py
+│   ├── mock_executor.py
+│   ├── eventhandler.py
+│   ├── position_sizer.py
+│   ├── runner.py
+│
+│   ├── 📁 simulator/
+│   │   ├── gbm_simulator.py
+│   │   ├── strategy_router.py
+│   │   ├── live_plotter.py
+│   │   ├── historical_loader.py
+│   │   └── drawdown_monitor.py
+│
+│   ├── 📁 logic/
+│   │   ├── trade_logic_base.py             # Abstract base class
+│   │   ├── default_trade_logic.py
+│   │   ├── execution_engine.py
+│   │   ├── trade_logic_manager.py
+│   │   └── strategy_routing_manager.py
+│
+│   ├── 📁 broker/
+│   │   ├── broker_interface.py             # Abstract base class
+│   │   └── alpaca_broker.py
+│
+│   ├── 📁 base/
+│   │   ├── strategy_base.py                # StrategyBase
+│   │   ├── indicator_base.py               # IndicatorBase
+│   │   ├── execution_engine_base.py        # ExecutionEngineBase
+│   │   ├── position_sizer_base.py          # PositionSizerBase
+│   │   ├── risk_model_base.py              # RiskModelBase
+│   │   ├── executor_base.py                # ExecutorBase
+│   │   ├── event_handler_base.py           # EventHandlerBase
+│   │   ├── sentiment_model_base.py         # SentimentModelBase
+│   │   └── trade_logger_base.py            # TradeLoggerBase
+│
+├── 📁 strategies/
+│   ├── base_strategy.py
+│   └── strategy_registry/
+│       ├── adx_strategy.py
+│       ├── bollinger_strategy.py
+│       ├── breakout_strategy.py
+│       ├── combined_strategy.py
+│       ├── donchian_strategy.py
+│       ├── ema_strategy.py
+│       ├── ichimoku_strategy.py
+│       ├── logistic_regression_strategy.py
+│       ├── macd_strategy.py
+│       ├── mean_reversion_strategy.py
+│       ├── momentum_strategy.py
+│       ├── psar_strategy.py
+│       ├── rsi_strategy.py
+│       ├── sma_strategy.py
+│       ├── stochastic_strategy.py
+│       ├── vwap_strategy.py
+│       └── __init__.py
+│
+├── 📁 indicators/
+│   ├── atr.py
+│   ├── base_indicator.py
+│   ├── bollinger.py
+│   ├── ema.py
+│   ├── macd.py
+│   ├── momentum.py
+│   ├── obv.py
+│   ├── percent_change.py
+│   ├── price_change.py
+│   ├── psar.py
+│   ├── roc.py
+│   ├── rsi.py
+│   ├── sma.py
+│   ├── technical_indicators.py
+│   └── vwap.py
+│
+├── 📁 data/
+│   ├── datapipeline.py
+│   ├── processor.py
+│   ├── aggregate.py
+│   ├── datastorage.py
+│   ├── datautils.py
+│   ├── output/
+│   │   └── writer.py
+│   └── streaming/
+│       ├── schwab_client.py
+│       ├── streamer.py
+│       └── authenticator.py
+│
+├── 📁 utils/
+│   ├── logger.py
+│   ├── framemanager.py
+│   ├── configloader.py
+│   └── risk_metrics.py
+│
+├── 📁 cache/
+│   └── cache.py
+│
+├── 📁 monitoring/
+│   └── monitor.py
+│
+├── 📁 tests/
+│   ├── test_aggregator.py
+│   ├── test_authenticator.py
+│   └── test_trade_logic.py
+│
+├── 📁 exploration/
+│   ├── trader.py
+│   ├── sentiment_analyzer.py
+│   ├── simulator.py
+│   ├── test1.py
+│   ├── backtest_1.py
+│   ├── test7.py
+│   ├── test8.py
+│   ├── muilt_model_eval.py
+│   ├── logistic_regression_eval.py
+│   └── logistic_regress_tst.py
+│
+├── 📁 notebooks/
+│   ├── data_analysis.ipynb
+│   ├── signal_testing.ipynb
+│   ├── live_vs_backtest_comparison.ipynb
+│   ├── sentiment_correlation.ipynb
+│   ├── strategy_experiments.ipynb
+│   └── feature_engineering.ipynb
+│
+├── 📁 archive/
+│   ├── strategy.py
+│   ├── indicators.py
+│   ├── schwab_client_old.py
+│   └── old_authenticator.py
+│
+├── structure.py
+└── requirements.txt

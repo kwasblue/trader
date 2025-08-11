@@ -1,4 +1,4 @@
-from indicators.base_indicator import BaseIndicator
+from schwab_trader.core.base.base_indicator import BaseIndicator
 
 class VWAPIndicator(BaseIndicator):
     def compute(self):

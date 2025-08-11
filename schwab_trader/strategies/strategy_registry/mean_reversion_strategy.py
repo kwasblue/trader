@@ -1,9 +1,21 @@
-import numpy as np
-from strategies.base_strategy import BaseStrategy
+# strategies/strategy_registry/mean_reversion_strategy.py
+from core.base.base_strategy import BaseStrategy
+import pandas as pd
 
 class MeanReversionStrategy(BaseStrategy):
-    def generate_signal(self, data):
-        window = self.params.get("window", 10)
-        data["Rolling_Mean"] = data["Close"].rolling(window=window).mean()
-        data["Signal"] = np.where(data["Close"] > data["Rolling_Mean"], -1, 1)
-        return data
+    def __init__(self, window: int = 14, threshold: float = 1.0, **kwargs):
+        super().__init__(**kwargs)
+        self.window = window
+        self.threshold = threshold
+
+    def generate_signal(self, data: pd.DataFrame) -> int:
+        df = data.copy()
+        close = df["Close"] if "Close" in df.columns else df["close"]
+        if len(df) < self.window:
+            return 0
+        z = (close - close.rolling(self.window).mean()) / close.rolling(self.window).std(ddof=0)
+        if z.iloc[-1] > self.threshold:
+            return -1
+        if z.iloc[-1] < -self.threshold:
+            return 1
+        return 0
