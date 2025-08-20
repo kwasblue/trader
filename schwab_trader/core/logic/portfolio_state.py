@@ -1,7 +1,7 @@
 # core/logic/portfolio_state.py
 from dataclasses import dataclass, field
 from typing import Dict
-from core.types import BrokerSnapshot  # <- the dataclass we defined earlier
+from core.app_types import BrokerSnapshot  # <- the dataclass we defined earlier
 
 @dataclass
 class SymbolPosition:

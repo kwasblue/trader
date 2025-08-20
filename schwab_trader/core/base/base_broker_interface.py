@@ -2,7 +2,7 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Optional, List
-from core.types import OrderResult, PositionView, BrokerSnapshot
+from core.app_types import OrderResult, PositionView, BrokerSnapshot
 
 class BaseBrokerInterface(ABC):
     """
