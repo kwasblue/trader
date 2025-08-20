@@ -5,9 +5,7 @@ from core.base.trade_logger_base import TradeLoggerBase
 from core.logic.trade_logic_manager import DynamicTradeLogicManager
 from core.logic.symbol_state import SymbolState
 from core.drawdown_monitor import DrawdownMonitor
-from core.logic.default_trade_logic import DefaultTradeLogic
 from loggers.logger import Logger
-from typing import Any
 
 
 class MockExecutionEngine(ExecutionEngineBase):

@@ -5,7 +5,7 @@ from core.base.base_broker_interface import BaseBrokerInterface
 from core.base.position_sizer_base import PositionSizerBase
 from core.base.trade_logger_base import TradeLoggerBase
 from core.logic.trade_logic_manager import DynamicTradeLogicManager
-from schwab_trader.loggers.logger import Logger
+from loggers.logger import Logger
 from typing import Any
 
 
@@ -66,7 +66,8 @@ class LiveExecutionEngine(ExecutionEngineBase):
                 regime=regime,
                 broker=self.broker,
                 sizer=self.sizer,
-                tracker=self.performance_tracker
+                performance_tracker=self.performance_tracker,
+                portfolio = self.portfolio
             )
 
             self.logger.info(f"[{symbol}] Executed live trade signal: {signal} at ${price:.2f}")

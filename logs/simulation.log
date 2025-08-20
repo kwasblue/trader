@@ -1,72 +1,12 @@
-2025-08-10 17:47:46 - SimulationRunner - DEBUG - Logger initialized.
-2025-08-10 17:47:46 - SimulationRunner - DEBUG - Log file: logs/simulation.log
-2025-08-10 17:47:46 - SimulationRunner - DEBUG - Logger name: SimulationRunner
-2025-08-10 17:47:47 - SimulationRunner - INFO - Starting sim for ['AAPL', 'MSFT'] | steps=2000
-2025-08-10 17:49:34 - SimulationRunner - INFO - Simulation finished producing bars.
-2025-08-10 17:49:34 - SimulationRunner - INFO - Done. Final equity: $100,000.00 | Unrealized: $0.00
-2025-08-10 17:58:55 - SimulationRunner - DEBUG - Logger initialized.
-2025-08-10 17:58:55 - SimulationRunner - DEBUG - Log file: logs/simulation.log
-2025-08-10 17:58:55 - SimulationRunner - DEBUG - Logger name: SimulationRunner
-2025-08-10 17:58:55 - SimulationRunner - INFO - Starting sim for ['AAPL', 'MSFT'] | steps=2000
-2025-08-10 18:00:40 - SimulationRunner - INFO - Simulation finished producing bars.
-2025-08-10 18:00:40 - SimulationRunner - INFO - Done. Final equity: $100,000.00 | Unrealized: $0.00
-2025-08-10 18:01:40 - SimulationRunner - DEBUG - Logger initialized.
-2025-08-10 18:01:40 - SimulationRunner - DEBUG - Log file: logs/simulation.log
-2025-08-10 18:01:40 - SimulationRunner - DEBUG - Logger name: SimulationRunner
-2025-08-10 18:01:40 - SimulationRunner - INFO - Starting sim for ['AAPL', 'MSFT'] | steps=2000
-2025-08-10 18:03:34 - SimulationRunner - INFO - Simulation finished producing bars.
-2025-08-10 18:03:34 - SimulationRunner - INFO - Done. Final equity: $100,000.00 | Unrealized: $0.00
-2025-08-10 18:05:05 - SimulationRunner - DEBUG - Logger initialized.
-2025-08-10 18:05:05 - SimulationRunner - DEBUG - Log file: logs/simulation.log
-2025-08-10 18:05:05 - SimulationRunner - DEBUG - Logger name: SimulationRunner
-2025-08-10 18:05:05 - SimulationRunner - INFO - Starting sim for ['AAPL', 'MSFT'] | steps=1000
-2025-08-10 18:06:04 - SimulationRunner - INFO - Simulation finished producing bars.
-2025-08-10 18:06:04 - SimulationRunner - INFO - Done. Final equity: $100,000.00 | Unrealized: $0.00
-2025-08-10 18:09:39 - SimulationRunner - DEBUG - Logger initialized.
-2025-08-10 18:09:39 - SimulationRunner - DEBUG - Log file: logs/simulation.log
-2025-08-10 18:09:39 - SimulationRunner - DEBUG - Logger name: SimulationRunner
-2025-08-10 18:09:39 - SimulationRunner - INFO - Starting sim for ['AAPL', 'MSFT'] | steps=1000
-2025-08-10 18:11:21 - SimulationRunner - INFO - Simulation finished producing bars.
-2025-08-10 18:11:21 - SimulationRunner - INFO - Done. Final equity: $100,000.00 | Unrealized: $0.00
-2025-08-10 18:15:53 - SimulationRunner - DEBUG - Logger initialized.
-2025-08-10 18:15:53 - SimulationRunner - DEBUG - Log file: logs/simulation.log
-2025-08-10 18:15:53 - SimulationRunner - DEBUG - Logger name: SimulationRunner
-2025-08-10 18:15:53 - SimulationRunner - INFO - Starting sim for ['AAPL', 'MSFT'] | steps=1000
-2025-08-10 18:17:34 - SimulationRunner - INFO - Simulation finished producing bars.
-2025-08-10 18:17:34 - SimulationRunner - INFO - Done. Final equity: $100,000.00 | Unrealized: $0.00
-2025-08-11 07:47:41 - SimulationRunner - DEBUG - Logger initialized.
-2025-08-11 07:47:41 - SimulationRunner - DEBUG - Log file: logs/simulation.log
-2025-08-11 07:47:41 - SimulationRunner - DEBUG - Logger name: SimulationRunner
-2025-08-11 07:47:41 - SimulationRunner - INFO - Starting sim for ['AAPL', 'MSFT'] | steps=1000
-2025-08-11 07:49:22 - SimulationRunner - INFO - Simulation finished producing bars.
-2025-08-11 07:49:22 - SimulationRunner - INFO - Done. Final equity: $100,000.00 | Unrealized: $0.00
-2025-08-11 08:55:11 - SimulationRunner - DEBUG - Logger initialized.
-2025-08-11 08:55:11 - SimulationRunner - DEBUG - Log file: logs/simulation.log
-2025-08-11 08:55:11 - SimulationRunner - DEBUG - Logger name: SimulationRunner
-2025-08-11 08:58:40 - SimulationRunner - DEBUG - Logger initialized.
-2025-08-11 08:58:40 - SimulationRunner - DEBUG - Log file: logs/simulation.log
-2025-08-11 08:58:40 - SimulationRunner - DEBUG - Logger name: SimulationRunner
-2025-08-11 08:59:35 - SimulationRunner - DEBUG - Logger initialized.
-2025-08-11 08:59:35 - SimulationRunner - DEBUG - Log file: logs/simulation.log
-2025-08-11 08:59:35 - SimulationRunner - DEBUG - Logger name: SimulationRunner
-2025-08-11 08:59:35 - SimulationRunner - INFO - Starting sim for ['AAPL', 'MSFT'] | steps=1000
-2025-08-11 09:01:17 - SimulationRunner - INFO - Simulation finished producing bars.
-2025-08-11 09:01:17 - SimulationRunner - INFO - Done. Final equity: $100,000.00 | Unrealized: $0.00
-2025-08-11 09:11:19 - SimulationRunner - DEBUG - Logger initialized.
-2025-08-11 09:11:19 - SimulationRunner - DEBUG - Log file: logs/simulation.log
-2025-08-11 09:11:19 - SimulationRunner - DEBUG - Logger name: SimulationRunner
-2025-08-11 09:11:19 - SimulationRunner - INFO - Starting sim for ['AAPL', 'MSFT'] | steps=1000
-2025-08-11 09:13:01 - SimulationRunner - INFO - Simulation finished producing bars.
-2025-08-11 09:13:01 - SimulationRunner - INFO - Done. Final equity: $100,000.00 | Unrealized: $0.00
-2025-08-11 09:17:24 - SimulationRunner - DEBUG - Logger initialized.
-2025-08-11 09:17:24 - SimulationRunner - DEBUG - Log file: logs/simulation.log
-2025-08-11 09:17:24 - SimulationRunner - DEBUG - Logger name: SimulationRunner
-2025-08-11 09:17:24 - SimulationRunner - INFO - Starting sim for ['AAPL', 'MSFT'] | steps=1000
-2025-08-11 09:19:05 - SimulationRunner - INFO - Simulation finished producing bars.
-2025-08-11 09:19:05 - SimulationRunner - INFO - Done. Final equity: $100,000.00 | Unrealized: $0.00
-2025-08-11 09:24:00 - SimulationRunner - DEBUG - Logger initialized.
-2025-08-11 09:24:00 - SimulationRunner - DEBUG - Log file: logs/simulation.log
-2025-08-11 09:24:00 - SimulationRunner - DEBUG - Logger name: SimulationRunner
-2025-08-11 09:24:00 - SimulationRunner - INFO - Starting sim for ['AAPL', 'MSFT'] | steps=1000
-2025-08-11 09:25:41 - SimulationRunner - INFO - Simulation finished producing bars.
-2025-08-11 09:25:41 - SimulationRunner - INFO - Done. Final equity: $100,000.00 | Unrealized: $0.00
+2025-08-11 19:24:12 - SimulationRunner - DEBUG - Logger initialized.
+2025-08-11 19:24:12 - SimulationRunner - DEBUG - Log file: logs/simulation.log
+2025-08-11 19:24:12 - SimulationRunner - DEBUG - Logger name: SimulationRunner
+2025-08-11 19:24:12 - SimulationRunner - INFO - Starting sim for ['AAPL', 'MSFT'] | steps=1000
+2025-08-11 19:25:54 - SimulationRunner - INFO - Simulation finished producing bars.
+2025-08-11 19:25:54 - SimulationRunner - INFO - Done. Final equity: $100,000.00 | Unrealized: $0.00
+2025-08-20 11:03:06 - SimulationRunner - DEBUG - Logger initialized.
+2025-08-20 11:03:06 - SimulationRunner - DEBUG - Log file: logs/simulation.log
+2025-08-20 11:03:06 - SimulationRunner - DEBUG - Logger name: SimulationRunner
+2025-08-20 11:03:06 - SimulationRunner - INFO - Starting sim for ['AAPL', 'MSFT'] | steps=1000
+2025-08-20 11:04:48 - SimulationRunner - INFO - Simulation finished producing bars.
+2025-08-20 11:04:48 - SimulationRunner - INFO - Done. Final equity: $100,000.00 | Unrealized: $0.00

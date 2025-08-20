@@ -99,6 +99,7 @@ class DefaultTradeLogic(TradeLogic):
         portfolio: PortfolioState,                     
     ) -> None:
         # snapshot position from portfolio
+        portfolio = PortfolioState()
         pos = portfolio.positions.get(symbol)
         qty_now = 0 if not pos else pos.qty
         avg_now = None if not pos else pos.avg_price

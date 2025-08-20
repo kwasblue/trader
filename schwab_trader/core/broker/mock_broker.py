@@ -5,7 +5,7 @@ from typing import Dict, Optional, List
 
 from core.base.base_broker_interface import BaseBrokerInterface
 from core.logic.portfolio_state import PortfolioState
-from core.types import OrderResult, PositionView, BrokerSnapshot
+from core.app_types import OrderResult, PositionView, BrokerSnapshot
 
 
 class MockBroker(BaseBrokerInterface):

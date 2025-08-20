@@ -5,12 +5,7 @@ from core.base.base_strategy import BaseStrategy
 from core.logic.strategy_routing_manager import StrategyRoutingManager
 from loggers.logger import Logger
 
-# === Registry of strategy classes ===
-from strategies.strategy_registry.momentum_strategy import MomentumStrategy
-from strategies.strategy_registry.mean_reversion_strategy import MeanReversionStrategy
-from strategies.strategy_registry.sma_strategy import SMAStrategy
-
-# ✨ Import the dynamic registry
+# Import the dynamic registry
 from strategies.strategy_registry.strategy_registry import STRATEGY_CLASS_REGISTRY
 
 

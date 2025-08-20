@@ -1,6 +1,6 @@
 import json
 import os
-from typing import Dict, Optional
+from typing import Dict
 from loggers.logger import Logger
 
 
@@ -49,14 +49,53 @@ class StrategyRoutingManager:
         self.logger.info("Refreshing routing config...")
         self._load_config()
 
-    def get_strategy(self, symbol: str, regime: str) -> str:
+    def get_strategy(self, symbol: str, regime: str):
         """
-        Retrieve the strategy assigned to a symbol and regime.
-        Falls back to 'default' if not found.
+        Return a STRATEGY INSTANCE for (symbol, regime).
+        Uses strategies.strategy_registry.strategy_registry.STRATEGY_CLASS_REGISTRY.
+        Caches instances per (symbol, regime, name).
         """
-        strategy = self.routing_map.get(symbol, {}).get(regime, "default")
-        self.logger.debug(f"Strategy for {symbol} in regime '{regime}': {strategy}")
-        return strategy
+        # Resolve name with same fallback behavior you had
+        name = (
+            self.routing_map.get(symbol, {}).get(regime)
+            or self.routing_map.get(symbol, {}).get("default")
+            or "default"
+        )
+        key = name.lower()
+        self.logger.debug(f"Strategy for {symbol} in regime '{regime}': {name}")
+
+        # Cache hit?
+        cache = self.__dict__.setdefault("_strategy_cache", {})
+        cache_key = (symbol, regime, key)
+        if cache_key in cache:
+            return cache[cache_key]
+
+        # Lookup class from your fixed registry
+        try:
+            from strategies.strategy_registry.strategy_registry import STRATEGY_CLASS_REGISTRY
+            cls = STRATEGY_CLASS_REGISTRY.get(key) or STRATEGY_CLASS_REGISTRY.get("default")
+        except Exception as e:
+            self.logger.error(f"Strategy registry import failed: {e}")
+            cls = None
+
+        # Instantiate or fall back to a no-op
+        if cls is None:
+            self.logger.error(f"No strategy class found for '{name}' and no 'default' registered; using no-op.")
+            class _NoOp:
+                def generate_signal(self, df): return 0
+            inst = _NoOp()
+        else:
+            try:
+                inst = cls()
+            except Exception as e:
+                self.logger.error(f"Failed to instantiate strategy '{name}': {e}")
+                # final fallback: no-op
+                class _NoOp:
+                    def generate_signal(self, df): return 0
+                inst = _NoOp()
+
+        cache[cache_key] = inst
+        return inst
 
     def set_strategy(self, symbol: str, regime: str, strategy: str) -> None:
         """
