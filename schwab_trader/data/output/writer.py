@@ -1,7 +1,7 @@
 import json
 import os
 import csv
-from schwab_trader.logger.logger import Logger
+from loggers.logger import Logger
 import pandas as pd
 
 class FileWriter:

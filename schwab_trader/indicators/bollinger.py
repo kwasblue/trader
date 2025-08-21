@@ -1,4 +1,4 @@
-from schwab_trader.core.base.base_indicator import BaseIndicator
+from core.base.base_indicator import BaseIndicator
 
 class BollingerBandsIndicator(BaseIndicator):
     def __init__(self, df, window=20):

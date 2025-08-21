@@ -1,0 +1,29 @@
+{
+  "Best Params": {
+    "model__subsample": 0.7,
+    "model__reg_lambda": 2.6826957952797246,
+    "model__num_leaves": 53,
+    "model__min_child_samples": 40,
+    "model__max_depth": 4,
+    "model__learning_rate": 0.007742636826811269,
+    "model__colsample_bytree": 0.7
+  },
+  "Accuracy": 0.5098039215686274,
+  "Precision": 0.5051395007342144,
+  "Recall": 0.7136929460580913,
+  "F1-Score": 0.5915735167669819,
+  "ROC-AUC": 0.4957249482392836,
+  "PR-AUC": 0.486232994901567,
+  "Confusion Matrix": [
+    [
+      150,
+      337
+    ],
+    [
+      138,
+      344
+    ]
+  ],
+  "n_train": 3875,
+  "n_test": 969
+}

@@ -7,13 +7,9 @@ import aiohttp
 import json
 from dotenv import load_dotenv
 from data.output.writer import FileWriter
-from schwab_trader.logger.logger import Logger
+from loggers.logger import Logger
 from utils.configloader import ConfigLoader
 from urllib.parse import urlencode
-
-
-
-
 
 class Authenticator:
     _instance = None
