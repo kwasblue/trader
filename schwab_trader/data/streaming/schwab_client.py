@@ -1,6 +1,6 @@
 import requests
 from data.streaming.authenticator import Authenticator
-from schwab_trader.logger.logger import Logger
+from loggers.logger import Logger
 from utils.configloader import ConfigLoader
 
 

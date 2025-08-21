@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 from data.streaming.authenticator import Authenticator
 from data.aggregate import Aggregator
 from data.processor import Processor
-from schwab_trader.loggers.logger import Logger
+from loggers.logger import Logger
 from utils.configloader import ConfigLoader
 from cache.cache import CacheManager
 import time

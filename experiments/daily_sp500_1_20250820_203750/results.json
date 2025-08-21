@@ -1,0 +1,99 @@
+{
+  "Logistic_Regression": {
+    "Best Params": {
+      "model__penalty": "l2",
+      "model__C": 0.23357214690901212
+    },
+    "Accuracy": 0.5098039215686274,
+    "Precision": 0.5040745052386496,
+    "Recall": 0.8983402489626556,
+    "F1-Score": 0.6457867263236391,
+    "ROC-AUC": 0.524402089173277,
+    "PR-AUC": 0.5050311902483302,
+    "Confusion Matrix": [
+      [
+        61,
+        426
+      ],
+      [
+        49,
+        433
+      ]
+    ],
+    "n_train": 3875,
+    "n_test": 969,
+    "Artifacts": {
+      "model": "experiments/daily_sp500_1_20250820_203750/models/logistic_regression_best.joblib",
+      "cv_results": "experiments/daily_sp500_1_20250820_203750/search/Logistic_Regression_cv_results.csv",
+      "metrics": "experiments/daily_sp500_1_20250820_203750/metrics/Logistic_Regression_metrics.json",
+      "report": "experiments/daily_sp500_1_20250820_203750/reports/Logistic_Regression_report.txt"
+    }
+  },
+  "Random_Forest": {
+    "Best Params": {
+      "model__n_estimators": 200,
+      "model__min_samples_split": 10,
+      "model__max_features": "log2",
+      "model__max_depth": 16
+    },
+    "Accuracy": 0.5149638802889577,
+    "Precision": 0.5097402597402597,
+    "Recall": 0.6514522821576764,
+    "F1-Score": 0.5719489981785064,
+    "ROC-AUC": 0.5189874496238296,
+    "PR-AUC": 0.5031266621079232,
+    "Confusion Matrix": [
+      [
+        185,
+        302
+      ],
+      [
+        168,
+        314
+      ]
+    ],
+    "n_train": 3875,
+    "n_test": 969,
+    "Artifacts": {
+      "model": "experiments/daily_sp500_1_20250820_203750/models/random_forest_best.joblib",
+      "cv_results": "experiments/daily_sp500_1_20250820_203750/search/Random_Forest_cv_results.csv",
+      "metrics": "experiments/daily_sp500_1_20250820_203750/metrics/Random_Forest_metrics.json",
+      "report": "experiments/daily_sp500_1_20250820_203750/reports/Random_Forest_report.txt"
+    }
+  },
+  "LightGBM": {
+    "Best Params": {
+      "model__subsample": 0.7,
+      "model__reg_lambda": 2.6826957952797246,
+      "model__num_leaves": 53,
+      "model__min_child_samples": 40,
+      "model__max_depth": 4,
+      "model__learning_rate": 0.007742636826811269,
+      "model__colsample_bytree": 0.7
+    },
+    "Accuracy": 0.5098039215686274,
+    "Precision": 0.5051395007342144,
+    "Recall": 0.7136929460580913,
+    "F1-Score": 0.5915735167669819,
+    "ROC-AUC": 0.4957249482392836,
+    "PR-AUC": 0.486232994901567,
+    "Confusion Matrix": [
+      [
+        150,
+        337
+      ],
+      [
+        138,
+        344
+      ]
+    ],
+    "n_train": 3875,
+    "n_test": 969,
+    "Artifacts": {
+      "model": "experiments/daily_sp500_1_20250820_203750/models/lightgbm_best.joblib",
+      "cv_results": "experiments/daily_sp500_1_20250820_203750/search/LightGBM_cv_results.csv",
+      "metrics": "experiments/daily_sp500_1_20250820_203750/metrics/LightGBM_metrics.json",
+      "report": "experiments/daily_sp500_1_20250820_203750/reports/LightGBM_report.txt"
+    }
+  }
+}

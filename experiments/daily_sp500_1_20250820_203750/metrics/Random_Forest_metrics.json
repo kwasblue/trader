@@ -1,0 +1,26 @@
+{
+  "Best Params": {
+    "model__n_estimators": 200,
+    "model__min_samples_split": 10,
+    "model__max_features": "log2",
+    "model__max_depth": 16
+  },
+  "Accuracy": 0.5149638802889577,
+  "Precision": 0.5097402597402597,
+  "Recall": 0.6514522821576764,
+  "F1-Score": 0.5719489981785064,
+  "ROC-AUC": 0.5189874496238296,
+  "PR-AUC": 0.5031266621079232,
+  "Confusion Matrix": [
+    [
+      185,
+      302
+    ],
+    [
+      168,
+      314
+    ]
+  ],
+  "n_train": 3875,
+  "n_test": 969
+}

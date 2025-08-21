@@ -4,7 +4,8 @@ from typing import Any
 from core.base.base_broker_interface import BaseBrokerInterface
 from core.base.position_sizer_base import PositionSizerBase
 from core.base.trade_logger_base import TradeLoggerBase
-from core.base.trade_logic_manager_base import TradeLogicManagerBase
+from core.base.trade_logic_manager_base import TradeLogicManagerBase 
+from core.logic.portfolio_state import PortfolioState
 
 
 class ExecutionEngineBase(ABC):
@@ -13,12 +14,14 @@ class ExecutionEngineBase(ABC):
         broker: BaseBrokerInterface,
         sizer: PositionSizerBase,
         performance_tracker: TradeLoggerBase,
-        trade_logic_manager: TradeLogicManagerBase
+        trade_logic_manager: TradeLogicManagerBase,
+        portfolio = PortfolioState
     ):
         self.broker = broker
         self.sizer = sizer
         self.performance_tracker = performance_tracker
         self.trade_logic_manager = trade_logic_manager
+        self.portfolio = portfolio
 
     @abstractmethod
     def handle_signal(

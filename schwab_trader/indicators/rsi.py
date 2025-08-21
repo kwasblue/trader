@@ -1,4 +1,4 @@
-from schwab_trader.core.base.base_indicator import BaseIndicator
+from core.base.base_indicator import BaseIndicator
 
 class RSIIndicator(BaseIndicator):
     def __init__(self, df, periods=14):

@@ -1,6 +1,6 @@
 import json
 import os
-from typing import Dict, Optional, Any
+from typing import Dict, Any
 from core.base.trade_logic_manager_base import TradeLogicManagerBase
 from core.logic.default_trade_logic import DefaultTradeLogic
 from core.base.trade_logic_base import TradeLogic

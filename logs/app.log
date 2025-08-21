@@ -481,3 +481,239 @@
 2025-08-11 09:24:16 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 2.90% -> 294.76
 2025-08-11 09:24:58 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 2.96% -> 282.58
 2025-08-11 09:25:05 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 1.91% -> 287.07
+2025-08-11 19:01:42 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-11 19:01:42 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-11 19:01:42 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-11 19:01:45 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 1.22% -> 283.74
+2025-08-11 19:01:52 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 2.67% -> 274.35
+2025-08-11 19:02:10 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 1.96% -> 286.16
+2025-08-11 19:02:39 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 1.23% -> 270.44
+2025-08-11 19:02:47 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 2.74% -> 276.03
+2025-08-11 19:02:57 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 1.82% -> 283.87
+2025-08-11 19:16:58 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-11 19:16:58 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-11 19:16:58 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-11 19:17:26 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 2.84% -> 269.85
+2025-08-11 19:17:35 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 1.88% -> 265.49
+2025-08-11 19:17:47 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 2.63% -> 325.76
+2025-08-11 19:18:18 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | DOWN 1.79% -> 310.64
+2025-08-11 19:18:21 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 2.70% -> 241.07
+2025-08-11 19:24:12 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-11 19:24:12 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-11 19:24:12 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-11 19:24:26 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 2.86% -> 319.58
+2025-08-11 19:24:51 - GBM Simulator - WARNING - [MSFT] *** PRICE SHOCK *** | UP 1.96% -> 346.41
+2025-08-11 19:24:52 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 1.95% -> 312.97
+2025-08-11 19:25:48 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 2.66% -> 301.23
+2025-08-20 11:03:06 - GBM Simulator - DEBUG - Logger initialized.
+2025-08-20 11:03:06 - GBM Simulator - DEBUG - Log file: logs/app.log
+2025-08-20 11:03:06 - GBM Simulator - DEBUG - Logger name: GBM Simulator
+2025-08-20 11:03:34 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 2.90% -> 294.57
+2025-08-20 11:03:42 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | UP 2.75% -> 302.16
+2025-08-20 11:04:35 - GBM Simulator - WARNING - [AAPL] *** PRICE SHOCK *** | DOWN 1.06% -> 310.20
+2025-08-20 14:05:06 - AlpacaLiveRunner - INFO - Seeded 2 symbols with 200 bars.
+2025-08-20 14:05:06 - AlpacaLiveRunner - INFO - LiveRunner (Alpaca) started for: AAPL, MSFT
+2025-08-20 14:38:19 - AlpacaLiveRunner - INFO - Seeded 2 symbols with 200 bars.
+2025-08-20 14:38:19 - AlpacaLiveRunner - INFO - LiveRunner (Alpaca) started for: AAPL, MSFT
+2025-08-20 14:42:43 - AlpacaLiveRunner - INFO - Seeded 2 symbols with 200 bars.
+2025-08-20 14:42:43 - AlpacaLiveRunner - INFO - LiveRunner (Alpaca) started for: AAPL, MSFT
+2025-08-20 14:55:33 - AlpacaLiveRunner - INFO - Seeded 2 symbols with 200 bars.
+2025-08-20 14:55:33 - AlpacaLiveRunner - INFO - LiveRunner (Alpaca) started for: AAPL, MSFT
+2025-08-20 15:01:25 - AlpacaLiveRunner - INFO - Seeded 2 symbols with 200 bars.
+2025-08-20 15:01:25 - AlpacaLiveRunner - INFO - LiveRunner (Alpaca) started for: AAPL, MSFT
+2025-08-20 15:06:23 - AlpacaLiveRunner - INFO - Seeded 2 symbols with 200 bars.
+2025-08-20 15:06:23 - AlpacaLiveRunner - INFO - LiveRunner (Alpaca) started for: AAPL, MSFT
+2025-08-20 15:13:33 - AlpacaLiveRunner - INFO - Seeded 2 symbols with 200 bars.
+2025-08-20 15:13:33 - AlpacaLiveRunner - INFO - LiveRunner (Alpaca) started for: AAPL, MSFT
+2025-08-20 15:14:00 - AlpacaLiveRunner - ERROR - [AAPL] Strategy error in str: 'str' object has no attribute 'generate_signal'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/alpaca_runner.py", line 205, in on_alpaca_bar
+    raw_signal = strategy.generate_signal(df)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'generate_signal'
+2025-08-20 15:14:00 - AlpacaLiveRunner - ERROR - [MSFT] Strategy error in str: 'str' object has no attribute 'generate_signal'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/alpaca_runner.py", line 205, in on_alpaca_bar
+    raw_signal = strategy.generate_signal(df)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'generate_signal'
+2025-08-20 15:14:37 - AlpacaLiveRunner - INFO - Seeded 2 symbols with 200 bars.
+2025-08-20 15:14:37 - AlpacaLiveRunner - INFO - LiveRunner (Alpaca) started for: AAPL, MSFT
+2025-08-20 15:15:00 - AlpacaLiveRunner - ERROR - [MSFT] Strategy error in str: 'str' object has no attribute 'generate_signal'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/alpaca_runner.py", line 205, in on_alpaca_bar
+    raw_signal = strategy.generate_signal(df)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'generate_signal'
+2025-08-20 15:15:00 - AlpacaLiveRunner - ERROR - [AAPL] Strategy error in str: 'str' object has no attribute 'generate_signal'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/alpaca_runner.py", line 205, in on_alpaca_bar
+    raw_signal = strategy.generate_signal(df)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'generate_signal'
+2025-08-20 15:16:00 - AlpacaLiveRunner - ERROR - [MSFT] Strategy error in str: 'str' object has no attribute 'generate_signal'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/alpaca_runner.py", line 205, in on_alpaca_bar
+    raw_signal = strategy.generate_signal(df)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'generate_signal'
+2025-08-20 15:17:00 - AlpacaLiveRunner - ERROR - [AAPL] Strategy error in str: 'str' object has no attribute 'generate_signal'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/alpaca_runner.py", line 205, in on_alpaca_bar
+    raw_signal = strategy.generate_signal(df)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'generate_signal'
+2025-08-20 15:17:54 - AlpacaLiveRunner - INFO - Seeded 2 symbols with 200 bars.
+2025-08-20 15:17:54 - AlpacaLiveRunner - INFO - LiveRunner (Alpaca) started for: AAPL, MSFT
+2025-08-20 15:18:00 - AlpacaLiveRunner - ERROR - [MSFT] Strategy error in str: 'str' object has no attribute 'generate_signal'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/alpaca_runner.py", line 205, in on_alpaca_bar
+    raw_signal = strategy.generate_signal(df)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'generate_signal'
+2025-08-20 15:18:00 - AlpacaLiveRunner - ERROR - [AAPL] Strategy error in str: 'str' object has no attribute 'generate_signal'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/alpaca_runner.py", line 205, in on_alpaca_bar
+    raw_signal = strategy.generate_signal(df)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'generate_signal'
+2025-08-20 15:19:00 - AlpacaLiveRunner - ERROR - [MSFT] Strategy error in str: 'str' object has no attribute 'generate_signal'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/alpaca_runner.py", line 205, in on_alpaca_bar
+    raw_signal = strategy.generate_signal(df)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'generate_signal'
+2025-08-20 15:20:00 - AlpacaLiveRunner - ERROR - [AAPL] Strategy error in str: 'str' object has no attribute 'generate_signal'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/alpaca_runner.py", line 205, in on_alpaca_bar
+    raw_signal = strategy.generate_signal(df)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'generate_signal'
+2025-08-20 15:21:00 - AlpacaLiveRunner - ERROR - [MSFT] Strategy error in str: 'str' object has no attribute 'generate_signal'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/alpaca_runner.py", line 205, in on_alpaca_bar
+    raw_signal = strategy.generate_signal(df)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'generate_signal'
+2025-08-20 15:21:00 - AlpacaLiveRunner - ERROR - [AAPL] Strategy error in str: 'str' object has no attribute 'generate_signal'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/alpaca_runner.py", line 205, in on_alpaca_bar
+    raw_signal = strategy.generate_signal(df)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'generate_signal'
+2025-08-20 15:22:00 - AlpacaLiveRunner - ERROR - [MSFT] Strategy error in str: 'str' object has no attribute 'generate_signal'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/alpaca_runner.py", line 205, in on_alpaca_bar
+    raw_signal = strategy.generate_signal(df)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'generate_signal'
+2025-08-20 15:22:00 - AlpacaLiveRunner - ERROR - [AAPL] Strategy error in str: 'str' object has no attribute 'generate_signal'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/alpaca_runner.py", line 205, in on_alpaca_bar
+    raw_signal = strategy.generate_signal(df)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'generate_signal'
+2025-08-20 15:23:01 - AlpacaLiveRunner - INFO - Seeded 2 symbols with 200 bars.
+2025-08-20 15:23:01 - AlpacaLiveRunner - INFO - LiveRunner (Alpaca) started for: AAPL, MSFT
+2025-08-20 15:24:00 - AlpacaLiveRunner - ERROR - [AAPL] Strategy error in str: 'str' object has no attribute 'generate_signal'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/alpaca_runner.py", line 205, in on_alpaca_bar
+    raw_signal = strategy.generate_signal(df)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'generate_signal'
+2025-08-20 15:24:00 - AlpacaLiveRunner - ERROR - [MSFT] Strategy error in str: 'str' object has no attribute 'generate_signal'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/alpaca_runner.py", line 205, in on_alpaca_bar
+    raw_signal = strategy.generate_signal(df)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'generate_signal'
+2025-08-20 15:25:00 - AlpacaLiveRunner - ERROR - [AAPL] Strategy error in str: 'str' object has no attribute 'generate_signal'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/alpaca_runner.py", line 205, in on_alpaca_bar
+    raw_signal = strategy.generate_signal(df)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'generate_signal'
+2025-08-20 15:26:00 - AlpacaLiveRunner - ERROR - [MSFT] Strategy error in str: 'str' object has no attribute 'generate_signal'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/alpaca_runner.py", line 205, in on_alpaca_bar
+    raw_signal = strategy.generate_signal(df)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'generate_signal'
+2025-08-20 15:27:00 - AlpacaLiveRunner - ERROR - [AAPL] Strategy error in str: 'str' object has no attribute 'generate_signal'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/alpaca_runner.py", line 205, in on_alpaca_bar
+    raw_signal = strategy.generate_signal(df)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'generate_signal'
+2025-08-20 15:28:00 - AlpacaLiveRunner - ERROR - [MSFT] Strategy error in str: 'str' object has no attribute 'generate_signal'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/alpaca_runner.py", line 205, in on_alpaca_bar
+    raw_signal = strategy.generate_signal(df)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'generate_signal'
+2025-08-20 15:29:00 - AlpacaLiveRunner - ERROR - [AAPL] Strategy error in str: 'str' object has no attribute 'generate_signal'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/alpaca_runner.py", line 205, in on_alpaca_bar
+    raw_signal = strategy.generate_signal(df)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'generate_signal'
+2025-08-20 15:30:00 - AlpacaLiveRunner - ERROR - [MSFT] Strategy error in str: 'str' object has no attribute 'generate_signal'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/alpaca_runner.py", line 205, in on_alpaca_bar
+    raw_signal = strategy.generate_signal(df)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'generate_signal'
+2025-08-20 15:31:00 - AlpacaLiveRunner - ERROR - [AAPL] Strategy error in str: 'str' object has no attribute 'generate_signal'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/alpaca_runner.py", line 205, in on_alpaca_bar
+    raw_signal = strategy.generate_signal(df)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'generate_signal'
+2025-08-20 15:31:00 - AlpacaLiveRunner - ERROR - [MSFT] Strategy error in str: 'str' object has no attribute 'generate_signal'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/alpaca_runner.py", line 205, in on_alpaca_bar
+    raw_signal = strategy.generate_signal(df)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'generate_signal'
+2025-08-20 15:32:00 - AlpacaLiveRunner - ERROR - [AAPL] Strategy error in str: 'str' object has no attribute 'generate_signal'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/alpaca_runner.py", line 205, in on_alpaca_bar
+    raw_signal = strategy.generate_signal(df)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'generate_signal'
+2025-08-20 15:33:00 - AlpacaLiveRunner - ERROR - [MSFT] Strategy error in str: 'str' object has no attribute 'generate_signal'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/alpaca_runner.py", line 205, in on_alpaca_bar
+    raw_signal = strategy.generate_signal(df)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'generate_signal'
+2025-08-20 15:33:00 - AlpacaLiveRunner - ERROR - [AAPL] Strategy error in str: 'str' object has no attribute 'generate_signal'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/alpaca_runner.py", line 205, in on_alpaca_bar
+    raw_signal = strategy.generate_signal(df)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'generate_signal'
+2025-08-20 15:33:44 - AlpacaLiveRunner - INFO - Seeded 2 symbols with 200 bars.
+2025-08-20 15:33:44 - AlpacaLiveRunner - INFO - LiveRunner (Alpaca) started for: AAPL, MSFT
+2025-08-20 15:34:00 - AlpacaLiveRunner - ERROR - [MSFT] Strategy error in str: 'str' object has no attribute 'generate_signal'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/alpaca_runner.py", line 205, in on_alpaca_bar
+    raw_signal = strategy.generate_signal(df)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'generate_signal'
+2025-08-20 15:34:00 - AlpacaLiveRunner - ERROR - [AAPL] Strategy error in str: 'str' object has no attribute 'generate_signal'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/alpaca_runner.py", line 205, in on_alpaca_bar
+    raw_signal = strategy.generate_signal(df)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'generate_signal'
+2025-08-20 15:35:00 - AlpacaLiveRunner - ERROR - [MSFT] Strategy error in str: 'str' object has no attribute 'generate_signal'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/alpaca_runner.py", line 205, in on_alpaca_bar
+    raw_signal = strategy.generate_signal(df)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'generate_signal'
+2025-08-20 15:55:23 - AlpacaLiveRunner - INFO - Seeded 2 symbols with 200 bars.
+2025-08-20 15:55:23 - AlpacaLiveRunner - INFO - LiveRunner (Alpaca) started for: AAPL, MSFT
+2025-08-20 15:58:41 - AlpacaLiveRunner - INFO - Seeded 2 symbols with 200 bars.
+2025-08-20 15:58:41 - AlpacaLiveRunner - INFO - LiveRunner (Alpaca) started for: AAPL, MSFT

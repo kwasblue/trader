@@ -1,0 +1,694 @@
+2025-08-20 14:05:06 - LiveExecutionEngine - DEBUG - Logger initialized.
+2025-08-20 14:05:06 - LiveExecutionEngine - DEBUG - Log file: logs/live_execution.log
+2025-08-20 14:05:06 - LiveExecutionEngine - DEBUG - Logger name: LiveExecutionEngine
+2025-08-20 14:05:06 - LiveExecutionEngine - INFO - Initialized LiveExecutionEngine
+2025-08-20 14:38:19 - LiveExecutionEngine - DEBUG - Logger initialized.
+2025-08-20 14:38:19 - LiveExecutionEngine - DEBUG - Log file: logs/live_execution.log
+2025-08-20 14:38:19 - LiveExecutionEngine - DEBUG - Logger name: LiveExecutionEngine
+2025-08-20 14:38:19 - LiveExecutionEngine - INFO - Initialized LiveExecutionEngine
+2025-08-20 14:42:42 - LiveExecutionEngine - DEBUG - Logger initialized.
+2025-08-20 14:42:42 - LiveExecutionEngine - DEBUG - Log file: logs/live_execution.log
+2025-08-20 14:42:42 - LiveExecutionEngine - DEBUG - Logger name: LiveExecutionEngine
+2025-08-20 14:42:42 - LiveExecutionEngine - INFO - Initialized LiveExecutionEngine
+2025-08-20 14:55:33 - LiveExecutionEngine - DEBUG - Logger initialized.
+2025-08-20 14:55:33 - LiveExecutionEngine - DEBUG - Log file: logs/live_execution.log
+2025-08-20 14:55:33 - LiveExecutionEngine - DEBUG - Logger name: LiveExecutionEngine
+2025-08-20 14:55:33 - LiveExecutionEngine - INFO - Initialized LiveExecutionEngine
+2025-08-20 15:01:25 - LiveExecutionEngine - DEBUG - Logger initialized.
+2025-08-20 15:01:25 - LiveExecutionEngine - DEBUG - Log file: logs/live_execution.log
+2025-08-20 15:01:25 - LiveExecutionEngine - DEBUG - Logger name: LiveExecutionEngine
+2025-08-20 15:01:25 - LiveExecutionEngine - INFO - Initialized LiveExecutionEngine
+2025-08-20 15:06:23 - LiveExecutionEngine - DEBUG - Logger initialized.
+2025-08-20 15:06:23 - LiveExecutionEngine - DEBUG - Log file: logs/live_execution.log
+2025-08-20 15:06:23 - LiveExecutionEngine - DEBUG - Logger name: LiveExecutionEngine
+2025-08-20 15:06:23 - LiveExecutionEngine - INFO - Initialized LiveExecutionEngine
+2025-08-20 15:13:33 - LiveExecutionEngine - DEBUG - Logger initialized.
+2025-08-20 15:13:33 - LiveExecutionEngine - DEBUG - Log file: logs/live_execution.log
+2025-08-20 15:13:33 - LiveExecutionEngine - DEBUG - Logger name: LiveExecutionEngine
+2025-08-20 15:13:33 - LiveExecutionEngine - INFO - Initialized LiveExecutionEngine
+2025-08-20 15:14:00 - LiveExecutionEngine - DEBUG - [AAPL] Live handling signal: 0 | Price: 226.47 | ATR: 5.110742857142861 | Regime: normal | Strategy: str
+2025-08-20 15:14:00 - LiveExecutionEngine - ERROR - [AAPL] Error in live execution: DefaultTradeLogic.execute() got an unexpected keyword argument 'tracker'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+TypeError: DefaultTradeLogic.execute() got an unexpected keyword argument 'tracker'
+2025-08-20 15:14:00 - LiveExecutionEngine - DEBUG - [MSFT] Live handling signal: 0 | Price: 506.495 | ATR: 10.456128571428573 | Regime: normal | Strategy: str
+2025-08-20 15:14:00 - LiveExecutionEngine - ERROR - [MSFT] Error in live execution: DefaultTradeLogic.execute() got an unexpected keyword argument 'tracker'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+TypeError: DefaultTradeLogic.execute() got an unexpected keyword argument 'tracker'
+2025-08-20 15:14:37 - LiveExecutionEngine - DEBUG - Logger initialized.
+2025-08-20 15:14:37 - LiveExecutionEngine - DEBUG - Log file: logs/live_execution.log
+2025-08-20 15:14:37 - LiveExecutionEngine - DEBUG - Logger name: LiveExecutionEngine
+2025-08-20 15:14:37 - LiveExecutionEngine - INFO - Initialized LiveExecutionEngine
+2025-08-20 15:15:00 - LiveExecutionEngine - DEBUG - [MSFT] Live handling signal: 0 | Price: 506.63 | ATR: 10.448271428571433 | Regime: normal | Strategy: str
+2025-08-20 15:15:00 - LiveExecutionEngine - ERROR - [MSFT] Error in live execution: DefaultTradeLogic.execute() got an unexpected keyword argument 'tracker'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+TypeError: DefaultTradeLogic.execute() got an unexpected keyword argument 'tracker'
+2025-08-20 15:15:00 - LiveExecutionEngine - DEBUG - [AAPL] Live handling signal: 0 | Price: 226.51 | ATR: 5.109314285714289 | Regime: normal | Strategy: str
+2025-08-20 15:15:00 - LiveExecutionEngine - ERROR - [AAPL] Error in live execution: DefaultTradeLogic.execute() got an unexpected keyword argument 'tracker'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+TypeError: DefaultTradeLogic.execute() got an unexpected keyword argument 'tracker'
+2025-08-20 15:16:00 - LiveExecutionEngine - DEBUG - [AAPL] Live handling signal: 0 | Price: 226.53 | ATR: 4.846457142857146 | Regime: normal | Strategy: str
+2025-08-20 15:16:00 - LiveExecutionEngine - ERROR - [AAPL] Error in live execution: DefaultTradeLogic.execute() got an unexpected keyword argument 'tracker'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+TypeError: DefaultTradeLogic.execute() got an unexpected keyword argument 'tracker'
+2025-08-20 15:16:00 - LiveExecutionEngine - DEBUG - [MSFT] Live handling signal: 0 | Price: 506.54 | ATR: 10.118271428571429 | Regime: normal | Strategy: str
+2025-08-20 15:16:00 - LiveExecutionEngine - ERROR - [MSFT] Error in live execution: DefaultTradeLogic.execute() got an unexpected keyword argument 'tracker'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+TypeError: DefaultTradeLogic.execute() got an unexpected keyword argument 'tracker'
+2025-08-20 15:17:00 - LiveExecutionEngine - DEBUG - [MSFT] Live handling signal: 0 | Price: 506.505 | ATR: 9.577200000000001 | Regime: normal | Strategy: str
+2025-08-20 15:17:00 - LiveExecutionEngine - ERROR - [MSFT] Error in live execution: DefaultTradeLogic.execute() got an unexpected keyword argument 'tracker'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+TypeError: DefaultTradeLogic.execute() got an unexpected keyword argument 'tracker'
+2025-08-20 15:17:00 - LiveExecutionEngine - DEBUG - [AAPL] Live handling signal: 0 | Price: 226.46 | ATR: 4.696457142857146 | Regime: normal | Strategy: str
+2025-08-20 15:17:00 - LiveExecutionEngine - ERROR - [AAPL] Error in live execution: DefaultTradeLogic.execute() got an unexpected keyword argument 'tracker'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+TypeError: DefaultTradeLogic.execute() got an unexpected keyword argument 'tracker'
+2025-08-20 15:17:53 - LiveExecutionEngine - DEBUG - Logger initialized.
+2025-08-20 15:17:53 - LiveExecutionEngine - DEBUG - Log file: logs/live_execution.log
+2025-08-20 15:17:53 - LiveExecutionEngine - DEBUG - Logger name: LiveExecutionEngine
+2025-08-20 15:17:53 - LiveExecutionEngine - INFO - Initialized LiveExecutionEngine
+2025-08-20 15:18:00 - LiveExecutionEngine - DEBUG - [MSFT] Live handling signal: 0 | Price: 506.475 | ATR: 10.453985714285718 | Regime: normal | Strategy: str
+2025-08-20 15:18:00 - LiveExecutionEngine - ERROR - [MSFT] Error in live execution: DefaultTradeLogic.execute() missing 1 required positional argument: 'portfolio'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+TypeError: DefaultTradeLogic.execute() missing 1 required positional argument: 'portfolio'
+2025-08-20 15:18:00 - LiveExecutionEngine - DEBUG - [AAPL] Live handling signal: 0 | Price: 226.54 | ATR: 5.107885714285716 | Regime: normal | Strategy: str
+2025-08-20 15:18:00 - LiveExecutionEngine - ERROR - [AAPL] Error in live execution: DefaultTradeLogic.execute() missing 1 required positional argument: 'portfolio'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+TypeError: DefaultTradeLogic.execute() missing 1 required positional argument: 'portfolio'
+2025-08-20 15:19:00 - LiveExecutionEngine - DEBUG - [AAPL] Live handling signal: 0 | Price: 226.57 | ATR: 4.845028571428573 | Regime: normal | Strategy: str
+2025-08-20 15:19:00 - LiveExecutionEngine - ERROR - [AAPL] Error in live execution: DefaultTradeLogic.execute() missing 1 required positional argument: 'portfolio'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+TypeError: DefaultTradeLogic.execute() missing 1 required positional argument: 'portfolio'
+2025-08-20 15:19:00 - LiveExecutionEngine - DEBUG - [MSFT] Live handling signal: 0 | Price: 506.5 | ATR: 10.113628571428572 | Regime: normal | Strategy: str
+2025-08-20 15:19:00 - LiveExecutionEngine - ERROR - [MSFT] Error in live execution: DefaultTradeLogic.execute() missing 1 required positional argument: 'portfolio'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+TypeError: DefaultTradeLogic.execute() missing 1 required positional argument: 'portfolio'
+2025-08-20 15:20:00 - LiveExecutionEngine - DEBUG - [MSFT] Live handling signal: 0 | Price: 506.69 | ATR: 9.575057142857142 | Regime: normal | Strategy: str
+2025-08-20 15:20:00 - LiveExecutionEngine - ERROR - [MSFT] Error in live execution: DefaultTradeLogic.execute() missing 1 required positional argument: 'portfolio'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+TypeError: DefaultTradeLogic.execute() missing 1 required positional argument: 'portfolio'
+2025-08-20 15:20:00 - LiveExecutionEngine - DEBUG - [AAPL] Live handling signal: 0 | Price: 226.42 | ATR: 4.697885714285716 | Regime: normal | Strategy: str
+2025-08-20 15:20:00 - LiveExecutionEngine - ERROR - [AAPL] Error in live execution: DefaultTradeLogic.execute() missing 1 required positional argument: 'portfolio'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+TypeError: DefaultTradeLogic.execute() missing 1 required positional argument: 'portfolio'
+2025-08-20 15:21:00 - LiveExecutionEngine - DEBUG - [MSFT] Live handling signal: 0 | Price: 506.535 | ATR: 9.07112857142857 | Regime: normal | Strategy: str
+2025-08-20 15:21:00 - LiveExecutionEngine - ERROR - [MSFT] Error in live execution: DefaultTradeLogic.execute() missing 1 required positional argument: 'portfolio'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+TypeError: DefaultTradeLogic.execute() missing 1 required positional argument: 'portfolio'
+2025-08-20 15:21:00 - LiveExecutionEngine - DEBUG - [AAPL] Live handling signal: 0 | Price: 226.49 | ATR: 4.555707142857145 | Regime: normal | Strategy: str
+2025-08-20 15:21:00 - LiveExecutionEngine - ERROR - [AAPL] Error in live execution: DefaultTradeLogic.execute() missing 1 required positional argument: 'portfolio'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+TypeError: DefaultTradeLogic.execute() missing 1 required positional argument: 'portfolio'
+2025-08-20 15:22:00 - LiveExecutionEngine - DEBUG - [MSFT] Live handling signal: 0 | Price: 506.565 | ATR: 8.614342857142853 | Regime: normal | Strategy: str
+2025-08-20 15:22:00 - LiveExecutionEngine - ERROR - [MSFT] Error in live execution: DefaultTradeLogic.execute() missing 1 required positional argument: 'portfolio'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+TypeError: DefaultTradeLogic.execute() missing 1 required positional argument: 'portfolio'
+2025-08-20 15:22:00 - LiveExecutionEngine - DEBUG - [AAPL] Live handling signal: 0 | Price: 226.48 | ATR: 4.231064285714287 | Regime: normal | Strategy: str
+2025-08-20 15:22:00 - LiveExecutionEngine - ERROR - [AAPL] Error in live execution: DefaultTradeLogic.execute() missing 1 required positional argument: 'portfolio'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+TypeError: DefaultTradeLogic.execute() missing 1 required positional argument: 'portfolio'
+2025-08-20 15:23:01 - LiveExecutionEngine - DEBUG - Logger initialized.
+2025-08-20 15:23:01 - LiveExecutionEngine - DEBUG - Log file: logs/live_execution.log
+2025-08-20 15:23:01 - LiveExecutionEngine - DEBUG - Logger name: LiveExecutionEngine
+2025-08-20 15:23:01 - LiveExecutionEngine - INFO - Initialized LiveExecutionEngine
+2025-08-20 15:24:00 - LiveExecutionEngine - DEBUG - [AAPL] Live handling signal: 0 | Price: 226.64 | ATR: 5.116457142857145 | Regime: normal | Strategy: str
+2025-08-20 15:24:00 - LiveExecutionEngine - ERROR - [AAPL] Error in live execution: type object 'PortfolioState' has no attribute 'positions'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/default_trade_logic.py", line 102, in execute
+    pos = portfolio.positions.get(symbol)
+          ^^^^^^^^^^^^^^^^^^^
+AttributeError: type object 'PortfolioState' has no attribute 'positions'
+2025-08-20 15:24:00 - LiveExecutionEngine - DEBUG - [MSFT] Live handling signal: 0 | Price: 507.355 | ATR: 10.426128571428576 | Regime: normal | Strategy: str
+2025-08-20 15:24:00 - LiveExecutionEngine - ERROR - [MSFT] Error in live execution: type object 'PortfolioState' has no attribute 'positions'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/default_trade_logic.py", line 102, in execute
+    pos = portfolio.positions.get(symbol)
+          ^^^^^^^^^^^^^^^^^^^
+AttributeError: type object 'PortfolioState' has no attribute 'positions'
+2025-08-20 15:25:00 - LiveExecutionEngine - DEBUG - [MSFT] Live handling signal: 0 | Price: 507.23 | ATR: 10.091128571428575 | Regime: normal | Strategy: str
+2025-08-20 15:25:00 - LiveExecutionEngine - ERROR - [MSFT] Error in live execution: type object 'PortfolioState' has no attribute 'positions'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/default_trade_logic.py", line 102, in execute
+    pos = portfolio.positions.get(symbol)
+          ^^^^^^^^^^^^^^^^^^^
+AttributeError: type object 'PortfolioState' has no attribute 'positions'
+2025-08-20 15:25:00 - LiveExecutionEngine - DEBUG - [AAPL] Live handling signal: 0 | Price: 226.67 | ATR: 4.8507428571428575 | Regime: normal | Strategy: str
+2025-08-20 15:25:00 - LiveExecutionEngine - ERROR - [AAPL] Error in live execution: type object 'PortfolioState' has no attribute 'positions'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/default_trade_logic.py", line 102, in execute
+    pos = portfolio.positions.get(symbol)
+          ^^^^^^^^^^^^^^^^^^^
+AttributeError: type object 'PortfolioState' has no attribute 'positions'
+2025-08-20 15:26:00 - LiveExecutionEngine - DEBUG - [AAPL] Live handling signal: 0 | Price: 226.53 | ATR: 4.705742857142856 | Regime: normal | Strategy: str
+2025-08-20 15:26:00 - LiveExecutionEngine - ERROR - [AAPL] Error in live execution: type object 'PortfolioState' has no attribute 'positions'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/default_trade_logic.py", line 102, in execute
+    pos = portfolio.positions.get(symbol)
+          ^^^^^^^^^^^^^^^^^^^
+AttributeError: type object 'PortfolioState' has no attribute 'positions'
+2025-08-20 15:26:00 - LiveExecutionEngine - DEBUG - [MSFT] Live handling signal: 0 | Price: 507.2 | ATR: 9.54362857142858 | Regime: normal | Strategy: str
+2025-08-20 15:26:00 - LiveExecutionEngine - ERROR - [MSFT] Error in live execution: type object 'PortfolioState' has no attribute 'positions'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/default_trade_logic.py", line 102, in execute
+    pos = portfolio.positions.get(symbol)
+          ^^^^^^^^^^^^^^^^^^^
+AttributeError: type object 'PortfolioState' has no attribute 'positions'
+2025-08-20 15:27:00 - LiveExecutionEngine - DEBUG - [MSFT] Live handling signal: 0 | Price: 506.76 | ATR: 9.065057142857151 | Regime: normal | Strategy: str
+2025-08-20 15:27:00 - LiveExecutionEngine - ERROR - [MSFT] Error in live execution: type object 'PortfolioState' has no attribute 'positions'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/default_trade_logic.py", line 102, in execute
+    pos = portfolio.positions.get(symbol)
+          ^^^^^^^^^^^^^^^^^^^
+AttributeError: type object 'PortfolioState' has no attribute 'positions'
+2025-08-20 15:27:00 - LiveExecutionEngine - DEBUG - [AAPL] Live handling signal: 0 | Price: 226.41 | ATR: 4.567135714285714 | Regime: normal | Strategy: str
+2025-08-20 15:27:00 - LiveExecutionEngine - ERROR - [AAPL] Error in live execution: type object 'PortfolioState' has no attribute 'positions'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/default_trade_logic.py", line 102, in execute
+    pos = portfolio.positions.get(symbol)
+          ^^^^^^^^^^^^^^^^^^^
+AttributeError: type object 'PortfolioState' has no attribute 'positions'
+2025-08-20 15:28:00 - LiveExecutionEngine - DEBUG - [AAPL] Live handling signal: 0 | Price: 226.44 | ATR: 4.24285 | Regime: normal | Strategy: str
+2025-08-20 15:28:00 - LiveExecutionEngine - ERROR - [AAPL] Error in live execution: type object 'PortfolioState' has no attribute 'positions'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/default_trade_logic.py", line 102, in execute
+    pos = portfolio.positions.get(symbol)
+          ^^^^^^^^^^^^^^^^^^^
+AttributeError: type object 'PortfolioState' has no attribute 'positions'
+2025-08-20 15:28:00 - LiveExecutionEngine - DEBUG - [MSFT] Live handling signal: 0 | Price: 506.92 | ATR: 8.615771428571435 | Regime: normal | Strategy: str
+2025-08-20 15:28:00 - LiveExecutionEngine - ERROR - [MSFT] Error in live execution: type object 'PortfolioState' has no attribute 'positions'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/default_trade_logic.py", line 102, in execute
+    pos = portfolio.positions.get(symbol)
+          ^^^^^^^^^^^^^^^^^^^
+AttributeError: type object 'PortfolioState' has no attribute 'positions'
+2025-08-20 15:29:00 - LiveExecutionEngine - DEBUG - [MSFT] Live handling signal: 0 | Price: 506.835 | ATR: 8.198271428571436 | Regime: normal | Strategy: str
+2025-08-20 15:29:00 - LiveExecutionEngine - ERROR - [MSFT] Error in live execution: type object 'PortfolioState' has no attribute 'positions'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/default_trade_logic.py", line 102, in execute
+    pos = portfolio.positions.get(symbol)
+          ^^^^^^^^^^^^^^^^^^^
+AttributeError: type object 'PortfolioState' has no attribute 'positions'
+2025-08-20 15:29:00 - LiveExecutionEngine - DEBUG - [AAPL] Live handling signal: 0 | Price: 226.49 | ATR: 4.056428571428571 | Regime: normal | Strategy: str
+2025-08-20 15:29:00 - LiveExecutionEngine - ERROR - [AAPL] Error in live execution: type object 'PortfolioState' has no attribute 'positions'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/default_trade_logic.py", line 102, in execute
+    pos = portfolio.positions.get(symbol)
+          ^^^^^^^^^^^^^^^^^^^
+AttributeError: type object 'PortfolioState' has no attribute 'positions'
+2025-08-20 15:30:00 - LiveExecutionEngine - DEBUG - [AAPL] Live handling signal: 0 | Price: 226.44 | ATR: 3.864999999999999 | Regime: normal | Strategy: str
+2025-08-20 15:30:00 - LiveExecutionEngine - ERROR - [AAPL] Error in live execution: type object 'PortfolioState' has no attribute 'positions'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/default_trade_logic.py", line 102, in execute
+    pos = portfolio.positions.get(symbol)
+          ^^^^^^^^^^^^^^^^^^^
+AttributeError: type object 'PortfolioState' has no attribute 'positions'
+2025-08-20 15:30:00 - LiveExecutionEngine - DEBUG - [MSFT] Live handling signal: 0 | Price: 506.985 | ATR: 7.779342857142865 | Regime: normal | Strategy: str
+2025-08-20 15:30:00 - LiveExecutionEngine - ERROR - [MSFT] Error in live execution: type object 'PortfolioState' has no attribute 'positions'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/default_trade_logic.py", line 102, in execute
+    pos = portfolio.positions.get(symbol)
+          ^^^^^^^^^^^^^^^^^^^
+AttributeError: type object 'PortfolioState' has no attribute 'positions'
+2025-08-20 15:31:00 - LiveExecutionEngine - DEBUG - [AAPL] Live handling signal: 0 | Price: 226.39 | ATR: 3.719642857142856 | Regime: normal | Strategy: str
+2025-08-20 15:31:00 - LiveExecutionEngine - ERROR - [AAPL] Error in live execution: type object 'PortfolioState' has no attribute 'positions'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/default_trade_logic.py", line 102, in execute
+    pos = portfolio.positions.get(symbol)
+          ^^^^^^^^^^^^^^^^^^^
+AttributeError: type object 'PortfolioState' has no attribute 'positions'
+2025-08-20 15:31:00 - LiveExecutionEngine - DEBUG - [MSFT] Live handling signal: 0 | Price: 507.1 | ATR: 7.231485714285725 | Regime: normal | Strategy: str
+2025-08-20 15:31:00 - LiveExecutionEngine - ERROR - [MSFT] Error in live execution: type object 'PortfolioState' has no attribute 'positions'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/default_trade_logic.py", line 102, in execute
+    pos = portfolio.positions.get(symbol)
+          ^^^^^^^^^^^^^^^^^^^
+AttributeError: type object 'PortfolioState' has no attribute 'positions'
+2025-08-20 15:32:00 - LiveExecutionEngine - DEBUG - [MSFT] Live handling signal: 0 | Price: 507.275 | ATR: 6.67857142857144 | Regime: low_volatility | Strategy: str
+2025-08-20 15:32:00 - LiveExecutionEngine - ERROR - [MSFT] Error in live execution: type object 'PortfolioState' has no attribute 'positions'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/default_trade_logic.py", line 102, in execute
+    pos = portfolio.positions.get(symbol)
+          ^^^^^^^^^^^^^^^^^^^
+AttributeError: type object 'PortfolioState' has no attribute 'positions'
+2025-08-20 15:32:00 - LiveExecutionEngine - DEBUG - [AAPL] Live handling signal: 0 | Price: 226.545 | ATR: 3.5992857142857133 | Regime: low_volatility | Strategy: str
+2025-08-20 15:32:00 - LiveExecutionEngine - ERROR - [AAPL] Error in live execution: type object 'PortfolioState' has no attribute 'positions'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/default_trade_logic.py", line 102, in execute
+    pos = portfolio.positions.get(symbol)
+          ^^^^^^^^^^^^^^^^^^^
+AttributeError: type object 'PortfolioState' has no attribute 'positions'
+2025-08-20 15:33:00 - LiveExecutionEngine - DEBUG - [MSFT] Live handling signal: 0 | Price: 506.845 | ATR: 6.36607142857144 | Regime: low_volatility | Strategy: str
+2025-08-20 15:33:00 - LiveExecutionEngine - ERROR - [MSFT] Error in live execution: type object 'PortfolioState' has no attribute 'positions'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/default_trade_logic.py", line 102, in execute
+    pos = portfolio.positions.get(symbol)
+          ^^^^^^^^^^^^^^^^^^^
+AttributeError: type object 'PortfolioState' has no attribute 'positions'
+2025-08-20 15:33:00 - LiveExecutionEngine - DEBUG - [AAPL] Live handling signal: 0 | Price: 226.5 | ATR: 3.4771428571428555 | Regime: low_volatility | Strategy: str
+2025-08-20 15:33:00 - LiveExecutionEngine - ERROR - [AAPL] Error in live execution: type object 'PortfolioState' has no attribute 'positions'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/default_trade_logic.py", line 102, in execute
+    pos = portfolio.positions.get(symbol)
+          ^^^^^^^^^^^^^^^^^^^
+AttributeError: type object 'PortfolioState' has no attribute 'positions'
+2025-08-20 15:33:44 - LiveExecutionEngine - DEBUG - Logger initialized.
+2025-08-20 15:33:44 - LiveExecutionEngine - DEBUG - Log file: logs/live_execution.log
+2025-08-20 15:33:44 - LiveExecutionEngine - DEBUG - Logger name: LiveExecutionEngine
+2025-08-20 15:33:44 - LiveExecutionEngine - INFO - Initialized LiveExecutionEngine
+2025-08-20 15:34:00 - LiveExecutionEngine - DEBUG - [MSFT] Live handling signal: 0 | Price: 506.965 | ATR: 10.42148571428572 | Regime: normal | Strategy: str
+2025-08-20 15:34:00 - LiveExecutionEngine - INFO - [MSFT] Executed live trade signal: 0 at $506.96
+2025-08-20 15:34:00 - LiveExecutionEngine - DEBUG - [AAPL] Live handling signal: 0 | Price: 226.57 | ATR: 5.108600000000004 | Regime: normal | Strategy: str
+2025-08-20 15:34:00 - LiveExecutionEngine - INFO - [AAPL] Executed live trade signal: 0 at $226.57
+2025-08-20 15:35:00 - LiveExecutionEngine - DEBUG - [AAPL] Live handling signal: 0 | Price: 226.58 | ATR: 4.843242857142861 | Regime: normal | Strategy: str
+2025-08-20 15:35:00 - LiveExecutionEngine - INFO - [AAPL] Executed live trade signal: 0 at $226.58
+2025-08-20 15:35:00 - LiveExecutionEngine - DEBUG - [MSFT] Live handling signal: 0 | Price: 506.79 | ATR: 10.091128571428571 | Regime: normal | Strategy: str
+2025-08-20 15:35:00 - LiveExecutionEngine - INFO - [MSFT] Executed live trade signal: 0 at $506.79
+2025-08-20 15:55:22 - LiveExecutionEngine - DEBUG - Logger initialized.
+2025-08-20 15:55:22 - LiveExecutionEngine - DEBUG - Log file: logs/live_execution.log
+2025-08-20 15:55:22 - LiveExecutionEngine - DEBUG - Logger name: LiveExecutionEngine
+2025-08-20 15:55:22 - LiveExecutionEngine - INFO - Initialized LiveExecutionEngine
+2025-08-20 15:56:00 - LiveExecutionEngine - DEBUG - [MSFT] Live handling signal: 1 | Price: 505.85 | ATR: 10.496128571428573 | Regime: normal | Strategy: MomentumStrategy
+2025-08-20 15:56:00 - LiveExecutionEngine - ERROR - [MSFT] Error in live execution: OrderResult.__init__() got an unexpected keyword argument 'status'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/broker/alpaca_broker.py", line 300, in _mk_order_result
+    return OrderResult(
+           ^^^^^^^^^^^^
+TypeError: OrderResult.__init__() got an unexpected keyword argument 'client_order_id'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/default_trade_logic.py", line 132, in execute
+    if signal == 1 and broker.place_market_order(symbol, qty, "buy", price):
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/core/broker/alpaca_broker.py", line 196, in place_market_order
+    return self._mk_order_result(o)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/core/broker/alpaca_broker.py", line 316, in _mk_order_result
+    return OrderResult(order_id=getattr(o, "id", None), status=str(getattr(o, "status", "")).lower())  # type: ignore[arg-type]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: OrderResult.__init__() got an unexpected keyword argument 'status'
+2025-08-20 15:56:00 - LiveExecutionEngine - DEBUG - [AAPL] Live handling signal: 1 | Price: 226.485 | ATR: 5.117171428571431 | Regime: normal | Strategy: MomentumStrategy
+2025-08-20 15:56:00 - LiveExecutionEngine - ERROR - [AAPL] Error in live execution: OrderResult.__init__() got an unexpected keyword argument 'status'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/broker/alpaca_broker.py", line 300, in _mk_order_result
+    return OrderResult(
+           ^^^^^^^^^^^^
+TypeError: OrderResult.__init__() got an unexpected keyword argument 'client_order_id'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/default_trade_logic.py", line 132, in execute
+    if signal == 1 and broker.place_market_order(symbol, qty, "buy", price):
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/core/broker/alpaca_broker.py", line 196, in place_market_order
+    return self._mk_order_result(o)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/core/broker/alpaca_broker.py", line 316, in _mk_order_result
+    return OrderResult(order_id=getattr(o, "id", None), status=str(getattr(o, "status", "")).lower())  # type: ignore[arg-type]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: OrderResult.__init__() got an unexpected keyword argument 'status'
+2025-08-20 15:57:00 - LiveExecutionEngine - DEBUG - [AAPL] Live handling signal: 1 | Price: 226.375 | ATR: 4.862528571428571 | Regime: normal | Strategy: MomentumStrategy
+2025-08-20 15:57:00 - LiveExecutionEngine - ERROR - [AAPL] Error in live execution: OrderResult.__init__() got an unexpected keyword argument 'status'
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/broker/alpaca_broker.py", line 300, in _mk_order_result
+    return OrderResult(
+           ^^^^^^^^^^^^
+TypeError: OrderResult.__init__() got an unexpected keyword argument 'client_order_id'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/default_trade_logic.py", line 132, in execute
+    if signal == 1 and broker.place_market_order(symbol, qty, "buy", price):
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/core/broker/alpaca_broker.py", line 196, in place_market_order
+    return self._mk_order_result(o)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/core/broker/alpaca_broker.py", line 316, in _mk_order_result
+    return OrderResult(order_id=getattr(o, "id", None), status=str(getattr(o, "status", "")).lower())  # type: ignore[arg-type]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: OrderResult.__init__() got an unexpected keyword argument 'status'
+2025-08-20 15:57:00 - LiveExecutionEngine - DEBUG - [MSFT] Live handling signal: 1 | Price: 505.29 | ATR: 10.194699999999996 | Regime: normal | Strategy: MomentumStrategy
+2025-08-20 15:57:00 - LiveExecutionEngine - ERROR - [MSFT] Error in live execution: {"buying_power":"80473.5","code":40310000,"cost_basis":"99557.91","message":"insufficient buying power"}
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/alpaca/common/rest.py", line 198, in _one_request
+    response.raise_for_status()
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/requests/models.py", line 1026, in raise_for_status
+    raise HTTPError(http_error_msg, response=self)
+requests.exceptions.HTTPError: 403 Client Error: Forbidden for url: https://paper-api.alpaca.markets/v2/orders
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/default_trade_logic.py", line 132, in execute
+    if signal == 1 and broker.place_market_order(symbol, qty, "buy", price):
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/core/broker/alpaca_broker.py", line 193, in place_market_order
+    o = self.trading_client.submit_order(
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/alpaca/trading/client.py", line 100, in submit_order
+    response = self.post("/orders", data)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/alpaca/common/rest.py", line 240, in post
+    return self._request("POST", path, data)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/alpaca/common/rest.py", line 131, in _request
+    return self._one_request(method, url, opts, retry)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/alpaca/common/rest.py", line 207, in _one_request
+    raise APIError(error, http_error)
+alpaca.common.exceptions.APIError: {"buying_power":"80473.5","code":40310000,"cost_basis":"99557.91","message":"insufficient buying power"}
+2025-08-20 15:58:00 - LiveExecutionEngine - DEBUG - [MSFT] Live handling signal: 1 | Price: 505.37 | ATR: 9.647199999999994 | Regime: normal | Strategy: MomentumStrategy
+2025-08-20 15:58:00 - LiveExecutionEngine - ERROR - [MSFT] Error in live execution: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/urllib3/connectionpool.py", line 787, in urlopen
+    response = self._make_request(
+               ^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/urllib3/connectionpool.py", line 534, in _make_request
+    response = conn.getresponse()
+               ^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/urllib3/connection.py", line 565, in getresponse
+    httplib_response = super().getresponse()
+                       ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/http/client.py", line 1428, in getresponse
+    response.begin()
+  File "/usr/lib/python3.12/http/client.py", line 331, in begin
+    version, status, reason = self._read_status()
+                              ^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/http/client.py", line 300, in _read_status
+    raise RemoteDisconnected("Remote end closed connection without"
+http.client.RemoteDisconnected: Remote end closed connection without response
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/requests/adapters.py", line 667, in send
+    resp = conn.urlopen(
+           ^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/urllib3/connectionpool.py", line 841, in urlopen
+    retries = retries.increment(
+              ^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/urllib3/util/retry.py", line 474, in increment
+    raise reraise(type(error), error, _stacktrace)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/urllib3/util/util.py", line 38, in reraise
+    raise value.with_traceback(tb)
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/urllib3/connectionpool.py", line 787, in urlopen
+    response = self._make_request(
+               ^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/urllib3/connectionpool.py", line 534, in _make_request
+    response = conn.getresponse()
+               ^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/urllib3/connection.py", line 565, in getresponse
+    httplib_response = super().getresponse()
+                       ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/http/client.py", line 1428, in getresponse
+    response.begin()
+  File "/usr/lib/python3.12/http/client.py", line 331, in begin
+    version, status, reason = self._read_status()
+                              ^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/http/client.py", line 300, in _read_status
+    raise RemoteDisconnected("Remote end closed connection without"
+urllib3.exceptions.ProtocolError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/default_trade_logic.py", line 132, in execute
+    if signal == 1 and broker.place_market_order(symbol, qty, "buy", price):
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/core/broker/alpaca_broker.py", line 193, in place_market_order
+    o = self.trading_client.submit_order(
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/alpaca/trading/client.py", line 100, in submit_order
+    response = self.post("/orders", data)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/alpaca/common/rest.py", line 240, in post
+    return self._request("POST", path, data)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/alpaca/common/rest.py", line 131, in _request
+    return self._one_request(method, url, opts, retry)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/alpaca/common/rest.py", line 195, in _one_request
+    response = self._session.request(method, url, **opts)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/requests/sessions.py", line 589, in request
+    resp = self.send(prep, **send_kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/requests/sessions.py", line 703, in send
+    r = adapter.send(request, **kwargs)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/requests/adapters.py", line 682, in send
+    raise ConnectionError(err, request=request)
+requests.exceptions.ConnectionError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+2025-08-20 15:58:00 - LiveExecutionEngine - DEBUG - [AAPL] Live handling signal: 1 | Price: 226.405 | ATR: 4.710742857142857 | Regime: normal | Strategy: MomentumStrategy
+2025-08-20 15:58:00 - LiveExecutionEngine - ERROR - [AAPL] Error in live execution: {"buying_power":"80473.53","code":40310000,"cost_basis":"99851.25","message":"insufficient buying power"}
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/alpaca/common/rest.py", line 198, in _one_request
+    response.raise_for_status()
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/requests/models.py", line 1026, in raise_for_status
+    raise HTTPError(http_error_msg, response=self)
+requests.exceptions.HTTPError: 403 Client Error: Forbidden for url: https://paper-api.alpaca.markets/v2/orders
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/default_trade_logic.py", line 132, in execute
+    if signal == 1 and broker.place_market_order(symbol, qty, "buy", price):
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/core/broker/alpaca_broker.py", line 193, in place_market_order
+    o = self.trading_client.submit_order(
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/alpaca/trading/client.py", line 100, in submit_order
+    response = self.post("/orders", data)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/alpaca/common/rest.py", line 240, in post
+    return self._request("POST", path, data)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/alpaca/common/rest.py", line 131, in _request
+    return self._one_request(method, url, opts, retry)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/alpaca/common/rest.py", line 207, in _one_request
+    raise APIError(error, http_error)
+alpaca.common.exceptions.APIError: {"buying_power":"80473.53","code":40310000,"cost_basis":"99851.25","message":"insufficient buying power"}
+2025-08-20 15:58:40 - LiveExecutionEngine - DEBUG - Logger initialized.
+2025-08-20 15:58:40 - LiveExecutionEngine - DEBUG - Log file: logs/live_execution.log
+2025-08-20 15:58:40 - LiveExecutionEngine - DEBUG - Logger name: LiveExecutionEngine
+2025-08-20 15:58:40 - LiveExecutionEngine - INFO - Initialized LiveExecutionEngine
+2025-08-20 15:59:00 - LiveExecutionEngine - DEBUG - [MSFT] Live handling signal: 1 | Price: 505.49 | ATR: 10.530414285714288 | Regime: normal | Strategy: MomentumStrategy
+2025-08-20 15:59:00 - LiveExecutionEngine - ERROR - [MSFT] Error in live execution: {"buying_power":"80473.53","code":40310000,"cost_basis":"99593.37","message":"insufficient buying power"}
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/alpaca/common/rest.py", line 198, in _one_request
+    response.raise_for_status()
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/requests/models.py", line 1026, in raise_for_status
+    raise HTTPError(http_error_msg, response=self)
+requests.exceptions.HTTPError: 403 Client Error: Forbidden for url: https://paper-api.alpaca.markets/v2/orders
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/default_trade_logic.py", line 132, in execute
+    if signal == 1 and broker.place_market_order(symbol, qty, "buy", price):
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/core/broker/alpaca_broker.py", line 193, in place_market_order
+    o = self.trading_client.submit_order(
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/alpaca/trading/client.py", line 100, in submit_order
+    response = self.post("/orders", data)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/alpaca/common/rest.py", line 240, in post
+    return self._request("POST", path, data)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/alpaca/common/rest.py", line 131, in _request
+    return self._one_request(method, url, opts, retry)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/alpaca/common/rest.py", line 207, in _one_request
+    raise APIError(error, http_error)
+alpaca.common.exceptions.APIError: {"buying_power":"80473.53","code":40310000,"cost_basis":"99593.37","message":"insufficient buying power"}
+2025-08-20 15:59:00 - LiveExecutionEngine - DEBUG - [AAPL] Live handling signal: 1 | Price: 226.09 | ATR: 5.096814285714288 | Regime: normal | Strategy: MomentumStrategy
+2025-08-20 15:59:00 - LiveExecutionEngine - ERROR - [AAPL] Error in live execution: {"buying_power":"80473.53","code":40310000,"cost_basis":"99949.49","message":"insufficient buying power"}
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/alpaca/common/rest.py", line 198, in _one_request
+    response.raise_for_status()
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/requests/models.py", line 1026, in raise_for_status
+    raise HTTPError(http_error_msg, response=self)
+requests.exceptions.HTTPError: 403 Client Error: Forbidden for url: https://paper-api.alpaca.markets/v2/orders
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/default_trade_logic.py", line 132, in execute
+    if signal == 1 and broker.place_market_order(symbol, qty, "buy", price):
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/core/broker/alpaca_broker.py", line 193, in place_market_order
+    o = self.trading_client.submit_order(
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/alpaca/trading/client.py", line 100, in submit_order
+    response = self.post("/orders", data)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/alpaca/common/rest.py", line 240, in post
+    return self._request("POST", path, data)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/alpaca/common/rest.py", line 131, in _request
+    return self._one_request(method, url, opts, retry)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/alpaca/common/rest.py", line 207, in _one_request
+    raise APIError(error, http_error)
+alpaca.common.exceptions.APIError: {"buying_power":"80473.53","code":40310000,"cost_basis":"99949.49","message":"insufficient buying power"}
+2025-08-20 16:00:00 - LiveExecutionEngine - DEBUG - [MSFT] Live handling signal: 1 | Price: 505.5 | ATR: 10.203271428571428 | Regime: normal | Strategy: MomentumStrategy
+2025-08-20 16:00:00 - LiveExecutionEngine - ERROR - [MSFT] Error in live execution: {"buying_power":"80473.53","code":40310000,"cost_basis":"99613.07","message":"insufficient buying power"}
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/alpaca/common/rest.py", line 198, in _one_request
+    response.raise_for_status()
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/requests/models.py", line 1026, in raise_for_status
+    raise HTTPError(http_error_msg, response=self)
+requests.exceptions.HTTPError: 403 Client Error: Forbidden for url: https://paper-api.alpaca.markets/v2/orders
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/default_trade_logic.py", line 132, in execute
+    if signal == 1 and broker.place_market_order(symbol, qty, "buy", price):
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/core/broker/alpaca_broker.py", line 193, in place_market_order
+    o = self.trading_client.submit_order(
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/alpaca/trading/client.py", line 100, in submit_order
+    response = self.post("/orders", data)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/alpaca/common/rest.py", line 240, in post
+    return self._request("POST", path, data)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/alpaca/common/rest.py", line 131, in _request
+    return self._one_request(method, url, opts, retry)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/alpaca/common/rest.py", line 207, in _one_request
+    raise APIError(error, http_error)
+alpaca.common.exceptions.APIError: {"buying_power":"80473.53","code":40310000,"cost_basis":"99613.07","message":"insufficient buying power"}
+2025-08-20 16:00:00 - LiveExecutionEngine - DEBUG - [AAPL] Live handling signal: 1 | Price: 225.975 | ATR: 4.840028571428571 | Regime: normal | Strategy: MomentumStrategy
+2025-08-20 16:00:00 - LiveExecutionEngine - ERROR - [AAPL] Error in live execution: {"buying_power":"80473.53","code":40310000,"cost_basis":"99880.98","message":"insufficient buying power"}
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/alpaca/common/rest.py", line 198, in _one_request
+    response.raise_for_status()
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/requests/models.py", line 1026, in raise_for_status
+    raise HTTPError(http_error_msg, response=self)
+requests.exceptions.HTTPError: 403 Client Error: Forbidden for url: https://paper-api.alpaca.markets/v2/orders
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/live_execution_engine.py", line 60, in handle_signal
+    trade_logic.execute(
+  File "/home/kwasi/Projects/trader/schwab_trader/core/logic/default_trade_logic.py", line 132, in execute
+    if signal == 1 and broker.place_market_order(symbol, qty, "buy", price):
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/core/broker/alpaca_broker.py", line 193, in place_market_order
+    o = self.trading_client.submit_order(
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/alpaca/trading/client.py", line 100, in submit_order
+    response = self.post("/orders", data)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/alpaca/common/rest.py", line 240, in post
+    return self._request("POST", path, data)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/alpaca/common/rest.py", line 131, in _request
+    return self._one_request(method, url, opts, retry)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kwasi/Projects/trader/schwab_trader/venv/lib/python3.12/site-packages/alpaca/common/rest.py", line 207, in _one_request
+    raise APIError(error, http_error)
+alpaca.common.exceptions.APIError: {"buying_power":"80473.53","code":40310000,"cost_basis":"99880.98","message":"insufficient buying power"}

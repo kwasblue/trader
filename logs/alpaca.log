@@ -1,0 +1,136 @@
+2025-08-11 15:07:05 - AlpacaBroker - INFO - Connected to Alpaca (paper=True, feed=DataFeed.IEX).
+2025-08-11 15:07:05 - AlpacaBroker - INFO - Subscribed to AAPL bars
+2025-08-11 15:07:05 - AlpacaBroker - INFO - Subscribed to MSFT bars
+2025-08-11 15:07:05 - AlpacaBroker - INFO - Starting Alpaca stream...
+2025-08-11 15:19:30 - AlpacaBroker - INFO - Connected to Alpaca (paper=True, feed=DataFeed.IEX).
+2025-08-11 15:19:30 - AlpacaBroker - INFO - Subscribed to AAPL bars
+2025-08-11 15:19:30 - AlpacaBroker - INFO - Subscribed to MSFT bars
+2025-08-11 15:19:30 - AlpacaBroker - INFO - Starting Alpaca stream...
+2025-08-11 15:47:18 - AlpacaBroker - INFO - Connected to Alpaca (paper=True, feed=DataFeed.IEX).
+2025-08-11 15:47:18 - AlpacaBroker - INFO - Subscribed to AAPL bars
+2025-08-11 15:47:18 - AlpacaBroker - INFO - Subscribed to MSFT bars
+2025-08-11 15:47:18 - AlpacaBroker - INFO - Starting Alpaca stream...
+2025-08-11 15:55:14 - AlpacaBroker - INFO - Connected to Alpaca (paper=True, feed=DataFeed.IEX).
+2025-08-11 15:55:14 - AlpacaBroker - INFO - Subscribed to AAPL bars
+2025-08-11 15:55:14 - AlpacaBroker - INFO - Subscribed to MSFT bars
+2025-08-11 15:55:14 - AlpacaBroker - INFO - Starting Alpaca stream...
+2025-08-11 15:56:01 - AlpacaBroker - INFO - Connected to Alpaca (paper=True, feed=DataFeed.IEX).
+2025-08-11 15:56:01 - AlpacaBroker - INFO - Subscribed to AAPL bars
+2025-08-11 15:56:01 - AlpacaBroker - INFO - Subscribed to MSFT bars
+2025-08-11 15:56:01 - AlpacaBroker - INFO - Starting Alpaca stream...
+2025-08-11 15:56:11 - AlpacaBroker - INFO - Connected to Alpaca (paper=True, feed=DataFeed.IEX).
+2025-08-11 15:56:11 - AlpacaBroker - INFO - Subscribed to AAPL bars
+2025-08-11 15:56:11 - AlpacaBroker - INFO - Subscribed to MSFT bars
+2025-08-11 15:56:11 - AlpacaBroker - INFO - Starting Alpaca stream...
+2025-08-11 16:00:14 - AlpacaBroker - INFO - Connected to Alpaca (paper=True, feed=DataFeed.IEX).
+2025-08-11 16:00:14 - AlpacaBroker - INFO - Subscribed to AAPL bars
+2025-08-11 16:00:14 - AlpacaBroker - INFO - Subscribed to MSFT bars
+2025-08-11 16:00:14 - AlpacaBroker - INFO - Starting Alpaca stream...
+2025-08-11 16:03:42 - AlpacaBroker - INFO - Connected to Alpaca (paper=True, feed=DataFeed.IEX).
+2025-08-11 16:03:42 - AlpacaBroker - INFO - Subscribed to AAPL bars
+2025-08-11 16:03:42 - AlpacaBroker - INFO - Subscribed to MSFT bars
+2025-08-11 16:03:42 - AlpacaBroker - INFO - Starting Alpaca stream...
+2025-08-11 16:07:44 - AlpacaBroker - INFO - Connected to Alpaca (paper=True, feed=DataFeed.IEX).
+2025-08-11 16:07:44 - AlpacaBroker - INFO - Subscribed to bars: AAPL
+2025-08-11 16:07:44 - AlpacaBroker - INFO - Subscribed to bars: MSFT
+2025-08-11 16:07:44 - AlpacaBroker - INFO - Starting Alpaca stream...
+2025-08-11 16:15:26 - AlpacaBroker - INFO - Connected to Alpaca (paper=True, feed=DataFeed.IEX).
+2025-08-11 16:15:26 - AlpacaBroker - INFO - Subscribed to bars: AAPL
+2025-08-11 16:15:26 - AlpacaBroker - INFO - Subscribed to bars: MSFT
+2025-08-11 16:15:26 - AlpacaBroker - INFO - Starting Alpaca stream...
+2025-08-20 14:05:06 - AlpacaBroker - DEBUG - Logger initialized.
+2025-08-20 14:05:06 - AlpacaBroker - DEBUG - Log file: logs/alpaca.log
+2025-08-20 14:05:06 - AlpacaBroker - DEBUG - Logger name: AlpacaBroker
+2025-08-20 14:05:06 - AlpacaBroker - INFO - Connected to Alpaca.
+2025-08-20 14:05:06 - AlpacaBroker - INFO - Subscribed to AAPL bars
+2025-08-20 14:05:06 - AlpacaBroker - INFO - Subscribed to MSFT bars
+2025-08-20 14:05:06 - AlpacaBroker - INFO - Starting Alpaca stream...
+2025-08-20 14:38:19 - AlpacaBroker - DEBUG - Logger initialized.
+2025-08-20 14:38:19 - AlpacaBroker - DEBUG - Log file: logs/alpaca.log
+2025-08-20 14:38:19 - AlpacaBroker - DEBUG - Logger name: AlpacaBroker
+2025-08-20 14:38:19 - AlpacaBroker - INFO - Connected to Alpaca.
+2025-08-20 14:38:19 - AlpacaBroker - INFO - [stream] subscribed bars: AAPL
+2025-08-20 14:38:19 - AlpacaBroker - INFO - [stream] subscribed bars: MSFT
+2025-08-20 14:38:19 - AlpacaBroker - INFO - [stream] starting...
+2025-08-20 14:38:19 - AlpacaBroker - ERROR - [stream] error: 'NoneType' object has no attribute 'is_running'; retrying in 300s
+2025-08-20 14:42:42 - AlpacaBroker - DEBUG - Logger initialized.
+2025-08-20 14:42:42 - AlpacaBroker - DEBUG - Log file: logs/alpaca.log
+2025-08-20 14:42:42 - AlpacaBroker - DEBUG - Logger name: AlpacaBroker
+2025-08-20 14:42:43 - AlpacaBroker - INFO - Connected to Alpaca.
+2025-08-20 14:42:43 - AlpacaBroker - INFO - [stream] subscribed bars: AAPL
+2025-08-20 14:42:43 - AlpacaBroker - INFO - [stream] subscribed bars: MSFT
+2025-08-20 14:42:43 - AlpacaBroker - INFO - [stream] starting...
+2025-08-20 14:42:43 - AlpacaBroker - ERROR - [stream] error: 'NoneType' object has no attribute 'is_running'; retrying in 300s
+2025-08-20 14:47:43 - AlpacaBroker - INFO - [stream] starting...
+2025-08-20 14:47:43 - AlpacaBroker - ERROR - [stream] error: 'NoneType' object has no attribute 'is_running'; retrying in 300s
+2025-08-20 14:55:33 - AlpacaBroker - DEBUG - Logger initialized.
+2025-08-20 14:55:33 - AlpacaBroker - DEBUG - Log file: logs/alpaca.log
+2025-08-20 14:55:33 - AlpacaBroker - DEBUG - Logger name: AlpacaBroker
+2025-08-20 14:55:33 - AlpacaBroker - INFO - Connected to Alpaca.
+2025-08-20 14:55:33 - AlpacaBroker - INFO - [stream] subscribed bars: AAPL
+2025-08-20 14:55:33 - AlpacaBroker - INFO - [stream] subscribed bars: MSFT
+2025-08-20 14:55:33 - AlpacaBroker - INFO - [stream] starting... alpaca-py=0.42.0 feed=?
+2025-08-20 14:55:33 - AlpacaBroker - ERROR - [stream] error: 'NoneType' object has no attribute 'is_running'; retrying in 300s
+2025-08-20 15:01:25 - AlpacaBroker - DEBUG - Logger initialized.
+2025-08-20 15:01:25 - AlpacaBroker - DEBUG - Log file: logs/alpaca.log
+2025-08-20 15:01:25 - AlpacaBroker - DEBUG - Logger name: AlpacaBroker
+2025-08-20 15:01:25 - AlpacaBroker - INFO - Connected to Alpaca.
+2025-08-20 15:01:25 - AlpacaBroker - INFO - [stream] subscribed bars: AAPL
+2025-08-20 15:01:25 - AlpacaBroker - INFO - [stream] subscribed bars: MSFT
+2025-08-20 15:01:25 - AlpacaBroker - INFO - [stream] starting... alpaca-py=0.42.0 feed=?
+2025-08-20 15:06:23 - AlpacaBroker - DEBUG - Logger initialized.
+2025-08-20 15:06:23 - AlpacaBroker - DEBUG - Log file: logs/alpaca.log
+2025-08-20 15:06:23 - AlpacaBroker - DEBUG - Logger name: AlpacaBroker
+2025-08-20 15:06:23 - AlpacaBroker - INFO - Connected to Alpaca.
+2025-08-20 15:06:23 - AlpacaBroker - INFO - [stream] subscribed bars: AAPL
+2025-08-20 15:06:23 - AlpacaBroker - INFO - [stream] subscribed bars: MSFT
+2025-08-20 15:06:23 - AlpacaBroker - INFO - [stream] starting... alpaca-py=0.42.0 feed=?
+2025-08-20 15:13:33 - AlpacaBroker - DEBUG - Logger initialized.
+2025-08-20 15:13:33 - AlpacaBroker - DEBUG - Log file: logs/alpaca.log
+2025-08-20 15:13:33 - AlpacaBroker - DEBUG - Logger name: AlpacaBroker
+2025-08-20 15:13:33 - AlpacaBroker - INFO - Connected to Alpaca.
+2025-08-20 15:13:33 - AlpacaBroker - INFO - [stream] subscribed bars: AAPL
+2025-08-20 15:13:33 - AlpacaBroker - INFO - [stream] subscribed bars: MSFT
+2025-08-20 15:13:33 - AlpacaBroker - INFO - [stream] starting... alpaca-py=0.42.0 feed=?
+2025-08-20 15:14:37 - AlpacaBroker - DEBUG - Logger initialized.
+2025-08-20 15:14:37 - AlpacaBroker - DEBUG - Log file: logs/alpaca.log
+2025-08-20 15:14:37 - AlpacaBroker - DEBUG - Logger name: AlpacaBroker
+2025-08-20 15:14:37 - AlpacaBroker - INFO - Connected to Alpaca.
+2025-08-20 15:14:37 - AlpacaBroker - INFO - [stream] subscribed bars: AAPL
+2025-08-20 15:14:37 - AlpacaBroker - INFO - [stream] subscribed bars: MSFT
+2025-08-20 15:14:37 - AlpacaBroker - INFO - [stream] starting... alpaca-py=0.42.0 feed=?
+2025-08-20 15:17:53 - AlpacaBroker - DEBUG - Logger initialized.
+2025-08-20 15:17:53 - AlpacaBroker - DEBUG - Log file: logs/alpaca.log
+2025-08-20 15:17:53 - AlpacaBroker - DEBUG - Logger name: AlpacaBroker
+2025-08-20 15:17:54 - AlpacaBroker - INFO - Connected to Alpaca.
+2025-08-20 15:17:54 - AlpacaBroker - INFO - [stream] subscribed bars: AAPL
+2025-08-20 15:17:54 - AlpacaBroker - INFO - [stream] subscribed bars: MSFT
+2025-08-20 15:17:54 - AlpacaBroker - INFO - [stream] starting... alpaca-py=0.42.0 feed=?
+2025-08-20 15:23:01 - AlpacaBroker - DEBUG - Logger initialized.
+2025-08-20 15:23:01 - AlpacaBroker - DEBUG - Log file: logs/alpaca.log
+2025-08-20 15:23:01 - AlpacaBroker - DEBUG - Logger name: AlpacaBroker
+2025-08-20 15:23:01 - AlpacaBroker - INFO - Connected to Alpaca.
+2025-08-20 15:23:01 - AlpacaBroker - INFO - [stream] subscribed bars: AAPL
+2025-08-20 15:23:01 - AlpacaBroker - INFO - [stream] subscribed bars: MSFT
+2025-08-20 15:23:01 - AlpacaBroker - INFO - [stream] starting... alpaca-py=0.42.0 feed=?
+2025-08-20 15:33:44 - AlpacaBroker - DEBUG - Logger initialized.
+2025-08-20 15:33:44 - AlpacaBroker - DEBUG - Log file: logs/alpaca.log
+2025-08-20 15:33:44 - AlpacaBroker - DEBUG - Logger name: AlpacaBroker
+2025-08-20 15:33:44 - AlpacaBroker - INFO - Connected to Alpaca.
+2025-08-20 15:33:44 - AlpacaBroker - INFO - [stream] subscribed bars: AAPL
+2025-08-20 15:33:44 - AlpacaBroker - INFO - [stream] subscribed bars: MSFT
+2025-08-20 15:33:44 - AlpacaBroker - INFO - [stream] starting... alpaca-py=0.42.0 feed=?
+2025-08-20 15:55:22 - AlpacaBroker - DEBUG - Logger initialized.
+2025-08-20 15:55:22 - AlpacaBroker - DEBUG - Log file: logs/alpaca.log
+2025-08-20 15:55:22 - AlpacaBroker - DEBUG - Logger name: AlpacaBroker
+2025-08-20 15:55:23 - AlpacaBroker - INFO - Connected to Alpaca.
+2025-08-20 15:55:23 - AlpacaBroker - INFO - [stream] subscribed bars: AAPL
+2025-08-20 15:55:23 - AlpacaBroker - INFO - [stream] subscribed bars: MSFT
+2025-08-20 15:55:23 - AlpacaBroker - INFO - [stream] starting... alpaca-py=0.42.0 feed=?
+2025-08-20 15:58:40 - AlpacaBroker - DEBUG - Logger initialized.
+2025-08-20 15:58:40 - AlpacaBroker - DEBUG - Log file: logs/alpaca.log
+2025-08-20 15:58:40 - AlpacaBroker - DEBUG - Logger name: AlpacaBroker
+2025-08-20 15:58:41 - AlpacaBroker - INFO - Connected to Alpaca.
+2025-08-20 15:58:41 - AlpacaBroker - INFO - [stream] subscribed bars: AAPL
+2025-08-20 15:58:41 - AlpacaBroker - INFO - [stream] subscribed bars: MSFT
+2025-08-20 15:58:41 - AlpacaBroker - INFO - [stream] starting... alpaca-py=0.42.0 feed=?
