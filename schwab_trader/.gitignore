@@ -42,6 +42,7 @@ model_results/
 saved_models/
 models/
 tokens/
+logs/
 
 # === Config and secrets ===
 .env
