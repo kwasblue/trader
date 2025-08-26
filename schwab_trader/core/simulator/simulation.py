@@ -26,7 +26,7 @@ from core.logic.trade_logic_manager import DynamicTradeLogicManager
 from core.logic.mock_execution_engine import MockExecutionEngine
 from core.logic.symbol_state import SymbolState
 from core.logic.portfolio_state import PortfolioState
-from core.position_sizer import DynamicPositionSizer
+from core.position_sizer import DynamicPositionSizer, DynamicPositionSizer2
 from loggers.file_trade_logger import FileTradeLogger
 from core.historical_loader import HistoricalBarLoader
 from core.drawdown_monitor import DrawdownMonitor
@@ -40,9 +40,6 @@ from core.broker.mock_broker import MockBroker
 # -----------------------------
 # Small utilities
 # -----------------------------
-# core/simulator/simulation.py
-# inside SimulationRunner
-
 
 CANONICAL = ("Open", "High", "Low", "Close", "Volume")
 
@@ -157,7 +154,7 @@ class SimulationRunner:
 
         # Broker + sizing + trade logger + engine
         self.broker = MockBroker(starting_cash=self.portfolio.cash)
-        self.sizer = DynamicPositionSizer(risk_percentage=0.01)
+        self.sizer = DynamicPositionSizer2(risk_percentage=0.01)
         self.trade_logger = FileTradeLogger(log_file="trades_sim.csv")
 
         # historical data
