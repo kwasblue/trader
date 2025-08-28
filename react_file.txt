@@ -1,0 +1,1012 @@
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Separator } from "@/components/ui/separator";
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip as RTooltip,
+  AreaChart,
+  Area,
+  Legend,
+  BarChart,
+  Bar,
+} from "recharts";
+import {
+  AlertTriangle,
+  Bell,
+  CirclePlay,
+  CircleStop,
+  Filter,
+  LineChart as LineChartIcon,
+  ListFilter,
+  Settings,
+  SlidersHorizontal,
+  SquareDot,
+  Trash2,
+  TrendingDown,
+  TrendingUp,
+  Workflow,
+  X,
+} from "lucide-react";
+
+// =====================================================
+// UTILITIES & MOCKS (replace with live wiring later)
+// =====================================================
+const fmtUSD = (x: number | null | undefined) =>
+  x === null || x === undefined
+    ? "–"
+    : x.toLocaleString(undefined, {
+        style: "currency",
+        currency: "USD",
+        maximumFractionDigits: 2,
+      });
+const fmtPct = (x: number | null | undefined) =>
+  x === null || x === undefined ? "–" : `${(x * 100).toFixed(2)}%`;
+const fmtNum = (x: number | null | undefined, digits = 2) =>
+  x === null || x === undefined
+    ? "–"
+    : x.toLocaleString(undefined, { maximumFractionDigits: digits });
+
+// Mock PnL curve & equity for preview
+function makeSeries(days = 240, start = 100000) {
+  let cur = start;
+  const out: Array<{ date: string; equity: number; pnl: number; ret: number }> = [];
+  for (let i = days; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const shock = (Math.random() - 0.5) * 0.01;
+    cur *= 1 + shock;
+    out.push({
+      date: d.toISOString().slice(0, 10),
+      equity: cur,
+      pnl: cur - start,
+      ret: cur / start - 1,
+    });
+  }
+  return out;
+}
+
+// Mock realized PnL time series (daily realized and cumulative realized)
+function makeRealizedSeries(days = 240) {
+  let cum = 0;
+  const out: Array<{ date: string; realized: number; cumRealized: number }> = [];
+  for (let i = days; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const daily = (Math.random() - 0.48) * 150; // daily realized
+    cum += daily;
+    out.push({ date: d.toISOString().slice(0, 10), realized: daily, cumRealized: cum });
+  }
+  return out;
+}
+
+const MOCK_SYMBOLS = [
+  {
+    symbol: "AAPL",
+    side: "long",
+    qty: 120,
+    avg: 214.24,
+    last: 219.12,
+    unreal: 586.8,
+    realized: 1320.5,
+    pnlPct: 0.022,
+    atr: 2.14,
+    regime: "normal_vol",
+  },
+  {
+    symbol: "MSFT",
+    side: "short",
+    qty: 50,
+    avg: 425.2,
+    last: 420.9,
+    unreal: 215.0,
+    realized: -430.7,
+    pnlPct: 0.012,
+    atr: 4.6,
+    regime: "low_vol",
+  },
+  {
+    symbol: "TSLA",
+    side: "long",
+    qty: 30,
+    avg: 245.3,
+    last: 238.9,
+    unreal: -192.0,
+    realized: 90.0,
+    pnlPct: -0.026,
+    atr: 7.1,
+    regime: "high_vol",
+  },
+  { symbol: "AMD", side: "flat", qty: 0, avg: null, last: 182.5, unreal: 0, realized: 0, pnlPct: 0, atr: 5.3, regime: "normal_vol" },
+];
+
+const MOCK_ALERTS = [
+  { id: "al1", ts: new Date().toISOString(), level: "warning", text: "Drawdown exceeded 3% intraday. Cooldown engaged.", sticky: true },
+  { id: "al2", ts: new Date().toISOString(), level: "info", text: "AAPL hit TP1. Partial exit executed (25%).", sticky: true },
+  { id: "al3", ts: new Date().toISOString(), level: "error", text: "Schwab stream reconnect (retry #2).", sticky: true },
+];
+
+const MOCK_TRADES = [
+  { id: 1, ts: "2025-08-27T13:44:02Z", symbol: "AAPL", side: "BUY", qty: 50, price: 218.7, fee: 0.75, sl: 213.3, tp: 224.2 },
+  { id: 2, ts: "2025-08-27T10:15:10Z", symbol: "TSLA", side: "SELL", qty: 10, price: 240.1, fee: 0.75, sl: 232.5, tp: 252.0 },
+  { id: 3, ts: "2025-08-26T15:20:57Z", symbol: "MSFT", side: "SHORT SELL", qty: 20, price: 423.2, fee: 0.75, sl: 436.0, tp: 412.7 },
+];
+
+// Build mock per-symbol daily PnL series
+function symbolDailyPnl(symbol: string) {
+  const n = 60;
+  const out: Array<{ date: string; pnl: number }> = [];
+  let cur = (Math.random() - 0.5) * 300;
+  for (let i = n; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    cur += (Math.random() - 0.5) * 50;
+    out.push({ date: d.toISOString().slice(0, 10), pnl: cur });
+  }
+  return out;
+}
+
+// =====================================================
+// CORE LAYOUT
+// =====================================================
+export default function TradingBotMonitor() {
+  const [running, setRunning] = useState(false);
+  const [equityCurve, setEquityCurve] = useState(() => makeSeries());
+  const [realizedCurve, setRealizedCurve] = useState(() => makeRealizedSeries());
+  const [alerts, setAlerts] = useState(MOCK_ALERTS);
+  const [symbols, setSymbols] = useState(MOCK_SYMBOLS);
+  const [filter, setFilter] = useState("");
+  const [timeframe, setTimeframe] = useState("1D");
+  const [showSignalOverlay, setShowSignalOverlay] = useState(true);
+  const [stickyAlertsOnly, setStickyAlertsOnly] = useState(true);
+
+  // Derived metrics
+  const totalUnreal = useMemo(() => symbols.reduce((a, s) => a + (s.unreal || 0), 0), [symbols]);
+  const totalRealized = useMemo(() => symbols.reduce((a, s) => a + (s.realized || 0), 0), [symbols]);
+  const longExposure = useMemo(() => symbols.filter((s) => s.side === "long").reduce((a, s) => a + s.qty * (s.last || 0), 0), [symbols]);
+  const shortExposure = useMemo(() => symbols.filter((s) => s.side === "short").reduce((a, s) => a + s.qty * (s.last || 0), 0), [symbols]);
+
+  const filteredSymbols = useMemo(() => symbols.filter((s) => !filter || s.symbol.toLowerCase().includes(filter.toLowerCase())), [symbols, filter]);
+
+  // Simulate live equity & realized drift when running
+  useEffect(() => {
+    if (!running) return;
+    const iv = setInterval(() => {
+      setEquityCurve((prev) => {
+        const last = prev[prev.length - 1];
+        const d = new Date();
+        const shock = (Math.random() - 0.5) * 0.004;
+        const nextEq = (last?.equity ?? 100000) * (1 + shock);
+        return [
+          ...prev.slice(1),
+          {
+            date: d.toISOString().slice(0, 10),
+            equity: nextEq,
+            pnl: nextEq - (prev[0]?.equity ?? 100000),
+            ret: nextEq / (prev[0]?.equity ?? 100000) - 1,
+          },
+        ];
+      });
+      setRealizedCurve((prev) => {
+        const d = new Date();
+        const daily = (Math.random() - 0.48) * 150;
+        const last = prev[prev.length - 1];
+        const cum = (last?.cumRealized ?? 0) + daily;
+        return [...prev.slice(1), { date: d.toISOString().slice(0, 10), realized: daily, cumRealized: cum }];
+      });
+    }, 1400);
+    return () => clearInterval(iv);
+  }, [running]);
+
+  function acknowledgeAlert(id: string) {
+    setAlerts((prev) => prev.filter((a) => a.id !== id));
+  }
+
+  return (
+    <div className="min-h-screen w-full bg-neutral-950 text-neutral-100">
+      <div className="mx-auto max-w-[1700px] p-4 sm:p-6 lg:p-8">
+        <HeaderBar
+          running={running}
+          setRunning={setRunning}
+          timeframe={timeframe}
+          setTimeframe={setTimeframe}
+          filter={filter}
+          setFilter={setFilter}
+        />
+
+        <div className="grid grid-cols-12 gap-6 mt-6">
+          {/* Left column: Risk + Alerts */}
+          <div className="col-span-12 xl:col-span-3 space-y-6">
+            <RiskPanel
+              totalUnreal={totalUnreal}
+              totalRealized={totalRealized}
+              longExposure={longExposure}
+              shortExposure={shortExposure}
+            />
+            <AlertsPanel
+              alerts={alerts}
+              stickyOnly={stickyAlertsOnly}
+              setStickyOnly={setStickyAlertsOnly}
+              onAck={acknowledgeAlert}
+            />
+            <ControlPanel
+              showSignalOverlay={showSignalOverlay}
+              setShowSignalOverlay={setShowSignalOverlay}
+            />
+          </div>
+
+          {/* Main column: Equity & Telemetry Tabs */}
+          <div className="col-span-12 xl:col-span-9 space-y-6">
+            <Card className="bg-neutral-900 border border-neutral-700">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-neutral-50">
+                  <LineChartIcon className="h-5 w-5" /> Equity & PnL
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-64 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={equityCurve} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="eqFill" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopOpacity={0.45} />
+                          <stop offset="95%" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <XAxis dataKey="date" hide />
+                      <YAxis domain={["auto", "auto"]} tick={{ fill: "#e5e7eb" }} tickFormatter={(v) => fmtNum(v as number, 0)} />
+                      <RTooltip formatter={(v) => fmtUSD(v as number)} labelFormatter={(l) => `Date: ${l}`} />
+                      <Legend />
+                      <Area type="monotone" dataKey="equity" strokeWidth={2} fillOpacity={1} fill="url(#eqFill)" />
+                      <Line type="monotone" dataKey="equity" strokeWidth={2} dot={false} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Tabs defaultValue="positions" className="w-full">
+              <TabsList className="bg-neutral-900 border border-neutral-700 text-neutral-100">
+                <TabsTrigger value="positions">Positions</TabsTrigger>
+                <TabsTrigger value="orders">Orders</TabsTrigger>
+                <TabsTrigger value="trades">Trades</TabsTrigger>
+                <TabsTrigger value="performance">Performance</TabsTrigger>
+                <TabsTrigger value="logs">Logs</TabsTrigger>
+              </TabsList>
+              <TabsContent value="positions">
+                <PositionsGrid symbols={filteredSymbols} />
+              </TabsContent>
+              <TabsContent value="orders">
+                <OrdersTable />
+              </TabsContent>
+              <TabsContent value="trades">
+                <TradesTable rows={MOCK_TRADES} />
+              </TabsContent>
+              <TabsContent value="performance">
+                <BotPerformance equityCurve={equityCurve} realizedCurve={realizedCurve} />
+              </TabsContent>
+              <TabsContent value="logs">
+                <LogConsole />
+              </TabsContent>
+            </Tabs>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// =====================================================
+// HEADER BAR
+// =====================================================
+function HeaderBar({ running, setRunning, timeframe, setTimeframe, filter, setFilter }: any) {
+  return (
+    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      <div className="flex items-center gap-3">
+        <Workflow className="h-6 w-6" />
+        <h1 className="text-2xl font-semibold tracking-tight">Bot Monitor</h1>
+        <Badge variant={running ? "default" : "secondary"} className="ml-1">
+          {running ? "LIVE" : "PAUSED"}
+        </Badge>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-2">
+          <ListFilter className="h-4 w-4" />
+          <Input
+            placeholder="Filter symbols…"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            className="w-44 bg-neutral-900 border-neutral-700 text-neutral-100 placeholder:text-neutral-400"
+          />
+        </div>
+
+        <div className="flex items-center gap-2">
+          <SlidersHorizontal className="h-4 w-4" />
+          <Select value={timeframe} onValueChange={setTimeframe}>
+            <SelectTrigger className="w-28 bg-neutral-900 border-neutral-700 text-neutral-100">
+              <SelectValue placeholder="Timeframe" />
+            </SelectTrigger>
+            <SelectContent className="bg-neutral-900 border border-neutral-700 text-neutral-100">
+              {["1m", "5m", "15m", "1H", "4H", "1D", "1W"].map((tf) => (
+                <SelectItem key={tf} value={tf}>
+                  {tf}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={running ? "destructive" : "default"}
+                onClick={() => setRunning((v: boolean) => !v)}
+                className="gap-2"
+              >
+                {running ? <CircleStop className="h-4 w-4" /> : <CirclePlay className="h-4 w-4" />}
+                {running ? "Stop" : "Start"}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Toggle the live engine loop</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
+        <Button variant="outline" className="gap-2 border-neutral-600 text-neutral-100">
+          <Settings className="h-4 w-4" /> Settings
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// =====================================================
+// RISK PANEL (higher contrast + semantic coloring)
+// =====================================================
+function RiskPanel({ totalUnreal, totalRealized, longExposure, shortExposure }: any) {
+  const metrics = [
+    { name: "Unrealized PnL", value: fmtUSD(totalUnreal), icon: SquareDot },
+    { name: "Realized PnL", value: fmtUSD(totalRealized), icon: SquareDot },
+    { name: "Long Exposure", value: fmtUSD(longExposure), icon: TrendingUp },
+    { name: "Short Exposure", value: fmtUSD(shortExposure), icon: TrendingDown },
+    { name: "Drawdown (day)", value: fmtPct(Math.random() * 0.05 - 0.03) },
+    { name: "Risk Regime", value: ["low_vol", "normal_vol", "high_vol"][Math.floor(Math.random() * 3)] },
+  ];
+
+  function valueClass(name: string, value: string) {
+    const neg = typeof value === "string" && value.trim().startsWith("-");
+    const isPnL = /pnl/i.test(name) || /drawdown/i.test(name);
+    const isExposure = /exposure/i.test(name);
+    if (isPnL) return neg ? "text-red-400" : "text-emerald-400";
+    if (isExposure) return neg ? "text-red-300" : "text-emerald-300";
+    return "text-neutral-100";
+  }
+
+  return (
+    <Card className="bg-neutral-900 border border-neutral-700">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-neutral-50">Risk Panel</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-2 gap-3">
+          {metrics.map((m, i) => (
+            <div key={i} className="rounded-2xl border border-neutral-600 bg-neutral-950 p-3">
+              <div className="text-xs text-neutral-200">{m.name}</div>
+              <div className="mt-1 flex items-center gap-2 text-base font-bold">
+                {m.icon ? <m.icon className="h-4 w-4 text-neutral-400" /> : null}
+                <span className={valueClass(m.name, m.value as string)}>{m.value}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+        <Separator className="bg-neutral-700" />
+        <OrderTicket />
+      </CardContent>
+    </Card>
+  );
+}
+
+// =====================================================
+// ORDER TICKET (compact)
+// =====================================================
+function OrderTicket() {
+  const [symbol, setSymbol] = useState("AAPL");
+  const [qty, setQty] = useState(10);
+  const [side, setSide] = useState("BUY");
+  const [sl, setSL] = useState(0);
+  const [tp, setTP] = useState(0);
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="text-sm font-semibold">Order Ticket</div>
+        <Badge variant="secondary">Paper</Badge>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <Input
+          value={symbol}
+          onChange={(e) => setSymbol(e.target.value.toUpperCase())}
+          placeholder="Symbol"
+          className="bg-neutral-900 border-neutral-700 text-neutral-100 placeholder:text-neutral-400"
+        />
+        <Input
+          type="number"
+          value={qty}
+          onChange={(e) => setQty(parseInt(e.target.value || "0"))}
+          placeholder="Qty"
+          className="bg-neutral-900 border-neutral-700 text-neutral-100 placeholder:text-neutral-400"
+        />
+        <Select value={side} onValueChange={setSide}>
+          <SelectTrigger className="bg-neutral-900 border-neutral-700 text-neutral-100">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className="bg-neutral-900 border border-neutral-700 text-neutral-100">
+            <SelectItem value="BUY">BUY</SelectItem>
+            <SelectItem value="SELL">SELL</SelectItem>
+            <SelectItem value="SHORT SELL">SHORT SELL</SelectItem>
+            <SelectItem value="COVER">COVER</SelectItem>
+          </SelectContent>
+        </Select>
+        <div className="flex gap-2">
+          <Input
+            type="number"
+            step="0.01"
+            value={sl}
+            onChange={(e) => setSL(parseFloat(e.target.value || "0"))}
+            placeholder="SL"
+            className="bg-neutral-900 border-neutral-700 text-neutral-100 placeholder:text-neutral-400"
+          />
+          <Input
+            type="number"
+            step="0.01"
+            value={tp}
+            onChange={(e) => setTP(parseFloat(e.target.value || "0"))}
+            placeholder="TP"
+            className="bg-neutral-900 border-neutral-700 text-neutral-100 placeholder:text-neutral-400"
+          />
+        </div>
+      </div>
+      <div className="flex gap-2">
+        <Button className="flex-1">Submit</Button>
+        <Button variant="outline" className="flex-1 border-neutral-600 text-neutral-100">
+          Dry Run
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// =====================================================
+// ALERTS (sticky until clicked)
+// =====================================================
+function AlertsPanel({ alerts, stickyOnly, setStickyOnly, onAck }: any) {
+  const shown = stickyOnly ? alerts.filter((a: any) => a.sticky) : alerts;
+
+  return (
+    <Card className="bg-neutral-900 border border-neutral-700">
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-neutral-50">
+          <Bell className="h-5 w-5" /> Alerts
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="flex items-center gap-2 text-xs">
+          <Checkbox id="stickyOnly" checked={stickyOnly} onCheckedChange={(v) => setStickyOnly(!!v)} />
+          <label htmlFor="stickyOnly" className="text-neutral-300">
+            Show sticky only
+          </label>
+        </div>
+        <div className="space-y-2 max-h-64 overflow-auto pr-1">
+          {shown.length === 0 ? (
+            <div className="text-neutral-400 text-sm">No alerts</div>
+          ) : (
+            shown.map((a: any) => (
+              <div key={a.id} className="rounded-xl border border-neutral-700 p-3 flex items-start gap-3 bg-neutral-950/60">
+                <span>
+                  {a.level === "error" ? (
+                    <AlertTriangle className="h-4 w-4" />
+                  ) : a.level === "warning" ? (
+                    <AlertTriangle className="h-4 w-4" />
+                  ) : (
+                    <SquareDot className="h-4 w-4" />
+                  )}
+                </span>
+                <div className="flex-1">
+                  <div className="text-xs text-neutral-400">{new Date(a.ts).toLocaleString()}</div>
+                  <div className="text-sm text-neutral-100">{a.text}</div>
+                </div>
+                <Button size="icon" variant="ghost" onClick={() => onAck(a.id)}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            ))
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// =====================================================
+// CONTROLS
+// =====================================================
+function ControlPanel({ showSignalOverlay, setShowSignalOverlay }: any) {
+  return (
+    <Card className="bg-neutral-900 border border-neutral-700">
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-neutral-50">
+          <Filter className="h-5 w-5" /> Controls
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="flex items-center gap-2 text-sm">
+          <Checkbox id="sig" checked={showSignalOverlay} onCheckedChange={(v) => setShowSignalOverlay(!!v)} />
+          <label htmlFor="sig" className="text-neutral-100">
+            Show signal overlay
+          </label>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" className="flex-1 border-neutral-600 text-neutral-100">
+            Reset Cooldown
+          </Button>
+          <Button variant="outline" className="flex-1 border-neutral-600 text-neutral-100">
+            <Trash2 className="h-4 w-4 mr-2" /> Clear Logs
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// =====================================================
+// POSITIONS GRID (multi-symbol telemetry with per‑symbol PnL)
+// =====================================================
+function PositionsGrid({ symbols }: any) {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
+      {symbols.map((s: any) => (
+        <SymbolCard key={s.symbol} s={s} />
+      ))}
+    </div>
+  );
+}
+
+function SymbolCard({ s }: any) {
+  const totalPnl = (s.unreal || 0) + (s.realized || 0);
+  const series = useMemo(() => symbolDailyPnl(s.symbol), [s.symbol]);
+
+  // regime pill color map (tinted backgrounds for readability)
+  const regimeClass =
+    ({
+      low_vol: "bg-teal-500/15 text-teal-300 border-teal-700",
+      normal_vol: "bg-neutral-700/30 text-neutral-200 border-neutral-600",
+      high_vol: "bg-amber-500/15 text-amber-300 border-amber-700",
+    } as Record<string, string>)[s.regime] || "bg-neutral-700/30 text-neutral-200 border-neutral-600";
+
+  // risk score: ATR as % of last price, scaled 0–100
+  const riskScore = (() => {
+    const last = typeof s.last === "number" && s.last > 0 ? s.last : 1;
+    const atr = typeof s.atr === "number" ? s.atr : 0;
+    const pct = (atr / last) * 100;
+    return Math.max(0, Math.min(100, Math.round(pct * 2)));
+  })();
+
+  const riskClass =
+    riskScore > 60
+      ? "bg-red-500/15 text-red-300 border-red-700"
+      : riskScore > 40
+      ? "bg-amber-500/15 text-amber-300 border-amber-700"
+      : riskScore > 20
+      ? "bg-teal-500/15 text-teal-300 border-teal-700"
+      : "bg-emerald-500/15 text-emerald-300 border-emerald-700";
+
+  return (
+    <Card className="bg-neutral-900 border border-neutral-700">
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-neutral-50 flex items-center gap-2">
+            {s.symbol}
+            <Badge className={`border ${regimeClass}`}>{s.regime.replace("_", " ")}</Badge>
+          </CardTitle>
+          <div className="flex items-center gap-2">
+            <Badge className={`border ${riskClass}`}>Risk {riskScore}</Badge>
+            <Badge variant={s.side === "long" ? "default" : s.side === "short" ? "destructive" : "secondary"}>
+              {s.side.toUpperCase()}
+            </Badge>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-2 gap-3">
+          <KV label="Qty" value={fmtNum(s.qty, 0)} />
+          <KV label="Avg" value={s.avg ? fmtUSD(s.avg) : "–"} />
+          <KV label="Last" value={fmtUSD(s.last)} />
+          <KV label="Unreal PnL" value={fmtUSD(s.unreal)} emphasis={s.unreal} />
+          <KV label="Realized PnL" value={fmtUSD(s.realized)} emphasis={s.realized} />
+          <KV label="Total PnL" value={fmtUSD(totalPnl)} emphasis={totalPnl} />
+          <KV label="PnL %" value={fmtPct(s.pnlPct)} emphasis={s.pnlPct} />
+          <KV label="ATR" value={fmtNum(s.atr)} />
+          <KV label="Regime" value={s.regime} />
+        </div>
+        <div className="mt-3 h-24 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={series} margin={{ left: 0, right: 0, top: 8, bottom: 0 }}>
+              <XAxis dataKey="date" hide />
+              <YAxis hide domain={["auto", "auto"]} />
+              <RTooltip formatter={(v) => fmtUSD(v as number)} labelFormatter={(l) => `Date: ${l}`} />
+              <Bar dataKey="pnl" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function KV({ label, value, emphasis }: { label: string; value: any; emphasis?: number }) {
+  const isNeg = typeof emphasis === "number" && emphasis < 0;
+  const isPos = typeof emphasis === "number" && emphasis > 0;
+  return (
+    <div className="rounded-xl border border-neutral-700 p-2 bg-neutral-950/60">
+      <div className="text-[10px] uppercase tracking-wide text-neutral-300">{label}</div>
+      <div className={`text-sm font-semibold ${isNeg ? "text-red-300" : isPos ? "text-emerald-300" : "text-neutral-100"}`}>{value}</div>
+    </div>
+  );
+}
+
+// =====================================================
+// ORDERS / TRADES / LOGS
+// =====================================================
+function OrdersTable() {
+  // Placeholder static orders
+  const rows = [
+    { id: "o1", ts: "2025-08-27T14:22:09Z", symbol: "AAPL", side: "BUY", qty: 25, price: 219.1, status: "FILLED" },
+    { id: "o2", ts: "2025-08-27T14:05:41Z", symbol: "TSLA", side: "SELL", qty: 10, price: 239.9, status: "PARTIAL" },
+    { id: "o3", ts: "2025-08-27T13:02:10Z", symbol: "MSFT", side: "SHORT SELL", qty: 10, price: 422.4, status: "CANCELED" },
+    { id: "o4", ts: "2025-08-27T12:41:00Z", symbol: "NVDA", side: "BUY", qty: 5, price: 850.0, status: "REJECTED" },
+  ];
+
+  const sideClass = (side: string) => (/BUY|COVER/i.test(side) ? "text-emerald-300" : /SELL|SHORT/i.test(side) ? "text-red-300" : "text-neutral-200");
+  const statusBadge = (status: string) => (status === "FILLED" ? "default" : status === "PARTIAL" ? "secondary" : "outline");
+  const rowClass = (status: string) => (status === "REJECTED" ? "bg-red-500/10" : status === "CANCELED" ? "bg-neutral-800/50" : "");
+
+  return (
+    <div className="overflow-auto rounded-2xl border border-neutral-700">
+      <table className="w-full text-sm">
+        <thead className="bg-neutral-900">
+          <tr className="text-left">
+            {["Time", "Symbol", "Side", "Qty", "Price", "Status"].map((h) => (
+              <th key={h} className="px-3 py-2 font-semibold text-neutral-100">
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.id} className={`border-t border-neutral-700 ${rowClass(r.status)}`}>
+              <td className="px-3 py-2 text-neutral-300">{new Date(r.ts).toLocaleString()}</td>
+              <td className="px-3 py-2 text-neutral-100">{r.symbol}</td>
+              <td className={`px-3 py-2 font-semibold ${sideClass(r.side)}`}>{r.side}</td>
+              <td className="px-3 py-2 text-neutral-100">{r.qty}</td>
+              <td className="px-3 py-2 text-neutral-100">{fmtUSD(r.price)}</td>
+              <td className="px-3 py-2">
+                <Badge variant={statusBadge(r.status)}>{r.status}</Badge>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function TradesTable({ rows }: any) {
+  const sideClass = (side: string) => (/BUY|COVER/i.test(side) ? "text-emerald-300" : /SELL|SHORT/i.test(side) ? "text-red-300" : "text-neutral-200");
+  return (
+    <div className="overflow-auto rounded-2xl border border-neutral-700">
+      <table className="w-full text-sm">
+        <thead className="bg-neutral-900">
+          <tr className="text-left">
+            {["Time", "Symbol", "Side", "Qty", "Price", "Fee", "SL", "TP"].map((h) => (
+              <th key={h} className="px-3 py-2 font-semibold text-neutral-100">
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r: any) => (
+            <tr key={r.id} className="border-t border-neutral-700">
+              <td className="px-3 py-2 text-neutral-300">{new Date(r.ts).toLocaleString()}</td>
+              <td className="px-3 py-2 text-neutral-100">{r.symbol}</td>
+              <td className={`px-3 py-2 font-semibold ${sideClass(r.side)}`}>{r.side}</td>
+              <td className="px-3 py-2 text-neutral-100">{r.qty}</td>
+              <td className="px-3 py-2 text-neutral-100">{fmtUSD(r.price)}</td>
+              <td className="px-3 py-2 text-neutral-100">{fmtUSD(r.fee)}</td>
+              <td className="px-3 py-2 text-neutral-100">{r.sl ? fmtUSD(r.sl) : "–"}</td>
+              <td className="px-3 py-2 text-neutral-100">{r.tp ? fmtUSD(r.tp) : "–"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function LogConsole() {
+  const [logs, setLogs] = useState<string[]>(() => [
+    "[13:44:02] AAPL BUY 50 @ 218.70 | SL 213.30 TP 224.20",
+    "[13:40:18] Stream reconnect attempt #2",
+    "[10:15:10] TSLA SELL 10 @ 240.10 | SL 232.50 TP 252.00",
+  ]);
+  const ref = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (ref.current) ref.current.scrollTop = ref.current.scrollHeight;
+  }, [logs]);
+
+  return (
+    <div className="space-y-2">
+      <div className="flex justify-end">
+        <Button variant="outline" className="border-neutral-600 text-neutral-100" onClick={() => setLogs([])}>
+          <Trash2 className="h-4 w-4 mr-2" /> Clear Logs
+        </Button>
+      </div>
+      <div
+        ref={ref}
+        className="h-64 overflow-auto rounded-2xl border border-neutral-700 bg-neutral-950 p-3 font-mono text-xs text-neutral-100"
+      >
+        {logs.length === 0 ? <div className="text-neutral-400">No logs</div> : logs.map((l, i) => <div key={i}>{l}</div>)}
+      </div>
+    </div>
+  );
+}
+
+// =====================================================
+// BOT PERFORMANCE (historical performance tracking)
+// =====================================================
+function BotPerformance({ equityCurve, realizedCurve }: any) {
+  // === Monthly aggregation ===
+  const monthlyEquity = useMemo(() => {
+    const byMonth: Record<string, { first: number; last: number }> = {};
+    equityCurve.forEach((p: any) => {
+      const m = p.date.slice(0, 7);
+      if (!byMonth[m]) byMonth[m] = { first: p.equity, last: p.equity };
+      byMonth[m].last = p.equity;
+    });
+    return Object.entries(byMonth).map(([month, { first, last }]) => ({ month, ret: last / first - 1 }));
+  }, [equityCurve]);
+
+  const monthlyRealized = useMemo(() => {
+    const byMonth: Record<string, number> = {};
+    realizedCurve.forEach((p: any) => {
+      const m = p.date.slice(0, 7);
+      byMonth[m] = (byMonth[m] || 0) + p.realized;
+    });
+    return Object.entries(byMonth).map(([month, realized]) => ({ month, realized }));
+  }, [realizedCurve]);
+
+  // === Stats ===
+  const equityStats = useMemo(() => {
+    const start = equityCurve[0]?.equity ?? 100000;
+    const end = equityCurve[equityCurve.length - 1]?.equity ?? start;
+    const totalRet = end / start - 1;
+    let peak = -Infinity,
+      maxDD = 0;
+    equityCurve.forEach((p: any) => {
+      peak = Math.max(peak, p.equity);
+      maxDD = Math.min(maxDD, (p.equity - peak) / peak);
+    });
+    return { start: fmtUSD(start), end: fmtUSD(end), totalRet: fmtPct(totalRet), maxDD: fmtPct(maxDD) };
+  }, [equityCurve]);
+
+  const realizedStats = useMemo(() => {
+    const total = realizedCurve.reduce((a: number, p: any) => a + p.realized, 0);
+    const avgDaily = realizedCurve.length ? total / realizedCurve.length : 0;
+    const wins = realizedCurve.filter((p: any) => p.realized > 0).length;
+    const winRate = realizedCurve.length ? wins / realizedCurve.length : 0;
+    return { total: fmtUSD(total), avgDaily: fmtUSD(avgDaily), winRate: fmtPct(winRate) };
+  }, [realizedCurve]);
+
+  return (
+    <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+      {/* Equity Panel */}
+      <Card className="bg-neutral-900 border border-neutral-700 xl:col-span-2">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-neutral-50">Cumulative Equity</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="h-72 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={equityCurve} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="perfFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopOpacity={0.45} />
+                    <stop offset="95%" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="date" tick={{ fill: "#e5e7eb" }} />
+                <YAxis tick={{ fill: "#e5e7eb" }} tickFormatter={(v) => fmtNum(v as number, 0)} />
+                <RTooltip formatter={(v) => fmtUSD(v as number)} labelFormatter={(l) => `Date: ${l}`} />
+                <Area type="monotone" dataKey="equity" strokeWidth={2} fillOpacity={1} fill="url(#perfFill)" />
+                <Line type="monotone" dataKey="equity" strokeWidth={2} dot={false} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Equity Stats */}
+      <Card className="bg-neutral-900 border border-neutral-700">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-neutral-50">Equity Stats</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <KV label="Starting Equity" value={equityStats.start} />
+            <KV label="Ending Equity" value={equityStats.end} />
+            <KV label="Total Return" value={equityStats.totalRet} emphasis={parseFloat(equityStats.totalRet) || 0} />
+            <KV label="Max Drawdown" value={equityStats.maxDD} emphasis={parseFloat(equityStats.maxDD) || 0} />
+          </div>
+          <Separator className="bg-neutral-700" />
+          <div className="text-sm font-semibold">Monthly Equity Returns</div>
+          <div className="h-40 overflow-auto rounded-xl border border-neutral-700">
+            <table className="w-full text-sm">
+              <thead className="bg-neutral-900">
+                <tr className="text-left">
+                  <th className="px-3 py-2 font-semibold text-neutral-100">Month</th>
+                  <th className="px-3 py-2 font-semibold text-neutral-100">Return</th>
+                </tr>
+              </thead>
+              <tbody>
+                {monthlyEquity.map((m: any) => (
+                  <tr key={m.month} className="border-t border-neutral-700">
+                    <td className="px-3 py-2 text-neutral-100">{m.month}</td>
+                    <td className={`px-3 py-2 font-semibold ${m.ret < 0 ? "text-red-300" : "text-emerald-300"}`}>
+                      {fmtPct(m.ret)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Realized PnL Panel */}
+      <Card className="bg-neutral-900 border border-neutral-700 xl:col-span-2">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-neutral-50">Realized PnL (Daily & Cumulative)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 gap-4">
+            <div className="h-48 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={realizedCurve} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                  <XAxis dataKey="date" hide />
+                  <YAxis tick={{ fill: "#e5e7eb" }} tickFormatter={(v) => fmtNum(v as number, 0)} />
+                  <RTooltip formatter={(v) => fmtUSD(v as number)} labelFormatter={(l) => `Date: ${l}`} />
+                  <Bar dataKey="realized" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="h-48 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={realizedCurve} margin={{ top: 0, right: 20, left: 0, bottom: 0 }}>
+                  <XAxis dataKey="date" tick={{ fill: "#e5e7eb" }} />
+                  <YAxis tick={{ fill: "#e5e7eb" }} tickFormatter={(v) => fmtNum(v as number, 0)} />
+                  <RTooltip formatter={(v) => fmtUSD(v as number)} labelFormatter={(l) => `Date: ${l}`} />
+                  <Line type="monotone" dataKey="cumRealized" strokeWidth={2} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Realized Stats */}
+      <Card className="bg-neutral-900 border border-neutral-700">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-neutral-50">Realized PnL Stats</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <KV label="Total Realized" value={realizedStats.total} emphasis={parseFloat(realizedStats.total) || 0} />
+            <KV label="Avg Daily" value={realizedStats.avgDaily} emphasis={parseFloat(realizedStats.avgDaily) || 0} />
+            <KV label="Winning Days" value={realizedStats.winRate} emphasis={parseFloat(realizedStats.winRate) || 0} />
+          </div>
+          <Separator className="bg-neutral-700" />
+          <div className="text-sm font-semibold">Monthly Realized PnL</div>
+          <div className="h-40 overflow-auto rounded-xl border border-neutral-700">
+            <table className="w-full text-sm">
+              <thead className="bg-neutral-900">
+                <tr className="text-left">
+                  <th className="px-3 py-2 font-semibold text-neutral-100">Month</th>
+                  <th className="px-3 py-2 font-semibold text-neutral-100">Realized</th>
+                </tr>
+              </thead>
+              <tbody>
+                {monthlyRealized.map((m: any) => (
+                  <tr key={m.month} className="border-t border-neutral-700">
+                    <td className="px-3 py-2 text-neutral-100">{m.month}</td>
+                    <td className={`px-3 py-2 font-semibold ${m.realized < 0 ? "text-red-300" : "text-emerald-300"}`}>
+                      {fmtUSD(m.realized as number)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+/*
+=====================================================
+Jest + React Testing Library — Suggested Tests (put in __tests__/TradingBotMonitor.test.tsx)
+=====================================================
+
+import React from 'react';
+import { render, screen } from '@testing-library/react';
+import '@testing-library/jest-dom';
+import TradingBotMonitor from '../path/to/TradingBotMonitor';
+
+test('renders header and tabs', () => {
+  render(<TradingBotMonitor/>);
+  expect(screen.getByText(/Bot Monitor/i)).toBeInTheDocument();
+  expect(screen.getByRole('tab', { name: /Positions/i })).toBeInTheDocument();
+  expect(screen.getByRole('tab', { name: /Performance/i })).toBeInTheDocument();
+});
+
+test('renders controls with Clear Logs button (Trash2 icon import present)', () => {
+  render(<TradingBotMonitor/>);
+  expect(screen.getByText(/Clear Logs/i)).toBeInTheDocument();
+});
+
+test('performance tab shows both Equity and Realized sections', () => {
+  render(<TradingBotMonitor/>);
+  expect(screen.getByText(/Cumulative Equity/i)).toBeInTheDocument();
+  expect(screen.getByText(/Realized PnL \(Daily & Cumulative\)/i)).toBeInTheDocument();
+});
+
+test('HeaderBar renders Start button when paused', () => {
+  render(<TradingBotMonitor/>);
+  expect(screen.getByText(/Start/i)).toBeInTheDocument();
+});
+
+test('Positions grid shows Total PnL field', () => {
+  render(<TradingBotMonitor/>);
+  expect(screen.getAllByText(/Total PnL/i)[0]).toBeInTheDocument();
+});
+
+test('Risk Panel renders and shows Unrealized PnL label', () => {
+  render(<TradingBotMonitor/>);
+  expect(screen.getByText(/Risk Panel/i)).toBeInTheDocument();
+  expect(screen.getByText(/Unrealized PnL/i)).toBeInTheDocument();
+});
+
+test('Symbol card shows regime pill and risk chip', () => {
+  render(<TradingBotMonitor/>);
+  expect(screen.getAllByText(/low vol|normal vol|high vol/i)[0]).toBeInTheDocument();
+  expect(screen.getAllByText(/Risk/i)[0]).toBeInTheDocument();
+});
+
+test('Orders table contains REJECTED and CANCELED statuses', () => {
+  render(<TradingBotMonitor/>);
+  expect(screen.getByText(/REJECTED/i)).toBeInTheDocument();
+  expect(screen.getByText(/CANCELED/i)).toBeInTheDocument();
+});
+*/
