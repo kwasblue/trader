@@ -106,6 +106,7 @@ class OrdersTableModel(QtCore.QAbstractTableModel):
             if c==3 and isinstance(val,(int,float)): return f"{val:,.0f}"
             if c==4 and isinstance(val,(int,float)): return f"{val:,.2f}"
             return str(val)
+        
         if role==QtCore.Qt.ForegroundRole:
             if c==2 and isinstance(val,str):
                 if any(k in val.upper() for k in ["BUY","COVER"]): return QtGui.QBrush(QtGui.QColor("#22c55e"))
