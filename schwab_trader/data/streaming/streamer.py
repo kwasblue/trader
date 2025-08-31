@@ -2,7 +2,7 @@ import json
 import requests
 import websockets
 from data.streaming.authenticator import Authenticator
-from schwab_trader.logger.logger import Logger
+from loggers.logger import Logger
 from utils.configloader import ConfigLoader
 from data.streaming.schwab_client import SchwabClient   
 from core.eventhandler import EventHandler
@@ -18,16 +18,11 @@ class SchwabStreamingClient():
         self.connection = None
         self.streaming_logger = Logger('app.log', 'SchwabStreamingClient', log_dir=f'{self.config['folders']['logs']}').get_logger()
         self.price_dict = {}
+        self.client = SchwabClient(apikey=self.apikey, secretkey=self.secretkey)
 
     async def websocket_client(self, symbols):
-
-        url = r"https://api.schwabapi.com/trader/v1/userPreference"
-        headers = {'Authorization': f"Bearer {self.authenticator.access_token()}"}
         try:
-            response = requests.get(headers=headers, url=url)
-            response.raise_for_status()
-            user_preference = response.json()
-            self.streamer_info = user_preference['streamerInfo'][0]
+            self.streamer_info = self.client.user_preferences()['streamerInfo'][0]
             self.streaming_logger.info("Retrieved user preferences successfully")
         except Exception as e:
             self.streaming_logger.error(f"Failed to retrieve user preferences: {e}")
