@@ -26,7 +26,7 @@ from core.logic.trade_logic_manager import DynamicTradeLogicManager
 from core.logic.mock_execution_engine import MockExecutionEngine
 from core.logic.symbol_state import SymbolState
 from core.logic.portfolio_state import PortfolioState
-from core.position_sizer import DynamicPositionSizer
+from core.position_sizer import DynamicPositionSizer, DynamicPositionSizer2
 from loggers.file_trade_logger import FileTradeLogger
 from core.historical_loader import HistoricalBarLoader
 from core.drawdown_monitor import DrawdownMonitor
@@ -157,7 +157,8 @@ class SimulationRunner:
 
         # Broker + sizing + trade logger + engine
         self.broker = MockBroker(starting_cash=self.portfolio.cash)
-        self.sizer = DynamicPositionSizer(risk_percentage=0.01)
+        self.sizer = DynamicPositionSizer2(risk_percentage=0.01,
+                                           max_notional_pct=0.25)
         self.trade_logger = FileTradeLogger(log_file="trades_sim.csv")
 
         # historical data
@@ -295,7 +296,7 @@ class SimulationRunner:
         # (you already did price update above)
         state = self.symbol_state[symbol]
         state.portfolio_value = self.portfolio.total_equity()
-
+        
         # ---- Drawdown monitor updates ----
         if self._last_ddm_date is None or ts.date() != self._last_ddm_date:
             self.ddm.start_new_day(portfolio_equity=self.portfolio.total_equity())
@@ -305,6 +306,7 @@ class SimulationRunner:
         self.ddm.update_portfolio(equity)
         sym_mv = self._symbol_mv(symbol, float(bar["Close"]))
         self.ddm.update_symbol(symbol, sym_mv)
+        self.sizer.update_capital(equity)
 
         price = float(bar["Close"])
 
@@ -346,7 +348,7 @@ class SimulationRunner:
         state.can_pyramid_long = can_pyr_long
         state.can_pyramid_short = can_pyr_short
         # ----------------------------------------------------------------------
-
+        # reset the sizer 
         # Call your engine exactly like before (optionally pass gates)
         self.engine.handle_signal(
             symbol=symbol,
