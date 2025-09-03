@@ -1,63 +1,3 @@
-"""
-Desktop Trading Bot Monitor — Extended Pro Edition (PySide6 + pyqtgraph)
-=======================================================================
-This desktop GUI includes a broad feature set for operating and analyzing a trading bot, matching and extending the React UI.
-
-Features implemented (with live mock data you can wire to your engine):
-
-DASHBOARD
-- Risk panel (Unrealized, Realized, Max Drawdown)
-- Positions table (per symbol: Unreal/Realized/Total, PnL %, ATR, Regime, Risk score)
-- Equity curve (cumulative)
-- Realized PnL (daily bars + cumulative line)
-
-MARKET CONTEXT
-- Live per-symbol price panel: simple candlestick with moving averages + markers for entries/exits; SL/TP lines
-- Regime panel (low/normal/high vol, trend vs mean-reversion, bull/bear)
-- Basic News/Sentiment feed
-
-PERFORMANCE METRICS
-- Rolling stats: Sharpe, Sortino, Kelly, Max DD, Avg win/loss, Hit ratio
-- Risk vs Exposure heatmap (symbol vs contribution)
-- PnL distribution histogram (fat tail check)
-- Trade duration stats + Win/Loss streaks
-
-EXECUTION HEALTH / MONITORING
-- Latency & slippage tracker (avg, p95)
-- Broker/API health (heartbeat, reconnects, API errors)
-- Order queue visualization (pending/working/canceled)
-- Cooldown alerts indicator
-
-ALERTING / SAFETY
-- Alert feed with severity + sticky ack
-- Guardrails banner (e.g., Daily loss limit tripped → STOPPED)
-
-STRATEGY INTROSPECTION
-- Strategy signals dashboard (last signal, confidence, next eval)
-- Signal markers on equity curve
-- Regime-specific performance breakdown
-
-OPS & CONTROL
-- Manual overrides (Flatten All, Halt Trading, Manual Order Ticket)
-- Session summary box (today realized, trade count, win rate)
-- Config snapshot (risk %, routing, active symbols)
-- Export CSV/PDF (CSV implemented; PDF stub)
-
-TIME & HISTORY
-- Aggregates (daily/weekly/monthly) with mini PnL calendar heatmap
-- Benchmark overlay (equity vs SPY mock)
-- Trade replay mode (basic scrubber)
-
-Run:
-  pip install PySide6 pyqtgraph pandas numpy
-  python pro_bot_monitor_desktop.py
-
-Wiring notes:
-- Replace DataFeeder.run() mocks with your engine; emit signals defined in FeedSignals.
-- For candlesticks, feed OHLCV through s.ohlc.emit(symbol, df_dict) periodically.
-- Export hooks write CSV in cwd; PDF export is a TODO you can wire with reportlab or wkhtmltopdf.
-"""
-
 from __future__ import annotations
 import sys, os, io, math
 from typing import List, Dict, Optional
@@ -88,6 +28,19 @@ def apply_dark_palette(app: QtWidgets.QApplication) -> None:
     palette.setColor(QtGui.QPalette.Highlight, QtGui.QColor("#2563eb"))
     palette.setColor(QtGui.QPalette.HighlightedText, QtGui.QColor("#ffffff"))
     app.setPalette(palette)
+
+# =====================================================
+# CONTROL BUS (signals your engine can subscribe to)
+# =====================================================
+class ControlBridge(QtCore.QObject):
+    """Emit UI -> Engine intents. Wire these to your EventHandler or Broker.
+    In production, forward to your async event bus.
+    """
+    halt_changed = QtCore.Signal(bool)       # True -> halted, False -> resumed
+    flatten_all  = QtCore.Signal()           # intent to close all positions
+    cancel_all   = QtCore.Signal()           # intent to cancel all working orders
+    flatten_symbol = QtCore.Signal(str)      # intent to close a single symbol
+    manual_order = QtCore.Signal(dict)       # {symbol, side, qty, type, price?, tif, reduce_only, sl?, tp?, route}
 
 # =====================================================
 # TABLE MODELS
@@ -153,6 +106,7 @@ class OrdersTableModel(QtCore.QAbstractTableModel):
             if c==3 and isinstance(val,(int,float)): return f"{val:,.0f}"
             if c==4 and isinstance(val,(int,float)): return f"{val:,.2f}"
             return str(val)
+        
         if role==QtCore.Qt.ForegroundRole:
             if c==2 and isinstance(val,str):
                 if any(k in val.upper() for k in ["BUY","COVER"]): return QtGui.QBrush(QtGui.QColor("#22c55e"))
@@ -223,9 +177,38 @@ class DataFeeder(QtCore.QThread):
         self._bench=100.0
         self._order_id=4
         self._cooldown=False
+        self._halted=False
         # seed OHLC per symbol
         self._symbols=["AAPL","MSFT","TSLA","AMD"]
         self._ohlc={sym:self._gen_ohlc() for sym in self._symbols}
+
+    @QtCore.Slot(bool)
+    def set_halted(self, h: bool):
+        self._halted = h
+        self.s.log.emit(f"[SYS] {'HALTED' if h else 'RESUMED'} by operator")
+
+    @QtCore.Slot()
+    def do_flatten_all(self):
+        self.s.log.emit("[OPS] Flatten All requested")
+        self.s.alerts.emit(self._mock_alerts(extra=True))
+
+    @QtCore.Slot()
+    def do_cancel_all(self):
+        self.s.log.emit("[OPS] Cancel All working orders requested")
+
+    @QtCore.Slot(str)
+    def do_flatten_symbol(self, sym: str):
+        self.s.log.emit(f"[OPS] Flatten symbol requested: {sym}")
+
+    @QtCore.Slot(dict)
+    def do_manual_order(self, order: Dict):
+        self._order_id += 1
+        now = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        row = {"id": f"o{self._order_id}", "ts": now, "symbol": order["symbol"],
+               "side": order["side"].upper(), "qty": int(order["qty"]),
+               "price": float(order.get("price") or 0.0), "status": "SUBMITTED", "route": order.get("route","Auto")}
+        self.s.orders.emit(self._mock_orders() + [row])
+        self.s.log.emit(f"[MANUAL] {row['route']} -> {row['symbol']} {row['side']} {row['qty']} @ {row['price']} ({order.get('type','market').upper()} / {order.get('tif','DAY')})")
 
     def stop(self): self._running=False
 
@@ -247,6 +230,12 @@ class DataFeeder(QtCore.QThread):
         for sym,df in self._ohlc.items(): self.s.ohlc.emit(sym, df)
 
         while self._running:
+            if self._halted:
+                health={"latency_ms":0.0,"p95_latency_ms":0.0,"slippage_bps":0.0,"heartbeat_secs":0.0,"reconnects":0,"api_errors":0}
+                self.s.health.emit(health)
+                self.msleep(400)
+                continue
+
             # symbols snapshot
             symbols=[]
             for sym in self._symbols:
@@ -330,13 +319,77 @@ class Candles(pg.GraphicsObject):
         return QtCore.QRectF(0, float(self._df.index.max()+1), float(self._df['low'].min()*0.99), float(self._df['high'].max()*1.01)).normalized()
 
 # =====================================================
+# MANUAL ORDER DIALOG
+# =====================================================
+class ManualOrderDialog(QtWidgets.QDialog):
+    def __init__(self, parent=None, symbols: Optional[List[str]]=None):
+        super().__init__(parent)
+        self.setWindowTitle("Manual Order")
+        self.setModal(True)
+        self.setMinimumWidth(460)
+        self._symbols = symbols or ["AAPL","MSFT","TSLA","AMD"]
+
+        form = QtWidgets.QFormLayout(self)
+        self.symbol = QtWidgets.QComboBox(); self.symbol.addItems(self._symbols)
+        self.side = QtWidgets.QComboBox(); self.side.addItems(["BUY","SELL","SHORT","COVER"])
+        self.qty = QtWidgets.QSpinBox(); self.qty.setRange(1, 1_000_000); self.qty.setValue(100)
+        self.ord_type = QtWidgets.QComboBox(); self.ord_type.addItems(["MARKET","LIMIT"]) 
+        self.price = QtWidgets.QDoubleSpinBox(); self.price.setRange(0.0, 1_000_000.0); self.price.setDecimals(4); self.price.setValue(0.0); self.price.setEnabled(False)
+        self.tif = QtWidgets.QComboBox(); self.tif.addItems(["DAY","IOC","FOK","GTC"]) 
+        self.route = QtWidgets.QComboBox(); self.route.addItems(["Auto","Alpaca","Schwab","Sim"])  # NEW: Route selector
+        self.reduce_only = QtWidgets.QCheckBox("Reduce-only")
+        self.sl = QtWidgets.QDoubleSpinBox(); self.sl.setRange(0.0, 1_000_000.0); self.sl.setDecimals(4); self.sl.setValue(0.0)
+        self.tp = QtWidgets.QDoubleSpinBox(); self.tp.setRange(0.0, 1_000_000.0); self.tp.setDecimals(4); self.tp.setValue(0.0)
+
+        self.ord_type.currentTextChanged.connect(lambda t: self.price.setEnabled(t=="LIMIT"))
+
+        form.addRow("Symbol", self.symbol)
+        form.addRow("Side", self.side)
+        form.addRow("Qty", self.qty)
+        form.addRow("Type", self.ord_type)
+        form.addRow("Limit Price", self.price)
+        form.addRow("TIF", self.tif)
+        form.addRow("Route", self.route)
+        form.addRow(self.reduce_only)
+        form.addRow("Stop Loss", self.sl)
+        form.addRow("Take Profit", self.tp)
+
+        btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+        btns.accepted.connect(self._on_accept)
+        btns.rejected.connect(self.reject)
+        form.addRow(btns)
+
+    def _on_accept(self):
+        if self.ord_type.currentText()=="LIMIT" and self.price.value()<=0:
+            QtWidgets.QMessageBox.warning(self, "Manual Order", "Limit price must be > 0 for LIMIT orders.")
+            return
+        self.accept()
+
+    def payload(self) -> Dict:
+        return {
+            "symbol": self.symbol.currentText(),
+            "side": self.side.currentText(),
+            "qty": int(self.qty.value()),
+            "type": self.ord_type.currentText().lower(),
+            "price": float(self.price.value()) if self.ord_type.currentText()=="LIMIT" else None,
+            "tif": self.tif.currentText(),
+            "route": self.route.currentText(),
+            "reduce_only": bool(self.reduce_only.isChecked()),
+            "sl": float(self.sl.value()) or None,
+            "tp": float(self.tp.value()) or None,
+        }
+
+# =====================================================
 # MAIN WINDOW (tabs)
 # =====================================================
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Trading Bot Monitor — Pro")
-        self.resize(1500, 980)
+        self.resize(1540, 1000)
+
+        self.ctrl = ControlBridge()
+        self._halted = False
 
         # pyqtgraph theme
         pg.setConfigOption("background","#0a0a0a"); pg.setConfigOption("foreground","#e5e5e5"); pg.setConfigOptions(antialias=True)
@@ -348,7 +401,35 @@ class MainWindow(QtWidgets.QMainWindow):
         self.clear_logs_act = QtGui.QAction("Clear Logs", self)
         self.export_csv_act = QtGui.QAction("Export CSV", self)
         self.export_pdf_act = QtGui.QAction("Export PDF (stub)", self)
-        for a in [self.start_act, self.stop_act, self.clear_logs_act, self.export_csv_act, self.export_pdf_act]: tb.addAction(a)
+
+        # NEW: Panic Switch (toggle), Flatten All, Cancel All, Manual Order
+        self.panic_btn = QtWidgets.QToolButton()
+        # Ensure banner exists before _style_panic touches it
+        self.halt_banner = QtWidgets.QLabel("")
+        self.halt_banner.setObjectName("haltBanner")
+        self.halt_banner.setStyleSheet("background:#991b1b;color:#fff;padding:6px;border-radius:6px;")
+        self.panic_btn.setCheckable(True)
+        self.panic_btn.setText("HALT ✖")
+        self.panic_btn.setToolTip("Panic / Kill Switch (Shift+Esc)")
+        self._style_panic(False)
+
+        self.flatten_btn_tb = QtWidgets.QToolButton(); self.flatten_btn_tb.setText("Flatten All"); self.flatten_btn_tb.setToolTip("Close all positions immediately")
+        self.cancel_all_btn_tb = QtWidgets.QToolButton(); self.cancel_all_btn_tb.setText("Cancel All"); self.cancel_all_btn_tb.setToolTip("Cancel all working orders")
+        self.manual_order_btn_tb = QtWidgets.QToolButton(); self.manual_order_btn_tb.setText("Manual Order")
+
+        for a in [self.start_act, self.stop_act, self.clear_logs_act, self.export_csv_act, self.export_pdf_act]:
+            tb.addAction(a)
+        tb.addSeparator()
+        tb.addWidget(self.panic_btn)
+        tb.addWidget(self.flatten_btn_tb)
+        tb.addWidget(self.cancel_all_btn_tb)
+        tb.addWidget(self.manual_order_btn_tb)
+
+        # Global shortcuts
+        QtGui.QShortcut(QtGui.QKeySequence("Shift+Esc"), self, activated=self._toggle_panic)
+        QtGui.QShortcut(QtGui.QKeySequence("Ctrl+M"), self, activated=self._show_manual_order)
+        QtGui.QShortcut(QtGui.QKeySequence("Ctrl+L"), self, activated=self._confirm_flatten)
+        QtGui.QShortcut(QtGui.QKeySequence("Ctrl+K"), self, activated=self._confirm_cancel_all)
 
         # Tabs
         self.tabs = QtWidgets.QTabWidget(); self.setCentralWidget(self.tabs)
@@ -369,6 +450,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.export_csv_act.triggered.connect(self._export_csv)
         self.export_pdf_act.triggered.connect(lambda: QtWidgets.QMessageBox.information(self, "Export", "PDF export is a stub. Wire reportlab/wkhtmltopdf."))
 
+        # Wire new controls
+        self.panic_btn.clicked.connect(self._toggle_panic)
+        self.flatten_btn_tb.clicked.connect(self._confirm_flatten)
+        self.cancel_all_btn_tb.clicked.connect(self._confirm_cancel_all)
+        self.manual_order_btn_tb.clicked.connect(self._show_manual_order)
+
     # ---------------- Dashboard ----------------
     def _build_dashboard_tab(self):
         tab = QtWidgets.QWidget(); grid=QtWidgets.QGridLayout(tab); grid.setContentsMargins(12,12,12,12); grid.setHorizontalSpacing(12); grid.setVerticalSpacing(12)
@@ -380,6 +467,9 @@ class MainWindow(QtWidgets.QMainWindow):
         rl.addWidget(QtWidgets.QLabel("Drawdown (max)"),2,0); rl.addWidget(self.dd_lbl,2,1)
         # Positions
         self.pos_model=SymbolsTableModel([]); self.pos_table=QtWidgets.QTableView(); self._style_table(self.pos_table); self.pos_table.setModel(self.pos_model)
+        # Context menu: per-symbol flatten
+        self.pos_table.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        self.pos_table.customContextMenuRequested.connect(self._on_pos_context)
         # Charts
         self.eq_plot=pg.PlotWidget(title="Cumulative Equity"); self.eq_plot.showGrid(x=True,y=True,alpha=0.15); self._eq_x=[]; self._eq_y=[]; self.eq_curve=self.eq_plot.plot([],[],pen=pg.mkPen(width=2))
         self.eq_signal_marks=pg.ScatterPlotItem(); self.eq_plot.addItem(self.eq_signal_marks)
@@ -424,11 +514,9 @@ class MainWindow(QtWidgets.QMainWindow):
         for i,(name,lbl) in enumerate(labels): gl.addWidget(QtWidgets.QLabel(name), i//2, (i%2)*2 ); gl.addWidget(lbl, i//2, (i%2)*2 +1)
         grid.addWidget(stats_box,0,0,1,2)
         
-        # Heatmap (risk vs exposure)  — emulate using ImageItem
+        # Heatmap (risk vs exposure)
         self.heat_plot=pg.PlotWidget(title="Risk vs Exposure Heatmap"); self.heat_img=pg.ImageItem(); self.heat_plot.addItem(self.heat_img); grid.addWidget(self.heat_plot,1,0)
-        
-        # Attach a color map (once)
-        cmap = pg.colormap.get('plasma')   # or 'viridis', 'CET-L4', etc.
+        cmap = pg.colormap.get('plasma')
         self.heat_img.setColorMap(cmap)
         self.heat_img.setLevels((0.0, 1.0))
         
@@ -446,7 +534,8 @@ class MainWindow(QtWidgets.QMainWindow):
         for i,(n,l) in enumerate([('Latency',self.lat_lbl),('p95',self.p95_lbl),('Slippage (bps)',self.slip_lbl),('Heartbeat (s)',self.hb_lbl),('Reconnects',self.rec_lbl),('API Errors',self.err_lbl)]): hl.addWidget(QtWidgets.QLabel(n), i,0); hl.addWidget(l, i,1)
         queue_box=QtWidgets.QGroupBox("Order Queue"); ql=QtWidgets.QGridLayout(queue_box); self.q_pending=self._kpi_label(); self.q_working=self._kpi_label(); self.q_canceled=self._kpi_label(); ql.addWidget(QtWidgets.QLabel("Pending"),0,0); ql.addWidget(self.q_pending,0,1); ql.addWidget(QtWidgets.QLabel("Working"),1,0); ql.addWidget(self.q_working,1,1); ql.addWidget(QtWidgets.QLabel("Canceled"),2,0); ql.addWidget(self.q_canceled,2,1)
         self.cooldown_banner=QtWidgets.QLabel(""); self.cooldown_banner.setStyleSheet("background:#7c2d12;color:#fff;padding:6px;border-radius:6px;")
-        grid.addWidget(health_box,0,0); grid.addWidget(queue_box,0,1); grid.addWidget(self.cooldown_banner,1,0,1,2)
+        self.halt_banner=QtWidgets.QLabel(""); self.halt_banner.setStyleSheet("background:#991b1b;color:#fff;padding:6px;border-radius:6px;")
+        grid.addWidget(health_box,0,0); grid.addWidget(queue_box,0,1); grid.addWidget(self.cooldown_banner,1,0,1,2); grid.addWidget(self.halt_banner,2,0,1,2)
         self.tabs.addTab(tab, "Execution")
 
     # ---------------- Alerts ----------------
@@ -465,8 +554,24 @@ class MainWindow(QtWidgets.QMainWindow):
     # ---------------- Ops ----------------
     def _build_ops_tab(self):
         tab=QtWidgets.QWidget(); grid=QtWidgets.QGridLayout(tab)
-        # Manual overrides
-        box=QtWidgets.QGroupBox("Manual Overrides"); hl=QtWidgets.QHBoxLayout(box); self.flatten_btn=QtWidgets.QPushButton("Flatten All"); self.halt_btn=QtWidgets.QPushButton("Halt Trading"); self.ticket_btn=QtWidgets.QPushButton("Manual Order Ticket"); hl.addWidget(self.flatten_btn); hl.addWidget(self.halt_btn); hl.addWidget(self.ticket_btn)
+        # Manual overrides (duplicated in toolbar, but here for discoverability)
+        box=QtWidgets.QGroupBox("Manual Overrides"); hl=QtWidgets.QHBoxLayout(box)
+        self.flatten_btn=QtWidgets.QPushButton("Flatten All")
+        self.cancel_all_btn=QtWidgets.QPushButton("Cancel All")
+        self.halt_btn=QtWidgets.QPushButton("Halt Trading")
+        self.ticket_btn=QtWidgets.QPushButton("Manual Order Ticket")
+        hl.addWidget(self.flatten_btn); hl.addWidget(self.cancel_all_btn); hl.addWidget(self.halt_btn); hl.addWidget(self.ticket_btn)
+        self.flatten_btn.clicked.connect(self._confirm_flatten)
+        self.cancel_all_btn.clicked.connect(self._confirm_cancel_all)
+        self.halt_btn.clicked.connect(self._toggle_panic)
+        self.ticket_btn.clicked.connect(self._show_manual_order)
+
+        # Guardrails
+        guard=QtWidgets.QGroupBox("Guardrails"); glr=QtWidgets.QGridLayout(guard)
+        self.daily_loss_limit_spin=QtWidgets.QDoubleSpinBox(); self.daily_loss_limit_spin.setRange(0.0, 1_000_000.0); self.daily_loss_limit_spin.setDecimals(2); self.daily_loss_limit_spin.setValue(500.0)
+        self.guard_status=QtWidgets.QLabel("Auto-halt when day PnL ≤ -$500.00")
+        glr.addWidget(QtWidgets.QLabel("Daily Loss Limit ($)"),0,0); glr.addWidget(self.daily_loss_limit_spin,0,1); glr.addWidget(self.guard_status,1,0,1,2)
+
         # Session summary
         sum_box=QtWidgets.QGroupBox("Session Summary"); gl=QtWidgets.QGridLayout(sum_box)
         self.today_real_lbl=self._kpi_label(); self.trade_count_lbl=self._kpi_label(); self.winrate_lbl=self._kpi_label()
@@ -477,7 +582,7 @@ class MainWindow(QtWidgets.QMainWindow):
         fl.addRow("Risk %", self.risk_pct_lbl); fl.addRow("Routing", self.routing_lbl); fl.addRow("Active Symbols", self.active_syms_lbl)
         # Logs
         self.logs_view=QtWidgets.QPlainTextEdit(); self.logs_view.setReadOnly(True); self.logs_view.setMaximumBlockCount(5000)
-        grid.addWidget(box,0,0,1,2); grid.addWidget(sum_box,1,0); grid.addWidget(conf_box,1,1); grid.addWidget(self.logs_view,2,0,1,2)
+        grid.addWidget(box,0,0,1,2); grid.addWidget(guard,1,0,1,2); grid.addWidget(sum_box,2,0); grid.addWidget(conf_box,2,1); grid.addWidget(self.logs_view,3,0,1,2)
         self.tabs.addTab(tab, "Ops")
 
     # ---------------- History ----------------
@@ -490,21 +595,15 @@ class MainWindow(QtWidgets.QMainWindow):
         self.calendar_img = pg.ImageItem()
         self.calendar_plot.addItem(self.calendar_img)
 
-        # >>> attach a diverging colormap once (good for PnL: neg/red, pos/green)
         try:
-            cmap = pg.colormap.get('CET-D1')      # diverging; alternatives: 'CET-D11', 'bwr'
+            cmap = pg.colormap.get('CET-D1')
             self.calendar_img.setColorMap(cmap)
         except Exception:
-            # fallback for older pyqtgraph
             lut = pg.colormap.get('CET-D1').getLookupTable(0.0, 1.0, 256)
             self.calendar_img.setLookupTable(lut)
 
-        # >>> lock levels so colors don’t flicker each update
-        # choose sensible PnL range for your calendar cells (e.g., -500..+500)
         self._calendar_levels = (-500.0, 500.0)
         self.calendar_img.setLevels(self._calendar_levels)
-
-        # (optional) prettier aspect/scaling
         self.calendar_img.setAutoDownsample(True)
         self.calendar_plot.getViewBox().setAspectLocked(False)
 
@@ -518,7 +617,6 @@ class MainWindow(QtWidgets.QMainWindow):
         grid.addWidget(self.bench_plot,   0, 1)
         self.tabs.addTab(tab, "History")
 
-
     # ---------------- Replay ----------------
     def _build_replay_tab(self):
         tab=QtWidgets.QWidget(); v=QtWidgets.QVBoxLayout(tab)
@@ -527,6 +625,75 @@ class MainWindow(QtWidgets.QMainWindow):
         v.addWidget(self.replay_slider); v.addWidget(self.replay_plot)
         self.tabs.addTab(tab, "Replay")
 
+    # ---------------- Panic / Flatten / Manual Order handlers ----------------
+    def _style_panic(self, halted: bool):
+        if halted:
+            self.panic_btn.setChecked(True)
+            self.panic_btn.setText("RESUME ▶")
+            self.panic_btn.setStyleSheet("QToolButton{background:#b91c1c;color:#fff;font-weight:700;padding:6px 10px;border-radius:8px;}")
+            self.halt_banner.setText("TRADING HALTED — Manual intervention required")
+        else:
+            self.panic_btn.setChecked(False)
+            self.panic_btn.setText("HALT ✖")
+            self.panic_btn.setStyleSheet("QToolButton{background:#1f2937;color:#e5e5e5;font-weight:700;padding:6px 10px;border-radius:8px;}")
+            self.halt_banner.setText("")
+
+    def _toggle_panic(self):
+        self._halted = not self._halted
+        self._style_panic(self._halted)
+        self._append_log(f"[UI] {'HALT' if self._halted else 'RESUME'} pressed")
+        self.ctrl.halt_changed.emit(self._halted)
+
+    def _confirm_flatten(self):
+        msg = QtWidgets.QMessageBox(self)
+        msg.setWindowTitle("Flatten All — Confirm")
+        msg.setText("This will submit market orders to close ALL positions across ALL symbols.")
+        msg.setInformativeText("Are you absolutely sure?")
+        msg.setIcon(QtWidgets.QMessageBox.Warning)
+        msg.setStandardButtons(QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
+        yes = msg.exec() == QtWidgets.QMessageBox.Yes
+        if yes:
+            self._append_log("[UI] Flatten All confirmed")
+            self.ctrl.flatten_all.emit()
+        else:
+            self._append_log("[UI] Flatten All canceled")
+
+    def _confirm_cancel_all(self):
+        msg = QtWidgets.QMessageBox(self)
+        msg.setWindowTitle("Cancel All — Confirm")
+        msg.setText("Cancel all WORKING orders across ALL symbols?")
+        msg.setIcon(QtWidgets.QMessageBox.Warning)
+        msg.setStandardButtons(QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
+        if msg.exec() == QtWidgets.QMessageBox.Yes:
+            self._append_log("[UI] Cancel All confirmed")
+            self.ctrl.cancel_all.emit()
+
+    def _show_manual_order(self):
+        dlg = ManualOrderDialog(self, symbols=[self.symbol_combo.itemText(i) for i in range(self.symbol_combo.count())])
+        if dlg.exec() == QtWidgets.QDialog.Accepted:
+            payload = dlg.payload()
+            self._append_log(f"[UI] Manual Order -> {payload}")
+            self.ctrl.manual_order.emit(payload)
+
+    def _on_pos_context(self, pos: QtCore.QPoint):
+        idx = self.pos_table.indexAt(pos)
+        if not idx.isValid():
+            return
+        row = idx.row()
+        sym = self.pos_model._rows[row].get("symbol")
+        menu = QtWidgets.QMenu(self)
+        act_flat = menu.addAction(f"Flatten {sym}")
+        act_flat25 = menu.addAction(f"Close 25% of {sym}")
+        act_flat50 = menu.addAction(f"Close 50% of {sym}")
+        chosen = menu.exec(self.pos_table.viewport().mapToGlobal(pos))
+        if chosen == act_flat:
+            self._append_log(f"[UI] Flatten {sym} requested")
+            self.ctrl.flatten_symbol.emit(sym)
+        elif chosen in (act_flat25, act_flat50):
+            pct = 0.25 if chosen==act_flat25 else 0.50
+            self._append_log(f"[UI] Partial close {sym} {int(pct*100)}% (route via engine)")
+            # Extend ControlBridge to support partials if you want.
+
     # ---------------- Utility ----------------
     def _style_table(self,t:QtWidgets.QTableView):
         t.setAlternatingRowColors(True); t.setSortingEnabled(True); t.horizontalHeader().setStretchLastSection(True); t.verticalHeader().setVisible(False); t.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
@@ -534,17 +701,28 @@ class MainWindow(QtWidgets.QMainWindow):
     def _kpi_label(self)->QtWidgets.QLabel:
         lbl=QtWidgets.QLabel("--"); lbl.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignVCenter); lbl.setStyleSheet("font-weight:700; font-size:16px; color:#e5e5e5;"); return lbl
 
+    def _set_kpi(self, lbl: QtWidgets.QLabel, val: float, money: bool=False, pct: bool=False):
+        color = "#e5e5e5"
+        try:
+            if pct:
+                text = f"{val*100:.2f}%"; color = "#22c55e" if val >= 0 else "#f87171"
+            elif money:
+                text = f"{val:,.2f}"; color = "#22c55e" if val >= 0 else "#f87171"
+            else:
+                text = f"{val}"
+            lbl.setText(text); lbl.setStyleSheet(f"font-weight:700; font-size:16px; color:{color};")
+        except Exception:
+            lbl.setText(str(val))
+
     def _append_log(self, text:str):
         if hasattr(self,'logs_view'):
             self.logs_view.appendPlainText(text)
             self.logs_view.verticalScrollBar().setValue(self.logs_view.verticalScrollBar().maximum())
 
     def _export_csv(self):
-        # demo: export positions + equity series
         try:
             pos_path=os.path.join(os.getcwd(), "positions_export.csv")
             eq_path=os.path.join(os.getcwd(), "equity_export.csv")
-            # positions
             model=self.pos_model
             rows=[]
             for r in range(model.rowCount()):
@@ -554,43 +732,34 @@ class MainWindow(QtWidgets.QMainWindow):
                     row[h]=model.data(idx, QtCore.Qt.DisplayRole)
                 rows.append(row)
             pd.DataFrame(rows).to_csv(pos_path, index=False)
-            # equity
             x=getattr(self,'_eq_x',[]); y=getattr(self,'_eq_y',[])
             pd.DataFrame({"t":x,"equity":y}).to_csv(eq_path, index=False)
             QtWidgets.QMessageBox.information(self, "Export", f"CSV exported:\n{pos_path}\n{eq_path}")
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, "Export", f"Failed to export: {e}")
-    # Inside class MainWindow …
 
-    def _kpi_label(self) -> QtWidgets.QLabel:
-        lbl = QtWidgets.QLabel("--")
-        lbl.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
-        lbl.setStyleSheet("font-weight:700; font-size:16px; color:#e5e5e5;")
-        return lbl
+    def _confirm_cancel_all(self):
+        msg = QtWidgets.QMessageBox(self)
+        msg.setWindowTitle("Cancel All Orders")
+        msg.setText("This will CANCEL all working/pending orders.")
+        msg.setStandardButtons(QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
+        if msg.exec() == QtWidgets.QMessageBox.Yes:
+            self._append_log("[UI] Cancel All confirmed")
+            self.ctrl.cancel_all.emit()
+        else:
+            self._append_log("[UI] Cancel All canceled")
 
-    def _set_kpi(self, lbl: QtWidgets.QLabel, val: float, money: bool=False, pct: bool=False):
-        """
-        High-contrast KPI formatter.
-        - money=True  -> 12,345.67 with green/red by sign
-        - pct=True    -> 1.23% with green/red by sign
-        - default     -> plain str(val), neutral color
-        """
-        color = "#e5e5e5"
-        try:
-            if pct:
-                text = f"{val*100:.2f}%"
-                color = "#22c55e" if val >= 0 else "#f87171"
-            elif money:
-                text = f"{val:,.2f}"
-                color = "#22c55e" if val >= 0 else "#f87171"
-            else:
-                text = f"{val}"
-            lbl.setText(text)
-            lbl.setStyleSheet(f"font-weight:700; font-size:16px; color:{color};")
-        except Exception:
-            # Fail-safe: don’t crash UI if a weird type slips in
-            lbl.setText(str(val))
 
+    def _confirm_flatten_symbol(self, symbol: str):
+        msg = QtWidgets.QMessageBox(self)
+        msg.setWindowTitle("Flatten Symbol")
+        msg.setText(f"Close ALL positions for {symbol}?")
+        msg.setStandardButtons(QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
+        if msg.exec() == QtWidgets.QMessageBox.Yes:
+            self._append_log(f"[UI] Flatten {symbol} confirmed")
+            self.ctrl.flatten_symbol.emit(symbol)
+        else:
+            self._append_log(f"[UI] Flatten {symbol} canceled")
 
 # =====================================================
 # APP ENTRY / SIGNAL WIRING
@@ -603,30 +772,47 @@ def main():
     win = MainWindow(); win.show()
 
     feeder = DataFeeder()
+
+    # Connect UI -> Feeder (in your system, connect to your event bus / broker)
+    win.ctrl.halt_changed.connect(feeder.set_halted)
+    win.ctrl.flatten_all.connect(feeder.do_flatten_all)
+    win.ctrl.cancel_all.connect(feeder.do_cancel_all)
+    win.ctrl.flatten_symbol.connect(feeder.do_flatten_symbol)
+    win.ctrl.manual_order.connect(feeder.do_manual_order)
+
     # Dashboard wires
     feeder.s.symbols.connect(win.pos_model.replace_rows)
     feeder.s.equity_point.connect(lambda d,v: (win._eq_x.append(len(win._eq_x)), win._eq_y.append(v), win.eq_curve.setData(win._eq_x, win._eq_y)))
-    feeder.s.realized_point.connect(lambda d,day,cum: (win._rz_x.append(len(win._rz_x)), win._rz_daily.append(day), win._rz_cum.append(cum), win.rz_bars.setOpts(x=win._rz_x, height=win._rz_daily), win.rz_line.setData(win._rz_x, win._rz_cum)))
+
+    # Guardrail: monitor day PnL vs limit and auto-halt
+    win._day_realized_running = 0.0
+    def _guardrail_check(day_realized: float):
+        win._day_realized_running += float(day_realized)
+        limit = float(win.daily_loss_limit_spin.value()) if hasattr(win, 'daily_loss_limit_spin') else 0.0
+        if hasattr(win,'guard_status'):
+            win.guard_status.setText(f"Auto-halt when day PnL ≤ -${limit:,.2f} (curr: ${win._day_realized_running:,.2f})")
+        if limit > 0 and win._day_realized_running <= -limit and not getattr(win, '_halted', False):
+            win._append_log("[GUARD] Daily loss limit breached → HALTING")
+            QtWidgets.QMessageBox.critical(win, "Guardrail Triggered", f"Daily loss limit breached (P/L ${win._day_realized_running:,.2f} ≤ -${limit:,.2f}). Trading HALTED.")
+            win._toggle_panic()
+            feeder.s.alerts.emit([{ "id":"guard1","ts":dt.datetime.now(dt.UTC).isoformat()+"Z","level":"error","text":"Daily loss limit breached — trading halted","sticky":True }])
+
+    feeder.s.realized_point.connect(lambda d,day,cum: (win._rz_x.append(len(win._rz_x)), win._rz_daily.append(day), win._rz_cum.append(cum), win.rz_bars.setOpts(x=win._rz_x, height=win._rz_daily), win.rz_line.setData(win._rz_x, win._rz_cum), _guardrail_check(day)))
     feeder.s.risk_stats.connect(lambda u,r,dd: (win._set_kpi(win.unreal_lbl,u, money=True), win._set_kpi(win.realized_lbl,r, money=True), win._set_kpi(win.dd_lbl,dd, pct=True)))
 
     # Market context
     def on_ohlc(sym, dflike):
         if win.symbol_combo.currentText()!=sym: return
         df = dflike if isinstance(dflike:=dflike, pd.DataFrame) else pd.DataFrame(dflike)
-        # rebuild candle item
         if win.candle_item: win.price_plot.removeItem(win.candle_item)
         win.candle_item=Candles(df); win.price_plot.addItem(win.candle_item)
-        # MAs
         if win.ma20: win.price_plot.removeItem(win.ma20)
         if win.ma50: win.price_plot.removeItem(win.ma50)
         x=np.arange(len(df)); win.ma20=win.price_plot.plot(x, df['ma20'].to_numpy(), pen=pg.mkPen('#93c5fd', width=2)); win.ma50=win.price_plot.plot(x, df['ma50'].to_numpy(), pen=pg.mkPen('#fbbf24', width=2))
-        # SL/TP demo lines around last close
         last=float(df.iloc[-1]['close']); win.sl_line.setValue(last*0.97); win.tp_line.setValue(last*1.03)
-        # Entry/exit markers demo
         entries=[(int(len(df)*0.3), df['close'].iloc[int(len(df)*0.3)]), (int(len(df)*0.7), df['close'].iloc[int(len(df)*0.7)])]
         exits=[(int(len(df)*0.4), df['close'].iloc[int(len(df)*0.4)]), (int(len(df)*0.8), df['close'].iloc[int(len(df)*0.8)])]
         win.entry_marks.setData([e[0] for e in entries],[e[1] for e in entries]); win.exit_marks.setData([e[0] for e in exits],[e[1] for e in exits])
-        # regime labels mock
         win.regime_lbl.setText(random.choice(["low_vol","normal_vol","high_vol"]))
         win.trend_lbl.setText(random.choice(["trend","mean-reversion"]))
         win.bull_lbl.setText(random.choice(["bull","bear"]))
@@ -636,12 +822,11 @@ def main():
 
     # Performance
     def update_perf_labels():
-        # mock formulas derived from equity curve
         if len(win._eq_y) < 10: return
         arr=np.diff(np.log(np.clip(np.array(win._eq_y),1e-6,1e12)))
         sharpe = arr.mean() / (arr.std()+1e-9) * np.sqrt(252)
         sortino = arr.mean() / (np.std(arr[arr<0])+1e-9) * np.sqrt(252)
-        maxdd = (np.minimum.accumulate(np.maximum.accumulate(np.array(win._eq_y), axis=0)) if False else min(0.0, (min(win._eq_y)-max(win._eq_y))/max(win._eq_y)))
+        maxdd = min(0.0, (min(win._eq_y)-max(win._eq_y))/max(win._eq_y)) if win._eq_y else 0.0
         win._set_kpi(win.sharpe_lbl, sharpe, money=False)
         win._set_kpi(win.sortino_lbl, sortino, money=False)
         win._set_kpi(win.kelly_lbl, min(1.0, max(0.0, sharpe/(sortino+1e-9))), money=False)
@@ -649,30 +834,21 @@ def main():
         win._set_kpi(win.hit_lbl, random.uniform(0.4,0.7), pct=True)
         win._set_kpi(win.avwin_lbl, random.uniform(20,120), money=True)
         win._set_kpi(win.avloss_lbl, -random.uniform(20,120), money=True)
-    # timer to refresh perf labels + charts
     perf_timer=QtCore.QTimer(); perf_timer.timeout.connect(lambda: (update_perf_labels(), _update_perf_charts())); perf_timer.start(1500)
 
     def _update_perf_charts():
-        # Heatmap
         mat = np.random.rand(6, 6).astype(np.float32)
         win.heat_img.setImage(mat.T)
-
-        # Histogram of per-trade PnL (use BarGraphItem instead of stepMode)
         win.hist_plot.clear()
         data = np.random.normal(10, 60, size=300)
         y, x = np.histogram(data, bins=30)
         centers = (x[:-1] + x[1:]) / 2.0
         width = (x[1] - x[0]) * 0.9
-        bars = pg.BarGraphItem(x=centers, height=y, width=width,
-                            brush=pg.mkBrush(100, 100, 255, 150))
+        bars = pg.BarGraphItem(x=centers, height=y, width=width, brush=pg.mkBrush(100, 100, 255, 150))
         win.hist_plot.addItem(bars)
-
-        # Duration
         win.duration_plot.clear()
         durs = np.random.exponential(scale=60, size=100)
         win.duration_plot.plot(np.sort(durs))
-
-        # Streaks
         win.streaks_plot.clear()
         streaks = np.cumsum(np.random.choice([-1, 1], size=50))
         win.streaks_plot.plot(streaks)
@@ -709,7 +885,6 @@ def main():
     # History
     feeder.s.benchmark_point.connect(lambda d,v: _update_benchmark(win,v))
     def _update_benchmark(win, v):
-        # append points for equity already stored in dashboard
         if len(win._eq_y)>0:
             x=list(range(len(win._eq_y)))
             win.bench_eq.setData(x, win._eq_y)
@@ -717,7 +892,6 @@ def main():
             bench.append(v)
             win._bench_series = bench
             win.bench_idx.setData(list(range(len(bench))), bench)
-        # calendar heat (random mock)
         mat=np.random.randn(8,16)
         win.calendar_img.setImage(mat.T)
 
@@ -728,11 +902,6 @@ def main():
     feeder.s.orders.connect(lambda rows: win.orders_model.replace_rows(rows) if hasattr(win,'orders_model') else None)
     feeder.s.trades.connect(lambda rows: win.trades_model.replace_rows(rows) if hasattr(win,'trades_model') else None)
     feeder.s.log.connect(lambda line: win._append_log(line))
-
-    # Build Orders/Trades tabs now that models exist
-    # (They are created inside their own builders, but we assign models here if missing.)
-    # Ensure Orders/Trades tabs exist
-    # (Created in _build_orders/_build_trades via Performance/Execution/Alerts tabs. If missing, ignore.)
 
     feeder.start()
     rc = app.exec()
