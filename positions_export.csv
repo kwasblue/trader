@@ -1,0 +1,5 @@
+Symbol,Side,Qty,Avg,Last,Unreal,Realized,Total,PnL %,ATR,Regime,Risk
+AAPL,short,50,206.81,203.75,153.21,-151.13,2.08,-1.48%,2.72,low_vol,2.0
+MSFT,long,10,197.83,194.38,-34.55,-63.18,-97.73,-1.75%,1.23,normal_vol,1.0
+TSLA,long,10,203.97,202.48,-14.92,-253.47,-268.38,-0.73%,2.36,normal_vol,2.0
+AMD,short,25,190.01,189.81,4.98,-498.71,-493.74,-0.10%,3.89,normal_vol,4.0
