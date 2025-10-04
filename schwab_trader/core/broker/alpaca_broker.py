@@ -7,6 +7,7 @@ import alpaca
 from alpaca.trading.client import TradingClient
 from alpaca.data.live import StockDataStream
 from alpaca.data.enums import DataFeed
+from datetime import datetime, timezone
 
 from alpaca.trading.requests import (
     MarketOrderRequest,
@@ -21,6 +22,15 @@ from alpaca.data.requests import StockLatestQuoteRequest
 from core.base.base_broker_interface import BaseBrokerInterface
 from core.app_types import OrderResult, PositionView, BrokerSnapshot
 from loggers.logger import Logger
+from core.events.eventhandler import EventHandler, get_event_handler
+from core.events.events import (
+    EVENT_ORDER_STATUS, OrderStatusPayload,
+    EVENT_NEW_TRADE, TradePayload,
+    EVENT_POSITION_UPDATE, PositionPayload,
+    EVENT_PNL_UPDATE, PnLPayload,
+    EVENT_HEALTH_UPDATE, HealthPayload, 
+    EVENT_ALERT, AlertPayload
+)
 
 
 def _map_side(side: str) -> OrderSide:
@@ -47,7 +57,7 @@ class AlpacaBroker(BaseBrokerInterface):
     you originally used (connect/start_stream/subscribe_bars/execute_trade).
     """
 
-    def __init__(self, api_key: str, api_secret: str, paper: bool = True):
+    def __init__(self, api_key: str, api_secret: str, event_handler: EventHandler | None = None, paper: bool = True):
         self.api_key = api_key
         self.api_secret = api_secret
         self.paper = paper
@@ -56,6 +66,7 @@ class AlpacaBroker(BaseBrokerInterface):
         self.data_rest: Optional[StockHistoricalDataClient] = None
         self._last_price: Dict[str, float] = {}
         self.logger = Logger("alpaca.log", "AlpacaBroker").get_logger()
+        self.event_handler = get_event_handler()
 
     # ---------------------------------------------------------
     # Connections / Streaming
@@ -67,35 +78,96 @@ class AlpacaBroker(BaseBrokerInterface):
         self.data_rest = StockHistoricalDataClient(self.api_key, self.api_secret)
         self.logger.info("Connected to Alpaca.")
 
+        if self.event_handler:
+            payload: HealthPayload = {
+                "broker": "alpaca",
+                "status": "connected",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+            asyncio.create_task(self.event_handler.emit(EVENT_HEALTH_UPDATE, payload))
+
+    async def _heartbeat_loop(self, interval: int = 10):
+        """Emit periodic broker heartbeat."""
+        while True:
+            if self.event_handler:
+                payload: HealthPayload = {
+                    "broker": "alpaca",
+                    "status": "alive",  # ✅ must be one of the allowed literals
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+                await self.event_handler.emit(EVENT_HEALTH_UPDATE, payload)
+            await asyncio.sleep(interval)
+
     async def start_stream(self, retry_seconds: int = 300):
         if not self.stream:
             self.logger.warning("Stream not initialized. Call connect() first.")
+            if self.event_handler:
+                await self.event_handler.emit(EVENT_HEALTH_UPDATE, {
+                    "broker": "alpaca",
+                    "status": "not_initialized",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                })
             return
 
         self.logger.info(
             f"[stream] starting... alpaca-py={getattr(alpaca,'__version__','unknown')} feed={getattr(self, 'feed', '?')}"
         )
+        if self.event_handler:
+            payload: HealthPayload = {
+                "broker": "alpaca",
+                "status": "stream_starting",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+            await self.event_handler.emit(EVENT_HEALTH_UPDATE, payload)
+        # launch heartbeat task
+        asyncio.create_task(self._heartbeat_loop(interval=15))
 
         while True:
             try:
-                run_fn = self.stream.run  # don't CALL it yet
+                run_fn = self.stream.run
                 if inspect.iscoroutinefunction(run_fn):
-                    await run_fn()                   # async variant (some versions)
+                    await run_fn()
                 else:
-                    await asyncio.to_thread(run_fn)  # sync variant (0.42.0 etc.)
+                    await asyncio.to_thread(run_fn)
 
                 self.logger.warning("[stream] exited cleanly; restarting in 5s...")
+                if self.event_handler:
+                    payload: HealthPayload = {
+                        "broker": "alpaca",
+                        "status": "stream_exited",
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    }
+                    await self.event_handler.emit(EVENT_HEALTH_UPDATE, payload)
+
                 await asyncio.sleep(5)
+
             except Exception as e:
                 self.logger.error(f"[stream] error: {e}; retrying in {retry_seconds}s")
-                await asyncio.sleep(retry_seconds)
+                if self.event_handler:
+                    # alert
+                    alert_payload: AlertPayload = {
+                        "level": "error",
+                        "message": f"Stream error: {e}",
+                        "symbol": None,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    }
+                    await self.event_handler.emit(EVENT_ALERT, alert_payload)
+
+                    # health
+                    health_payload: HealthPayload = {
+                        "broker": "alpaca",
+                        "status": "reconnecting",
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    }
+                    await self.event_handler.emit(EVENT_HEALTH_UPDATE, health_payload)
+
+            await asyncio.sleep(retry_seconds)
 
     def subscribe_bars(self, callback, symbol: str):
         if not self.stream:
             self.logger.warning("Stream not initialized. Call connect() first.")
             return
 
-        # Wrap sync callbacks so the SDK gets an async function
         if not asyncio.iscoroutinefunction(callback):
             async def _async_wrap(bar):
                 return callback(bar)
@@ -105,6 +177,14 @@ class AlpacaBroker(BaseBrokerInterface):
 
         self.stream.subscribe_bars(cb, symbol)
         self.logger.info(f"[stream] subscribed bars: {symbol}")
+
+        if self.event_handler:
+            asyncio.create_task(self.event_handler.emit(EVENT_HEALTH_UPDATE, {
+                "broker": "alpaca",
+                "status": "subscribed",
+                "symbol": symbol,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }))
 
     # ---------------------------------------------------------
     # Convenience (from your original snippet)
@@ -121,10 +201,21 @@ class AlpacaBroker(BaseBrokerInterface):
         )
 
     def submit_market_order(self, symbol: str, qty: int, side: str) -> bool:
-        """Submit a market order through Alpaca (bool result for convenience)."""
+        """Submit a market order through Alpaca and emit status to the event bus."""
         if not self.trading_client:
             self.logger.error("Trading client not initialized. Call `connect()` first.")
+            if self.event_handler:
+                payload: OrderStatusPayload = {
+                    "order_id": "N/A",
+                    "symbol": symbol,
+                    "status": "rejected",
+                    "filled_qty": 0.0,
+                    "avg_price": None,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+                asyncio.create_task(self.event_handler.emit(EVENT_ORDER_STATUS, payload))
             return False
+
         try:
             order = MarketOrderRequest(
                 symbol=symbol,
@@ -132,16 +223,41 @@ class AlpacaBroker(BaseBrokerInterface):
                 side=_map_side(side),
                 time_in_force=TimeInForce.DAY,
             )
-            self.trading_client.submit_order(order)
+            res = self.trading_client.submit_order(order)
+
             self.logger.info(f"Submitted {side.upper()} order for {qty} {symbol}")
+
+            if self.event_handler:
+                payload: OrderStatusPayload = {
+                    "order_id": getattr(res, "id", "N/A"),
+                    "symbol": symbol,
+                    "status": "submitted",
+                    "filled_qty": 0.0,
+                    "avg_price": None,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+                asyncio.create_task(self.event_handler.emit(EVENT_ORDER_STATUS, payload))
+
             return True
+
         except Exception as e:
             self.logger.error(f"Order failed for {symbol}: {e}")
+            if self.event_handler:
+                payload: OrderStatusPayload = {
+                    "order_id": "N/A",
+                    "symbol": symbol,
+                    "status": "rejected",
+                    "filled_qty": 0.0,
+                    "avg_price": None,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+                asyncio.create_task(self.event_handler.emit(EVENT_ORDER_STATUS, payload))
             return False
 
     # ---------------------------------------------------------
     # BaseBrokerInterface implementation (async + sync)
     # ---------------------------------------------------------
+
     async def place_order(
         self,
         symbol: str,
@@ -152,9 +268,20 @@ class AlpacaBroker(BaseBrokerInterface):
         stop_price: float | None = None,
         time_in_force: str = "gtc",
         **kwargs,
-    ) -> OrderResult:
+    ) -> None:   # 🚨 emits, does not return
         if not self.trading_client:
+            if self.event_handler:
+                payload: OrderStatusPayload = {
+                    "order_id": "N/A",
+                    "symbol": symbol,
+                    "status": "rejected",
+                    "filled_qty": 0.0,
+                    "avg_price": None,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+                await self.event_handler.emit(EVENT_ORDER_STATUS, payload)
             raise RuntimeError("Not connected: call connect() first")
+
         tif = _map_tif(time_in_force)
         s = _map_side(side)
 
@@ -171,10 +298,47 @@ class AlpacaBroker(BaseBrokerInterface):
             o = self.trading_client.submit_order(req)
             return self._mk_order_result(o)
 
-        return await asyncio.to_thread(_submit)
+        try:
+            res = await asyncio.to_thread(_submit)
 
-    async def cancel_order(self, order_id: str) -> OrderResult:
+            if self.event_handler:
+                payload: OrderStatusPayload = {
+                    "order_id": res.order_id or "N/A",
+                    "symbol": res.symbol or symbol,
+                    "status": res.status or "submitted",
+                    "filled_qty": res.filled_qty or 0.0,
+                    "avg_price": res.avg_fill_price,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+                await self.event_handler.emit(EVENT_ORDER_STATUS, payload)
+
+        except Exception as e:
+            self.logger.error(f"Order failed for {symbol}: {e}")
+            if self.event_handler:
+                payload: OrderStatusPayload = {
+                    "order_id": "N/A",
+                    "symbol": symbol,
+                    "status": "rejected",
+                    "filled_qty": 0.0,
+                    "avg_price": None,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+                await self.event_handler.emit(EVENT_ORDER_STATUS, payload)
+        return res
+
+
+    async def cancel_order(self, order_id: str) -> None:  # no return; emits instead
         if not self.trading_client:
+            if self.event_handler:
+                payload: OrderStatusPayload = {
+                    "order_id": order_id,
+                    "symbol": "N/A",
+                    "status": "rejected",
+                    "filled_qty": 0.0,
+                    "avg_price": None,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+                await self.event_handler.emit(EVENT_ORDER_STATUS, payload)
             raise RuntimeError("Not connected: call connect() first")
 
         def _cancel():
@@ -183,9 +347,35 @@ class AlpacaBroker(BaseBrokerInterface):
                 o = self.trading_client.get_order_by_id(order_id)
                 return self._mk_order_result(o)
             except Exception:
-                return OrderResult(order_id=order_id, status="canceled")  # type: ignore[arg-type]
+                return OrderResult(order_id=order_id, status="canceled")
 
-        return await asyncio.to_thread(_cancel)
+        try:
+            res = await asyncio.to_thread(_cancel)
+
+            if self.event_handler:
+                payload: OrderStatusPayload = {
+                    "order_id": res.order_id or order_id,
+                    "symbol": res.symbol or "N/A",
+                    "status": res.status or "canceled",
+                    "filled_qty": res.filled_qty or 0.0,
+                    "avg_price": res.avg_fill_price,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+                await self.event_handler.emit(EVENT_ORDER_STATUS, payload)
+
+        except Exception as e:
+            self.logger.error(f"Cancel order failed for {order_id}: {e}")
+            if self.event_handler:
+                payload: OrderStatusPayload = {
+                    "order_id": order_id,
+                    "symbol": "N/A",
+                    "status": "rejected",
+                    "filled_qty": 0.0,
+                    "avg_price": None,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+                await self.event_handler.emit(EVENT_ORDER_STATUS, payload)
+            return res
 
     def place_market_order(self, symbol: str, qty: int, side: str, price: float | None = None) -> OrderResult:
         if not self.trading_client:
@@ -193,7 +383,24 @@ class AlpacaBroker(BaseBrokerInterface):
         o = self.trading_client.submit_order(
             MarketOrderRequest(symbol=symbol, qty=qty, side=_map_side(side), time_in_force=TimeInForce.DAY)
         )
-        return self._mk_order_result(o)
+        res = self._mk_order_result(o)
+
+        # 🚨 Emit event
+        if self.event_handler:
+            payload = {
+                "order_id": res.order_id,
+                "symbol": res.symbol,
+                "status": res.status,
+                "side": res.side,
+                "qty": res.qty,
+                "filled_qty": res.filled_qty,
+                "avg_price": res.avg_fill_price,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+            asyncio.create_task(self.event_handler.emit(EVENT_ORDER_STATUS, payload))
+
+        return res  # still return for synchronous contexts (tests, notebooks)
+
 
     def place_oco_order(self, symbol: str, qty: int, stop_price: float, limit_price: float) -> OrderResult:
         """Simple OCO via bracket: TP limit + SL stop.
@@ -201,6 +408,7 @@ class AlpacaBroker(BaseBrokerInterface):
         """
         if not self.trading_client:
             raise RuntimeError("Not connected: call connect() first")
+
         req = MarketOrderRequest(
             symbol=symbol,
             qty=qty,
@@ -211,7 +419,24 @@ class AlpacaBroker(BaseBrokerInterface):
             stop_loss={"stop_price": stop_price},
         )
         o = self.trading_client.submit_order(req)
-        return self._mk_order_result(o)
+        res = self._mk_order_result(o)
+
+        # 🚨 Emit order status
+        if self.event_handler:
+            payload = {
+                "order_id": res.order_id,
+                "symbol": res.symbol,
+                "status": res.status,
+                "side": res.side,
+                "qty": res.qty,
+                "filled_qty": res.filled_qty,
+                "avg_price": res.avg_fill_price,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+            asyncio.create_task(self.event_handler.emit(EVENT_ORDER_STATUS, payload))
+
+        return res  # hybrid: return for sync code, emit for event-driven system
+
 
     async def get_position(self, symbol: str) -> Optional[PositionView]:
         if not self.trading_client:

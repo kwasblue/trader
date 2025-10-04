@@ -30,7 +30,9 @@ class OrderResult:
     filled_qty: int = 0
     avg_price: Optional[float] = None
     message: Optional[str] = None
+    symbol: Optional[str] = None
     raw: Optional[Dict] = None  # optional broker-native payload
+    side: Optional[str] = None 
 
     def __bool__(self) -> bool:
         # lets you do: if result: ...
@@ -44,8 +46,9 @@ class OrderResult:
 class PositionView:
     symbol: str
     qty: int
-    avg_price: float
+    avg_entry_price: float
     last_price: float
+    market_price: float
 
     def to_dict(self) -> Dict:
         return asdict(self)

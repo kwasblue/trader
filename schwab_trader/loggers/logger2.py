@@ -1,8 +1,9 @@
-# keep your UniqueMessageFilter as-is, add rotation
-import logging, os
+import logging
+import os
 from logging.handlers import RotatingFileHandler
 
 class UniqueMessageFilter(logging.Filter):
+    """Suppress consecutive duplicate log messages."""
     def __init__(self):
         super().__init__()
         self.last_message = None
@@ -14,7 +15,10 @@ class UniqueMessageFilter(logging.Filter):
             return True
         return False
 
+
 class Logger:
+    """Thread-safe rotating logger with duplicate suppression."""
+
     def __init__(
         self,
         log_file: str,
@@ -22,44 +26,49 @@ class Logger:
         log_dir: str = "logs",
         level: int = logging.INFO,
         timestamp_format: str = "%Y-%m-%d %H:%M:%S",
-        propagate: bool = True,
+        propagate: bool = False,
         max_bytes: int = 5_000_000,
         backup_count: int = 5,
         console: bool = False,
     ):
         os.makedirs(log_dir, exist_ok=True)
-        full_log_file = os.path.join(log_dir, log_file)
+        full_log_path = os.path.join(log_dir, log_file)
 
-        self.logger = logging.getLogger(logger_name)
-        self.logger.setLevel(level)
-        self.logger.propagate = propagate
+        # Always use a *real* logging.Logger, never self.logger recursion
+        _logger = logging.getLogger(logger_name)
+        _logger.setLevel(level)
+        _logger.propagate = propagate
 
-        if not self.logger.hasHandlers():
+        # Avoid duplicate handlers if logger already exists
+        if not _logger.handlers:
             fmt = logging.Formatter(
                 "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
                 datefmt=timestamp_format,
             )
 
-            fh = RotatingFileHandler(full_log_file, maxBytes=max_bytes, backupCount=backup_count)
+            fh = RotatingFileHandler(full_log_path, maxBytes=max_bytes, backupCount=backup_count)
             fh.setLevel(level)
-            fh.addFilter(UniqueMessageFilter())
             fh.setFormatter(fmt)
-            self.logger.addHandler(fh)
+            fh.addFilter(UniqueMessageFilter())
+            _logger.addHandler(fh)
 
             if console:
                 ch = logging.StreamHandler()
                 ch.setLevel(level)
                 ch.setFormatter(fmt)
-                self.logger.addHandler(ch)
+                _logger.addHandler(ch)
 
-        self.logger.debug("Logger initialized.")
+        self._logger = _logger
+        self._logger.debug(f"Logger '{logger_name}' initialized → {full_log_path}")
 
+    # ---------------------------------------------------------------------
+    # Convenience passthroughs
+    # ---------------------------------------------------------------------
     def get_logger(self):
-        return self.logger
+        return self._logger
 
-    # convenience
-    def debug(self, m): self.logger.debug(m)
-    def info(self, m): self.logger.info(m)
-    def warning(self, m): self.logger.warning(m)
-    def error(self, m): self.logger.error(m)
-    def critical(self, m): self.logger.critical(m)
+    def debug(self, msg: str): self._logger.debug(msg)
+    def info(self, msg: str): self._logger.info(msg)
+    def warning(self, msg: str): self._logger.warning(msg)
+    def error(self, msg: str): self._logger.error(msg)
+    def critical(self, msg: str): self._logger.critical(msg)

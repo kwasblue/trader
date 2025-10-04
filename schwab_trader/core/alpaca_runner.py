@@ -1,4 +1,4 @@
-# core/live_runner.py
+# core/alpaca_runner.py
 from __future__ import annotations 
 from pathlib import Path
 import sys  
@@ -29,7 +29,9 @@ from core.logic.strategy_routing_manager import StrategyRoutingManager
 from core.position_sizer import DynamicPositionSizer
 from core.drawdown_monitor import DrawdownMonitor
 from core.historical_loader import HistoricalBarLoader
-from core.eventhandler import EventHandler
+from core.events.eventhandler import EventHandler, get_event_handler
+from core.events.events import (EVENT_NEW_BAR, BarPayload, EVENT_STRATEGY_SIGNAL, StrategySignalPayload,
+    EVENT_PNL_UPDATE, PnLPayload)
 
 from core.simulator.simulation import compute_atr, classify_regime  # reuse your helpers
 from core.broker.alpaca_broker import AlpacaBroker
@@ -41,7 +43,7 @@ class AlpacaLiveRunner:
     def __init__(self, settings: Settings, symbols: list[str]):
         self.settings = settings
         self.symbols = symbols
-        self.event_handler = EventHandler()
+        self.event_handler = get_event_handler()
 
         # logging + trade log
         self.logger = get_module_logger(module_name='AlpacaLiveRunner', file_key='AlpacaLive')
@@ -197,6 +199,14 @@ class AlpacaLiveRunner:
             self._last_ddm_date = ts.date()
         self.ddm.update_portfolio(self.portfolio.total_equity())
         self.ddm.update_symbol(symbol, self._symbol_mv(symbol, last_px))
+        await self.event_handler.emit(EVENT_PNL_UPDATE, PnLPayload(
+            portfolio_value=self.portfolio.total_equity(),
+            equity_curve=self.portfolio.equity_history,
+            unrealized=self.portfolio.total_unrealized(),
+            realized=self.portfolio.realized_pnl,
+            drawdown=self.ddm.get_portfolio_drawdown(),
+            timestamp=ts.isoformat(),
+        ))
 
         # strategy & signal
         strategy = self.router.get_strategy(symbol, regime)
@@ -204,6 +214,14 @@ class AlpacaLiveRunner:
         try:
             raw_signal = strategy.generate_signal(df)
             signal = int(raw_signal if isinstance(raw_signal, (int, float)) else getattr(raw_signal, "signal", 0))
+            await self.event_handler.emit(EVENT_STRATEGY_SIGNAL, StrategySignalPayload(
+                symbol=symbol,
+                strategy=strategy_name,
+                signal={-1: "sell", 0: "hold", 1: "buy"}.get(signal, "hold"),
+                confidence=None,  # you could calculate model confidence here
+                timestamp=ts.isoformat(),
+            ))
+
         except Exception as e:
             self.logger.exception(f"[{symbol}] Strategy error in {strategy_name}: {e}")
             signal = 0
@@ -232,6 +250,15 @@ class AlpacaLiveRunner:
             f"[{symbol}] bar={bar_id} closed={bar_closed} regime={regime} "
             f"persist={gs.regime_persist} qty={qty} equity={self.portfolio.total_equity():.2f}"
         )
+        await self.event_handler.emit(EVENT_NEW_BAR, BarPayload(
+            symbol=symbol,
+            open=float(bar["Open"]),
+            high=float(bar["High"]),
+            low=float(bar["Low"]),
+            close=float(bar["Close"]),
+            volume=int(bar.get("Volume", 0)),
+            timestamp=ts.isoformat(),
+        ))
 
     # ---------- run ----------
     async def run(self):

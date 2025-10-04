@@ -8,6 +8,9 @@ from loggers.file_trade_logger import FileTradeLogger
 from core.logic.symbol_state import SymbolState
 from core.logic.portfolio_state import PortfolioState
 from datetime import datetime, UTC
+from core.events.events import EVENT_STRATEGY_SIGNAL, StrategySignalPayload
+
+import asyncio
 
 class DefaultTradeLogic(TradeLogic):
     def __init__(
@@ -20,11 +23,13 @@ class DefaultTradeLogic(TradeLogic):
         sl_mult_high: float = 2.0,
         exit_fraction: float = 0.25,
         trailing_stop: bool = True,
+        event_handler = None
     ):
         self.tp = {"low_volatility": tp_mult_low, "normal": tp_mult_normal, "high_volatility": tp_mult_high}
         self.sl = {"low_volatility": sl_mult_low, "normal": sl_mult_normal, "high_volatility": sl_mult_high}
         self.exit_fraction = exit_fraction
         self.trailing_stop = trailing_stop
+        self.event_handler = event_handler
     
     def _get_cash(self, broker: BaseBrokerInterface, state: SymbolState) -> float:
         """
@@ -99,7 +104,7 @@ class DefaultTradeLogic(TradeLogic):
         portfolio: PortfolioState,                     
     ) -> None:
         # snapshot position from portfolio
-        portfolio = PortfolioState()
+        #portfolio = PortfolioState()
         pos = portfolio.positions.get(symbol)
         qty_now = 0 if not pos else pos.qty
         avg_now = None if not pos else pos.avg_price
@@ -114,13 +119,28 @@ class DefaultTradeLogic(TradeLogic):
         cond = self._get_market_condition(atr, regime)
         if atr is None or atr <= 0:
             return
+        
+                # --- emit strategy intent regardless of execution ---
+        if self.event_handler:
+            payload: StrategySignalPayload = {
+                "symbol": symbol,
+                "strategy": state.strategy_name or type(self).__name__,
+                "signal": signal,
+                "price": price,
+                "regime": cond,
+                "timestamp": datetime.now(UTC).isoformat(),
+            }
+            asyncio.create_task(self.event_handler.emit(EVENT_STRATEGY_SIGNAL, payload))
+            
+
 
         # size using portfolio cash
         stop_loss_price = price - atr * self.sl[cond] if signal == 1 else price + atr * self.sl[cond]
         qty = sizer.calculate_position_size(
             price=price,
             stop_loss_price=stop_loss_price,
-            current_cash=portfolio.cash,
+            portfolio=portfolio,
+            symbol = symbol,
             market_conditions=cond,
             signal=signal,
         )

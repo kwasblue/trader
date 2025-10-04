@@ -3,8 +3,12 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Dict, Optional
+from core.events.eventhandler import EventHandler, get_event_handler
+from core.events.events import EVENT_GUARDRAIL_TRIGGERED, GuardrailPayload
 
 from loggers.logger import Logger
+
+import asyncio
 
 
 class DrawdownMonitor:
@@ -37,14 +41,14 @@ class DrawdownMonitor:
     def __init__(
         self,
         # --- Per-symbol limits ---
-        max_symbol_drawdown: float = 0.02,         # 30% symbol intraday
-        max_symbol_daily_drawdown: float = 0.01,   # 10% symbol daily
-        symbol_cooldown_seconds: int = 10,
+        max_symbol_drawdown: float = 0.05,         # 30% symbol intraday
+        max_symbol_daily_drawdown: float = 0.02,   # 10% symbol daily
+        symbol_cooldown_seconds: int = 5,
 
         # --- Portfolio limits ---
-        max_portfolio_drawdown: float = 0.02,      # 25% portfolio intraday
-        max_portfolio_daily_drawdown: float = 0.01,# 10% portfolio daily
-        portfolio_cooldown_seconds: int = 10,
+        max_portfolio_drawdown: float = 0.05,      # 25% portfolio intraday
+        max_portfolio_daily_drawdown: float = 0.02,# 10% portfolio daily
+        portfolio_cooldown_seconds: int = 5,
     ):
         # Per-symbol state
         self.max_symbol_drawdown = max_symbol_drawdown
@@ -55,6 +59,12 @@ class DrawdownMonitor:
         self.symbol_daily_start: Dict[str, float] = {}
         self.symbol_locked = defaultdict(lambda: False)
         self.symbol_last_unlock_time: Dict[str, datetime] = {}
+
+        # Track current drawdown values
+        self.current_portfolio_dd: float = 0.0
+        self.current_portfolio_daily_dd: float = 0.0
+        self.current_symbol_dd: Dict[str, float] = defaultdict(float)
+        self.current_symbol_daily_dd: Dict[str, float] = defaultdict(float)
 
         # Portfolio state
         self.max_portfolio_drawdown = max_portfolio_drawdown
@@ -67,6 +77,7 @@ class DrawdownMonitor:
         self.portfolio_last_unlock_time: Optional[datetime] = None
 
         self.logger = Logger(log_file='TradeLogger.log', logger_name='Drawdown Monitor')
+        self.event_handler = get_event_handler()
 
     # ----------------------------- Public API -----------------------------
 
@@ -103,6 +114,13 @@ class DrawdownMonitor:
 
         if self.portfolio_daily_start is None:
             self.portfolio_daily_start = portfolio_equity
+        
+        # daily drawdown
+        if self.portfolio_daily_start:
+            self.current_portfolio_daily_dd = (portfolio_equity - self.portfolio_daily_start) / self.portfolio_daily_start
+        # intraday drawdown
+        if self.portfolio_peak:
+            self.current_portfolio_dd = (portfolio_equity - self.portfolio_peak) / self.portfolio_peak
 
         # daily drawdown
         daily_dd = (portfolio_equity - self.portfolio_daily_start) / self.portfolio_daily_start
@@ -110,6 +128,14 @@ class DrawdownMonitor:
             if not self.portfolio_locked:
                 self.portfolio_locked = True
                 self.logger.warning(f"[PORTFOLIO DAILY LOCK] Daily DD {daily_dd:.2%} breached.")
+                asyncio.create_task(
+                    self.event_handler.emit_guardrail(
+                        "portfolio.daily",         # guard_name (namespaced style is nice)
+                        True,                      # triggered
+                        f"Portfolio daily drawdown breached {daily_dd:.2%}", 
+                        daily_dd                   # <- value (float)
+                    )
+                )
             return False
 
         # intraday drawdown vs peak
@@ -118,13 +144,30 @@ class DrawdownMonitor:
             if not self.portfolio_locked:
                 self.portfolio_locked = True
                 self.logger.warning(f"[PORTFOLIO LOCK] Intraday DD {intraday_dd:.2%} breached.")
+                asyncio.create_task(
+                    self.event_handler.emit_guardrail(
+                        "portfolio.intraday",
+                        True,
+                        f"Portfolio intraday drawdown breached {intraday_dd:.2%}",
+                        intraday_dd
+                    )
+                )
             return False
+
 
         # cooldown if previously unlocked
         if not self.portfolio_locked and self.portfolio_last_unlock_time:
             elapsed = (now - self.portfolio_last_unlock_time).total_seconds()
             if elapsed < self.portfolio_cooldown_seconds:
                 self.logger.warning(f"[PORTFOLIO COOLDOWN] {elapsed:.1f}s elapsed — trading disabled.")
+                asyncio.create_task(
+                    self.event_handler.emit_guardrail(
+                        "portfolio.cooldown",
+                        True,
+                        f"Portfolio in cooldown ({elapsed:.1f}s elapsed)",
+                        elapsed
+                    )
+                )
                 return False
 
         return True
@@ -147,15 +190,23 @@ class DrawdownMonitor:
 
         if symbol not in self.symbol_daily_start:
             self.symbol_daily_start[symbol] = symbol_equity
+        
+        daily_start = self.symbol_daily_start[symbol]
+        if daily_start:
+            self.current_symbol_daily_dd[symbol] = (symbol_equity - daily_start) / daily_start
+        # intraday drawdown
+        peak = self.symbol_peak.get(symbol)
+        if peak:
+            self.current_symbol_dd[symbol] = (symbol_equity - peak) / peak
 
         # daily drawdown
-        daily_start = self.symbol_daily_start[symbol]
         if daily_start > 0:
             daily_dd = (symbol_equity - daily_start) / daily_start
             if daily_dd < -self.max_symbol_daily_drawdown:
                 if not self.symbol_locked[symbol]:
                     self.symbol_locked[symbol] = True
                     self.logger.warning(f"[{symbol}] DAILY LOCK | DD {daily_dd:.2%}")
+                    asyncio.create_task(self._emit_guardrail(f"{symbol}_daily", True, f"{symbol} daily drawdown breached {daily_dd:.2%}"))
                 return False
 
         # intraday drawdown vs peak
@@ -203,6 +254,20 @@ class DrawdownMonitor:
             return False
         elapsed = (datetime.now(timezone.utc) - self.portfolio_last_unlock_time).total_seconds()
         return elapsed < self.portfolio_cooldown_seconds
+    
+    def get_portfolio_drawdown(self) -> float:
+        """Current portfolio drawdown vs peak (negative = DD)."""
+        return self.current_portfolio_dd
+
+    def get_portfolio_daily_drawdown(self) -> float:
+        """Current portfolio drawdown vs daily start."""
+        return self.current_portfolio_daily_dd
+
+    def get_symbol_drawdown(self, symbol: str) -> float:
+        return self.current_symbol_dd.get(symbol, 0.0)
+
+    def get_symbol_daily_drawdown(self, symbol: str) -> float:
+        return self.current_symbol_daily_dd.get(symbol, 0.0)
 
     # ----------------------------- Admin / manual controls -----------------------------
 
@@ -211,6 +276,8 @@ class DrawdownMonitor:
             self.symbol_locked[symbol] = False
             self.symbol_last_unlock_time[symbol] = datetime.now(timezone.utc)
             self.logger.info(f"[{symbol}] UNLOCKED (cooldown started)")
+            asyncio.create_task(self._emit_guardrail(f"{symbol}", False,
+            f"{symbol} unlocked from guardrail (cooldown active)"))
 
     def reset_symbol(self, symbol: str) -> None:
         self.symbol_locked[symbol] = False

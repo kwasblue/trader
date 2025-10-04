@@ -3,6 +3,9 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Optional, List
 from core.app_types import OrderResult, PositionView, BrokerSnapshot
+from datetime import datetime, timezone
+from core.events.events import EVENT_ORDER_STATUS, EVENT_NEW_TRADE, EVENT_PNL_UPDATE
+from core.events.eventhandler import EventHandler
 
 class BaseBrokerInterface(ABC):
     """
@@ -12,6 +15,8 @@ class BaseBrokerInterface(ABC):
       - position management
       - market status
     """
+    def __init__(self):
+        self.bus = EventHandler()
 
     # --- Orders (generic async) ---
     @abstractmethod
@@ -91,3 +96,57 @@ class BaseBrokerInterface(ABC):
     def mark_price(self, symbol: str, price: float) -> None:
         """Update last price for MTM equity calc."""
         pass
+
+        # --- Emit helpers (subclasses call when relevant) ---
+    async def _emit_order_status(self, payload: dict):
+        await self.bus.emit(EVENT_ORDER_STATUS, payload)
+
+    async def _emit_new_trade(self, payload: dict):
+        await self.bus.emit(EVENT_NEW_TRADE, payload)
+
+    async def _emit_pnl_update(self, payload: dict):
+        await self.bus.emit(EVENT_PNL_UPDATE, payload)
+
+    
+    # high-level helpers (normalize schema)
+    async def emit_order_status(
+        self, status: str, symbol: str, side: str,
+        qty: float = 0.0, order_id: str | None = None,
+        filled_qty: float = 0.0, avg_price: float | None = None,
+        reason: str | None = None,
+    ):
+        payload = {
+            "order_id": order_id,
+            "symbol": symbol,
+            "side": side,
+            "qty": qty,
+            "filled_qty": filled_qty,
+            "avg_price": avg_price,
+            "status": status,
+            "reason": reason,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        await self._emit_order_status(payload)
+
+    async def emit_new_trade(self, symbol: str, side: str, qty: float, price: float, pnl: float | None = None):
+        payload = {
+            "symbol": symbol,
+            "side": side,
+            "qty": qty,
+            "price": price,
+            "pnl": pnl,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        await self._emit_new_trade(payload)
+
+    async def emit_pnl_update(self, portfolio_value: float, equity_curve: list[float],
+                              unrealized: float, realized: float, drawdown: float):
+        payload = {
+            "portfolio_value": portfolio_value,
+            "equity_curve": equity_curve,
+            "unrealized": unrealized,
+            "realized": realized,
+            "drawdown": drawdown,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        await self._emit_pnl_update(payload)

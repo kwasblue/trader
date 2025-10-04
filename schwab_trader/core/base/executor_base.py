@@ -2,6 +2,17 @@ from abc import ABC, abstractmethod
 from typing import Dict, Any
 import pandas as pd
 
+from core.events.eventhandler import EventHandler
+from core.events.events import (
+    EVENT_ORDER_STATUS,
+    EVENT_NEW_TRADE,
+    EVENT_PNL_UPDATE,
+    EVENT_ALERT,
+    OrderStatusPayload,
+    TradePayload,
+    PnLPayload,
+    AlertPayload,
+)
 
 class BaseExecutor(ABC):
     """
@@ -10,6 +21,21 @@ class BaseExecutor(ABC):
     Executors are responsible for submitting orders,
     tracking positions, logging, and enforcing trade logic.
     """
+    def __init__(self):
+        self.bus = EventHandler()
+
+    # --- Emit helpers (subclasses call these) ---
+    async def _emit_order_status(self, payload: OrderStatusPayload):
+        await self.bus.emit(EVENT_ORDER_STATUS, payload)
+
+    async def _emit_new_trade(self, payload: TradePayload):
+        await self.bus.emit(EVENT_NEW_TRADE, payload)
+
+    async def _emit_pnl_update(self, payload: PnLPayload):
+        await self.bus.emit(EVENT_PNL_UPDATE, payload)
+
+    async def _emit_alert(self, payload: AlertPayload):
+        await self.bus.emit(EVENT_ALERT, payload)
 
     @abstractmethod
     def execute(

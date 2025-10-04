@@ -1,5 +1,6 @@
 # core/base/position_sizer.py (or wherever your DynamicPositionSizer lives)
 from core.base.position_sizer_base import PositionSizerBase
+from core.logic.portfolio_state import PortfolioState
 from typing import Optional
 import math
 
@@ -95,21 +96,22 @@ class DynamicPositionSizer2(PositionSizerBase):
     """
     Risk- and capital-aware position sizer.
 
-    - Use `update_capital(equity)` to set equity basis for risk sizing.
-    - Pass AVAILABLE BUYING POWER as `current_cash` to `calculate_position_size(...)`.
-    - Caps by buying power and optional notional % of equity.
-    - Applies a fee/slippage buffer.
-    - Reserves notional intra-bar so parallel signals don't double-spend.
+    - Uses PortfolioState directly.
+    - Enforces per-trade notional cap AND per-holding notional cap.
+    - Caps by buying power, risk budget, and regime adjustment.
+    - Reserves notional *per-symbol* intra-bar so parallel signals don't double-spend.
+    - Pyramiding always allowed, constrained by max_holding_pct.
     """
 
     def __init__(
         self,
         risk_percentage: float,
         *,
-        fee_rate: float = 0.001,                 # 10 bps buffer for fees/slippage
-        max_notional_pct: Optional[float] = None,# e.g., 0.25 caps any single order to 25% of equity
-        allow_fractional: bool = False,          # keep False if you place share-qty orders
-        lot_size: int = 1
+        fee_rate: float = 0.001,
+        max_trade_pct: Optional[float] = None,
+        max_holding_pct: Optional[float] = None,
+        allow_fractional: bool = False,
+        lot_size: int = 1,
     ):
         if not (0 < risk_percentage < 1):
             raise ValueError("risk_percentage must be between 0 and 1 (non-inclusive).")
@@ -118,15 +120,15 @@ class DynamicPositionSizer2(PositionSizerBase):
         self.max_risk_percentage = self.risk_per_trade * 3.0
 
         self.fee_rate = float(fee_rate)
-        self.max_notional_pct = max_notional_pct
+        self.max_trade_pct = max_trade_pct
+        self.max_holding_pct = max_holding_pct
         self.allow_fractional = bool(allow_fractional)
         self.lot_size = max(1, int(lot_size))
 
-        # live state
-        self.capital: float = 0.0              # treat as equity basis for risk sizing
-        self._reserved_notional: float = 0.0   # reserved this bar (BP-aware sizing)
+        # per-symbol reserved notional
+        self._reserved_notional: dict[str, float] = {}
 
-    # ---- risk adaptation by regime ----
+    # ---- risk adaptation ----
     def adjust_risk_percentage(self, market_conditions: str) -> float:
         if market_conditions == "high_volatility":
             return max(self.min_risk_percentage, self.risk_per_trade * 0.5)
@@ -134,107 +136,106 @@ class DynamicPositionSizer2(PositionSizerBase):
             return min(self.max_risk_percentage, self.risk_per_trade * 1.25)
         return self.risk_per_trade
 
-    # ---- main API ----
     def calculate_position_size(
         self,
         price: float,
         stop_loss_price: float,
-        current_cash: float,     # pass AVAILABLE BUYING POWER here
         market_conditions: str,
-        signal: int
+        signal: int,
+        symbol: str,
+        portfolio: PortfolioState
     ) -> int:
-        """
-        Returns integer shares to trade, bounded by risk, buying power, and optional notional cap.
-        Also reserves notional for the remainder of the bar.
-        """
         if signal == 0:
             return 0
 
         price = float(price)
         stop_loss_price = float(stop_loss_price)
-        bp_live = float(current_cash)
+        equity = float(portfolio.equity)
+        cash = float(portfolio.cash)
 
-        # gross price with fee/slippage buffer
         px_gross = price * (1.0 + self.fee_rate)
-        if px_gross <= 0:
+        if px_gross <= 0 or equity <= 0:
             return 0
 
-        # available BP after prior reservations in this bar
-        avail_bp = max(0.0, bp_live - self._reserved_notional)
+        reserved = self._reserved_notional.get(symbol, 0.0)
+        avail_bp = max(0.0, cash - reserved)
 
-        # equity basis for risk sizing
-        equity = self.capital if self.capital > 0 else bp_live
-
-        # risk dollars by regime-adjusted risk %
+        # risk budget
         risk_pct = self.adjust_risk_percentage(market_conditions)
         risk_dollars = equity * risk_pct
-        if risk_dollars < 5.0:  # too tiny to bother
+        if risk_dollars < 5.0:
             return 0
 
-        # directional risk per share
-        # long: stop below entry → risk = price - stop
-        # short: stop above entry → risk = stop - price
-        if signal > 0:
+        # per-share risk
+        if signal > 0:  # long
             risk_per_share = price - stop_loss_price
-        else:
+        else:           # short
             risk_per_share = stop_loss_price - price
-
         if risk_per_share <= 0:
-            # invalid stop; don't trade
             return 0
 
-        # risk-based qty
         qty_risk = risk_dollars / risk_per_share
-
-        # capital caps
         qty_cap_bp = avail_bp / px_gross
-        if self.max_notional_pct and self.max_notional_pct > 0:
-            qty_cap_notional = (equity * self.max_notional_pct) / px_gross
+
+        # per-trade cap
+        if self.max_trade_pct and self.max_trade_pct > 0:
+            max_trade_notional = equity * self.max_trade_pct
+            qty_cap_trade = max_trade_notional / px_gross
         else:
-            qty_cap_notional = float("inf")
+            qty_cap_trade = float("inf")
 
-        qty_float = min(qty_risk, qty_cap_bp, qty_cap_notional)
+        # per-holding cap
+        existing_pos = portfolio.positions.get(symbol)
+        existing_notional = abs(existing_pos.qty) * price if existing_pos else 0.0
+        if self.max_holding_pct and self.max_holding_pct > 0:
+            max_holding_notional = equity * self.max_holding_pct
+            remaining_notional = max(0.0, max_holding_notional - existing_notional)
+            qty_cap_holding = remaining_notional / px_gross
+        else:
+            qty_cap_holding = float("inf")
 
-        # lotting
+        # final qty
+        qty_float = min(qty_risk, qty_cap_bp, qty_cap_trade, qty_cap_holding)
         if self.allow_fractional:
-            # if your broker supports fractional qty, you could round to, say, 3 decimals
-            qty_final = math.floor(qty_float / self.lot_size) * self.lot_size if self.lot_size > 1 else qty_float
+            qty_final = qty_float
         else:
             qty_final = math.floor(qty_float / self.lot_size) * self.lot_size
 
-        qty_int = int(qty_final) if not self.allow_fractional else int(qty_final)  # keep int API for now
+        qty_int = int(qty_final) if not self.allow_fractional else qty_final
         if qty_int <= 0:
+            print(f"[Sizer] {symbol} => No position (qty<=0). "
+                  f"Risk={qty_risk:.2f}, BP={qty_cap_bp:.2f}, TradeCap={qty_cap_trade:.2f}, HoldCap={qty_cap_holding:.2f}")
+            return 0
+        
+        if self.max_holding_pct and self.max_holding_pct > 0:
+            max_holding_notional = equity * self.max_holding_pct
+            total_notional = existing_notional + (qty_int * px_gross)
+            if total_notional > max_holding_notional:
+                # shrink position to fit
+                max_additional = max_holding_notional - existing_notional
+                qty_int = math.floor(max(0.0, max_additional) / px_gross)
+
+        # safety: don’t allow trades that wipe out nearly all cash
+        if qty_int * px_gross > cash:
+            qty_int = math.floor(cash / px_gross)
+
+        if qty_int <= 0:
+            print(f"[Sizer] {symbol} => No position (after cap check).")
             return 0
 
-        # reserve notional so subsequent symbols in the same bar see reduced BP
-        self._reserved_notional += qty_int * px_gross
+        # reserve per-symbol notional
+        self._reserved_notional[symbol] = reserved + qty_int * px_gross
+
+        print(f"[Sizer] {symbol} => Qty={qty_int} "
+              f"(Risk={qty_risk:.2f}, BP={qty_cap_bp:.2f}, TradeCap={qty_cap_trade:.2f}, HoldCap={qty_cap_holding:.2f})")
         return qty_int
 
-    # ---- lifecycle helpers ----
-    def update_capital(self, new_capital: float) -> None:
-        """Set equity basis used for risk sizing."""
-        self.capital = float(new_capital)
-        print(f"[PositionSizer] Equity updated to: {self.capital:.2f}")
+    def reset_reserved(self, symbol: Optional[str] = None):
+        """Reset reserved notional (per symbol or all)."""
+        if symbol is None:
+            self._reserved_notional.clear()
+        else:
+            self._reserved_notional.pop(symbol, None)
 
-    def reset_risk(self, new_risk: float) -> None:
-        if not (0 < new_risk < 1):
-            raise ValueError("new_risk must be between 0 and 1 (non-inclusive).")
-        self.risk_per_trade = float(new_risk)
-        self.min_risk_percentage = self.risk_per_trade * 0.5
-        self.max_risk_percentage = self.risk_per_trade * 3.0
-        print(f"[PositionSizer] Risk percentage reset to: {new_risk}")
-
-    def reset_bar_reservations(self) -> None:
-        """Call once per bar close so the next bar starts with fresh availability."""
-        self._reserved_notional = 0.0
-
-    def release_reserved(self, notional: float) -> None:
-        """Call if an order is rejected/canceled before fill."""
-        self._reserved_notional = max(0.0, self._reserved_notional - max(0.0, float(notional)))
-
-    # optional tuners
-    def set_fee_rate(self, fee_rate: float) -> None:
-        self.fee_rate = max(0.0, float(fee_rate))
-
-    def set_max_notional_pct(self, pct: Optional[float]) -> None:
-        self.max_notional_pct = pct if (pct is None or pct > 0) else None
+    # 🔑 Alias for engine compatibility
+    reset_bar_reservations = reset_reserved

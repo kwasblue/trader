@@ -5,7 +5,7 @@ from data.streaming.authenticator import Authenticator
 from loggers.logger import Logger
 from utils.configloader import ConfigLoader
 from data.streaming.schwab_client import SchwabClient   
-from core.eventhandler import EventHandler
+from schwab_trader.core.events.eventhandler import EventHandler
 import asyncio
 
 class SchwabStreamingClient():

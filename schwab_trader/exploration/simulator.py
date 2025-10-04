@@ -32,7 +32,7 @@ from strategies.strategy_registry.rsi_strategy import RSIStrategy
 from strategies.strategy_registry.macd_strategy import MACDStrategy
 from strategies.strategy_registry.momentum_strategy import MomentumStrategy
 from core.position_sizer import DynamicPositionSizer
-from core.eventhandler import EventHandler
+from schwab_trader.core.events.eventhandler import EventHandler
 
 # ---------------------------- Logger Setup ----------------------------
 # Create logs directory

@@ -4,9 +4,12 @@ from __future__ import annotations
 import asyncio
 import inspect
 import threading
+from datetime import datetime, timezone
 from typing import Any, Callable, Awaitable, Dict, List
 
 from core.base.event_handler_base import Event, EventHandlerBase
+from core.events.events import EVENT_SCHEMA_MAP, GuardrailPayload, EVENT_GUARDRAIL_TRIGGERED
+from core.events.validation import validate_payload 
 
 
 class EventHandler(EventHandlerBase):
@@ -22,16 +25,13 @@ class EventHandler(EventHandlerBase):
     _create_lock = threading.Lock()
 
     def __new__(cls):
-        # Use a threading lock here (can't await in __new__)
         with cls._create_lock:
             if cls._instance is None:
                 cls._instance = super().__new__(cls)
-                # Initialize the base once (sets listeners, logger, etc.)
                 super(EventHandler, cls._instance).__init__()
-                # Lazy attrs for publisher loop
                 cls._instance._queue = None
                 cls._instance._runner = None
-        return cls._instance
+            return cls._instance
 
     async def subscribe(self, event_name: str, callback: Callable[[Event], Any]) -> None:
         """
@@ -45,16 +45,27 @@ class EventHandler(EventHandlerBase):
 
     async def emit(self, event_name: str, payload: Any) -> None:
         """
-        Emit an event and await all callbacks. Sync callbacks are offloaded
-        to the default executor so the event loop doesn't block.
+        Emit an event and await all callbacks.
+        Sync callbacks are offloaded to the executor.
         """
+        # Schema validation (if defined)
+        schema = EVENT_SCHEMA_MAP.get(event_name)
+        if schema:
+            try:
+                validate_payload(payload, schema)
+            except Exception as e:
+                self.logger.error(f"[EventHandler] Invalid payload for {event_name}: {e}")
+                return  # or raise if you want hard failure
+
         event = Event(event_name, payload)
-        callbacks = list(self.listeners.get(event_name, []))  # copy to avoid mutation during iteration
+        callbacks = list(self.listeners.get(event_name, []))  # copy
         if not callbacks:
             self.logger.debug(f"[EventHandler] Emit '{event_name}' (no listeners)")
             return
 
-        self.logger.debug(f"[EventHandler] Emit '{event_name}' to {len(callbacks)} listener(s) | Payload: {payload}")
+        self.logger.debug(
+            f"[EventHandler] Emit '{event_name}' to {len(callbacks)} listener(s) | Payload: {payload}"
+        )
         loop = asyncio.get_running_loop()
         tasks: List[Awaitable[Any]] = []
 
@@ -63,18 +74,19 @@ class EventHandler(EventHandlerBase):
                 if inspect.iscoroutinefunction(cb):
                     tasks.append(asyncio.create_task(cb(event)))
                 else:
-                    # Run sync handlers in a threadpool
                     tasks.append(loop.run_in_executor(None, cb, event))
             except Exception as e:
-                self.logger.exception(f"[EventHandler] Failed scheduling callback {getattr(cb, '__name__', repr(cb))}: {e}")
+                self.logger.exception(
+                    f"[EventHandler] Failed scheduling callback {getattr(cb, '__name__', repr(cb))}: {e}"
+                )
 
-        if not tasks:
-            return
-
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        for cb, res in zip(callbacks, results):
-            if isinstance(res, Exception):
-                self.logger.exception(f"[EventHandler] Error in callback {getattr(cb, '__name__', repr(cb))} for '{event_name}': {res}")
+        if tasks:
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for cb, res in zip(callbacks, results):
+                if isinstance(res, Exception):
+                    self.logger.exception(
+                        f"[EventHandler] Error in callback {getattr(cb, '__name__', repr(cb))} for '{event_name}': {res}"
+                )
 
     def unsubscribe(self, event_name: str, callback: Callable[[Event], Any]) -> None:
         if callback in self.listeners[event_name]:
@@ -110,4 +122,22 @@ class EventHandler(EventHandlerBase):
             finally:
                 self._queue.task_done()
 
+    async def emit_guardrail(event_handler: EventHandler, guard_name: str, triggered: bool, message: str, value: float | None = None):
+        payload: GuardrailPayload = {
+            "guard_name": guard_name,
+            "triggered": triggered,
+            "message": message,
+            "value": value,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        await event_handler.emit(EVENT_GUARDRAIL_TRIGGERED, payload)
 
+# --- Global Singleton Accessor ---
+_global_event_handler: EventHandler | None = None
+
+def get_event_handler() -> EventHandler:
+    """Return the global EventHandler singleton."""
+    global _global_event_handler
+    if _global_event_handler is None:
+        _global_event_handler = EventHandler()
+    return _global_event_handler

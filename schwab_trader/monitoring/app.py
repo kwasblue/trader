@@ -9,6 +9,8 @@ if str(ROOT) not in sys.path:
 # =====================================================
 
 from PySide6 import QtWidgets, QtCore, QtGui
+from qasync import QEventLoop
+import asyncio
 from typing import List, Dict, Optional
 import sys
 import random
@@ -17,7 +19,8 @@ import numpy as np
 import pyqtgraph as pg
 from monitoring.theme import apply_dark_palette
 from monitoring.views.main_window import MainWindow
-from monitoring.feeds.feeder import DataFeeder
+from monitoring.views.main_window_demo import MainWindowDemo
+from monitoring.feeds.feeder_demo import DataFeeder
 import datetime as dt
 from monitoring.widgets.candles import Candles
 
@@ -25,8 +28,11 @@ def main():
     app = QtWidgets.QApplication(sys.argv)
     apply_dark_palette(app)
 
-    win = MainWindow(); win.show()
+    win = MainWindowDemo(); win.show()
     feeder = DataFeeder()
+     # Bridge Qt ⇄ asyncio
+    loop = QEventLoop(app)
+    asyncio.set_event_loop(loop)
 
     # Connect UI -> Feeder (in your system, connect to your event bus / broker)
     win.ctrl.halt_changed.connect(feeder.set_halted)
@@ -72,7 +78,12 @@ def main():
         win.trend_lbl.setText(random.choice(["trend","mean-reversion"]))
         win.bull_lbl.setText(random.choice(["bull","bear"]))
     feeder.s.ohlc.connect(on_ohlc)
-    win.symbol_combo.currentTextChanged.connect(lambda _: feeder.s.ohlc.emit(win.symbol_combo.currentText(), feeder._ohlc[win.symbol_combo.currentText()]))
+    win.symbol_combo.currentTextChanged.connect(
+        lambda _: feeder.s.ohlc.emit(
+            win.symbol_combo.currentText(),
+            feeder._ohlc.get(win.symbol_combo.currentText(), pd.DataFrame())
+        )
+    )
     feeder.s.news.connect(lambda items: (win.news_list.clear(), [win.news_list.addItem(f"[{i['ts']}] {i['symbol']}: {i['headline']} ({i['sentiment']})") for i in items]))
 
     # Performance
@@ -157,11 +168,16 @@ def main():
     feeder.s.orders.connect(lambda rows: win.orders_model.replace_rows(rows) if hasattr(win,'orders_model') else None)
     feeder.s.trades.connect(lambda rows: win.trades_model.replace_rows(rows) if hasattr(win,'trades_model') else None)
     feeder.s.log.connect(lambda line: win._append_log(line))
+    QtCore.QTimer.singleShot(0, lambda: getattr(win, "_subscribe_backend_events", lambda: None)())
 
     feeder.start()
-    rc = app.exec()
-    feeder.stop(); feeder.wait(1500)
-    sys.exit(rc)
+    with loop:
+        try:
+            loop.run_forever()   # replaces app.exec()
+        finally:
+            feeder.stop()
+            feeder.wait(1500)
+            sys.exit(0)
 
 if __name__ == '__main__':
     main()
