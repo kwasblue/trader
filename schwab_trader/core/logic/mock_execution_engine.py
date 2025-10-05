@@ -5,6 +5,7 @@ from core.base.trade_logger_base import TradeLoggerBase
 from core.logic.trade_logic_manager import DynamicTradeLogicManager
 from core.logic.symbol_state import SymbolState
 from core.drawdown_monitor import DrawdownMonitor
+from core.logic.symbol_state import SymbolState
 from loggers.logger import Logger
 from datetime import datetime, UTC
 from core.events.events import TradePayload, EVENT_NEW_TRADE, PositionPayload, EVENT_POSITION_UPDATE, PnLPayload, EVENT_PNL_UPDATE, EVENT_STRATEGY_SIGNAL
@@ -30,6 +31,7 @@ class MockExecutionEngine(ExecutionEngineBase):
         self.logger = Logger("mock_execution.log", self.__class__.__name__).get_logger()
         self.logger.info("Initialized MockExecutionEngine")
         self.event_handler = event_handler
+        self.symbolstates = SymbolState
 
     def handle_signal(
         self,
@@ -73,6 +75,14 @@ class MockExecutionEngine(ExecutionEngineBase):
                 qty = action["qty"]
                 side = action["side"]
                 self.portfolio.apply_fill(symbol, side, qty, price)  # update PortfolioState
+                if state is None:
+                    self.logger.warning(f"[{symbol}] No SymbolState provided — creating new one.")
+                    state = SymbolState(symbol=symbol)
+                    # make sure we register it so future signals find it
+                    if hasattr(self, "symbol_states"):
+                        self.symbol_states[symbol] = state
+                    else:
+                        self.symbol_states = {symbol: state}
 
                 # --- emit trade event ---
                 trade: TradePayload = {
@@ -107,22 +117,50 @@ class MockExecutionEngine(ExecutionEngineBase):
 
             self.logger.info(f"[{symbol}] Executed mock trade signal: {signal} at ${price:.2f}")
 
-        
-
         except Exception as e:
             self.logger.exception(f"[{symbol}] Error in mock execution: {e}")
+    
+    # async def subscribe_signals(self):
+    #     async def on_signal(event):
+    #         payload = event.payload
+    #         sig_val = 1 if payload["signal"] in (1, "buy") else -1 if payload["signal"] in (-1, "sell") else 0
+    #         state = self.symbol_states[payload["symbol"]] if hasattr(self, "symbol_states") else None
+    #         self.handle_signal(
+    #             symbol=payload["symbol"],
+    #             state=state,
+    #             signal=sig_val,
+    #             price=payload.get("price", 0.0),
+    #             atr=payload.get("atr", 0.0),
+    #             regime=payload.get("regime", "normal"),
+    #             strategy_name=payload.get("strategy")
+    #         )
+    #     await self.event_handler.subscribe(EVENT_STRATEGY_SIGNAL, on_signal)
     
     async def subscribe_signals(self):
         async def on_signal(event):
             payload = event.payload
+            symbol = payload["symbol"]
             sig_val = 1 if payload["signal"] in (1, "buy") else -1 if payload["signal"] in (-1, "sell") else 0
+
+            # --- ensure symbol_states exists ---
+            if not hasattr(self, "symbol_states"):
+                self.symbol_states = {}
+
+            # --- ensure state exists for this symbol ---
+            if symbol not in self.symbol_states:
+                self.symbol_states[symbol] = SymbolState(symbol=symbol)
+
+            state = self.symbol_states[symbol]
+
+            # --- proceed with normal handling ---
             self.handle_signal(
-                symbol=payload["symbol"],
-                state=self.symbol_states[payload["symbol"]],
+                symbol=symbol,
+                state=state,
                 signal=sig_val,
                 price=payload.get("price", 0.0),
                 atr=payload.get("atr", 0.0),
                 regime=payload.get("regime", "normal"),
                 strategy_name=payload.get("strategy")
             )
+
         await self.event_handler.subscribe(EVENT_STRATEGY_SIGNAL, on_signal)

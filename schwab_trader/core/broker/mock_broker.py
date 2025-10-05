@@ -14,6 +14,7 @@ from core.events.events import (
     EVENT_NEW_TRADE, TradePayload,
     EVENT_POSITION_UPDATE, PositionPayload,
     EVENT_PNL_UPDATE, PnLPayload,
+    EVENT_PRICE_UPDATE, PricePayload
 )
 from core.events.eventhandler import EventHandler, get_event_handler
 
@@ -174,8 +175,41 @@ class MockBroker(BaseBrokerInterface):
         return OrderResult(True, order_id=order_id, status="filled", message="Filled (mock)")
 
     # mark-to-market so equity is correct
-    def mark_price(self, symbol: str, price: float) -> None:
-        p = self._positions.get(symbol)
-        if p:
-            p.market_price = float(price)
-            self._portfolio.update_price(symbol, price)
+    async def mark_price(self, symbol: str, price: float) -> None:
+            p = self._positions.get(symbol)
+            if p:
+                p.market_price = float(price)
+                self._portfolio.update_price(symbol, price)
+            
+                # --- emit price update ---
+                if self.event_handler:
+                    payload: PricePayload = {
+                        "symbol": symbol,
+                        "price": float(price),
+                        "ma20": None,
+                        "ma50": None,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    }
+                    await self.event_handler.emit(EVENT_PRICE_UPDATE, payload)
+
+                # --- if position exists, emit position + pnl updates ---
+                if p:
+                    pos_payload: PositionPayload = {
+                        "symbol": symbol,
+                        "qty": p.qty,
+                        "avg_price": p.avg_entry_price,
+                        "unrealized": (price - p.avg_entry_price) * p.qty,
+                        "realized": 0.0,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    }
+                    await self.event_handler.emit(EVENT_POSITION_UPDATE, pos_payload)
+
+                pnl_payload: PnLPayload = {
+                    "portfolio_value": self._portfolio.total_equity(),
+                    "equity_curve": [],
+                    "unrealized": self._portfolio.total_unrealized(),
+                    "realized": 0.0,
+                    "drawdown": 0.0,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+                await self.event_handler.emit(EVENT_PNL_UPDATE, pnl_payload)

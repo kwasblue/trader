@@ -3,6 +3,8 @@ from PySide6 import QtCore
 import pandas as pd
 from typing import List, Dict
 import asyncio
+import time
+from datetime import datetime, timezone
 
 from core.events import events
 from core.events.eventhandler import EventHandler, get_event_handler
@@ -31,6 +33,9 @@ class FeedSignals(QtCore.QObject):
     trades           = QtCore.Signal(object)           # trade dict or list of trades
     ohlc             = QtCore.Signal(str, object)      # symbol, DataFrame/dict
     pnl_update       = QtCore.Signal(object)           # full PnL payload
+    regime_state     = QtCore.Signal(object)
+    regime_perf      = QtCore.Signal(object)
+    
 
 
 
@@ -48,6 +53,7 @@ class DataFeeder(QtCore.QObject):
         self._running = False
         self._reconnect_task = None
 
+
     # ------------------------------------------------------------
     # Thread-safe Qt emit helper
     # ------------------------------------------------------------
@@ -57,12 +63,18 @@ class DataFeeder(QtCore.QObject):
         self.s = FeedSignals()             # ✅ create signal hub
         self.bus = get_event_handler()     # ✅ subscribe to the global bus
         self._running = False
+        self._reconnect_task = None
+        self._last_emit = time.time()
+        self._heartbeat_timer = QtCore.QTimer()
+        self._heartbeat_timer.timeout.connect(self._check_heartbeat)
+        self._heartbeat_timer.start(5000)  # every 5 seconds
 
     def _emit_safe(self, signal: QtCore.Signal, *args):
         """
         Thread-safe Qt signal emission.
         Runs emit() on the GUI thread using a queued timer call.
         """
+        self._last_emit = time.time()  # 🩺 record last GUI event emission
         QtCore.QTimer.singleShot(0, lambda: signal.emit(*args))
 
     # ------------------------------------------------------------
@@ -94,6 +106,33 @@ class DataFeeder(QtCore.QObject):
                     await asyncio.sleep(retry_interval)
 
         self._reconnect_task = asyncio.create_task(_connect_loop())
+    
+    def _check_heartbeat(self):
+        now = time.time()
+        lag = now - self._last_emit
+
+        if lag > 5:  # feed silent for >5s
+            payload = {
+                "broker": "Simulation",
+                "status": "stale",
+                "details": {"last_emit_age": round(lag, 2)},
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+        else:
+            payload = {
+                "broker": "Simulation",
+                "status": "healthy",
+                "details": {"last_emit_age": round(lag, 2)},
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+
+        # 🩺 Emit directly to GUI (so health panel updates)
+        self._emit_safe(self.s.health, payload)
+
+        # Optionally: also forward via bus so backend sees it
+        if self.bus:
+            asyncio.create_task(self.bus.emit("HEALTH_UPDATE", payload))
+
 
     async def stop(self):
         """Cleanly unsubscribe from all events."""
@@ -132,6 +171,10 @@ class DataFeeder(QtCore.QObject):
             await self.bus.subscribe(events.EVENT_STRATEGY_SIGNAL, self._on_strategy),
             await self.bus.subscribe(events.EVENT_REGIME_UPDATE, self._on_regime),
             await self.bus.subscribe(events.EVENT_REGIME_PERF, self._on_regime_perf),
+            await self.bus.subscribe(events.EVENT_PRICE_UPDATE, self._on_price_update),
+            await self.bus.subscribe(events.EVENT_PERFORMANCE_METRICS, self._on_perf_metrics),
+            await self.bus.subscribe(events.EVENT_HALT_STATE, self._on_halt_state),
+            await self.bus.subscribe(events.EVENT_REGIME_UPDATE, self._on_regime_update)
         ]
 
 
@@ -231,3 +274,19 @@ class DataFeeder(QtCore.QObject):
         data = getattr(event, "payload", event)
         regimes = data.get("regimes", {})
         self._emit_safe(self.s.regime_breakdown, regimes)
+
+    async def _on_price_update(self, event: events.PricePayload):
+        data = getattr(event, "payload", event)
+        self._emit_safe(self.s.ohlc, data.get("symbol", ""), pd.DataFrame([data]))
+    
+    async def _on_perf_metrics(self, event: events.PerformanceMetricsPayload):
+        data = getattr(event, "payload", event)
+        self._emit_safe(self.s.pnl_update, data)
+
+    async def _on_halt_state(self, event):
+        payload = getattr(event, "payload", event)
+        self._emit_safe(self.s.cooldown, bool(payload.get("halted", False)))
+    
+    async def _on_regime_update(self, event):
+        data = getattr(event, "payload", event)
+        self._emit_safe(self.s.regime_state, data)

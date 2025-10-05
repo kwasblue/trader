@@ -14,6 +14,9 @@ class PortfolioState:
     positions: Dict[str, SymbolPosition] = field(default_factory=dict)
     realized_pnl: float = 0.0
     equity_history: List[float] = field(default_factory=list)
+    unrealized_pnl: float = 0.0
+    drawdown: float = 0.0
+
 
 
     @property

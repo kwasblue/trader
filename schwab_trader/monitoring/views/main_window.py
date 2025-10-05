@@ -129,6 +129,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.cancel_all_btn_tb.clicked.connect(self._confirm_cancel_all)
         self.manual_order_btn_tb.clicked.connect(self._show_manual_order)
 
+        # heart beat indicator
+        self.heartbeat_indicator = QtWidgets.QLabel("●")
+        self.heartbeat_indicator.setStyleSheet("color: #22c55e; font-size: 18px;")
+        self.statusBar().addPermanentWidget(self.heartbeat_indicator)
+
         # === Wire bus ===
         self._wire_gui_to_bus()
         self._subscribe_backend_events()
@@ -153,7 +158,14 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Alerts → alerts list
         s.alerts.connect(lambda alerts: [self.alerts_list.addItem(a["text"]) for a in alerts])
+        # 7️⃣ Cooldown / halt → panic button + disable
+        s.cooldown.connect(self._on_cooldown_state)
 
+        # 8️⃣ Health → log or status bar
+        s.health.connect(lambda h: self._append_log(f"[HEALTH] {h.get('broker','?')} - {h.get('status','?')}"))
+
+        # 9️⃣ Regime breakdown (optional future use)
+        s.regime_breakdown.connect(lambda d: self._append_log(f"[REGIME] {d}"))
         # Logs → Ops tab
         s.log.connect(self._append_log)
         #asyncio.create_task(self.feeder.start_safe())
@@ -244,8 +256,43 @@ class MainWindow(QtWidgets.QMainWindow):
     # ---------------- Update Helpers ----------------
 
 
+    # def _update_perf_dashboard(self, pnl: dict):
+    #     # Update KPI labels
+    #     if 'unrealized' in pnl:
+    #         self._set_kpi(self.unreal_lbl, pnl['unrealized'], money=True)
+    #     if 'realized' in pnl:
+    #         self._set_kpi(self.realized_lbl, pnl['realized'], money=True)
+    #     if 'drawdown' in pnl:
+    #         self._set_kpi(self.dd_lbl, pnl['drawdown'], pct=True)
+
+    #     # Update equity curve
+    #     if 'portfolio_value' in pnl and 'timestamp' in pnl:
+    #         ts = pnl['timestamp']
+
+    #         # --- Convert timestamp to float for plotting ---
+    #         if isinstance(ts, str):
+    #             try:
+    #                 ts = datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp()
+    #             except Exception:
+    #                 ts = float(len(self._eq_x))  # fallback sequential index
+    #         elif isinstance(ts, datetime):
+    #             ts = ts.timestamp()
+
+    #         try:
+    #             y_val = float(pnl['portfolio_value'])
+    #         except (ValueError, TypeError):
+    #             y_val = np.nan
+
+    #         self._eq_x.append(ts)
+    #         self._eq_y.append(y_val)
+
+    #         # --- Ensure numeric numpy arrays for pyqtgraph ---
+    #         x = np.asarray(self._eq_x, dtype=float)
+    #         y = np.asarray(self._eq_y, dtype=float)
+    #         self.eq_curve.setData(x, y)
+
     def _update_perf_dashboard(self, pnl: dict):
-        # Update KPI labels
+        # === Update KPI labels ===
         if 'unrealized' in pnl:
             self._set_kpi(self.unreal_lbl, pnl['unrealized'], money=True)
         if 'realized' in pnl:
@@ -253,16 +300,16 @@ class MainWindow(QtWidgets.QMainWindow):
         if 'drawdown' in pnl:
             self._set_kpi(self.dd_lbl, pnl['drawdown'], pct=True)
 
-        # Update equity curve
+        # === Update equity curve ===
         if 'portfolio_value' in pnl and 'timestamp' in pnl:
             ts = pnl['timestamp']
 
-            # --- Convert timestamp to float for plotting ---
+            # Convert timestamp → float (safe)
             if isinstance(ts, str):
                 try:
                     ts = datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp()
                 except Exception:
-                    ts = float(len(self._eq_x))  # fallback sequential index
+                    ts = float(len(self._eq_x))
             elif isinstance(ts, datetime):
                 ts = ts.timestamp()
 
@@ -274,10 +321,81 @@ class MainWindow(QtWidgets.QMainWindow):
             self._eq_x.append(ts)
             self._eq_y.append(y_val)
 
-            # --- Ensure numeric numpy arrays for pyqtgraph ---
+            # --- 🧩 Fix 1: trim runaway array length ---
+            MAX_POINTS = 10000
+            if len(self._eq_x) > MAX_POINTS:
+                self._eq_x = self._eq_x[-MAX_POINTS:]
+                self._eq_y = self._eq_y[-MAX_POINTS:]
+
+            # --- 🧩 Fix 2: remove NaN / Inf values ---
             x = np.asarray(self._eq_x, dtype=float)
             y = np.asarray(self._eq_y, dtype=float)
-            self.eq_curve.setData(x, y)
+            mask = np.isfinite(y)
+            if not mask.all():
+                bad = np.sum(~mask)
+                self._append_log(f"[WARN] Dropped {bad} bad PnL points (NaN/inf)")
+                x, y = x[mask], y[mask]
+
+            # --- 🧩 Fix 3: ensure monotonic timestamps ---
+            # If any out-of-order data snuck in, sort all points by timestamp.
+            if len(x) > 1:
+                order = np.argsort(x)
+                x, y = x[order], y[order]
+
+                # Ensure uniqueness (optional safety)
+                _, unique_idx = np.unique(x, return_index=True)
+                x, y = x[unique_idx], y[unique_idx]
+            
+            # --- 🧩 Normalize timestamps (FIX huge x-axis) ---
+            if len(x) > 0:
+                x = x - x[0]
+
+            # --- 🧩 Optional: downsample for GUI performance ---
+            if len(x) > 2000:
+                step = max(1, len(x) // 2000)
+                x, y = x[::step], y[::step]
+
+            # Safe plot call
+            try:
+                self.eq_curve.setData(x, y)
+            except Exception as e:
+                self._append_log(f"[ERR] Plot update failed: {e}")
+
+    
+    def _update_health_panel(self, payload: dict):
+        msg = f"[HEALTH] {payload['status'].upper()} | " \
+            f"Age: {payload['details']['last_emit_age']}s"
+        #self._append_log(msg)
+
+        status = payload.get("status", "unknown")
+        age = payload.get("details", {}).get("last_emit_age", 0)
+
+        # === Gentle pulse when healthy ===
+        if not hasattr(self, "_health_anim"):
+            self._health_anim = QtCore.QPropertyAnimation(self.halt_banner, b"windowOpacity")
+            self._health_anim.setDuration(500)
+            self._health_anim.setStartValue(1.0)
+            self._health_anim.setEndValue(0.3)
+            self._health_anim.setEasingCurve(QtCore.QEasingCurve.InOutQuad)
+            self._health_anim.setLoopCount(2)  # one quick fade in/out pulse
+
+        if status == "healthy":
+            self.halt_banner.setStyleSheet("background:#166534;color:#fff;padding:6px;border-radius:6px;")
+            self.halt_banner.setText(f"Feed OK ({age:.1f}s)")
+            self.halt_banner.show()
+
+            # restart gentle pulse
+            self._health_anim.stop()
+            self.halt_banner.setWindowOpacity(1.0)
+            self._health_anim.start()
+
+        elif status == "stale":
+            self.halt_banner.setStyleSheet("background:#991b1b;color:#fff;padding:6px;border-radius:6px;")
+            self.halt_banner.setText("Feed stalled!")
+            self.halt_banner.show()
+
+        else:
+            self.halt_banner.hide()
 
 
     def _handle_new_trade(self, trade: dict):
@@ -336,6 +454,31 @@ class MainWindow(QtWidgets.QMainWindow):
         ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
         if hasattr(self, "logs_view"):
             self.logs_view.appendPlainText(f"[{ts}] {msg}")
+    
+    def _update_performance_tab(self, metrics: dict):
+        """Update Sharpe, Sortino, and Kelly labels."""
+        if not metrics:
+            return
+        sharpe = metrics.get("sharpe")
+        sortino = metrics.get("sortino")
+        kelly = metrics.get("kelly")
+
+        if sharpe is not None:
+            self._set_kpi(self.sharpe_lbl, sharpe)
+        if sortino is not None:
+            self._set_kpi(self.sortino_lbl, sortino)
+        if kelly is not None:
+            self._set_kpi(self.kelly_lbl, kelly)
+
+    def _on_cooldown_state(self, cooldown: bool):
+        """Toggle HALT state visual + disable trade buttons."""
+        self._append_log(f"[STATE] Cooldown active: {cooldown}")
+        self._style_panic(cooldown)
+        for b in [self.flatten_btn, self.cancel_all_btn, self.halt_btn, self.ticket_btn]:
+            b.setEnabled(not cooldown)
+        for tb_btn in [self.flatten_btn_tb, self.cancel_all_btn_tb, self.manual_order_btn_tb]:
+            tb_btn.setEnabled(not cooldown)
+
 
 
     
@@ -423,7 +566,6 @@ class MainWindow(QtWidgets.QMainWindow):
                 executor.execute(sym, None, signal, bar["close"], atr_val)
 
             await asyncio.sleep(0.1)  # controls sim speed
-
 
     # ---------------- Tab Builders ----------------
     def _build_dashboard_tab(self):
@@ -624,92 +766,139 @@ class MainWindow(QtWidgets.QMainWindow):
         except Exception:
             lbl.setText(str(val))
 
-    async def _start_sim(self):
-        """Run GBM-based simulation using GUI parameters."""
+    # async def _start_sim(self):
+    #     """Run GBM-based simulation using GUI parameters."""
 
+    #     raw = self.symbol_input.text().strip()
+    #     symbols = [s.strip().upper() for s in raw.split(",") if s.strip()] or ["AAPL"]
+
+    #     steps = self.sim_steps_spin.value()
+    #     sleep_time = self.sim_speed_spin.value()
+    #     mu = self.sim_mu_spin.value()
+    #     sigma = self.sim_sigma_spin.value()
+
+    #     self._append_log(f"[SIM] Starting {steps}-step sim | μ={mu}, σ={sigma}, Δt={sleep_time}s")
+
+    #     sim = GBMSimulator(
+    #         symbols,
+    #         base_price={s: 100.0 for s in symbols},
+    #         log_prices=True,
+    #         drift_scale=mu,
+    #         vol_scale=sigma,
+    #         dt=sleep_time / 390.0,
+    #     )
+    #     executor = MockExecutor()
+    #     self._sim_running = True
+
+    #     for i in range(steps):
+    #         if not self._sim_running or getattr(self, "_halted", False):
+    #             self._append_log("[SIM] Simulation stopped.")
+    #             break
+
+    #         bars = sim.update_all()
+
+    #         for sym, bar in bars.items():
+    #             # ensure timestamp is ISO8601 string
+    #             ts = (
+    #                 bar["timestamp"].isoformat()
+    #                 if not isinstance(bar["timestamp"], str)
+    #                 else bar["timestamp"]
+    #             )
+
+    #             # --- 1️⃣ Emit full OHLC bar (BarPayload)
+    #             await self.bus.emit(events.EVENT_NEW_BAR, {
+    #                 "symbol": sym,
+    #                 "open": bar["open"],
+    #                 "high": bar["high"],
+    #                 "low": bar["low"],
+    #                 "close": bar["close"],
+    #                 "volume": bar["volume"],
+    #                 "timestamp": ts,
+    #             })
+
+    #             # --- 2️⃣ Emit price update (PricePayload)
+    #             await self.bus.emit(events.EVENT_PRICE_UPDATE, {
+    #                 "symbol": sym,
+    #                 "price": bar["close"],
+    #                 "ma20": None,
+    #                 "ma50": None,
+    #                 "timestamp": ts,
+    #             })
+
+    #             # --- 3️⃣ Emit dummy position (PositionPayload)
+    #             await self.bus.emit(events.EVENT_POSITION_UPDATE, {
+    #                 "symbol": sym,
+    #                 "qty": 100,
+    #                 "avg_price": bar["close"],
+    #                 "unrealized": 0.0,
+    #                 "realized": 0.0,
+    #                 "timestamp": ts,
+    #             })
+
+    #             # --- 4️⃣ Random trade signal (optional)
+    #             signal = random.choice([-1, 0, 1])
+    #             atr_val = max(bar["high"] - bar["low"], 0.01)
+    #             executor.execute(sym, None, signal, bar["close"], atr_val)
+            
+    #         #  pacing per bar (controls speed)
+    #         await asyncio.sleep(sleep_time)
+
+    #         # yield occasionally to keep GUI responsive
+    #         if i % 10 == 0:
+    #             await asyncio.sleep(0)
+
+    #     await asyncio.sleep(sleep_time)
+
+    #     self._append_log("[SIM] Simulation complete.")
+    #     self._sim_running = False
+
+    async def _start_sim(self):
+        """Launch SimulationRunner (GBM-based) using GUI parameters."""
+
+        # --- GUI parameters ---
         raw = self.symbol_input.text().strip()
         symbols = [s.strip().upper() for s in raw.split(",") if s.strip()] or ["AAPL"]
 
         steps = self.sim_steps_spin.value()
-        sleep_time = self.sim_speed_spin.value()
+        #sleep_time = self.sim_speed_spin.value()
+        sleep_time = 0.5
         mu = self.sim_mu_spin.value()
         sigma = self.sim_sigma_spin.value()
 
-        self._append_log(f"[SIM] Starting {steps}-step sim | μ={mu}, σ={sigma}, Δt={sleep_time}s")
-
-        sim = GBMSimulator(
-            symbols,
-            base_price={s: 100.0 for s in symbols},
-            log_prices=True,
-            drift_scale=mu,
-            vol_scale=sigma,
-            dt=sleep_time / 390.0,
+        self._append_log(
+            f"[SIM] Launching SimulationRunner | symbols={symbols} | steps={steps}, μ={mu}, σ={sigma}, Δt={sleep_time}s"
         )
-        executor = MockExecutor()
+
+        # --- Build SimConfig (so the runner uses GUI values) ---
+        cfg = SimConfig(
+            symbols=symbols,
+            steps=steps,
+            bar_sleep=sleep_time,
+            # the rest (drawdown config etc.) stays default
+        )
+
+        # --- Instantiate the SimulationRunner ---
+        self._sim_runner = SimulationRunner(cfg)
+
+        # (optional) attach to GUI’s event bus so signals, PnL, etc. flow to frontend
+        if hasattr(self, "bus"):
+            self._sim_runner.events = self.bus  # share same EventHandler
+
         self._sim_running = True
 
-        for i in range(steps):
-            if not self._sim_running or getattr(self, "_halted", False):
-                self._append_log("[SIM] Simulation stopped.")
-                break
+        try:
+            # Run the actual simulation pipeline
+            await self._sim_runner.run()
 
-            bars = sim.update_all()
-
-            for sym, bar in bars.items():
-                # ensure timestamp is ISO8601 string
-                ts = (
-                    bar["timestamp"].isoformat()
-                    if not isinstance(bar["timestamp"], str)
-                    else bar["timestamp"]
-                )
-
-                # --- 1️⃣ Emit full OHLC bar (BarPayload)
-                await self.bus.emit(events.EVENT_NEW_BAR, {
-                    "symbol": sym,
-                    "open": bar["open"],
-                    "high": bar["high"],
-                    "low": bar["low"],
-                    "close": bar["close"],
-                    "volume": bar["volume"],
-                    "timestamp": ts,
-                })
-
-                # --- 2️⃣ Emit price update (PricePayload)
-                await self.bus.emit(events.EVENT_PRICE_UPDATE, {
-                    "symbol": sym,
-                    "price": bar["close"],
-                    "ma20": None,
-                    "ma50": None,
-                    "timestamp": ts,
-                })
-
-                # --- 3️⃣ Emit dummy position (PositionPayload)
-                await self.bus.emit(events.EVENT_POSITION_UPDATE, {
-                    "symbol": sym,
-                    "qty": 100,
-                    "avg_price": bar["close"],
-                    "unrealized": 0.0,
-                    "realized": 0.0,
-                    "timestamp": ts,
-                })
-
-                # --- 4️⃣ Random trade signal (optional)
-                signal = random.choice([-1, 0, 1])
-                atr_val = max(bar["high"] - bar["low"], 0.01)
-                executor.execute(sym, None, signal, bar["close"], atr_val)
-            
-            #  pacing per bar (controls speed)
-            await asyncio.sleep(sleep_time)
-
-            # yield occasionally to keep GUI responsive
-            if i % 10 == 0:
-                await asyncio.sleep(0)
-
-        await asyncio.sleep(sleep_time)
-
-        self._append_log("[SIM] Simulation complete.")
-        self._sim_running = False
-
+            self._append_log(
+                f"[SIM] Completed. Final equity: ${self._sim_runner.portfolio.total_equity():,.2f}"
+            )
+        except asyncio.CancelledError:
+            self._append_log("[SIM] Simulation cancelled.")
+        except Exception as e:
+            self._append_log(f"[SIM] Error: {e}")
+        finally:
+            self._sim_running = False
 
     def _stop_simulation(self):
         if getattr(self, "_sim_running", False):

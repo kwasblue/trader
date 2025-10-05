@@ -43,50 +43,102 @@ class EventHandler(EventHandlerBase):
         else:
             self.logger.debug(f"[EventHandler] Callback already subscribed to '{event_name}'")
 
+    # async def emit(self, event_name: str, payload: Any) -> None:
+    #     """
+    #     Emit an event and await all callbacks.
+    #     Sync callbacks are offloaded to the executor.
+    #     """
+    #     # Schema validation (if defined)
+    #     schema = EVENT_SCHEMA_MAP.get(event_name)
+    #     if schema:
+    #         try:
+    #             validate_payload(payload, schema)
+    #         except Exception as e:
+    #             self.logger.error(f"[EventHandler] Invalid payload for {event_name}: {e}")
+    #             return  # or raise if you want hard failure
+
+    #     event = Event(event_name, payload)
+    #     callbacks = list(self.listeners.get(event_name, []))  # copy
+    #     if not callbacks:
+    #         self.logger.debug(f"[EventHandler] Emit '{event_name}' (no listeners)")
+    #         return
+
+    #     self.logger.debug(
+    #         f"[EventHandler] Emit '{event_name}' to {len(callbacks)} listener(s) | Payload: {payload}"
+    #     )
+    #     loop = asyncio.get_running_loop()
+    #     tasks: List[Awaitable[Any]] = []
+
+    #     for cb in callbacks:
+    #         try:
+    #             if inspect.iscoroutinefunction(cb):
+    #                 tasks.append(asyncio.create_task(cb(event)))
+    #             else:
+    #                 tasks.append(loop.run_in_executor(None, cb, event))
+    #         except Exception as e:
+    #             self.logger.exception(
+    #                 f"[EventHandler] Failed scheduling callback {getattr(cb, '__name__', repr(cb))}: {e}"
+    #             )
+
+    #     if tasks:
+    #         results = await asyncio.gather(*tasks, return_exceptions=True)
+    #         for cb, res in zip(callbacks, results):
+    #             if isinstance(res, Exception):
+    #                 self.logger.exception(
+    #                     f"[EventHandler] Error in callback {getattr(cb, '__name__', repr(cb))} for '{event_name}': {res}"
+    #             )
+    
     async def emit(self, event_name: str, payload: Any) -> None:
         """
-        Emit an event and await all callbacks.
-        Sync callbacks are offloaded to the executor.
+        Emit an event asynchronously and dispatch all listeners concurrently.
+        Sync callbacks are offloaded to a thread executor.
+        This version is fully non-blocking — each callback runs as its own task.
         """
-        # Schema validation (if defined)
+
+        # --- Schema validation (optional but safe) ---
         schema = EVENT_SCHEMA_MAP.get(event_name)
         if schema:
             try:
                 validate_payload(payload, schema)
             except Exception as e:
                 self.logger.error(f"[EventHandler] Invalid payload for {event_name}: {e}")
-                return  # or raise if you want hard failure
+                return
 
+        # --- Build event object ---
         event = Event(event_name, payload)
-        callbacks = list(self.listeners.get(event_name, []))  # copy
+        callbacks = list(self.listeners.get(event_name, []))
         if not callbacks:
             self.logger.debug(f"[EventHandler] Emit '{event_name}' (no listeners)")
             return
 
-        self.logger.debug(
-            f"[EventHandler] Emit '{event_name}' to {len(callbacks)} listener(s) | Payload: {payload}"
-        )
-        loop = asyncio.get_running_loop()
-        tasks: List[Awaitable[Any]] = []
+        self.logger.debug(f"[EventHandler] Emit '{event_name}' -> {len(callbacks)} listener(s)")
 
+        loop = asyncio.get_running_loop()
+
+        # --- Dispatch each callback without awaiting (non-blocking fan-out) ---
         for cb in callbacks:
             try:
                 if inspect.iscoroutinefunction(cb):
-                    tasks.append(asyncio.create_task(cb(event)))
+                    loop.create_task(self._safe_call(cb, event))
                 else:
-                    tasks.append(loop.run_in_executor(None, cb, event))
+                    loop.run_in_executor(None, self._safe_call, cb, event)
             except Exception as e:
                 self.logger.exception(
                     f"[EventHandler] Failed scheduling callback {getattr(cb, '__name__', repr(cb))}: {e}"
                 )
 
-        if tasks:
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-            for cb, res in zip(callbacks, results):
-                if isinstance(res, Exception):
-                    self.logger.exception(
-                        f"[EventHandler] Error in callback {getattr(cb, '__name__', repr(cb))} for '{event_name}': {res}"
-                )
+    async def _safe_call(self, cb: Callable, event: Event):
+        """Wrapper to isolate callback errors so one bad listener doesn’t crash emit()."""
+        try:
+            if inspect.iscoroutinefunction(cb):
+                await cb(event)
+            else:
+                cb(event)
+        except Exception as e:
+            self.logger.exception(
+                f"[EventHandler] Error in callback {getattr(cb, '__name__', repr(cb))}: {e}"
+            )
+
 
     def unsubscribe(self, event_name: str, callback: Callable[[Event], Any]) -> None:
         if callback in self.listeners[event_name]:

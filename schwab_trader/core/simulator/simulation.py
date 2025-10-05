@@ -36,7 +36,14 @@ from utils.replay import replay_equity_from_trades
 
 # If your mock broker doesn't expose `submit_market_order`, adapt it:
 from core.broker.mock_broker import MockBroker 
-from core.events.events import EVENT_NEW_BAR, BarPayload, EVENT_STRATEGY_SIGNAL, StrategySignalPayload
+from core.events.events import (
+    EVENT_NEW_BAR,
+    EVENT_STRATEGY_SIGNAL,
+    EVENT_PNL_UPDATE,
+    PnLPayload,
+    BarPayload,
+    StrategySignalPayload,
+)
 #%%
 
 # -----------------------------
@@ -173,8 +180,6 @@ class SimulationRunner:
         # historical data
         self.loader = HistoricalBarLoader(path="data/data_storage/proc_data")
         
-
-        # 
         self._last_ddm_date = None
 
         # init the execution engine
@@ -188,6 +193,7 @@ class SimulationRunner:
                     event_handler=self.events
 
             )
+        self.engine.symbolstates = self.symbol_state
         
         # initialize the trade gates. Helps deal with weird bars
         self.trade_gate = TradeGate(
@@ -331,10 +337,11 @@ class SimulationRunner:
             "timestamp": ts.isoformat(),
             "signal": signal,
             "strategy": strategy_name,
+            "confidence":0.0,
             "atr": atr,
             "regime": regime,
         }
-        await self.events.publish("SIGNAL", payload)
+        await self.events.publish(EVENT_STRATEGY_SIGNAL, payload)
 
         # --- NEW: update gate context and expose tiny flags to engine/state ---
         self.trade_gate.on_new_bar(symbol, bar_id, regime)
@@ -406,12 +413,25 @@ class SimulationRunner:
                 }
                 await self.events.publish(EVENT_NEW_BAR, payload)
             await asyncio.sleep(self.cfg.bar_sleep)
+            if step % 5 == 0:
+                await asyncio.sleep(0)
+
         self.logger.info("Simulation finished producing bars.")
 
     async def _bar_consumer(self) -> None:
         """
         Subscribe to BAR events and process them.
         """
+        pnl_payload: PnLPayload = {
+            "portfolio_value": self.portfolio.total_equity(),
+            "realized": self.portfolio.realized_pnl,
+            "unrealized": self.portfolio.unrealized_pnl,
+            "drawdown": self.portfolio.drawdown,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+        await self.events.emit(EVENT_PNL_UPDATE, pnl_payload)
+
         async def bar_handler(event):
             await self._on_bar(event.payload)
 

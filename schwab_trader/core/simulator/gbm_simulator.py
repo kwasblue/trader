@@ -2,7 +2,9 @@ from loggers.logger2 import Logger
 import random, math
 import numpy as np
 from datetime import datetime, UTC
-
+import asyncio
+from core.events.eventhandler import get_event_handler
+from core.events.events import EVENT_PRICE_UPDATE, EVENT_NEW_BAR
 
 class GBMSimulator:
     """
@@ -51,6 +53,7 @@ class GBMSimulator:
         self.max_bar_change_pct = 0.007
         self.max_log_return = 3
         self.min_price_floor = 1.0
+        self.bus = get_event_handler()
 
     # ------------------------------------------------------------
     # Helpers
@@ -130,6 +133,26 @@ class GBMSimulator:
             "close": round(close, 2),
             "volume": volume,
         }
+        payload = {
+                "symbol": symbol,
+                "price": bar["close"],
+                "timestamp": bar["timestamp"].isoformat(),
+            }
+        barpayload = {
+            "symbol": symbol,
+            "timestamp": bar["timestamp"].isoformat(),
+            "open": bar["open"],
+            "high": bar["high"],
+            "low": bar["low"],
+            "close": bar["close"],
+            "volume": bar["volume"],
+        }
+
+        # Position update (for dashboard positions)
+        # Schedule asynchronously so we don’t block bar generation
+        asyncio.create_task(self.bus.emit(EVENT_PRICE_UPDATE, payload))
+        asyncio.create_task(self.bus.emit(EVENT_NEW_BAR, barpayload))
+
 
         if self.log_prices:
             self.logger.info(
