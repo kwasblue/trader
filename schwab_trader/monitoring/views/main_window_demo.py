@@ -9,7 +9,7 @@ from ..bus import ControlBridge
 from monitoring.models import SymbolsTableModel
 from monitoring.widgets.candles import Candles
 from monitoring.dialogs.manual_order import ManualOrderDialog
-
+from core.events.eventhandler import get_event_handler
 # =====================================================
 # MAIN WINDOW (tabs)
 # =====================================================
@@ -19,7 +19,7 @@ class MainWindowDemo(QtWidgets.QMainWindow):
         self.setWindowTitle("Trading Bot Monitor — Pro")
         self.resize(1540, 1000)
 
-        self.ctrl = ControlBridge()
+        self.ctrl = ControlBridge(bus=get_event_handler())
         self._halted = False
 
         # pyqtgraph theme

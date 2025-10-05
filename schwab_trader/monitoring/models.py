@@ -46,6 +46,25 @@ class SymbolsTableModel(QtCore.QAbstractTableModel):
             if risk>20: return QtGui.QBrush(QtGui.QColor(0,40,40,80))
             return QtGui.QBrush(QtGui.QColor(0,60,20,80))
         return None
+    def update_from_df(self, df):
+        """
+        Update model rows from a pandas DataFrame.
+        Expected columns: symbol, qty, avg_price, unrealized, realized, etc.
+        """
+        try:
+            if df is None or df.empty:
+                self.beginResetModel()
+                self._rows = []
+                self.endResetModel()
+                return
+
+            records = df.to_dict(orient="records")
+
+            self.beginResetModel()
+            self._rows = records
+            self.endResetModel()
+        except Exception as e:
+            print(f"[WARN] update_from_df failed: {e}")
 
     def replace_rows(self, rows: List[Dict]):
         self.beginResetModel(); self._rows=rows; self.endResetModel()

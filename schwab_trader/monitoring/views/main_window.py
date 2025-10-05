@@ -14,6 +14,7 @@ import random
 from monitoring.bus import ControlBridge
 from monitoring.models import SymbolsTableModel
 from monitoring.dialogs.manual_order import ManualOrderDialog
+from monitoring.feeds.state_aggregator import StateAggregator 
 
 from core.events.eventhandler import EventHandler, get_event_handler
 from monitoring.feeds.feeder import DataFeeder
@@ -139,36 +140,43 @@ class MainWindow(QtWidgets.QMainWindow):
         self._subscribe_backend_events()
 
         # Connect feeder → GUI slots
-# --- Connect feeder → GUI slots ---
-        s = self.feeder.s
+        self.aggregator = StateAggregator(self.feeder)
+        self.aggregator.snapshot_ready.connect(self._update_from_snapshot)
 
-        # OHLC bars → price chart updates
-        s.ohlc.connect(lambda sym, df: self._update_price_chart({"symbol": sym, "data": df}))
+        # Keep OHLC direct if you want smooth chart updates
+        self.feeder.s.ohlc.connect(lambda sym, df: self._update_price_chart({"symbol": sym, "data": df}))
 
-        # Trades → trade markers and log
-        s.trades.connect(lambda rows: [self._handle_new_trade(r) for r in rows])
+        self._append_log("[INIT] Aggregator connected to Feeder and GUI.")
+# # --- Connect feeder → GUI slots ---
+#         s = self.feeder.s
 
-        # Positions → table model updates
-        s.symbols.connect(lambda rows: [self._update_position_row(r) for r in rows])
+#         # OHLC bars → price chart updates
+#         s.ohlc.connect(lambda sym, df: self._update_price_chart({"symbol": sym, "data": df}))
 
-        # PnL → equity curve and labels
-        s.equity_point.connect(lambda ts, val: self._update_perf_dashboard({"timestamp": ts, "portfolio_value": val}))
-        s.realized_point.connect(lambda ts, realized, unrealized: self._update_perf_dashboard({"timestamp": ts, "realized": realized, "unrealized": unrealized}))
-        s.risk_stats.connect(lambda u, r, dd: self._update_perf_dashboard({"unrealized": u, "realized": r, "drawdown": dd}))
+#         # Trades → trade markers and log
+#         s.trades.connect(lambda rows: [self._handle_new_trade(r) for r in rows])
 
-        # Alerts → alerts list
-        s.alerts.connect(lambda alerts: [self.alerts_list.addItem(a["text"]) for a in alerts])
-        # 7️⃣ Cooldown / halt → panic button + disable
-        s.cooldown.connect(self._on_cooldown_state)
+#         # Positions → table model updates
+#         s.symbols.connect(lambda rows: [self._update_position_row(r) for r in rows])
 
-        # 8️⃣ Health → log or status bar
-        s.health.connect(lambda h: self._append_log(f"[HEALTH] {h.get('broker','?')} - {h.get('status','?')}"))
+#         # PnL → equity curve and labels
+#         s.equity_point.connect(lambda ts, val: self._update_perf_dashboard({"timestamp": ts, "portfolio_value": val}))
+#         s.realized_point.connect(lambda ts, realized, unrealized: self._update_perf_dashboard({"timestamp": ts, "realized": realized, "unrealized": unrealized}))
+#         s.risk_stats.connect(lambda u, r, dd: self._update_perf_dashboard({"unrealized": u, "realized": r, "drawdown": dd}))
 
-        # 9️⃣ Regime breakdown (optional future use)
-        s.regime_breakdown.connect(lambda d: self._append_log(f"[REGIME] {d}"))
-        # Logs → Ops tab
-        s.log.connect(self._append_log)
-        #asyncio.create_task(self.feeder.start_safe())
+#         # Alerts → alerts list
+#         s.alerts.connect(lambda alerts: [self.alerts_list.addItem(a["text"]) for a in alerts])
+#         # 7️⃣ Cooldown / halt → panic button + disable
+#         s.cooldown.connect(self._on_cooldown_state)
+
+#         # 8️⃣ Health → log or status bar
+#         s.health.connect(lambda h: self._append_log(f"[HEALTH] {h.get('broker','?')} - {h.get('status','?')}"))
+
+#         # 9️⃣ Regime breakdown (optional future use)
+#         s.regime_breakdown.connect(lambda d: self._append_log(f"[REGIME] {d}"))
+#         # Logs → Ops tab
+#         s.log.connect(self._append_log)
+#         #asyncio.create_task(self.feeder.start_safe())
         self._append_log("[INIT] Feeder started and subscribed to EventBus.")
     # ---------------- GUI -> Bus ----------------
     def _wire_gui_to_bus(self):
@@ -480,8 +488,72 @@ class MainWindow(QtWidgets.QMainWindow):
             tb_btn.setEnabled(not cooldown)
 
 
+    def _update_from_snapshot(self, snap: dict):
+        """
+        Receive merged state snapshot from aggregator.
+        Runs once per interval (~1s) with unified data from all subsystems.
+        """
+        try:
+            pnl = snap.get("pnl", {})
+            health = snap.get("health", {})
+            metrics = snap.get("metrics", {})
+            positions = snap.get("positions", {})
+            alerts = snap.get("alerts", [])
+            trades = snap.get("trades", [])
 
-    
+            # === 1️⃣ Performance Dashboard (equity, drawdown, etc.) ===
+            self._update_perf_dashboard({
+                "portfolio_value": pnl.get("portfolio_value", 0.0),
+                "realized": pnl.get("realized", 0.0),
+                "unrealized": pnl.get("unrealized", 0.0),
+                "drawdown": pnl.get("drawdown", 0.0),
+                "timestamp": pnl.get("timestamp", None),
+            })
+
+            # === 2️⃣ Performance Metrics (Sharpe, Sortino, Kelly, etc.) ===
+            if metrics:
+                self._update_performance_tab(metrics)
+
+            # === 3️⃣ Health Indicator ===
+            if health and isinstance(health, dict) and health.get("status"):
+                self._update_health_panel(health)
+            else:
+                # graceful fallback
+                self.halt_banner.hide()
+
+            # === 4️⃣ Positions Table ===
+            if hasattr(self, "pos_model"):
+                for sym, info in positions.items():
+                    self._update_position_row(info)
+
+            # === 5️⃣ Alerts Tab ===
+            if hasattr(self, "alerts_list"):
+                self.alerts_list.clear()
+                for a in alerts[-10:]:
+                    msg = a.get("text") or a.get("message") or str(a)
+                    self.alerts_list.addItem(msg)
+
+            # === 6️⃣ Trades (visual markers on equity chart) ===
+            if hasattr(self, "_eq_x") and trades:
+                # Avoid repeated marking of same trade
+                recent_ids = getattr(self, "_recent_trade_ids", set())
+                for t in trades[-5:]:
+                    tid = t.get("id") or (t.get("symbol"), t.get("timestamp"))
+                    if tid in recent_ids:
+                        continue
+                    self._handle_new_trade(t)
+                    recent_ids.add(tid)
+                # Trim stored IDs
+                self._recent_trade_ids = set(list(recent_ids)[-50:])
+
+            # === 7️⃣ Optional: regime display (future use) ===
+            if "regime" in snap and snap["regime"]:
+                self._append_log(f"[REGIME] {snap['regime']}")
+
+        except Exception as e:
+            import traceback
+            self._append_log(f"[ERR] Snapshot update failed: {e}\n{traceback.format_exc()}")
+
 
     # ---------------- CSV Logging ----------------
     def log_event(self, event_name: str, payload: dict):

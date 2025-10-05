@@ -10,7 +10,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from monitoring.theme import apply_dark_palette
-from monitoring.views.main_window import MainWindow
+#from monitoring.views.main_window import MainWindow
+from monitoring.views.main_window2 import MainWindow
 from monitoring.feeds.feeder import DataFeeder
 from core.events.eventhandler import EventHandler
 from core.events import events
