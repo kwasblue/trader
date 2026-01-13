@@ -1,4 +1,4 @@
-from loggers.logger2 import Logger
+from loggers.logger import Logger
 import random, math
 import numpy as np
 from datetime import datetime, UTC

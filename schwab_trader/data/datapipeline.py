@@ -92,10 +92,12 @@ class StockDataPipeline:
         """Process stock data in parallel."""
         def process(stock, frame):
             self.processor.update(stock, frame)
-            return stock, self.processor.process(200, 50, 'standard')
+            return stock, self.processor.ml_process(200, 50, scaling_method="standard", include_scaled=True, include_pca=False)
+
 
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             results = executor.map(lambda item: process(*item), gathered_data.items())
+        print(dict(results))
 
         return dict(results)
 
@@ -133,9 +135,9 @@ class StockDataPipeline:
         fetch_results = self.fetch_data()
         updated_stocks = list(fetch_results.keys())
 
-        if not updated_stocks:
-            self.logger.info("No stocks had new data. Skipping processing.")
-            return
+        #if not updated_stocks:
+        #    self.logger.info("No stocks had new data. Skipping processing.")
+        #    return
 
         # ⛏ Only gather/process/store for those
         self.watch_list = updated_stocks

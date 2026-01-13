@@ -36,8 +36,8 @@ class Authenticator:
         self.logger = Logger('app.log', 'Authenticator', log_dir=self.logs_dir).get_logger()
         self.writer = FileWriter(log_file='app.log',logger_name='FileWriter',log_dir=self.logs_dir)
         self.token_path = self.config["folders"]["tokens"]
-        self.rate_lim = 0.5
-
+        self.rate_lim = 0.5 # seconds between requests  
+    
     async def _throttle_requests(self):
         await asyncio.sleep(self.rate_lim)
          
@@ -190,14 +190,14 @@ class Authenticator:
             try:
                 if not os.path.exists(self.token_path):
                     self.logger.error("Token file not found. Cannot renew tokens.")
-                    await asyncio.sleep(60)
+                    await asyncio.sleep(5)
                     continue
 
                 # Read and validate token data
                 token_data = self._read_token_file()
                 if not token_data:
                     self.logger.error("Token file is empty or invalid. Cannot proceed.")
-                    await asyncio.sleep(60)
+                    await asyncio.sleep(5)
                     continue
 
                 # Check and renew access token

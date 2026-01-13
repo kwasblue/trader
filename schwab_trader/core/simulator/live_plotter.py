@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 
 # Use your custom logger
 try:
-    from schwab_trader.loggers.logger import Logger as _Logger
+    from loggers.logger import Logger as _Logger
 except Exception:
     # Fallback if the path is different in your env
     from loggers.logger import Logger as _Logger

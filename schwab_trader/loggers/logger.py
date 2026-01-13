@@ -1,80 +1,74 @@
 import logging
 import os
+from logging.handlers import RotatingFileHandler
 
 class UniqueMessageFilter(logging.Filter):
+    """Suppress consecutive duplicate log messages."""
     def __init__(self):
         super().__init__()
         self.last_message = None
 
     def filter(self, record):
-        current_message = record.getMessage()
-        if current_message != self.last_message:
-            self.last_message = current_message
+        msg = record.getMessage()
+        if msg != self.last_message:
+            self.last_message = msg
             return True
         return False
 
+
 class Logger:
-    def __init__(self, log_file: str, logger_name: str, log_dir: str = 'logs', level: int = logging.DEBUG, timestamp_format: str = '%Y-%m-%d %H:%M:%S'):
-        # Ensure the log directory exists
+    """Thread-safe rotating logger with duplicate suppression."""
+
+    def __init__(
+        self,
+        log_file: str,
+        logger_name: str,
+        log_dir: str = "logs",
+        level: int = logging.INFO,
+        timestamp_format: str = "%Y-%m-%d %H:%M:%S",
+        propagate: bool = False,
+        max_bytes: int = 5_000_000,
+        backup_count: int = 5,
+        console: bool = False,
+    ):
         os.makedirs(log_dir, exist_ok=True)
-        
-        # Full path to the log file
-        full_log_file = os.path.join(log_dir, log_file)
-        
-        self.logger = logging.getLogger(logger_name)
-        self.logger.setLevel(level)
-        
-        # Create handlers only if not already added
-        if not self.logger.hasHandlers():
-            # Create file handler
-            file_handler = logging.FileHandler(full_log_file)
-            file_handler.setLevel(level)
-            
-            # Add unique message filter to avoid duplicate log messages
-            unique_message_filter = UniqueMessageFilter()
-            file_handler.addFilter(unique_message_filter)
-            
-            # Create formatter with customizable timestamp format
-            formatter = logging.Formatter(f'%(asctime)s - %(name)s - %(levelname)s - %(message)s', datefmt=timestamp_format)
-            file_handler.setFormatter(formatter)
-            
-            # Add file handler to logger
-            self.logger.addHandler(file_handler)
-            
-            # Optionally add console logging
-            # console_handler = logging.StreamHandler()
-            # console_handler.setLevel(level)
-            # console_handler.setFormatter(formatter)
-            # self.logger.addHandler(console_handler)
-        
-        # Debugging information
-        self.logger.debug("Logger initialized.")
-        self.logger.debug(f"Log file: {full_log_file}")
-        self.logger.debug(f"Logger name: {logger_name}")
+        full_log_path = os.path.join(log_dir, log_file)
 
+        # Always use a *real* logging.Logger, never self.logger recursion
+        _logger = logging.getLogger(logger_name)
+        _logger.setLevel(level)
+        _logger.propagate = propagate
+
+        # Avoid duplicate handlers if logger already exists
+        if not _logger.handlers:
+            fmt = logging.Formatter(
+                "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+                datefmt=timestamp_format,
+            )
+
+            fh = RotatingFileHandler(full_log_path, maxBytes=max_bytes, backupCount=backup_count)
+            fh.setLevel(level)
+            fh.setFormatter(fmt)
+            fh.addFilter(UniqueMessageFilter())
+            _logger.addHandler(fh)
+
+            if console:
+                ch = logging.StreamHandler()
+                ch.setLevel(level)
+                ch.setFormatter(fmt)
+                _logger.addHandler(ch)
+
+        self._logger = _logger
+        self._logger.debug(f"Logger '{logger_name}' initialized → {full_log_path}")
+
+    # ---------------------------------------------------------------------
+    # Convenience passthroughs
+    # ---------------------------------------------------------------------
     def get_logger(self):
-        return self.logger
+        return self._logger
 
-    # Convenience methods for different log levels
-    def debug(self, message: str):
-        self.logger.debug(message)
-
-    def info(self, message: str):
-        self.logger.info(message)
-
-    def warning(self, message: str):
-        self.logger.warning(message)
-
-    def error(self, message: str):
-        self.logger.error(message)
-
-    def critical(self, message: str):
-        self.logger.critical(message)
-
-
-# Usage Example
-#if __name__ == "__main__":
-#    logger_instance = Logger('application.log', 'MyAppLogger')
-#    logger = logger_instance.get_logger()
-#    logger.info("This is an info message.")
-#    logger.error("This is an error message.")
+    def debug(self, msg: str): self._logger.debug(msg)
+    def info(self, msg: str): self._logger.info(msg)
+    def warning(self, msg: str): self._logger.warning(msg)
+    def error(self, msg: str): self._logger.error(msg)
+    def critical(self, msg: str): self._logger.critical(msg)

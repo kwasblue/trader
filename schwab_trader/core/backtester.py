@@ -6,7 +6,7 @@ import matplotlib.dates as mdates
 from fpdf import FPDF
 from strategies.strategy_registry import load_strategy, list_strategies
 from utils.risk_metrics import RiskQuantifier
-from schwab_trader.loggers.logger import Logger
+from loggers.logger import Logger
 from core.position_sizer import DynamicPositionSizer
 from data.datautils import epoch_to_date
 
