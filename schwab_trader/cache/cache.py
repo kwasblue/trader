@@ -72,12 +72,5 @@ class CacheManager:
         self._save_cache()
 
 
-# Preview the initialized structure
-#example_cache_manager = CacheManager()
-#example_cache_manager.update("stream_state", "last_heartbeat", datetime.utcnow().isoformat())
-#example_cache_manager.update("strategy_metrics", "AAPL", {"sharpe": 1.2, "updated": "2025-07-17"})
-#example_cache_manager.update("positions", "TSLA", {"qty": 10, "entry": 260.5})
-#example_cache_manager.get("positions")
-
 
 
