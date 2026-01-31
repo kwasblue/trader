@@ -1,0 +1,50 @@
+{
+  "training": {
+    "seed": 42,
+    "test_size": 0.2,
+    "cv_splits": 5,
+    "n_iter": 20,
+    "scoring": "roc_auc"
+  },
+  "models": {
+    "logistic_regression": {
+      "enabled": true,
+      "params": {
+        "C_range": [-3, 2, 20],
+        "penalty": ["l1", "l2"],
+        "max_iter": 2000,
+        "solver": "saga"
+      }
+    },
+    "random_forest": {
+      "enabled": true,
+      "params": {
+        "n_estimators_range": [200, 800, 100],
+        "max_depth": [null, 4, 8, 12, 16, 20],
+        "min_samples_split": [2, 5, 10],
+        "max_features": ["sqrt", "log2", null]
+      }
+    },
+    "lightgbm": {
+      "enabled": true,
+      "params": {
+        "n_estimators": 600,
+        "learning_rate_range": [-3, -1, 10],
+        "num_leaves_range": [16, 64],
+        "max_depth": [-1, 4, 6, 8, 10]
+      }
+    }
+  },
+  "prediction": {
+    "buy_threshold": 0.52,
+    "sell_threshold": 0.48,
+    "default_signal": 0
+  },
+  "paths": {
+    "experiments_dir": "experiments",
+    "models_subdir": "models",
+    "metrics_subdir": "metrics",
+    "reports_subdir": "reports",
+    "leaderboard_file": "leaderboard.csv"
+  }
+}

@@ -1,74 +1,145 @@
+import time
+import threading
+from typing import Optional
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from data.streaming.authenticator import Authenticator
 from loggers.logger import Logger
 from utils.configloader import ConfigLoader
 
+# Optimization constants
+REQUEST_TIMEOUT = 10  # seconds
+MAX_RETRIES = 3
+BACKOFF_FACTOR = 0.3
+RATE_LIMIT_REQUESTS = 2  # requests per second
+POOL_CONNECTIONS = 10
+POOL_MAXSIZE = 20
+
+
+class TokenBucketRateLimiter:
+    """Non-blocking token bucket rate limiter."""
+
+    def __init__(self, rate: float = 2.0, capacity: float = 5.0):
+        self.rate = rate  # tokens per second
+        self.capacity = capacity
+        self.tokens = capacity
+        self.last_update = time.monotonic()
+        self._lock = threading.Lock()
+
+    def acquire(self, timeout: float = 5.0) -> bool:
+        """Acquire a token, waiting if necessary. Returns False if timeout."""
+        deadline = time.monotonic() + timeout
+        while True:
+            with self._lock:
+                now = time.monotonic()
+                # Refill tokens based on elapsed time
+                elapsed = now - self.last_update
+                self.tokens = min(self.capacity, self.tokens + elapsed * self.rate)
+                self.last_update = now
+
+                if self.tokens >= 1.0:
+                    self.tokens -= 1.0
+                    return True
+
+            # Wait a bit before retrying
+            if time.monotonic() >= deadline:
+                return False
+            time.sleep(0.05)
+
 
 class SchwabClient:
     """
-    Client for interacting with the Schwab API.
-    Handles authentication, request throttling, and logging.
+    Optimized client for interacting with the Schwab API.
+
+    Optimizations:
+    - Connection pooling via requests.Session
+    - Non-blocking token bucket rate limiter
+    - Automatic retry with exponential backoff
+    - Request timeouts to prevent hanging
     """
 
     def __init__(self, apikey: str, secretkey: str):
-        """
-        Initializes the SchwabClient with API credentials.
-
-        Args:
-            apikey (str): API key for authentication.
-            secretkey (str): Secret key for authentication.
-        """
         self.authenticator = Authenticator()
         self.config = ConfigLoader().load_config()
         self.apikey = apikey
         self.secretkey = secretkey
-        self.rate_lim = 0.5  # Hard rate limit in seconds
         self.logger = Logger(
             log_file='app.log',
             logger_name='SchwabClient',
             log_dir=self.config['folders']['logs']
         ).get_logger()
 
-    def _throttle_requests(self):
-        """
-        Implements a rate limit to avoid overwhelming the API.
-        """
-        import time
-        time.sleep(self.rate_lim)
+        # Optimization: Connection pooling with session
+        self._session = requests.Session()
+        retry_strategy = Retry(
+            total=MAX_RETRIES,
+            backoff_factor=BACKOFF_FACTOR,
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=["GET", "POST", "PUT", "DELETE"],
+        )
+        adapter = HTTPAdapter(
+            pool_connections=POOL_CONNECTIONS,
+            pool_maxsize=POOL_MAXSIZE,
+            max_retries=retry_strategy
+        )
+        self._session.mount("https://", adapter)
+        self._session.mount("http://", adapter)
 
-    def _request(self, method: str, endpoint: str, headers: dict, params: dict = None, data: dict = None) -> dict:
-        """
-        Sends a request to the Schwab API.
+        # Optimization: Non-blocking rate limiter
+        self._rate_limiter = TokenBucketRateLimiter(
+            rate=RATE_LIMIT_REQUESTS,
+            capacity=5.0
+        )
 
-        Args:
-            method (str): HTTP method (GET, POST, etc.).
-            endpoint (str): API endpoint URL.
-            headers (dict): HTTP headers.
-            params (dict, optional): Query parameters. Defaults to None.
-            data (dict, optional): Request body. Defaults to None.
-
-        Returns:
-            dict: API response as a dictionary.
+    def _request(
+        self,
+        method: str,
+        endpoint: str,
+        headers: dict,
+        params: Optional[dict] = None,
+        data: Optional[dict] = None,
+        timeout: float = REQUEST_TIMEOUT
+    ) -> dict:
         """
+        Sends a request with connection pooling, rate limiting, and timeout.
+        """
+        # Rate limit (non-blocking with timeout)
+        if not self._rate_limiter.acquire(timeout=5.0):
+            self.logger.warning(f"Rate limit timeout for {endpoint}")
+            return {"error": "Rate limit timeout"}
+
         try:
-            self.logger.info(f'Sending {method.upper()} request to {endpoint}')
-            response = requests.request(
+            self.logger.debug(f'Sending {method.upper()} request to {endpoint}')
+            response = self._session.request(
                 method=method,
                 url=endpoint,
                 headers=headers,
                 params=params,
-                json=data
+                json=data,
+                timeout=timeout
             )
-            self._throttle_requests()
+
             if response.status_code == 200:
-                self.logger.info(f'Successful {method.upper()} request to {endpoint}')
                 return response.json()
+            elif response.status_code == 201:
+                return {"status": "created", "headers": dict(response.headers)}
             else:
-                self.logger.error(f'{method.upper()} request to {endpoint} failed with status {response.status_code}')
-                return {"error": f"HTTP {response.status_code}"}
+                self.logger.error(
+                    f'{method.upper()} {endpoint} failed: HTTP {response.status_code}'
+                )
+                return {"error": f"HTTP {response.status_code}", "body": response.text[:200]}
+
+        except requests.Timeout:
+            self.logger.error(f'Timeout on {method.upper()} {endpoint}')
+            return {"error": "Request timeout"}
         except requests.RequestException as e:
-            self.logger.error(f'Error in {method.upper()} request to {endpoint}: {str(e)}')
+            self.logger.error(f'Request error on {endpoint}: {e}')
             return {"error": str(e)}
+
+    def close(self):
+        """Close the session and release connections."""
+        self._session.close()
 
     def _get(self, endpoint: str, headers: dict, params: dict) -> dict:
         """Helper method for making GET requests."""

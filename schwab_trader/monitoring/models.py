@@ -1,7 +1,9 @@
-
 import math
+import logging
 from typing import List, Dict
 from PySide6 import QtCore, QtGui
+
+logger = logging.getLogger(__name__)
 
 # =====================================================
 # TABLE MODELS
@@ -64,10 +66,40 @@ class SymbolsTableModel(QtCore.QAbstractTableModel):
             self._rows = records
             self.endResetModel()
         except Exception as e:
-            print(f"[WARN] update_from_df failed: {e}")
+            logger.warning(f"update_from_df failed: {e}")
 
     def replace_rows(self, rows: List[Dict]):
         self.beginResetModel(); self._rows=rows; self.endResetModel()
+
+    def update_position(self, pos: Dict):
+        """Update a single position row by symbol, or add if new."""
+        sym = pos.get("symbol")
+        if not sym:
+            return
+
+        # Find existing row by symbol
+        for i, row in enumerate(self._rows):
+            if row.get("symbol") == sym:
+                # Update existing row
+                self._rows[i] = {**row, **pos}
+                top_left = self.index(i, 0)
+                bottom_right = self.index(i, len(self.HEADERS) - 1)
+                self.dataChanged.emit(top_left, bottom_right)
+                return
+
+        # Add new row
+        self.beginInsertRows(QtCore.QModelIndex(), len(self._rows), len(self._rows))
+        self._rows.append(pos)
+        self.endInsertRows()
+
+    def remove_position(self, symbol: str):
+        """Remove a position row by symbol."""
+        for i, row in enumerate(self._rows):
+            if row.get("symbol") == symbol:
+                self.beginRemoveRows(QtCore.QModelIndex(), i, i)
+                del self._rows[i]
+                self.endRemoveRows()
+                return
 
 class OrdersTableModel(QtCore.QAbstractTableModel):
     HEADERS = ["Time","Symbol","Side","Qty","Price","Status"]

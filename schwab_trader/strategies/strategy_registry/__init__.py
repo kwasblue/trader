@@ -17,7 +17,15 @@ def load_strategy(name, params=None):
     cls = STRATEGY_MAP.get(name)
     if not cls:
         raise ValueError(f"Strategy '{name}' not found")
-    return cls(params)
+    # Pass params as keyword arguments for strategies that use named args,
+    # or as a positional dict for strategies that use self.params
+    if params:
+        try:
+            return cls(**params)
+        except TypeError:
+            # Fallback for strategies expecting params as dict
+            return cls(params)
+    return cls()
 
 def list_strategies():
     return list(STRATEGY_MAP.keys())

@@ -1,8 +1,18 @@
 # core/base/position_sizer.py (or wherever your DynamicPositionSizer lives)
+import logging
 from core.base.position_sizer_base import PositionSizerBase
 from core.logic.portfolio_state import PortfolioState
+from loggers.logger import Logger
 from typing import Optional
 import math
+
+# Logger - own file with propagation to app.log
+_logger_instance = Logger(
+    log_file="position_sizer.log",
+    logger_name="PositionSizer",
+    propagate=True
+)
+logger = _logger_instance.get_logger()
 
 class DynamicPositionSizer(PositionSizerBase):
     """
@@ -69,7 +79,7 @@ class DynamicPositionSizer(PositionSizerBase):
         if signal > 0:
             risk_per_share = price - stop_loss_price
         else:  # short
-            risk_per_share = stop_loss_price + price
+            risk_per_share = stop_loss_price - price
 
         if risk_per_share <= 0:
             raise ValueError("Invalid stop-loss: must be logically beyond the entry price for signal direction.")
@@ -81,7 +91,7 @@ class DynamicPositionSizer(PositionSizerBase):
 
     def update_capital(self, new_capital: float) -> None:
         self.capital = new_capital
-        print(f"[PositionSizer] Capital updated to: {new_capital}")
+        logger.debug(f"Capital updated to: {new_capital}")
 
     def reset_risk(self, new_risk: float) -> None:
         if not (0 < new_risk < 1):
@@ -89,7 +99,7 @@ class DynamicPositionSizer(PositionSizerBase):
         self.risk_per_trade = new_risk
         self.min_risk_percentage = new_risk * 0.5
         self.max_risk_percentage = new_risk * 3
-        print(f"[PositionSizer] Risk percentage reset to: {new_risk}")
+        logger.debug(f"Risk percentage reset to: {new_risk}")
 
 
 class DynamicPositionSizer2(PositionSizerBase):
@@ -113,6 +123,7 @@ class DynamicPositionSizer2(PositionSizerBase):
         allow_fractional: bool = False,
         lot_size: int = 1,
     ):
+        super().__init__()
         if not (0 < risk_percentage < 1):
             raise ValueError("risk_percentage must be between 0 and 1 (non-inclusive).")
         self.risk_per_trade = float(risk_percentage)
@@ -128,6 +139,8 @@ class DynamicPositionSizer2(PositionSizerBase):
         # per-symbol reserved notional
         self._reserved_notional: dict[str, float] = {}
 
+        logger.info(f"DynamicPositionSizer2 initialized: risk={risk_percentage:.1%}, max_trade={max_trade_pct}, max_holding={max_holding_pct}")
+
     # ---- risk adaptation ----
     def adjust_risk_percentage(self, market_conditions: str) -> float:
         if market_conditions == "high_volatility":
@@ -138,15 +151,44 @@ class DynamicPositionSizer2(PositionSizerBase):
 
     def calculate_position_size(
         self,
-        price: float,
-        stop_loss_price: float,
-        market_conditions: str,
-        signal: int,
         symbol: str,
-        portfolio: PortfolioState
+        price: float,
+        account_value: float,
+        signal_strength: float = 1.0,
+        atr: Optional[float] = None,
+        stop_loss_price: Optional[float] = None,
+        **kwargs
     ) -> int:
+        """
+        Calculate position size based on risk management rules.
+        
+        Args:
+            symbol: Trading symbol
+            price: Current price
+            account_value: Total account value (not used, we use portfolio)
+            signal_strength: Signal confidence (not currently used)
+            atr: Average True Range
+            stop_loss_price: Stop loss price
+            **kwargs: Additional parameters:
+                - signal: Trade signal (1, -1)
+                - portfolio: PortfolioState instance
+                - market_conditions: Market regime
+                
+        Returns:
+            Position size in shares
+        """
+        signal = kwargs.get('signal', 0)
+        portfolio = kwargs.get('portfolio')
+        market_conditions = kwargs.get('market_conditions', 'normal')
+        
         if signal == 0:
             return 0
+        
+        if portfolio is None:
+            raise ValueError("portfolio must be provided in kwargs")
+        
+        if stop_loss_price is None:
+            raise ValueError("stop_loss_price must be provided")
 
         price = float(price)
         stop_loss_price = float(stop_loss_price)
@@ -203,7 +245,7 @@ class DynamicPositionSizer2(PositionSizerBase):
 
         qty_int = int(qty_final) if not self.allow_fractional else qty_final
         if qty_int <= 0:
-            print(f"[Sizer] {symbol} => No position (qty<=0). "
+            logger.debug(f"[Sizer] {symbol} => No position (qty<=0). "
                   f"Risk={qty_risk:.2f}, BP={qty_cap_bp:.2f}, TradeCap={qty_cap_trade:.2f}, HoldCap={qty_cap_holding:.2f}")
             return 0
         
@@ -215,18 +257,18 @@ class DynamicPositionSizer2(PositionSizerBase):
                 max_additional = max_holding_notional - existing_notional
                 qty_int = math.floor(max(0.0, max_additional) / px_gross)
 
-        # safety: don’t allow trades that wipe out nearly all cash
+        # safety: don't allow trades that wipe out nearly all cash
         if qty_int * px_gross > cash:
             qty_int = math.floor(cash / px_gross)
 
         if qty_int <= 0:
-            print(f"[Sizer] {symbol} => No position (after cap check).")
+            logger.debug(f"[Sizer] {symbol} => No position (after cap check).")
             return 0
 
         # reserve per-symbol notional
         self._reserved_notional[symbol] = reserved + qty_int * px_gross
 
-        print(f"[Sizer] {symbol} => Qty={qty_int} "
+        logger.info(f"[Sizer] {symbol} => Qty={qty_int} "
               f"(Risk={qty_risk:.2f}, BP={qty_cap_bp:.2f}, TradeCap={qty_cap_trade:.2f}, HoldCap={qty_cap_holding:.2f})")
         return qty_int
 

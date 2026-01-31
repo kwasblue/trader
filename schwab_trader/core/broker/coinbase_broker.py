@@ -86,8 +86,10 @@ class CoinbaseBroker:
                 f"Import error: {_IMPORT_ERR}"
             )
 
-        # Auto-load .env if not provided
-        load_dotenv(r'C:\Users\kwasi\OneDrive\Documents\Personal Projects\schwab_trader\venv\.env')
+        # Auto-load .env if not provided (relative path)
+        from pathlib import Path
+        _ENV_PATH = Path(__file__).resolve().parents[2] / ".venv" / ".env"
+        load_dotenv(_ENV_PATH)
 
         if auth is None:
             api_key = os.getenv("COINBASE_API_KEY")

@@ -1,53 +1,125 @@
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
-from loggers.logger import Logger
-from utils.configloader import ConfigLoader
-from indicators.technical_indicators import TechnicalIndicators
 from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from scipy.fft import fft, ifft
 import numpy as np
 import pandas as pd
+import functools
+from typing import Optional, Dict, Any, Tuple
+
+from loggers.logger import Logger
+from utils.configloader import ConfigLoader
+from indicators.technical_indicators import TechnicalIndicators
+
+# Optimization: Cache FFT frequency bins by length
+_fft_freq_cache: Dict[int, np.ndarray] = {}
 
 
-import pandas as pd
+def _get_fft_freqs(n: int) -> np.ndarray:
+    """Get cached FFT frequency bins for length n."""
+    if n not in _fft_freq_cache:
+        _fft_freq_cache[n] = np.fft.fftfreq(n)
+    return _fft_freq_cache[n]
+
+
 class Processor:
-    def __init__(self, stock=None, frame=None):
+    """
+    Optimized data processor with caching and reduced DataFrame copies.
+
+    Optimizations:
+    - Cached cleaned data (invalidated on frame update)
+    - Cached feature engineering results
+    - FFT frequency bin caching
+    - Reduced DataFrame copies in pipeline
+    - In-place operations where safe
+    """
+
+    def __init__(self, stock: Optional[str] = None, frame: Optional[pd.DataFrame] = None):
         self.stock = stock
         self.frame = frame
         self.config = ConfigLoader().load_config()
         self.logs_dir = self.config["folders"]["logs"]
         self.logger = Logger('app.log', 'Processor', log_dir=self.logs_dir).get_logger()
-        self.scaler = None  # Initialized during scaling
+        self.scaler = None
 
-    def update(self, stock, frame):
-        """Update the stock symbol and frame data."""
+        # Optimization: Cache for expensive computations
+        self._clean_cache: Optional[pd.DataFrame] = None
+        self._clean_cache_hash: Optional[int] = None
+        self._features_cache: Optional[pd.DataFrame] = None
+        self._features_cache_hash: Optional[int] = None
+
+    def update(self, stock: str, frame: pd.DataFrame) -> None:
+        """Update the stock symbol and frame data. Invalidates caches."""
         self.stock = stock
         self.frame = frame
+        # Invalidate caches on data update
+        self._clean_cache = None
+        self._clean_cache_hash = None
+        self._features_cache = None
+        self._features_cache_hash = None
 
-    def dataframe(self) -> pd.DataFrame:
-        return self.frame.copy()
+    def dataframe(self, copy: bool = True) -> pd.DataFrame:
+        """
+        Return the frame. Set copy=False for read-only operations.
 
-    def clean_stock_data(self) -> pd.DataFrame:
+        Args:
+            copy: If True (default), return a copy. If False, return view.
+        """
+        if copy:
+            return self.frame.copy()
+        return self.frame
+
+    def _frame_hash(self) -> int:
+        """Compute a hash of the frame for cache invalidation."""
+        if self.frame is None or len(self.frame) == 0:
+            return 0
+        # Use shape and numeric columns only for hash
         try:
-            df = self.dataframe()
-            df.dropna(inplace=True)
-            # df['datetime'] = pd.to_datetime(df['datetime'], unit='ms')
-            df.sort_values(by='datetime', inplace=True)
-            df.drop_duplicates(inplace=True)
-            df.rename(
-                columns={
-                    'open': 'Open',
-                    'high': 'High',
-                    'low': 'Low',
-                    'close': 'Close',
-                    'volume': 'Volume',
-                    'datetime': 'Date'
-                },
-                inplace=True,
-            )
-            return df
+            numeric_cols = self.frame.select_dtypes(include=[np.number])
+            if len(numeric_cols.columns) > 0 and len(numeric_cols) > 0:
+                first_val = numeric_cols.iloc[0].sum()
+            else:
+                first_val = 0
+            return hash((len(self.frame), len(self.frame.columns), first_val))
+        except Exception:
+            return hash(len(self.frame))
+
+    def clean_stock_data(self, use_cache: bool = True) -> pd.DataFrame:
+        """
+        Clean and normalize stock data with optional caching.
+
+        Args:
+            use_cache: If True, return cached result if available.
+        """
+        # Check cache
+        current_hash = self._frame_hash()
+        if use_cache and self._clean_cache is not None and self._clean_cache_hash == current_hash:
+            return self._clean_cache.copy()
+
+        try:
+            # Get a copy for modification
+            df = self.dataframe(copy=True)
+
+            # Chain operations for efficiency
+            df = (df
+                  .dropna()
+                  .sort_values(by='datetime')
+                  .drop_duplicates()
+                  .rename(columns={
+                      'open': 'Open',
+                      'high': 'High',
+                      'low': 'Low',
+                      'close': 'Close',
+                      'volume': 'Volume',
+                      'datetime': 'Date'
+                  }))
+
+            # Cache result
+            self._clean_cache = df
+            self._clean_cache_hash = current_hash
+            return df.copy()
+
         except KeyError as e:
-            self.logger.error(f"KeyError: Missing key {e} in the DataFrame. Please ensure all required columns are present.")
+            self.logger.error(f"KeyError: Missing key {e} in the DataFrame.")
             return pd.DataFrame()
 
     def apply_indicators(self, sma_window: int, ema_window: int) -> pd.DataFrame:
@@ -180,34 +252,43 @@ class Processor:
         scaled_df = pd.concat([df[['Date', 'Close']], scaled_df], axis=1)
         return scaled_df
 
-    def denoise_fft(self, signal: np.ndarray, threshold: float = 0.1, low_freq_cutoff: float = 0.1, high_freq_cutoff: float = 0.9) -> np.ndarray:
+    def denoise_fft(
+        self,
+        signal: np.ndarray,
+        threshold: float = 0.1,
+        low_freq_cutoff: float = 0.1,
+        high_freq_cutoff: float = 0.9
+    ) -> np.ndarray:
         """
-        Apply Fourier Transform based denoising with a cutoff for low and high frequencies.
-        This is an enhanced version where a frequency band is retained based on thresholds.
+        Apply FFT-based denoising with frequency band filtering.
 
-        Parameters:
-        - signal: The input signal (1D numpy array).
-        - threshold: The threshold for zeroing out frequency components (complex magnitude).
-        - low_freq_cutoff: Low frequency cutoff to retain components.
-        - high_freq_cutoff: High frequency cutoff to retain components.
-
-        Returns:
-        - The denoised signal after applying the inverse FFT.
+        Optimizations:
+        - Cached frequency bins by signal length
+        - Early return for invalid signals
+        - In-place array modification
         """
-        # Apply FFT to the signal
-        fft_signal = fft(signal)
-        
-        # Get the frequency bins corresponding to the FFT components
+        # Validate input
+        if signal is None or len(signal) == 0:
+            return signal
+        if not np.all(np.isfinite(signal)):
+            return signal  # Return unchanged if contains NaN/Inf
+
         n = len(signal)
-        freqs = np.fft.fftfreq(n)
-        
-        # Apply the frequency thresholding by zeroing out components outside the specified range
-        fft_signal[(freqs < low_freq_cutoff) | (freqs > high_freq_cutoff)] = 0
 
-        # Optionally apply a magnitude threshold for high-frequency noise rejection
-        fft_signal[np.abs(fft_signal) < threshold] = 0
-        
-        # Inverse FFT to recover the denoised signal
+        # Optimization: Use cached frequency bins
+        freqs = _get_fft_freqs(n)
+
+        # FFT and filter
+        fft_signal = fft(signal)
+
+        # Create mask once (avoid repeated boolean operations)
+        freq_mask = (freqs < low_freq_cutoff) | (freqs > high_freq_cutoff)
+        fft_signal[freq_mask] = 0
+
+        # Magnitude threshold
+        mag_mask = np.abs(fft_signal) < threshold
+        fft_signal[mag_mask] = 0
+
         return np.abs(ifft(fft_signal))
 
     def apply_signal_processing(self, df: pd.DataFrame, columns_to_denoise: list) -> pd.DataFrame:

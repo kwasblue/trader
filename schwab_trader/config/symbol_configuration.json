@@ -1,0 +1,157 @@
+{
+  "_description": "Unified symbol configuration combining strategy routing, parameters, and trade logic",
+  "_version": "1.0.0",
+
+  "default_settings": {
+    "risk_per_trade": 0.01,
+    "max_position_pct": 0.10,
+    "sl_mults": {
+      "low_volatility": 2.0,
+      "normal": 1.5,
+      "high_volatility": 1.0
+    },
+    "tp_mults": {
+      "low_volatility": 3.0,
+      "normal": 2.0,
+      "high_volatility": 1.5
+    },
+    "default_strategy": "sma_strategy",
+    "default_trade_logic": "default"
+  },
+
+  "symbols": {
+    "AAPL": {
+      "enabled": true,
+      "regimes": {
+        "low_volatility": {
+          "strategy": "sma_strategy",
+          "strategy_params": {
+            "fast": 10,
+            "slow": 30
+          },
+          "trade_logic": "default",
+          "trade_logic_params": {}
+        },
+        "normal": {
+          "strategy": "momentum_strategy",
+          "strategy_params": {
+            "lookback": 20
+          },
+          "trade_logic": "default",
+          "trade_logic_params": {}
+        },
+        "high_volatility": {
+          "strategy": "mean_reversion_strategy",
+          "strategy_params": {
+            "window": 14
+          },
+          "trade_logic": "default",
+          "trade_logic_params": {}
+        }
+      },
+      "overrides": {
+        "risk_per_trade": 0.01,
+        "max_position_pct": 0.10
+      }
+    },
+
+    "MSFT": {
+      "enabled": true,
+      "regimes": {
+        "low_volatility": {
+          "strategy": "sma_strategy",
+          "strategy_params": {
+            "fast": 10,
+            "slow": 30
+          },
+          "trade_logic": "default",
+          "trade_logic_params": {}
+        },
+        "normal": {
+          "strategy": "momentum_strategy",
+          "strategy_params": {
+            "lookback": 20
+          },
+          "trade_logic": "default",
+          "trade_logic_params": {}
+        },
+        "high_volatility": {
+          "strategy": "mean_reversion_strategy",
+          "strategy_params": {
+            "window": 14
+          },
+          "trade_logic": "default",
+          "trade_logic_params": {}
+        }
+      },
+      "overrides": {}
+    },
+
+    "GOOGL": {
+      "enabled": false,
+      "regimes": {
+        "low_volatility": {
+          "strategy": "sma_strategy",
+          "strategy_params": {
+            "fast": 12,
+            "slow": 26
+          },
+          "trade_logic": "default",
+          "trade_logic_params": {}
+        },
+        "normal": {
+          "strategy": "momentum_strategy",
+          "strategy_params": {
+            "lookback": 20
+          },
+          "trade_logic": "default",
+          "trade_logic_params": {}
+        },
+        "high_volatility": {
+          "strategy": "mean_reversion_strategy",
+          "strategy_params": {
+            "window": 14
+          },
+          "trade_logic": "default",
+          "trade_logic_params": {}
+        }
+      },
+      "overrides": {}
+    },
+
+    "TSLA": {
+      "enabled": false,
+      "regimes": {
+        "low_volatility": {
+          "strategy": "sma_strategy",
+          "strategy_params": {
+            "fast": 8,
+            "slow": 21
+          },
+          "trade_logic": "default",
+          "trade_logic_params": {}
+        },
+        "normal": {
+          "strategy": "momentum_strategy",
+          "strategy_params": {
+            "lookback": 14
+          },
+          "trade_logic": "default",
+          "trade_logic_params": {}
+        },
+        "high_volatility": {
+          "strategy": "mean_reversion_strategy",
+          "strategy_params": {
+            "window": 10
+          },
+          "trade_logic": "default",
+          "trade_logic_params": {}
+        }
+      },
+      "overrides": {
+        "risk_per_trade": 0.005,
+        "max_position_pct": 0.05
+      }
+    }
+  }
+}

@@ -23,12 +23,11 @@ venv/
 *.onnx
 *.tflite
 
-# === Data files ===
+# === Data files (keep config JSON) ===
 *.csv
 *.tsv
 *.xlsx
 *.xls
-*.json
 *.parquet
 *.zip
 *.gz
@@ -37,12 +36,20 @@ venv/
 *.npy
 *.npz
 
+# === Data storage (large files) ===
+data/data_storage/raw_data/
+data/data_storage/proc_data/
+
 # === Local models and results ===
 model_results/
 saved_models/
 models/
 tokens/
 logs/
+experiments/
+
+# === Archive (experimental code) ===
+archive/
 
 # === Config and secrets ===
 .env
@@ -51,6 +58,12 @@ logs/
 *.crt
 credentials.json
 .zip
+
+# === API keys and tokens ===
+utils/cdp_api_key.json
+**/token_file.json
+**/token_file
+*.token
 
 # === OS and IDE-specific ===
 .DS_Store

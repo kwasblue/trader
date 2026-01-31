@@ -28,9 +28,11 @@ from core.events.events import (
     EVENT_NEW_TRADE, TradePayload,
     EVENT_POSITION_UPDATE, PositionPayload,
     EVENT_PNL_UPDATE, PnLPayload,
-    EVENT_HEALTH_UPDATE, HealthPayload, 
+    EVENT_HEALTH_UPDATE, HealthPayload,
     EVENT_ALERT, AlertPayload
 )
+from core.utils.retry import retry, async_retry, get_circuit_breaker
+from core.utils.health import get_health_checker
 
 
 def _map_side(side: str) -> OrderSide:
@@ -71,12 +73,21 @@ class AlpacaBroker(BaseBrokerInterface):
     # ---------------------------------------------------------
     # Connections / Streaming
     # ---------------------------------------------------------
+    @retry(max_attempts=3, base_delay=2.0, circuit_breaker="alpaca_connect")
     def connect(self):
-        """Establish trading and streaming connections."""
+        """Establish trading and streaming connections with retry logic."""
         self.trading_client = TradingClient(self.api_key, self.api_secret, paper=self.paper)
         self.stream = StockDataStream(self.api_key, self.api_secret, feed=DataFeed.IEX)
         self.data_rest = StockHistoricalDataClient(self.api_key, self.api_secret)
         self.logger.info("Connected to Alpaca.")
+
+        # Register health check
+        health_checker = get_health_checker()
+        health_checker.register(
+            "alpaca_broker",
+            self._health_check,
+            metadata={"paper": self.paper}
+        )
 
         if self.event_handler:
             payload: HealthPayload = {
@@ -85,6 +96,18 @@ class AlpacaBroker(BaseBrokerInterface):
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
             asyncio.create_task(self.event_handler.emit(EVENT_HEALTH_UPDATE, payload))
+
+    async def _health_check(self) -> bool:
+        """Health check for Alpaca connection."""
+        try:
+            if not self.trading_client:
+                return False
+            # Try to get account info as health check
+            account = await asyncio.to_thread(self.trading_client.get_account)
+            return account is not None
+        except Exception as e:
+            self.logger.warning(f"Health check failed: {e}")
+            return False
 
     async def _heartbeat_loop(self, interval: int = 10):
         """Emit periodic broker heartbeat."""
@@ -200,8 +223,16 @@ class AlpacaBroker(BaseBrokerInterface):
             side=trade["side"],
         )
 
+    @retry(max_attempts=3, base_delay=1.0, circuit_breaker="alpaca_orders")
     def submit_market_order(self, symbol: str, qty: int, side: str) -> bool:
-        """Submit a market order through Alpaca and emit status to the event bus."""
+        """
+        Submit a market order through Alpaca with retry logic.
+
+        Features:
+        - Automatic retry on transient failures (3 attempts)
+        - Circuit breaker to prevent cascading failures
+        - Event emission for order status tracking
+        """
         if not self.trading_client:
             self.logger.error("Trading client not initialized. Call `connect()` first.")
             if self.event_handler:

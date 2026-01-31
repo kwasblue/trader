@@ -1,6 +1,9 @@
 import numpy as np
+import pandas as pd
 import inspect
+from typing import Optional, List
 from core.base.base_strategy import BaseStrategy
+
 
 class CombinedStrategy(BaseStrategy):
     def generate_signal(self, data):
@@ -40,4 +43,41 @@ class CombinedStrategy(BaseStrategy):
             raise ValueError("Unknown combine method. Use 'vote' or 'weighted'.")
 
         data["Signal"] = combined_signal
-        return data
+        if data.empty or "Signal" not in data.columns:
+            return 0
+        return int(data["Signal"].iloc[-1])
+
+    def generate_signals_vectorized(self, data: pd.DataFrame) -> Optional[List[int]]:
+        """Vectorized combined signal generation for fast backtesting."""
+        strategy_instances = self.params.get("strategy_instances", [])
+        weights = self.params.get("weights", None)
+        combine_method = self.params.get("combine_method", "vote")
+
+        if not strategy_instances:
+            return None
+
+        # Collect vectorized signals from each sub-strategy
+        all_signals = []
+        for strategy in strategy_instances:
+            if hasattr(strategy, 'generate_signals_vectorized'):
+                sig = strategy.generate_signals_vectorized(data.copy())
+                if sig is not None:
+                    all_signals.append(np.array(sig))
+
+        if not all_signals:
+            return None
+
+        signals_array = np.array(all_signals)
+
+        # Combine signals
+        if combine_method == "vote":
+            combined = np.sign(np.sum(signals_array, axis=0))
+        elif combine_method == "weighted":
+            if weights is None or len(weights) != len(all_signals):
+                # Equal weights as fallback
+                weights = np.ones(len(all_signals)) / len(all_signals)
+            combined = np.sign(np.sum(signals_array * np.array(weights)[:, None], axis=0))
+        else:
+            combined = np.sign(np.sum(signals_array, axis=0))
+
+        return combined.astype(int).tolist()

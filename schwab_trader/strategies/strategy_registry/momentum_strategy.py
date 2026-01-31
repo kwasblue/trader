@@ -1,6 +1,9 @@
 # strategies/strategy_registry/momentum_strategy.py
-from core.base.base_strategy import BaseStrategy
+import numpy as np
 import pandas as pd
+from typing import Optional, List
+from core.base.base_strategy import BaseStrategy
+
 
 class MomentumStrategy(BaseStrategy):
     def __init__(self, lookback: int = 20, **kwargs):
@@ -13,3 +16,19 @@ class MomentumStrategy(BaseStrategy):
         if len(df) < self.lookback + 1:
             return 0
         return 1 if close.iloc[-1] > close.iloc[-self.lookback - 1] else -1
+
+    def generate_signals_vectorized(self, data: pd.DataFrame) -> Optional[List[int]]:
+        """Vectorized momentum signal generation for fast backtesting."""
+        close = data['Close'].values if 'Close' in data.columns else data['close'].values
+        n = len(close)
+
+        # Compare current price with price `lookback` periods ago
+        signals = np.zeros(n, dtype=int)
+
+        for i in range(self.lookback + 1, n):
+            if close[i] > close[i - self.lookback - 1]:
+                signals[i] = 1
+            else:
+                signals[i] = -1
+
+        return signals.tolist()

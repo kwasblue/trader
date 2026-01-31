@@ -1,10 +1,14 @@
 from PySide6 import QtWidgets, QtCore, QtGui
 import pyqtgraph as pg
 import os
+from pathlib import Path
 import pandas as pd
 import numpy as np
 
 from datetime import datetime, timezone
+
+# Project root for relative path resolution
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
 from core.simulator.gbm_simulator import GBMSimulator
 from core.historical_loader import HistoricalBarLoader
 from core.mock_executor import MockExecutor
@@ -14,7 +18,7 @@ import random
 from monitoring.bus import ControlBridge
 from monitoring.models import SymbolsTableModel
 from monitoring.dialogs.manual_order import ManualOrderDialog
-from monitoring.feeds.state_aggregator import StateAggregator 
+# StateAggregator removed - using direct feeder connections now
 
 from core.events.eventhandler import EventHandler, get_event_handler
 from monitoring.feeds.feeder import DataFeeder
@@ -91,8 +95,26 @@ class MainWindow(QtWidgets.QMainWindow):
         self.cancel_all_btn_tb = QtWidgets.QToolButton(); self.cancel_all_btn_tb.setText("Cancel All")
         self.manual_order_btn_tb = QtWidgets.QToolButton(); self.manual_order_btn_tb.setText("Manual Order")
 
+        # Mode selector
+        self.mode_label = QtWidgets.QLabel("Mode:")
+        self.mode_combo = QtWidgets.QComboBox()
+        self.mode_combo.addItems(["Simulation", "Alpaca", "Schwab"])
+        self.mode_combo.setMinimumWidth(100)
+        self.mode_combo.currentTextChanged.connect(self._on_mode_changed)
+
+        # Symbol input
+        self.symbol_label = QtWidgets.QLabel("Symbols:")
+        self.symbol_input = QtWidgets.QLineEdit("AAPL,MSFT")
+        self.symbol_input.setMinimumWidth(120)
+        self.symbol_input.setPlaceholderText("AAPL,MSFT,GOOGL")
+
         for a in [self.start_act, self.stop_act, self.clear_logs_act, self.export_csv_act, self.export_pdf_act]:
             tb.addAction(a)
+        tb.addSeparator()
+        tb.addWidget(self.mode_label)
+        tb.addWidget(self.mode_combo)
+        tb.addWidget(self.symbol_label)
+        tb.addWidget(self.symbol_input)
         tb.addSeparator()
         tb.addWidget(self.panic_btn)
         tb.addWidget(self.flatten_btn_tb)
@@ -117,9 +139,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self._build_history_tab()
         self._build_replay_tab()
 
-        # Toolbar actions
-        self.start_act.triggered.connect(lambda: self._append_log("[UI] Start clicked"))
-        self.stop_act.triggered.connect(lambda: self._append_log("[UI] Stop clicked"))
+        # Toolbar actions - wire to trading controls
+        self.start_act.triggered.connect(self._start_trading)
+        self.stop_act.triggered.connect(self._stop_trading)
         self.clear_logs_act.triggered.connect(lambda: self.logs_view.clear())
         self.export_csv_act.triggered.connect(self._export_all_csvs)
         self.export_pdf_act.triggered.connect(lambda: QtWidgets.QMessageBox.information(
@@ -139,45 +161,174 @@ class MainWindow(QtWidgets.QMainWindow):
         self._wire_gui_to_bus()
         self._subscribe_backend_events()
 
-        # Connect feeder → GUI slots
-        self.aggregator = StateAggregator(self.feeder)
-        self.aggregator.snapshot_ready.connect(self._update_from_snapshot)
+        # === Direct feeder → GUI connections ===
+        # NOTE: Feeder subscribes to EventBus SYNCHRONOUSLY in its __init__,
+        # so subscriptions are already in place when we connect Qt signals here.
+        self._connect_feeder_signals()
 
-        # Keep OHLC direct if you want smooth chart updates
-        self.feeder.s.ohlc.connect(lambda sym, df: self._update_price_chart({"symbol": sym, "data": df}))
+        # Log subscription status
+        pnl_count = len(self.bus.listeners.get("PNL_UPDATE", []))
+        bar_count = len(self.bus.listeners.get("NEW_BAR", []))
+        self._append_log(f"[INIT] Feeder ready: PNL_UPDATE={pnl_count}, NEW_BAR={bar_count} listeners")
+        self._append_log("[INIT] GUI signal connections established.")
 
-        self._append_log("[INIT] Aggregator connected to Feeder and GUI.")
-# # --- Connect feeder → GUI slots ---
-#         s = self.feeder.s
+    def _connect_feeder_signals(self):
+        """Connect DataFeeder Qt signals to GUI update methods.
 
-#         # OHLC bars → price chart updates
-#         s.ohlc.connect(lambda sym, df: self._update_price_chart({"symbol": sym, "data": df}))
+        IMPORTANT: These handlers must be SYNC functions (not async).
+        They receive data from the feeder's Qt signals.
+        """
+        # P&L and equity updates
+        self.feeder.s.pnl_update.connect(self._gui_on_pnl)
+        self.feeder.s.equity_update.connect(self._gui_on_equity)
 
-#         # Trades → trade markers and log
-#         s.trades.connect(lambda rows: [self._handle_new_trade(r) for r in rows])
+        # Market data
+        self.feeder.s.bar_update.connect(self._gui_on_bar)
+        self.feeder.s.price_update.connect(self._gui_on_price)
 
-#         # Positions → table model updates
-#         s.symbols.connect(lambda rows: [self._update_position_row(r) for r in rows])
+        # Health status
+        self.feeder.s.health_update.connect(self._gui_on_health)
 
-#         # PnL → equity curve and labels
-#         s.equity_point.connect(lambda ts, val: self._update_perf_dashboard({"timestamp": ts, "portfolio_value": val}))
-#         s.realized_point.connect(lambda ts, realized, unrealized: self._update_perf_dashboard({"timestamp": ts, "realized": realized, "unrealized": unrealized}))
-#         s.risk_stats.connect(lambda u, r, dd: self._update_perf_dashboard({"unrealized": u, "realized": r, "drawdown": dd}))
+        # Trades and positions
+        self.feeder.s.trade_update.connect(self._gui_on_trade)
+        self.feeder.s.position_update.connect(self._gui_on_position)
+        self.feeder.s.order_update.connect(self._gui_on_order)
 
-#         # Alerts → alerts list
-#         s.alerts.connect(lambda alerts: [self.alerts_list.addItem(a["text"]) for a in alerts])
-#         # 7️⃣ Cooldown / halt → panic button + disable
-#         s.cooldown.connect(self._on_cooldown_state)
+        # Logs and alerts
+        self.feeder.s.log_message.connect(self._append_log)
+        self.feeder.s.alert.connect(self._gui_on_alert)
 
-#         # 8️⃣ Health → log or status bar
-#         s.health.connect(lambda h: self._append_log(f"[HEALTH] {h.get('broker','?')} - {h.get('status','?')}"))
+        self._append_log("[INIT] Feeder Qt signals connected to GUI handlers.")
 
-#         # 9️⃣ Regime breakdown (optional future use)
-#         s.regime_breakdown.connect(lambda d: self._append_log(f"[REGIME] {d}"))
-#         # Logs → Ops tab
-#         s.log.connect(self._append_log)
-#         #asyncio.create_task(self.feeder.start_safe())
-        self._append_log("[INIT] Feeder started and subscribed to EventBus.")
+    # ================================================================
+    # GUI HANDLERS (SYNC) - Connected to DataFeeder Qt signals
+    # ================================================================
+
+    def _gui_on_pnl(self, data: dict):
+        """Handle P&L update from feeder Qt signal (SYNC)."""
+        try:
+            self._append_log(f"[PNL] Portfolio: ${data.get('portfolio_value', 0):,.2f}")
+
+            # Update KPI labels
+            if 'unrealized' in data:
+                self._set_kpi(self.unreal_lbl, data['unrealized'], money=True)
+            if 'realized' in data:
+                self._set_kpi(self.realized_lbl, data['realized'], money=True)
+            if 'drawdown' in data:
+                self._set_kpi(self.dd_lbl, data['drawdown'], pct=True)
+
+            # Update equity curve
+            value = data.get('portfolio_value', 0)
+            if value:
+                self._eq_x.append(len(self._eq_x))
+                self._eq_y.append(float(value))
+                self._update_equity_chart()
+
+            # Log to CSV
+            self.log_event(events.EVENT_PNL_UPDATE, data)
+        except Exception as e:
+            self._append_log(f"[ERR] PnL update failed: {e}")
+
+    def _gui_on_equity(self, value: float):
+        """Handle simple equity update (SYNC)."""
+        self._eq_x.append(len(self._eq_x))
+        self._eq_y.append(value)
+        self._update_equity_chart()
+
+    def _gui_on_bar(self, symbol: str, bar: dict):
+        """Handle bar update from feeder (SYNC)."""
+        try:
+            close = bar.get('close', 0)
+            self._append_log(f"[BAR] {symbol}: ${close:.2f}")
+            self._update_price_chart({"symbol": symbol, "data": bar})
+        except Exception as e:
+            self._append_log(f"[ERR] Bar update failed: {e}")
+
+    def _gui_on_price(self, symbol: str, price: float):
+        """Handle price update from feeder (SYNC)."""
+        # Update price display if needed
+        pass
+
+    def _gui_on_health(self, data: dict):
+        """Handle health status update (SYNC)."""
+        try:
+            status = data.get('status', 'unknown')
+            details = data.get('details', {})
+            age = details.get('last_emit_age', 0) if isinstance(details, dict) else 0
+            count = details.get('event_count', 0) if isinstance(details, dict) else 0
+
+            if status == 'healthy':
+                self.heartbeat_indicator.setStyleSheet("color: #22c55e; font-size: 18px;")
+                self.halt_banner.setStyleSheet("background:#166534;color:#fff;padding:6px;border-radius:6px;")
+                self.halt_banner.setText(f"Feed OK | Events: {count}")
+                self.halt_banner.show()
+            else:
+                self.heartbeat_indicator.setStyleSheet("color: #ef4444; font-size: 18px;")
+                self.halt_banner.setStyleSheet("background:#991b1b;color:#fff;padding:6px;border-radius:6px;")
+                self.halt_banner.setText(f"Feed STALE ({age:.0f}s)")
+                self.halt_banner.show()
+        except Exception as e:
+            self._append_log(f"[ERR] Health update failed: {e}")
+
+    def _gui_on_trade(self, data: dict):
+        """Handle trade update from feeder (SYNC)."""
+        try:
+            symbol = data.get('symbol', 'UNKNOWN')
+            side = data.get('side', 'unknown')
+            qty = data.get('qty', 0)
+            price = data.get('price', 0)
+            self._append_log(f"[TRADE] {side.upper()} {qty} {symbol} @ ${price:.2f}")
+            self._handle_new_trade(data)
+            self.log_event(events.EVENT_NEW_TRADE, data)
+        except Exception as e:
+            self._append_log(f"[ERR] Trade update failed: {e}")
+
+    def _gui_on_position(self, data: dict):
+        """Handle position update from feeder (SYNC)."""
+        try:
+            if hasattr(self, 'pos_model') and hasattr(self.pos_model, 'update_position'):
+                self.pos_model.update_position(data)
+            self.log_event(events.EVENT_POSITION_UPDATE, data)
+        except Exception as e:
+            self._append_log(f"[ERR] Position update failed: {e}")
+
+    def _gui_on_order(self, data: dict):
+        """Handle order status update from feeder (SYNC)."""
+        try:
+            order_id = data.get('order_id', 'N/A')
+            status = data.get('status', 'unknown')
+            self._append_log(f"[ORDER] {order_id}: {status}")
+            self._update_order_kpis(data)
+            self.log_event(events.EVENT_ORDER_STATUS, data)
+        except Exception as e:
+            self._append_log(f"[ERR] Order update failed: {e}")
+
+    def _gui_on_alert(self, data: dict):
+        """Handle alert from feeder (SYNC)."""
+        try:
+            level = data.get('level', 'info') if isinstance(data, dict) else 'info'
+            message = data.get('message', str(data)) if isinstance(data, dict) else str(data)
+            self._append_log(f"[ALERT] {level.upper()}: {message}")
+            if hasattr(self, 'alerts_list'):
+                self.alerts_list.addItem(f"{level.upper()}: {message}")
+            self.log_event(events.EVENT_ALERT, data)
+        except Exception as e:
+            self._append_log(f"[ERR] Alert update failed: {e}")
+
+    def _update_equity_chart(self):
+        """Update the equity curve chart."""
+        try:
+            if not self._eq_x or not self._eq_y:
+                return
+
+            x = np.asarray(self._eq_x[-1000:], dtype=float)  # Limit to last 1000 points
+            y = np.asarray(self._eq_y[-1000:], dtype=float)
+
+            if hasattr(self, 'eq_curve'):
+                self.eq_curve.setData(x, y)
+        except Exception as e:
+            self._append_log(f"[ERR] Equity chart update failed: {e}")
+
     # ---------------- GUI -> Bus ----------------
     def _wire_gui_to_bus(self):
         self.ctrl.halt_changed.connect(lambda halted: self._emit_and_log(events.EVENT_HALTED, {"halted": bool(halted)}))
@@ -193,50 +344,24 @@ class MainWindow(QtWidgets.QMainWindow):
 
     # ---------------- Bus -> GUI ----------------
     def _subscribe_backend_events(self):
-        """Subscribe GUI to backend EventBus and route updates to GUI slots."""
+        """
+        Subscribe to backend events.
+
+        NOTE: The DataFeeder handles EventBus → Qt signal bridging.
+        This method now only handles events that aren't covered by the feeder.
+        """
         async def sub(event_name, handler):
             await self.bus.subscribe(event_name, handler)
 
         async def setup_subs():
-            await asyncio.gather(
-                sub(events.EVENT_PNL_UPDATE, self._on_pnl_update),
-                sub(events.EVENT_NEW_TRADE, self._on_new_trade),
-                sub(events.EVENT_ORDER_STATUS, self._on_order_status),
-                sub(events.EVENT_ALERT, self._on_alert),
-                sub(events.EVENT_POSITION_UPDATE, self._on_position_update),
-                sub(events.EVENT_PRICE_UPDATE, self._on_price_update),
-                sub(events.EVENT_MANUAL_ORDER, self._on_manual_order),
-            )
-            self._append_log("[INIT] Subscribed to backend EventBus events.")
+            # Only subscribe to events not handled by the feeder
+            await sub(events.EVENT_MANUAL_ORDER, self._async_on_manual_order)
+            self._append_log("[INIT] Backend event subscriptions ready.")
 
         QtCore.QTimer.singleShot(0, lambda: asyncio.create_task(setup_subs()))
-    # ---------------- Event Handlers ----------------
-    async def _on_pnl_update(self, event):
-        QtCore.QTimer.singleShot(0, lambda: self._update_perf_dashboard(event.payload))
-        self.log_event(events.EVENT_PNL_UPDATE, event.payload)
 
-    async def _on_new_trade(self, event):
-        QtCore.QTimer.singleShot(0, lambda: self._handle_new_trade(event.payload))
-        self.log_event(events.EVENT_NEW_TRADE, event.payload)
-
-    async def _on_order_status(self, event):
-        QtCore.QTimer.singleShot(0, lambda: self._update_order_kpis(event.payload))
-        self.log_event(events.EVENT_ORDER_STATUS, event.payload)
-
-    async def _on_alert(self, event):
-        QtCore.QTimer.singleShot(0, lambda: self.alerts_list.addItem(
-            f"{event.payload['level'].upper()}: {event.payload['message']}"))
-        self.log_event(events.EVENT_ALERT, event.payload)
-
-    async def _on_position_update(self, event):
-        QtCore.QTimer.singleShot(0, lambda: self._update_position_row(event.payload))
-        self.log_event(events.EVENT_POSITION_UPDATE, event.payload)
-
-    async def _on_price_update(self, event):
-        QtCore.QTimer.singleShot(0, lambda: self._update_price_chart(event.payload))
-        self.log_event(events.EVENT_PRICE_UPDATE, event.payload)
-    
-    async def _on_manual_order(self, event):
+    # ---------------- Async Event Handlers (for events not handled by feeder) ----------------
+    async def _async_on_manual_order(self, event):
         """Handle manual orders coming from the dialog (UI -> Backend)."""
         payload = event.payload
         sym = payload.get("symbol", "?")
@@ -244,22 +369,107 @@ class MainWindow(QtWidgets.QMainWindow):
         qty = payload.get("qty", "?")
         order_type = payload.get("type", "?")
 
-        # Log to GUI
-        self._append_log(f"[UI] Manual order → {side.upper()} {qty} {sym} ({order_type})")
-
-        # Persist to CSV
-        #self.log_event(events.EVENT_MANUAL_ORDER, payload)
+        # Log to GUI (thread-safe via QTimer)
+        QtCore.QTimer.singleShot(0, lambda: self._append_log(
+            f"[UI] Manual order → {side.upper()} {qty} {sym} ({order_type})"
+        ))
     
     def _on_mode_changed(self, mode: str):
-        self.sim_mode = (mode == "Simulation")
-        self._append_log(f"[UI] Mode switched → {mode}")
-        if self.sim_mode:
-            # kick off sim loop
-            self.executor = MockExecutor()
-            asyncio.create_task(self.executor.bus.subscribe(events.EVENT_MANUAL_ORDER, self.executor._on_manual_order))
-            asyncio.create_task(self._start_sim())
-        else:
-            self.sim_mode = False  # ensures _start_sim() loop exits
+        """Handle mode change from the combo box."""
+        self._current_mode = mode
+        self._append_log(f"[UI] Mode selected → {mode}")
+        # Mode change just selects - Start button actually starts trading
+
+    def _start_trading(self):
+        """Start trading with the selected mode."""
+        mode = getattr(self, '_current_mode', 'Simulation')
+        symbols_text = self.symbol_input.text() if hasattr(self, 'symbol_input') else "AAPL,MSFT"
+        symbols = [s.strip().upper() for s in symbols_text.split(",") if s.strip()]
+
+        if not symbols:
+            self._append_log("[ERROR] No symbols specified")
+            return
+
+        self._trading_active = True
+        self._append_log(f"[START] Starting {mode} mode for: {', '.join(symbols)}")
+
+        asyncio.create_task(self._run_backend(mode, symbols))
+
+    async def _run_backend(self, mode: str, symbols: list):
+        """Run the selected backend."""
+        try:
+            # Verify feeder subscriptions (they were set up synchronously at init)
+            pnl_listeners = len(self.bus.listeners.get("PNL_UPDATE", []))
+            bar_listeners = len(self.bus.listeners.get("NEW_BAR", []))
+            self._append_log(f"[INIT] EventBus: PNL={pnl_listeners}, BAR={bar_listeners} listeners")
+
+            if pnl_listeners == 0:
+                self._append_log("[ERROR] No PNL listeners! Feeder not initialized properly.")
+                return
+
+            # Start the backend
+            if mode == "Simulation":
+                await self._run_simulation_backend(symbols)
+            elif mode == "Alpaca":
+                await self._run_alpaca_backend(symbols)
+            elif mode == "Schwab":
+                await self._run_schwab_backend(symbols)
+        except asyncio.CancelledError:
+            self._append_log(f"[STOP] {mode} backend stopped")
+        except Exception as e:
+            import traceback
+            self._append_log(f"[ERROR] Backend error: {e}")
+            self._append_log(traceback.format_exc())
+
+    async def _run_simulation_backend(self, symbols: list):
+        """Run GBM simulation backend."""
+        from core.simulator.simulation import SimConfig, SimulationRunner
+
+        config = SimConfig(
+            symbols=symbols,
+            steps=999999,  # Run indefinitely
+            bar_sleep=0.1,
+        )
+        self._sim_runner = SimulationRunner(config)
+        self._append_log("[SIM] Starting simulation...")
+        await self._sim_runner.run()
+
+    async def _run_alpaca_backend(self, symbols: list):
+        """Run Alpaca live/paper trading."""
+        from utils.settings import Settings
+        from core.alpaca_runner import AlpacaLiveRunner
+
+        settings = Settings(root="config", include_root=True)
+        self._alpaca_runner = AlpacaLiveRunner(settings, symbols)
+        self._append_log("[ALPACA] Connecting to Alpaca...")
+        await self._alpaca_runner.run()
+
+    async def _run_schwab_backend(self, symbols: list):
+        """Run Schwab live trading using SchwabLiveRunner."""
+        from utils.settings import Settings
+        from core.schwab_runner import SchwabLiveRunner
+
+        try:
+            settings = Settings(root="config", include_root=True)
+            self._schwab_runner = SchwabLiveRunner(settings, symbols)
+            self._append_log("[SCHWAB] Connecting to Schwab...")
+            await self._schwab_runner.run()
+        except ValueError as e:
+            self._append_log(f"[SCHWAB] Configuration error: {e}")
+            self._append_log("[SCHWAB] Please set SCHWAB_API_KEY and SCHWAB_SECRET in .env file")
+        except Exception as e:
+            self._append_log(f"[SCHWAB] Error: {e}")
+
+    def _stop_trading(self):
+        """Stop the current trading backend."""
+        self._trading_active = False
+        self._append_log("[STOP] Stopping trading...")
+
+        # Cancel any running backend tasks
+        if hasattr(self, '_sim_runner'):
+            self._sim_runner = None
+        if hasattr(self, '_alpaca_runner'):
+            self._alpaca_runner = None
 
     # ---------------- Update Helpers ----------------
 
@@ -371,12 +581,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
     
     def _update_health_panel(self, payload: dict):
-        msg = f"[HEALTH] {payload['status'].upper()} | " \
-            f"Age: {payload['details']['last_emit_age']}s"
-        #self._append_log(msg)
-
         status = payload.get("status", "unknown")
-        age = payload.get("details", {}).get("last_emit_age", 0)
+        details = payload.get("details", {})
+        age = details.get("last_emit_age", 0) if isinstance(details, dict) else 0
 
         # === Gentle pulse when healthy ===
         if not hasattr(self, "_health_anim"):
@@ -407,13 +614,20 @@ class MainWindow(QtWidgets.QMainWindow):
 
 
     def _handle_new_trade(self, trade: dict):
-        sym, px = trade['symbol'], float(trade['price'])
+        sym = trade.get('symbol', 'UNKNOWN')
+        try:
+            px = float(trade.get('price', 0))
+        except (ValueError, TypeError):
+            px = 0.0
+        side = trade.get('side', 'unknown')
+        qty = trade.get('qty', 0)
+
         x = len(self._eq_x)
-        if trade['side'] in ('buy', 'long'):
+        if side in ('buy', 'long'):
             self.entry_marks.addPoints([{'pos': (x, px)}])
         else:
             self.exit_marks.addPoints([{'pos': (x, px)}])
-        self._append_log(f"[TRADE] {trade['side'].upper()} {sym} {trade['qty']} @ {px}")
+        self._append_log(f"[TRADE] {side.upper()} {sym} {qty} @ {px}")
 
     def _update_position_row(self, pos: dict):
         if hasattr(self.pos_model, 'update_position'):
@@ -427,10 +641,15 @@ class MainWindow(QtWidgets.QMainWindow):
             self.q_canceled.setText(str(int(self.q_canceled.text() or '0') + 1))
 
     def _update_price_chart(self, price: dict):
-        """Update Market tab price chart with latest simulated prices."""
+        """Update Market tab price chart with latest simulated prices.
+
+        Handles two input formats:
+        1. Direct price: {"symbol": str, "price": float, "timestamp": str}
+        2. OHLC data: {"symbol": str, "data": DataFrame}
+        """
         sym = price.get("symbol")
-        px = float(price.get("price", np.nan))
-        ts = price.get("timestamp")
+        if not sym:
+            return
 
         if not hasattr(self, "_price_data"):
             self._price_data = {}
@@ -438,13 +657,36 @@ class MainWindow(QtWidgets.QMainWindow):
         self._price_data.setdefault(sym, {"x": [], "y": []})
         d = self._price_data[sym]
 
-        try:
-            t = datetime.fromisoformat(str(ts).replace("Z", "+00:00")).timestamp()
-        except Exception:
-            t = len(d["x"])
+        # Handle OHLC DataFrame format
+        if "data" in price:
+            df = price["data"]
+            # Check if it's a DataFrame with .empty attribute, otherwise skip
+            if df is not None and hasattr(df, 'empty') and not df.empty:
+                close_col = "Close" if "Close" in df.columns else "close"
+                if close_col in df.columns:
+                    px = float(df[close_col].iloc[-1])
+                    # Use index as timestamp if available
+                    if hasattr(df.index, 'to_pydatetime'):
+                        try:
+                            ts = df.index[-1].timestamp()
+                        except Exception:
+                            ts = len(d["x"])
+                    else:
+                        ts = len(d["x"])
+                    d["x"].append(ts)
+                    d["y"].append(px)
+        else:
+            # Handle direct price format
+            px = float(price.get("price", np.nan))
+            ts = price.get("timestamp")
 
-        d["x"].append(t)
-        d["y"].append(px)
+            try:
+                t = datetime.fromisoformat(str(ts).replace("Z", "+00:00")).timestamp()
+            except Exception:
+                t = len(d["x"])
+
+            d["x"].append(t)
+            d["y"].append(px)
 
         # Keep last 500 points for performance
         if len(d["x"]) > 500:
@@ -603,42 +845,6 @@ class MainWindow(QtWidgets.QMainWindow):
         event.accept()
         asyncio.create_task(self.feeder.stop())
         super().closeEvent(event)
-    #-----------------Simulator---------------------
-    
-    async def _start_sim(self):
-
-        # load symbols from GUI input (fallback to AAPL if empty)
-        raw = self.symbol_input.text() if hasattr(self, "symbol_input") else "AAPL"
-        symbols = [s.strip().upper() for s in raw.split(",") if s.strip()]
-
-        # use your real historical data path
-        hist_path = r"C:\Users\kwasi\OneDrive\Documents\Personal Projects\schwab_trader\data\data_storage\proc_data"
-        hist_loader = HistoricalBarLoader(hist_path)
-
-        # use latest historical close as base price (fallback = 100.0)
-        base_prices = {
-            s: hist_loader.get_latest_close_price(s) or 100.0
-            for s in symbols
-        }
-
-        sim = GBMSimulator(symbols, base_price=base_prices, log_prices=True)
-        executor = MockExecutor()
-
-        self._append_log(f"[SIM] Starting simulation for {symbols} with base {base_prices}")
-
-        while self.sim_mode:  # keep running until user switches mode
-            bars = sim.update_all()
-            for sym, bar in bars.items():
-                # emit price to GUI
-                await self.bus.emit(events.EVENT_PRICE_UPDATE, bar)
-
-                # TEMP: random signals (replace with real strategy later)
-                signal = random.choice([-1, 0, 1])
-                atr_val = max(bar["high"] - bar["low"], 0.01)
-                executor.execute(sym, None, signal, bar["close"], atr_val)
-
-            await asyncio.sleep(0.1)  # controls sim speed
-
     # ---------------- Tab Builders ----------------
     def _build_dashboard_tab(self):
         tab = QtWidgets.QWidget(); grid=QtWidgets.QGridLayout(tab)
@@ -713,19 +919,22 @@ class MainWindow(QtWidgets.QMainWindow):
         hl = QtWidgets.QHBoxLayout()
         [hl.addWidget(b) for b in [self.flatten_btn, self.cancel_all_btn, self.halt_btn, self.ticket_btn]]
 
-        # === Mode + Symbol Input ===
-        self.mode_combo = QtWidgets.QComboBox()
-        self.mode_combo.addItems(["Live", "Simulation"])
-        self.mode_combo.setCurrentText("Live")
-        self.mode_combo.currentTextChanged.connect(self._on_mode_changed)
+        # === Mode + Symbol Input (use existing from toolbar) ===
+        # Note: mode_combo and symbol_input are already created in the toolbar
+        # We add references here for ops tab context
+        ops_mode_label = QtWidgets.QLabel("Mode:")
+        ops_symbol_label = QtWidgets.QLabel("Symbols:")
+        ops_mode_display = QtWidgets.QLabel(self.mode_combo.currentText())
+        ops_symbol_display = QtWidgets.QLabel(self.symbol_input.text())
 
-        self.symbol_input = QtWidgets.QLineEdit()
-        self.symbol_input.setPlaceholderText("Enter symbols (e.g. AAPL, TSLA, MSFT)")
+        # Update displays when main widgets change
+        self.mode_combo.currentTextChanged.connect(ops_mode_display.setText)
+        self.symbol_input.textChanged.connect(ops_symbol_display.setText)
 
-        hl.addWidget(QtWidgets.QLabel("Mode:"))
-        hl.addWidget(self.mode_combo)
-        hl.addWidget(QtWidgets.QLabel("Symbols:"))
-        hl.addWidget(self.symbol_input)
+        hl.addWidget(ops_mode_label)
+        hl.addWidget(ops_mode_display)
+        hl.addWidget(ops_symbol_label)
+        hl.addWidget(ops_symbol_display)
 
         grid.addLayout(hl, 0, 0)
 
@@ -797,7 +1006,7 @@ class MainWindow(QtWidgets.QMainWindow):
     # ---------------- Utility ----------------
     def _style_panic(self, halted: bool):
         if halted: self.panic_btn.setChecked(True); self.panic_btn.setText("RESUME ▶")
-        else: self.panic_btn.setChecked(False); self.panic_btn
+        else: self.panic_btn.setChecked(False); self.panic_btn.setText("HALT ✖")
 
     def _show_manual_order(self):
         dlg = ManualOrderDialog(self)
@@ -838,102 +1047,24 @@ class MainWindow(QtWidgets.QMainWindow):
         except Exception:
             lbl.setText(str(val))
 
-    # async def _start_sim(self):
-    #     """Run GBM-based simulation using GUI parameters."""
-
-    #     raw = self.symbol_input.text().strip()
-    #     symbols = [s.strip().upper() for s in raw.split(",") if s.strip()] or ["AAPL"]
-
-    #     steps = self.sim_steps_spin.value()
-    #     sleep_time = self.sim_speed_spin.value()
-    #     mu = self.sim_mu_spin.value()
-    #     sigma = self.sim_sigma_spin.value()
-
-    #     self._append_log(f"[SIM] Starting {steps}-step sim | μ={mu}, σ={sigma}, Δt={sleep_time}s")
-
-    #     sim = GBMSimulator(
-    #         symbols,
-    #         base_price={s: 100.0 for s in symbols},
-    #         log_prices=True,
-    #         drift_scale=mu,
-    #         vol_scale=sigma,
-    #         dt=sleep_time / 390.0,
-    #     )
-    #     executor = MockExecutor()
-    #     self._sim_running = True
-
-    #     for i in range(steps):
-    #         if not self._sim_running or getattr(self, "_halted", False):
-    #             self._append_log("[SIM] Simulation stopped.")
-    #             break
-
-    #         bars = sim.update_all()
-
-    #         for sym, bar in bars.items():
-    #             # ensure timestamp is ISO8601 string
-    #             ts = (
-    #                 bar["timestamp"].isoformat()
-    #                 if not isinstance(bar["timestamp"], str)
-    #                 else bar["timestamp"]
-    #             )
-
-    #             # --- 1️⃣ Emit full OHLC bar (BarPayload)
-    #             await self.bus.emit(events.EVENT_NEW_BAR, {
-    #                 "symbol": sym,
-    #                 "open": bar["open"],
-    #                 "high": bar["high"],
-    #                 "low": bar["low"],
-    #                 "close": bar["close"],
-    #                 "volume": bar["volume"],
-    #                 "timestamp": ts,
-    #             })
-
-    #             # --- 2️⃣ Emit price update (PricePayload)
-    #             await self.bus.emit(events.EVENT_PRICE_UPDATE, {
-    #                 "symbol": sym,
-    #                 "price": bar["close"],
-    #                 "ma20": None,
-    #                 "ma50": None,
-    #                 "timestamp": ts,
-    #             })
-
-    #             # --- 3️⃣ Emit dummy position (PositionPayload)
-    #             await self.bus.emit(events.EVENT_POSITION_UPDATE, {
-    #                 "symbol": sym,
-    #                 "qty": 100,
-    #                 "avg_price": bar["close"],
-    #                 "unrealized": 0.0,
-    #                 "realized": 0.0,
-    #                 "timestamp": ts,
-    #             })
-
-    #             # --- 4️⃣ Random trade signal (optional)
-    #             signal = random.choice([-1, 0, 1])
-    #             atr_val = max(bar["high"] - bar["low"], 0.01)
-    #             executor.execute(sym, None, signal, bar["close"], atr_val)
-            
-    #         #  pacing per bar (controls speed)
-    #         await asyncio.sleep(sleep_time)
-
-    #         # yield occasionally to keep GUI responsive
-    #         if i % 10 == 0:
-    #             await asyncio.sleep(0)
-
-    #     await asyncio.sleep(sleep_time)
-
-    #     self._append_log("[SIM] Simulation complete.")
-    #     self._sim_running = False
-
     async def _start_sim(self):
         """Launch SimulationRunner (GBM-based) using GUI parameters."""
+
+        # Verify feeder is ready (subscriptions done synchronously at init)
+        pnl_count = len(self.bus.listeners.get("PNL_UPDATE", []))
+        bar_count = len(self.bus.listeners.get("NEW_BAR", []))
+        self._append_log(f"[SIM] EventBus: PNL={pnl_count}, BAR={bar_count} listeners")
+
+        if pnl_count == 0:
+            self._append_log("[ERROR] No PNL listeners! Feeder not initialized properly.")
+            return
 
         # --- GUI parameters ---
         raw = self.symbol_input.text().strip()
         symbols = [s.strip().upper() for s in raw.split(",") if s.strip()] or ["AAPL"]
 
         steps = self.sim_steps_spin.value()
-        #sleep_time = self.sim_speed_spin.value()
-        sleep_time = 0.5
+        sleep_time = self.sim_speed_spin.value()
         mu = self.sim_mu_spin.value()
         sigma = self.sim_sigma_spin.value()
 
@@ -946,16 +1077,10 @@ class MainWindow(QtWidgets.QMainWindow):
             symbols=symbols,
             steps=steps,
             bar_sleep=sleep_time,
-            # the rest (drawdown config etc.) stays default
         )
 
         # --- Instantiate the SimulationRunner ---
         self._sim_runner = SimulationRunner(cfg)
-
-        # (optional) attach to GUI’s event bus so signals, PnL, etc. flow to frontend
-        if hasattr(self, "bus"):
-            self._sim_runner.events = self.bus  # share same EventHandler
-
         self._sim_running = True
 
         try:
@@ -968,7 +1093,9 @@ class MainWindow(QtWidgets.QMainWindow):
         except asyncio.CancelledError:
             self._append_log("[SIM] Simulation cancelled.")
         except Exception as e:
+            import traceback
             self._append_log(f"[SIM] Error: {e}")
+            self._append_log(traceback.format_exc())
         finally:
             self._sim_running = False
 

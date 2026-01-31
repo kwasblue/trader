@@ -4,44 +4,89 @@ from __future__ import annotations
 import asyncio
 import inspect
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
-from typing import Any, Callable, Awaitable, Dict, List
+from typing import Any, Callable, Awaitable, Dict, List, Set
+import weakref
 
 from core.base.event_handler_base import Event, EventHandlerBase
 from core.events.events import EVENT_SCHEMA_MAP, GuardrailPayload, EVENT_GUARDRAIL_TRIGGERED
-from core.events.validation import validate_payload 
+from core.events.validation import validate_payload
+
+# Optimization constants
+MAX_CONCURRENT_HANDLERS = 50  # Limit concurrent async handlers
+MAX_THREAD_WORKERS = 8  # Bounded thread pool for sync callbacks
+MAX_QUEUE_SIZE = 2000  # Reduced from 10,000 for memory efficiency
 
 
 class EventHandler(EventHandlerBase):
     """
-    Async-safe singleton event hub that accepts both async and sync callbacks.
-    - subscribe(): register a callback for an event name
-    - emit(): fire an event and await all handlers (run sync callbacks in executor)
-    - unsubscribe(): remove a previously registered callback
-    - get_event_names(): list all events with subscribers
-    - publish()/start(): optional queue-based publisher for decoupled emission
+    Optimized async-safe singleton event hub.
+
+    Optimizations:
+    - Bounded ThreadPoolExecutor for sync callbacks (prevents thread explosion)
+    - Semaphore to limit concurrent async handlers
+    - Task tracking for graceful shutdown
+    - Early exit when no subscribers (skip validation overhead)
+    - Reduced queue size for memory efficiency
+
+    IMPORTANT: This is a true singleton - __init__ is guarded to prevent
+    reinitializing the listeners dict on subsequent calls.
     """
     _instance: "EventHandler" | None = None
     _create_lock = threading.Lock()
+    _initialized = False  # Guard against __init__ being called multiple times
 
     def __new__(cls):
         with cls._create_lock:
             if cls._instance is None:
                 cls._instance = super().__new__(cls)
-                super(EventHandler, cls._instance).__init__()
-                cls._instance._queue = None
-                cls._instance._runner = None
             return cls._instance
+
+    def __init__(self):
+        # CRITICAL: Only initialize once! Python calls __init__ every time
+        # the class is instantiated, even for singletons.
+        if EventHandler._initialized:
+            return
+
+        # Call parent init (creates listeners dict)
+        super().__init__()
+
+        # Initialize our attributes
+        self._queue = None
+        self._runner = None
+        # Optimization: bounded thread pool for sync callbacks
+        self._executor = ThreadPoolExecutor(
+            max_workers=MAX_THREAD_WORKERS,
+            thread_name_prefix="event_handler"
+        )
+        # Optimization: limit concurrent async handlers
+        self._semaphore = asyncio.Semaphore(MAX_CONCURRENT_HANDLERS)
+        # Track active tasks for graceful shutdown
+        self._active_tasks: Set[asyncio.Task] = set()
+
+        # Mark as initialized
+        EventHandler._initialized = True
+        self.logger.info(f"EventHandler singleton initialized, id={id(self)}")
+        print(f"[EventHandler] Singleton initialized, id={id(self)}")
+
+    def subscribe_sync(self, event_name: str, callback: Callable[[Event], Any]) -> None:
+        """
+        SYNCHRONOUS subscribe - use this when you need guaranteed immediate subscription.
+        """
+        cb_name = getattr(callback, '__name__', repr(callback))
+        if callback not in self.listeners[event_name]:
+            self.listeners[event_name].append(callback)
+            self.logger.debug(f"[EventHandler] Subscribed to '{event_name}' -> {cb_name} (total: {len(self.listeners[event_name])})")
+        else:
+            self.logger.debug(f"[EventHandler] Duplicate subscription blocked for '{event_name}'")
 
     async def subscribe(self, event_name: str, callback: Callable[[Event], Any]) -> None:
         """
         Register a callback for an event. Callback can be async or sync.
+        For guaranteed immediate subscription, use subscribe_sync() instead.
         """
-        if callback not in self.listeners[event_name]:
-            self.listeners[event_name].append(callback)
-            self.logger.debug(f"[EventHandler] Subscribed to '{event_name}' -> {getattr(callback, '__name__', repr(callback))}")
-        else:
-            self.logger.debug(f"[EventHandler] Callback already subscribed to '{event_name}'")
+        self.subscribe_sync(event_name, callback)
 
     # async def emit(self, event_name: str, payload: Any) -> None:
     #     """
@@ -88,14 +133,33 @@ class EventHandler(EventHandlerBase):
     #                     f"[EventHandler] Error in callback {getattr(cb, '__name__', repr(cb))} for '{event_name}': {res}"
     #             )
     
+    def has_subscribers(self, event_name: str) -> bool:
+        """Check if event has any subscribers (optimization for early exit)."""
+        return bool(self.listeners.get(event_name))
+
     async def emit(self, event_name: str, payload: Any) -> None:
         """
-        Emit an event asynchronously and dispatch all listeners concurrently.
-        Sync callbacks are offloaded to a thread executor.
-        This version is fully non-blocking — each callback runs as its own task.
-        """
+        Emit an event asynchronously with optimized dispatch.
 
-        # --- Schema validation (optional but safe) ---
+        Optimizations:
+        - Early exit if no subscribers (skip validation overhead)
+        - Bounded thread pool for sync callbacks
+        - Semaphore-limited concurrency for async handlers
+        - Task tracking for graceful shutdown
+        """
+        # Optimization: Early exit before validation if no listeners
+        callbacks = self.listeners.get(event_name)
+        if not callbacks:
+            # Debug: Log when no listeners
+            if event_name == "PNL_UPDATE":
+                print(f"[EventHandler] NO LISTENERS for {event_name}!")
+            return
+
+        # Debug logging (commented out for production)
+        # if event_name in ("PNL_UPDATE", "NEW_BAR"):
+        #     self.logger.debug(f"[EventHandler] Emitting {event_name} to {len(callbacks)} listener(s)")
+
+        # Schema validation (only if we have listeners)
         schema = EVENT_SCHEMA_MAP.get(event_name)
         if schema:
             try:
@@ -104,40 +168,55 @@ class EventHandler(EventHandlerBase):
                 self.logger.error(f"[EventHandler] Invalid payload for {event_name}: {e}")
                 return
 
-        # --- Build event object ---
         event = Event(event_name, payload)
-        callbacks = list(self.listeners.get(event_name, []))
-        if not callbacks:
-            self.logger.debug(f"[EventHandler] Emit '{event_name}' (no listeners)")
-            return
-
-        self.logger.debug(f"[EventHandler] Emit '{event_name}' -> {len(callbacks)} listener(s)")
+        callbacks = list(callbacks)  # Copy to avoid mutation during iteration
 
         loop = asyncio.get_running_loop()
 
-        # --- Dispatch each callback without awaiting (non-blocking fan-out) ---
         for cb in callbacks:
             try:
                 if inspect.iscoroutinefunction(cb):
-                    loop.create_task(self._safe_call(cb, event))
+                    # Optimization: Track task and use semaphore
+                    task = loop.create_task(self._safe_async_call(cb, event))
+                    self._active_tasks.add(task)
+                    task.add_done_callback(self._active_tasks.discard)
                 else:
-                    loop.run_in_executor(None, self._safe_call, cb, event)
+                    # Optimization: Use bounded thread pool instead of default
+                    loop.run_in_executor(self._executor, self._safe_sync_call, cb, event)
             except Exception as e:
                 self.logger.exception(
                     f"[EventHandler] Failed scheduling callback {getattr(cb, '__name__', repr(cb))}: {e}"
                 )
 
-    async def _safe_call(self, cb: Callable, event: Event):
-        """Wrapper to isolate callback errors so one bad listener doesn’t crash emit()."""
-        try:
-            if inspect.iscoroutinefunction(cb):
+    async def _safe_async_call(self, cb: Callable, event: Event) -> None:
+        """Execute async callback with semaphore-limited concurrency."""
+        async with self._semaphore:
+            try:
                 await cb(event)
-            else:
-                cb(event)
+            except Exception as e:
+                self.logger.exception(
+                    f"[EventHandler] Error in async callback {getattr(cb, '__name__', repr(cb))}: {e}"
+                )
+
+    def _safe_sync_call(self, cb: Callable, event: Event) -> None:
+        """Execute sync callback in thread pool (called from executor)."""
+        try:
+            cb(event)
         except Exception as e:
             self.logger.exception(
-                f"[EventHandler] Error in callback {getattr(cb, '__name__', repr(cb))}: {e}"
+                f"[EventHandler] Error in sync callback {getattr(cb, '__name__', repr(cb))}: {e}"
             )
+
+    async def shutdown(self) -> None:
+        """Gracefully shutdown: wait for pending tasks and close executor."""
+        # Wait for active async tasks
+        if self._active_tasks:
+            self.logger.info(f"[EventHandler] Waiting for {len(self._active_tasks)} pending tasks...")
+            await asyncio.gather(*self._active_tasks, return_exceptions=True)
+
+        # Shutdown thread pool
+        self._executor.shutdown(wait=True, cancel_futures=False)
+        self.logger.info("[EventHandler] Shutdown complete")
 
 
     def unsubscribe(self, event_name: str, callback: Callable[[Event], Any]) -> None:
@@ -153,7 +232,7 @@ class EventHandler(EventHandlerBase):
     async def start(self) -> None:
         """Start an internal consumer task to drain the publish() queue."""
         if self._queue is None:
-            self._queue = asyncio.Queue(maxsize=10_000)
+            self._queue = asyncio.Queue(maxsize=MAX_QUEUE_SIZE)  # Optimized size
         if self._runner is None or self._runner.done():
             self._runner = asyncio.create_task(self._consumer_loop())
             self.logger.info("[EventHandler] Dispatcher loop started")

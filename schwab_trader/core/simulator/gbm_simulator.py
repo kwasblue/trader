@@ -42,7 +42,14 @@ class GBMSimulator:
         self.bias_strength = bias_strength         # amplitude for oscillating bias
         self.dt = dt
         self.log_prices = log_prices
-        self.logger = Logger(log_file="app.log", logger_name="GBM Simulator")
+        # Logger - own file with propagation to app.log
+        self.logger = Logger(
+            log_file="gbm_simulator.log",
+            logger_name="GBMSimulator",
+            propagate=True
+        ).get_logger()
+
+        self.logger.info(f"GBMSimulator initialized for symbols: {symbols}")
 
         # --- Shocks ---
         self.shock_probability = 0.002

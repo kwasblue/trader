@@ -117,31 +117,102 @@ class Authenticator:
         return time.time() >= (refresh_time + refresh_interval_seconds)
 
 
-    async def manual_refresh_token(self):
+    async def manual_refresh_token(self, use_gui: bool = True):
+        """
+        Manually refresh the authentication token.
+
+        Args:
+            use_gui: If True, use Qt dialog for URL input. If False, use console input.
+
+        Returns:
+            True on success, dict with error on failure
+        """
+        from urllib.parse import urlparse, parse_qs
+
         params = {
             'client_id': self.apikey,
             'redirect_uri': self.redirect_url
         }
-        auth_url = f'{self.config['auth']['authentication_url']}{urlencode(params)}'
-        print(f"Use this URL to log in and authenticate: {auth_url}")
-        returned_link = input("Complete the login process and paste the redirect URL here:")
-        
-        try:    
-            # Extract code from the returned URL
-            code = returned_link[returned_link.index('code=') + 5:returned_link.index('%40')] + "@"
+        auth_url = f'{self.config["auth"]["authentication_url"]}{urlencode(params)}'
+        self.logger.info(f"Use this URL to log in and authenticate: {auth_url}")
+
+        returned_link = None
+
+        if use_gui:
+            # Try to use Qt dialog for input
+            try:
+                from PySide6 import QtWidgets, QtCore
+
+                # Check if QApplication exists
+                app = QtWidgets.QApplication.instance()
+                if app is None:
+                    # No Qt app running, fall back to console
+                    use_gui = False
+                else:
+                    # Create input dialog
+                    dialog = QtWidgets.QInputDialog()
+                    dialog.setWindowTitle("Schwab Authentication")
+                    dialog.setLabelText(
+                        f"1. Open this URL in your browser:\n{auth_url}\n\n"
+                        "2. Complete the login process\n\n"
+                        "3. Paste the redirect URL here:"
+                    )
+                    dialog.setTextValue("")
+                    dialog.resize(600, 200)
+
+                    if dialog.exec() == QtWidgets.QDialog.Accepted:
+                        returned_link = dialog.textValue()
+                    else:
+                        self.logger.warning("User cancelled authentication")
+                        return {"error": "Authentication cancelled by user"}
+
+            except ImportError:
+                self.logger.warning("PySide6 not available, falling back to console input")
+                use_gui = False
+
+        if not use_gui:
+            # Console input fallback
+            print(f"\nAuthentication URL:\n{auth_url}\n")
+            returned_link = input("Complete the login process and paste the redirect URL here: ")
+
+        if not returned_link:
+            return {"error": "No redirect URL provided"}
+
+        try:
+            # Parse the redirect URL properly using urllib
+            parsed = urlparse(returned_link)
+            query_params = parse_qs(parsed.query)
+
+            if 'code' not in query_params:
+                # Try to extract code using fallback method
+                if 'code=' in returned_link:
+                    # Handle URL-encoded @ symbol
+                    start = returned_link.index('code=') + 5
+                    # Find the end of the code (either & or end of string)
+                    end = returned_link.find('&', start)
+                    if end == -1:
+                        end = len(returned_link)
+                    code = returned_link[start:end]
+                    # Decode URL-encoded @ symbol
+                    code = code.replace('%40', '@')
+                else:
+                    raise ValueError("No authorization code found in URL")
+            else:
+                code = query_params['code'][0]
+
         except Exception as e:
             self.logger.error(f"Error extracting authorization code: {str(e)}")
-            return {"error": "Failed to extract code from URL."}
-        
+            return {"error": f"Failed to extract code from URL: {str(e)}"}
+
         endpoint, headers, params = self._set_headers_params(
-            endpoint=self.token_endpoint, 
-            grant_type='authorization_code', 
-            code=code, 
-            redrirect_url=self.redirect_url, 
-            secret=self.secret, 
+            endpoint=self.token_endpoint,
+            grant_type='authorization_code',
+            code=code,
+            redrirect_url=self.redirect_url,
+            secret=self.secret,
             apikey=self.apikey
         )
-        
+
         token_dict = await self._get(endpoint=endpoint, headers=headers, params=params)
         token_dict['refresh_time'] = time.time()
         token_dict['access_time'] = time.time()
@@ -149,7 +220,7 @@ class Authenticator:
         if 'error' in token_dict:
             self.logger.error(f"Error during manual refresh: {token_dict['error']}")
             return token_dict
-        
+
         try:
             self.writer.write_json(target_path=f'{self.program_path}/tokens/', target_file='token_file', data=token_dict)
             self.logger.info("Manual refresh token successfully saved.")

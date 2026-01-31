@@ -1,0 +1,45 @@
+{
+  "general": {
+    "default_symbols": ["AAPL", "MSFT"],
+    "default_mode": "simulation"
+  },
+  "simulation": {
+    "bar_sleep": 0.1,
+    "warmup_bars": 200,
+    "starting_cash": 100000.0
+  },
+  "alpaca": {
+    "paper": true,
+    "data_feed": "iex"
+  },
+  "schwab": {
+    "session": "NORMAL"
+  },
+  "risk": {
+    "risk_per_trade": 0.01,
+    "max_position_pct": 0.10,
+    "max_pyramid_layers": 2,
+    "min_bars_between_layers": 2,
+    "max_symbol_drawdown": 0.12,
+    "max_portfolio_drawdown": 0.15,
+    "daily_loss_limit": 1000.0
+  },
+  "indicators": {
+    "atr_period": 14,
+    "sma_short": 20,
+    "sma_long": 50,
+    "rsi_period": 14,
+    "bollinger_period": 20,
+    "bollinger_std": 2.0
+  },
+  "data": {
+    "historical_data_path": "data/data_storage/proc_data",
+    "raw_data_path": "data/data_storage/raw_data",
+    "logs_path": "logs"
+  },
+  "gui": {
+    "update_interval_ms": 1000,
+    "equity_maxlen": 5000,
+    "price_maxlen": 2000
+  }
+}

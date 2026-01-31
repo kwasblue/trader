@@ -1,0 +1,12 @@
+{
+  "AAPL": {
+    "low_volatility": "sma_strategy",
+    "normal": "momentum_strategy",
+    "high_volatility": "mean_reversion_strategy"
+  },
+  "MSFT": {
+    "low_volatility": "sma_strategy",
+    "normal": "momentum_strategy",
+    "high_volatility": "mean_reversion_strategy"
+  }
+}

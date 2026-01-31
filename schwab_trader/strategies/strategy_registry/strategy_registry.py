@@ -1,9 +1,14 @@
 # strategies/strategy_registry/strategy_registry.py
 
-# strategies/strategy_registry/strategy_registry.py
-import os, importlib, inspect, re
+import os
+import importlib
+import inspect
+import re
+import logging
 from typing import Dict, Type
-from core.base.base_strategy import BaseStrategy  # adjust path if needed
+from core.base.base_strategy import BaseStrategy
+
+logger = logging.getLogger(__name__)
 
 STRATEGY_CLASS_REGISTRY: Dict[str, Type[BaseStrategy]] = {}
 
@@ -41,7 +46,7 @@ def load_strategies_from_directory(directory: str) -> None:
         try:
             module = importlib.import_module(module_path)
         except Exception as e:
-            print(f"[Loader] Failed to import {module_path}: {e}")
+            logger.warning(f"Failed to import {module_path}: {e}")
             continue
 
         for _, obj in inspect.getmembers(module, inspect.isclass):

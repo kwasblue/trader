@@ -24,7 +24,7 @@ class Logger:
         log_file: str,
         logger_name: str,
         log_dir: str = "logs",
-        level: int = logging.INFO,
+        level: int = logging.DEBUG,
         timestamp_format: str = "%Y-%m-%d %H:%M:%S",
         propagate: bool = False,
         max_bytes: int = 5_000_000,

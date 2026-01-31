@@ -1,0 +1,20 @@
+{
+  "folders": {
+    "logs": "logs",
+    "data": "data",
+    "tokens": "tokens/token_file",
+    "env": ".venv/env/.env",
+    "test": "tests",
+    "app_path": "."
+  },
+  
+  "api": {
+    "base_url": "https://api.schwabapi.com/trader/v1",
+    "market_url": "https://api.schwabapi.com/marketdata/v1"
+  },
+
+  "auth": {
+    "token_endpoint": "https://api.schwabapi.com/v1/oauth/token",
+    "authentication_url": "https://api.schwabapi.com/v1/oauth/authorize?"
+  }
+}

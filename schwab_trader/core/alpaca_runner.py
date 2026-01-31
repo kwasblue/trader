@@ -37,7 +37,7 @@ from core.simulator.simulation import compute_atr, classify_regime  # reuse your
 from core.broker.alpaca_broker import AlpacaBroker
 from core.logic.live_execution_engine import LiveExecutionEngine
 from core.logic.trade_logic_manager import DynamicTradeLogicManager
-load_dotenv(r"/home/kwasi/Projects/trader/schwab_trader/venv/.env")
+load_dotenv(ROOT / ".venv" / ".env")
 
 class AlpacaLiveRunner:
     def __init__(self, settings: Settings, symbols: list[str]):
@@ -79,12 +79,12 @@ class AlpacaLiveRunner:
         self.sizer = DynamicPositionSizer(
             risk_percentage=settings.get("BASE_RISK_PCT", 0.05)
         )
-        self.router = StrategyRoutingManager('/home/kwasi/Projects/trader/config/strategy_routing.json')
+        self.router = StrategyRoutingManager(str(ROOT.parent / "config" / "strategy_routing.json"))
         self.engine = LiveExecutionEngine(
             broker=self.broker,
             sizer=self.sizer,
             performance_tracker=self.trade_logger,
-            trade_logic_manager=DynamicTradeLogicManager('/home/kwasi/Projects/trader/config/trade_logic_routing.json'),
+            trade_logic_manager=DynamicTradeLogicManager(str(ROOT.parent / "config" / "trade_logic_routing.json")),
         )
         # If your engine has optional attrs (per our earlier patch), wire them:
         if hasattr(self.engine, "trade_gate"):
@@ -136,7 +136,7 @@ class AlpacaLiveRunner:
             pass
     # ---------- seeding ----------
     async def seed(self, lookback_bars: int = 200):
-        loader = HistoricalBarLoader('/home/kwasi/Projects/trader/schwab_trader/data/data_storage/proc_data')
+        loader = HistoricalBarLoader(str(ROOT / "data" / "data_storage" / "proc_data"))
         for sym in self.symbols:
             for b in loader.load_last_n_bars(sym, n=lookback_bars):
                 # assume loader returns dict-like
@@ -156,7 +156,6 @@ class AlpacaLiveRunner:
     async def on_alpaca_bar(self, raw_bar):
         bar = self._canonicalize_alpaca_bar(raw_bar)
         self.logger.debug(f"[RAW BAR] {raw_bar.symbol} {raw_bar.timestamp} c={raw_bar.close}")
-        print(f"[RUNNER RAW BAR] {raw_bar.symbol} {raw_bar.timestamp} c={raw_bar.close}", flush=True)
         symbol = bar["symbol"]
         ts: datetime = bar["timestamp"]
         

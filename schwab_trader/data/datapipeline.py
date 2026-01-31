@@ -97,9 +97,10 @@ class StockDataPipeline:
 
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             results = executor.map(lambda item: process(*item), gathered_data.items())
-        print(dict(results))
+        results_dict = dict(results)
+        self.logger.debug(f"Processed data: {results_dict}")
 
-        return dict(results)
+        return results_dict
 
     def store_data(self, processed_data: dict):
         """Store processed data."""

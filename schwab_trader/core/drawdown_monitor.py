@@ -76,8 +76,18 @@ class DrawdownMonitor:
         self.portfolio_locked: bool = False
         self.portfolio_last_unlock_time: Optional[datetime] = None
 
-        self.logger = Logger(log_file='TradeLogger.log', logger_name='Drawdown Monitor')
+        # Logger - own file with propagation to app.log
+        self.logger = Logger(
+            log_file='drawdown_monitor.log',
+            logger_name='DrawdownMonitor',
+            propagate=True
+        ).get_logger()
         self.event_handler = get_event_handler()
+
+        self.logger.info(
+            f"DrawdownMonitor initialized: symbol_dd={max_symbol_drawdown:.1%}, "
+            f"portfolio_dd={max_portfolio_drawdown:.1%}, cooldown={symbol_cooldown_seconds}s"
+        )
 
     # ----------------------------- Public API -----------------------------
 

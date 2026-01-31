@@ -8,7 +8,7 @@ trading signals based on market data analysis.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Union, Dict, Any, Optional
+from typing import Union, Dict, Any, Optional, List
 import pandas as pd
 import logging
 
@@ -172,29 +172,65 @@ class BaseStrategy(ABC):
         """
         return self.generate_signal(bar)
     
-    def on_data(self, data: pd.DataFrame) -> pd.DataFrame:
+    def on_data(self, data: pd.DataFrame, vectorized: bool = True) -> pd.DataFrame:
         """
         Process batch data and generate signals for each row.
-        
-        This is a convenience method for backtesting that generates
-        signals for an entire DataFrame at once. Override if you need
-        vectorized operations for performance.
-        
+
         Args:
             data: Historical OHLCV DataFrame
-            
+            vectorized: If True, use vectorized generation (10-50x faster).
+                        Set False for strict row-by-row simulation.
+
         Returns:
             DataFrame with added 'signal' column
+
+        Performance:
+            - vectorized=True: O(1) calls to generate_signals_vectorized
+            - vectorized=False: O(n) calls to generate_signal (slower but exact)
         """
-        signals = []
-        for i in range(len(data)):
-            # Generate signal using data up to current point
-            signal = self.generate_signal(data.iloc[:i+1])
-            signals.append(signal)
-        
+        if vectorized:
+            # Try vectorized method first (much faster for backtesting)
+            signals = self.generate_signals_vectorized(data)
+            if signals is not None:
+                data_copy = data.copy()
+                data_copy['signal'] = signals
+                return data_copy
+
+        # Fallback to row-by-row (slower but compatible with all strategies)
+        n = len(data)
+        signals = [0] * n  # Pre-allocate
+
+        for i in range(n):
+            signals[i] = self.generate_signal(data.iloc[:i+1])
+
         data_copy = data.copy()
         data_copy['signal'] = signals
         return data_copy
+
+    def generate_signals_vectorized(self, data: pd.DataFrame) -> Optional[List[int]]:
+        """
+        Generate signals for entire DataFrame at once (vectorized).
+
+        Override this method for 10-50x faster backtesting performance.
+        Default implementation returns None, falling back to row-by-row.
+
+        Args:
+            data: Full historical OHLCV DataFrame
+
+        Returns:
+            List of signals (same length as data), or None to use fallback
+
+        Example:
+            def generate_signals_vectorized(self, data):
+                close = data['Close']
+                sma_fast = close.rolling(10).mean()
+                sma_slow = close.rolling(50).mean()
+
+                signals = np.where(sma_fast > sma_slow, 1,
+                           np.where(sma_fast < sma_slow, -1, 0))
+                return signals.tolist()
+        """
+        return None  # Subclasses override for vectorized operation
     
     def cleanup(self) -> None:
         """

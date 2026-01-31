@@ -2,10 +2,16 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Optional, List, Dict, Any, Literal, Union
+import inspect
+import time
+from datetime import datetime, timezone, time as dt_time
+from functools import wraps
+from typing import Optional, List, Dict, Any, Literal, Union, Callable
 
 from core.base.base_broker_interface import BaseBrokerInterface
 from core.app_types import OrderResult, PositionView, BrokerSnapshot
+from core.events.eventhandler import get_event_handler
+from core.events.events import EVENT_ORDER_STATUS, EVENT_HEALTH_UPDATE
 from data.streaming.schwab_client import SchwabClient
 from data.streaming.streamer import SchwabStreamingClient
 from loggers.logger import Logger
@@ -22,6 +28,98 @@ def _to_float(v: Any) -> float | None:
         return None if v is None else float(v)
     except Exception:
         return None
+
+
+def retry(max_attempts: int = 3, delay: float = 1.0, backoff: float = 2.0, exceptions: tuple = (Exception,)):
+    """
+    Retry decorator with exponential backoff.
+
+    Args:
+        max_attempts: Maximum number of retry attempts
+        delay: Initial delay between retries in seconds
+        backoff: Multiplier for delay after each retry
+        exceptions: Tuple of exception types to catch and retry
+    """
+    def decorator(func: Callable):
+        @wraps(func)
+        async def async_wrapper(*args, **kwargs):
+            current_delay = delay
+            last_exception = None
+            for attempt in range(max_attempts):
+                try:
+                    return await func(*args, **kwargs)
+                except exceptions as e:
+                    last_exception = e
+                    if attempt < max_attempts - 1:
+                        await asyncio.sleep(current_delay)
+                        current_delay *= backoff
+            raise last_exception
+
+        @wraps(func)
+        def sync_wrapper(*args, **kwargs):
+            current_delay = delay
+            last_exception = None
+            for attempt in range(max_attempts):
+                try:
+                    return func(*args, **kwargs)
+                except exceptions as e:
+                    last_exception = e
+                    if attempt < max_attempts - 1:
+                        import time
+                        time.sleep(current_delay)
+                        current_delay *= backoff
+            raise last_exception
+
+        if inspect.iscoroutinefunction(func):
+            return async_wrapper
+        return sync_wrapper
+    return decorator
+
+
+class CircuitBreaker:
+    """
+    Circuit breaker pattern for handling API failures.
+
+    States:
+    - CLOSED: Normal operation, requests pass through
+    - OPEN: Circuit is open, requests fail immediately
+    - HALF_OPEN: Testing if service recovered
+    """
+    CLOSED = "closed"
+    OPEN = "open"
+    HALF_OPEN = "half_open"
+
+    def __init__(self, failure_threshold: int = 5, recovery_timeout: float = 60.0):
+        self.failure_threshold = failure_threshold
+        self.recovery_timeout = recovery_timeout
+        self.failures = 0
+        self.state = self.CLOSED
+        self.last_failure_time: Optional[float] = None
+
+    def record_failure(self):
+        """Record a failure and potentially open the circuit."""
+        self.failures += 1
+        self.last_failure_time = time.monotonic()
+        if self.failures >= self.failure_threshold:
+            self.state = self.OPEN
+
+    def record_success(self):
+        """Record a success and reset the circuit."""
+        self.failures = 0
+        self.state = self.CLOSED
+
+    def can_execute(self) -> bool:
+        """Check if a request can be executed."""
+        if self.state == self.CLOSED:
+            return True
+        if self.state == self.OPEN:
+            if self.last_failure_time and \
+               (time.monotonic() - self.last_failure_time) > self.recovery_timeout:
+                self.state = self.HALF_OPEN
+                return True
+            return False
+        # HALF_OPEN - allow one request through
+        return True
 
 
 class SchwabBroker(BaseBrokerInterface):
@@ -52,10 +150,93 @@ class SchwabBroker(BaseBrokerInterface):
         self._last_price: Dict[str, float] = {}
         self.logger = Logger("schwab_broker.log", "SchwabBroker").get_logger()
 
+        # Event handler for emitting order/health events
+        self._event_handler = get_event_handler()
+
         # Streaming (Alpaca-like façade)
         self.stream: Optional[SchwabStreamingClient] = None
         self._stream_task: Optional[asyncio.Task] = None
         self._stream_symbols: set[str] = set()
+
+        # Quote callbacks registry
+        self._quote_callbacks: Dict[str, List[Callable]] = {}
+
+        # Circuit breaker for API calls
+        self._circuit_breaker = CircuitBreaker(failure_threshold=5, recovery_timeout=60.0)
+
+        # Health check callback
+        self._health_callback: Optional[Callable] = None
+
+        # Connection state
+        self._connected = False
+
+    # ---------------------------------------------------------------------
+    # Connection Lifecycle
+    # ---------------------------------------------------------------------
+    async def connect(self) -> bool:
+        """
+        Initialize connection to Schwab API.
+
+        Returns:
+            True if connection successful, False otherwise
+        """
+        try:
+            # Verify account access
+            account = await self._to_thread(self.client.account_number)
+            if not account or not account.get("accountNumbers"):
+                self.logger.error("Failed to retrieve account information")
+                return False
+
+            self._connected = True
+            self.logger.info(f"Connected to Schwab API, account: {self.account_number}")
+
+            # Emit health event
+            await self._emit_health_event("connected")
+
+            return True
+        except Exception as e:
+            self.logger.exception(f"Failed to connect to Schwab: {e}")
+            self._connected = False
+            await self._emit_health_event("error", str(e))
+            return False
+
+    async def disconnect(self):
+        """Disconnect from Schwab API and streaming."""
+        self._connected = False
+        if self._stream_task and not self._stream_task.done():
+            self._stream_task.cancel()
+            try:
+                await self._stream_task
+            except asyncio.CancelledError:
+                pass
+        self.logger.info("Disconnected from Schwab API")
+        await self._emit_health_event("disconnected")
+
+    def set_health_callback(self, callback: Callable):
+        """Set callback for health status updates."""
+        self._health_callback = callback
+
+    async def _emit_health_event(self, status: str, error: str = None):
+        """Emit health status event."""
+        payload = {
+            "broker": "schwab",
+            "status": status,
+            "details": {
+                "account": self.account_number,
+                "connected": self._connected,
+            },
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        if error:
+            payload["details"]["error"] = error
+
+        await self._event_handler.emit(EVENT_HEALTH_UPDATE, payload)
+
+        if self._health_callback:
+            try:
+                self._health_callback(status, payload)
+            except Exception as e:
+                self.logger.warning(f"Health callback error: {e}")
 
     # ---------------------------------------------------------------------
     # Internal utilities
@@ -84,6 +265,7 @@ class SchwabBroker(BaseBrokerInterface):
     # ---------------------------------------------------------------------
     # BaseBrokerInterface — ASYNC
     # ---------------------------------------------------------------------
+    @retry(max_attempts=3, delay=1.0, backoff=2.0)
     async def place_order(
         self,
         symbol: str,
@@ -95,6 +277,18 @@ class SchwabBroker(BaseBrokerInterface):
         time_in_force: str = "gtc",
         **kwargs,
     ) -> OrderResult:
+        # Circuit breaker check
+        if not self._circuit_breaker.can_execute():
+            self.logger.warning("Circuit breaker is open, rejecting order")
+            return OrderResult(
+                order_id=None,
+                status="rejected",
+                symbol=symbol,
+                side=side,
+                qty=qty,
+                raw={"error": "circuit_breaker_open"}
+            )
+
         if qty <= 0:
             raise ValueError("qty must be > 0")
 
@@ -140,13 +334,67 @@ class SchwabBroker(BaseBrokerInterface):
         else:
             raise ValueError(f"Unsupported order_type: {order_type}")
 
-        resp = await self._to_thread(self.client.place_orders, self.account_number, od)
-        return self._mk_order_result(resp, symbol=symbol, qty=qty, side=side,
-                                     type=ot, limit_price=limit_price, stop_price=stop_price)
+        try:
+            resp = await self._to_thread(self.client.place_orders, self.account_number, od)
+            result = self._mk_order_result(resp, symbol=symbol, qty=qty, side=side,
+                                           type=ot, limit_price=limit_price, stop_price=stop_price)
 
+            # Record success for circuit breaker
+            self._circuit_breaker.record_success()
+
+            # Emit order status event
+            await self._emit_order_event(result, "placed")
+
+            self.logger.info(f"Order placed: {side} {qty} {symbol} @ {order_type}")
+            return result
+
+        except Exception as e:
+            self._circuit_breaker.record_failure()
+            self.logger.exception(f"Failed to place order: {e}")
+            raise
+
+    @retry(max_attempts=3, delay=1.0, backoff=2.0)
     async def cancel_order(self, order_id: str) -> OrderResult:
-        resp = await self._to_thread(self.client.cancel_order, self.account_number, order_id)
-        return self._mk_order_result(resp)
+        """Cancel an order by ID."""
+        if not self._circuit_breaker.can_execute():
+            self.logger.warning("Circuit breaker is open, rejecting cancel request")
+            return OrderResult(
+                order_id=order_id,
+                status="rejected",
+                raw={"error": "circuit_breaker_open"}
+            )
+
+        try:
+            resp = await self._to_thread(self.client.cancel_order, self.account_number, order_id)
+            result = self._mk_order_result(resp)
+
+            self._circuit_breaker.record_success()
+
+            # Emit order cancellation event
+            await self._emit_order_event(result, "cancelled")
+
+            self.logger.info(f"Order cancelled: {order_id}")
+            return result
+
+        except Exception as e:
+            self._circuit_breaker.record_failure()
+            self.logger.exception(f"Failed to cancel order {order_id}: {e}")
+            raise
+
+    async def _emit_order_event(self, order_result: OrderResult, action: str):
+        """Emit order status event to the event bus."""
+        payload = {
+            "order_id": order_result.order_id,
+            "symbol": order_result.symbol,
+            "side": order_result.side,
+            "qty": order_result.qty,
+            "status": order_result.status,
+            "action": action,
+            "filled_qty": order_result.filled_qty,
+            "avg_fill_price": order_result.avg_fill_price,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        await self._event_handler.emit(EVENT_ORDER_STATUS, payload)
 
     async def get_position(self, symbol: str) -> Optional[PositionView]:
         acct = await self._to_thread(self.client.accounts_number, self.account_number)
@@ -161,8 +409,70 @@ class SchwabBroker(BaseBrokerInterface):
         return self._mk_broker_snapshot(acct)
 
     async def is_market_open(self) -> bool:
-        # If you later expose a market-hours endpoint, call it here.
-        return True
+        """
+        Check if the US equity market is currently open.
+
+        Uses Eastern Time to determine market hours:
+        - Regular hours: 9:30 AM - 4:00 PM ET, Mon-Fri
+        - Pre-market: 4:00 AM - 9:30 AM ET (if SCHWAB_SESSION == "AM")
+        - After-hours: 4:00 PM - 8:00 PM ET (if SCHWAB_SESSION == "PM")
+
+        Returns:
+            True if market is open for the configured session type
+        """
+        try:
+            # Get current time in Eastern Time
+            from zoneinfo import ZoneInfo
+            et_tz = ZoneInfo("America/New_York")
+            now_et = datetime.now(et_tz)
+
+            # Check if it's a weekday
+            if now_et.weekday() >= 5:  # Saturday = 5, Sunday = 6
+                return False
+
+            current_time = now_et.time()
+
+            # Define market hours
+            market_open = dt_time(9, 30)
+            market_close = dt_time(16, 0)
+            premarket_open = dt_time(4, 0)
+            afterhours_close = dt_time(20, 0)
+
+            # Check based on session type
+            if self.session == "NORMAL":
+                return market_open <= current_time <= market_close
+            elif self.session == "AM":
+                # Pre-market through regular hours
+                return premarket_open <= current_time <= market_close
+            elif self.session == "PM":
+                # Regular hours through after-hours
+                return market_open <= current_time <= afterhours_close
+            else:
+                # Default to regular hours
+                return market_open <= current_time <= market_close
+
+        except ImportError:
+            # Fallback if zoneinfo not available (Python < 3.9)
+            try:
+                import pytz
+                et_tz = pytz.timezone("America/New_York")
+                now_et = datetime.now(et_tz)
+
+                if now_et.weekday() >= 5:
+                    return False
+
+                current_time = now_et.time()
+                market_open = dt_time(9, 30)
+                market_close = dt_time(16, 0)
+
+                return market_open <= current_time <= market_close
+            except ImportError:
+                # If no timezone library available, assume market is open
+                self.logger.warning("No timezone library available, assuming market open")
+                return True
+        except Exception as e:
+            self.logger.warning(f"Error checking market hours: {e}, assuming open")
+            return True
 
     async def get_open_orders(self) -> List[OrderResult]:
         resp = await self._to_thread(self.client.all_orders, self.account_number)
@@ -249,13 +559,56 @@ class SchwabBroker(BaseBrokerInterface):
     def connect_stream(self, api_key: str, secret_key: str):
         """Initialize the Schwab websocket streamer (no network call yet)."""
         self.stream = SchwabStreamingClient(api_key, secret_key)
+        # Wire up the quote dispatcher
+        self.stream.set_quote_callback(self._dispatch_quote)
 
-    def subscribe_quotes(self, callback, symbol: str):
-        """Register a quote handler for a symbol; works before/after start."""
-        if not self.stream:
-            raise RuntimeError("Stream not initialized. Call connect_stream(api_key, secret_key) first.")
-        self.stream.on_quote(symbol, callback)
+    def subscribe_quotes(self, callback: Callable, symbol: str):
+        """
+        Register a quote handler for a symbol.
+
+        The callback will be invoked with quote data when new quotes arrive.
+        Works before or after stream start.
+
+        Args:
+            callback: Async or sync function to call with quote data
+            symbol: The symbol to subscribe to
+        """
+        if symbol not in self._quote_callbacks:
+            self._quote_callbacks[symbol] = []
+        if callback not in self._quote_callbacks[symbol]:
+            self._quote_callbacks[symbol].append(callback)
         self._stream_symbols.add(symbol)
+        self.logger.debug(f"Subscribed to quotes for {symbol}")
+
+    def unsubscribe_quotes(self, callback: Callable, symbol: str):
+        """
+        Unsubscribe a callback from quote updates.
+
+        Args:
+            callback: The callback to remove
+            symbol: The symbol to unsubscribe from
+        """
+        if symbol in self._quote_callbacks and callback in self._quote_callbacks[symbol]:
+            self._quote_callbacks[symbol].remove(callback)
+            self.logger.debug(f"Unsubscribed from quotes for {symbol}")
+
+    async def _dispatch_quote(self, symbol: str, quote: Dict):
+        """
+        Dispatch quote to all registered callbacks for a symbol.
+
+        Args:
+            symbol: The symbol this quote is for
+            quote: The quote data
+        """
+        callbacks = self._quote_callbacks.get(symbol, [])
+        for cb in callbacks:
+            try:
+                if asyncio.iscoroutinefunction(cb):
+                    await cb(quote)
+                else:
+                    cb(quote)
+            except Exception as e:
+                self.logger.exception(f"Error in quote callback for {symbol}: {e}")
 
     async def start_stream(self):
         """Start the websocket loop with currently-subscribed symbols."""
@@ -266,6 +619,26 @@ class SchwabBroker(BaseBrokerInterface):
         symbols = sorted(self._stream_symbols) or []
         self._stream_task = asyncio.create_task(self.stream.run(symbols))
         await asyncio.sleep(0)
+
+    async def stop_stream(self):
+        """Stop the streaming connection."""
+        if self._stream_task and not self._stream_task.done():
+            self._stream_task.cancel()
+            try:
+                await self._stream_task
+            except asyncio.CancelledError:
+                pass
+        self._stream_task = None
+        self.logger.info("Streaming stopped")
+
+    def subscribe_bars(self, callback: Callable, symbol: str):
+        """
+        Alias for subscribe_quotes for compatibility with AlpacaBroker interface.
+
+        Note: Schwab streaming provides quotes, not bars. The runner must
+        aggregate quotes into bars if needed.
+        """
+        self.subscribe_quotes(callback, symbol)
 
     # ---------------------------------------------------------------------
     # Mappers: Schwab payloads -> your domain types

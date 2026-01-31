@@ -420,9 +420,8 @@ class StateAggregator(QtCore.QObject):
     def _emit_snapshot(self):
         """Emit unified state snapshot to GUI"""
         try:
-            # Only emit if feed is active
-            if not self.cache["health"]:
-                return
+            # Always emit snapshots - don't block on health status
+            # Health will be updated separately via _check_heartbeat in DataFeeder
 
             # Compute metrics
             self._compute_metrics()
@@ -460,4 +459,3 @@ class StateAggregator(QtCore.QObject):
 
         except Exception as e:
             self._logger.error(f"Symbol pruning error: {e}")
-            self._logger.warning(f"Invalid OHLC data for {sym}: {e}")
