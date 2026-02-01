@@ -7,8 +7,8 @@
 
   "simulation": {
     "enabled": true,
-    "steps": 999999,
-    "bar_sleep": 0.1,
+    "steps": 2000,
+    "bar_sleep": 0.5,
     "warmup_bars": 200,
     "starting_cash": 100000.0,
     "gbm_mu": 0.05,
@@ -27,7 +27,7 @@
   },
 
   "risk": {
-    "risk_per_trade": 0.01,
+    "risk_per_trade": 0.05,
     "max_trade_pct": 0.10,
     "max_holding_pct": 0.25,
     "max_pyramid_layers": 2,
@@ -47,7 +47,7 @@
 
   "position_sizer": {
     "type": "dynamic",
-    "risk_percentage": 0.01,
+    "risk_percentage": 0.05,
     "max_trade_pct": 0.10,
     "max_holding_pct": 0.25,
     "min_position_size": 1,
