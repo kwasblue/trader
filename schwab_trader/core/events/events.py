@@ -192,11 +192,11 @@ class HealthPayload(TypedDict):
     timestamp: str
 
 # --- Ops ---
-class GuardrailPayload(TypedDict):
+class GuardrailPayload(TypedDict, total=False):
     guard_name: str
     triggered: bool
     message: str
-    drawdown: float
+    value: float  # Generic value (drawdown, cooldown time, etc.)
     timestamp: str
 
 class SessionPayload(TypedDict):

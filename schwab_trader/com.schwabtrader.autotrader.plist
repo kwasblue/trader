@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Unique identifier for this service -->
+    <key>Label</key>
+    <string>com.schwabtrader.autotrader</string>
+
+    <!-- Command to run -->
+    <key>ProgramArguments</key>
+    <array>
+        <!-- Update this path to your Python interpreter -->
+        <string>/Users/kwasiaddo/projects/trader/schwab_trader/.venv/bin/python</string>
+        <string>/Users/kwasiaddo/projects/trader/schwab_trader/autotrader.py</string>
+        <string>--symbols</string>
+        <string>AAPL</string>
+        <string>MSFT</string>
+        <string>--broker</string>
+        <string>alpaca</string>
+    </array>
+
+    <!-- Working directory -->
+    <key>WorkingDirectory</key>
+    <string>/Users/kwasiaddo/projects/trader/schwab_trader</string>
+
+    <!-- Environment variables -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/Users/kwasiaddo/projects/trader/schwab_trader/.venv/bin</string>
+        <!-- Load these from .env file or set directly -->
+        <!-- <key>ALPACA_API_KEY</key> -->
+        <!-- <string>your_key_here</string> -->
+    </dict>
+
+    <!-- Log files -->
+    <key>StandardOutPath</key>
+    <string>/Users/kwasiaddo/projects/trader/schwab_trader/logs/launchd_stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/kwasiaddo/projects/trader/schwab_trader/logs/launchd_stderr.log</string>
+
+    <!-- Run at load (when user logs in) -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- Keep alive - restart if crashes -->
+    <key>KeepAlive</key>
+    <dict>
+        <!-- Only keep alive if exit code is non-zero (crashed) -->
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+
+    <!-- Throttle restarts (wait 60s between restart attempts) -->
+    <key>ThrottleInterval</key>
+    <integer>60</integer>
+
+    <!-- Nice level (lower priority to not hog CPU) -->
+    <key>Nice</key>
+    <integer>10</integer>
+
+    <!-- Process type -->
+    <key>ProcessType</key>
+    <string>Background</string>
+</dict>
+</plist>

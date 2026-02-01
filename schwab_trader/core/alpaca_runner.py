@@ -37,6 +37,9 @@ from core.simulator.simulation import compute_atr, classify_regime  # reuse your
 from core.broker.alpaca_broker import AlpacaBroker
 from core.logic.live_execution_engine import LiveExecutionEngine
 from core.logic.trade_logic_manager import DynamicTradeLogicManager
+from core.historical_data_updater import HistoricalDataUpdater
+from core.unified_data_pipeline import UnifiedDataPipeline
+from core.credential_validator import CredentialValidator
 load_dotenv(ROOT / ".venv" / ".env")
 
 class AlpacaLiveRunner:
@@ -95,6 +98,25 @@ class AlpacaLiveRunner:
         # bar tracking
         self._last_bar_id: dict[str, int] = {}
         self._last_ddm_date = None
+
+        # Unified data pipeline (supports Alpaca and Schwab with fallback)
+        self.data_pipeline = UnifiedDataPipeline(
+            data_path=str(ROOT / "data" / "data_storage" / "proc_data"),
+            raw_data_path=str(ROOT / "data" / "data_storage" / "raw_data"),
+        )
+
+        # Also keep the simple updater for quick freshness checks
+        self.data_updater = HistoricalDataUpdater(
+            api_key=settings.get("ALPACA_KEY_ID"),
+            api_secret=settings.get("ALPACA_SECRET_KEY"),
+            data_path=str(ROOT / "data" / "data_storage" / "proc_data"),
+        )
+
+        # Credential validator
+        self.credential_validator = CredentialValidator()
+
+        # Background update task reference
+        self._update_task: asyncio.Task | None = None
         
 
     # ---------- helpers ----------
@@ -135,11 +157,66 @@ class AlpacaLiveRunner:
         except Exception:
             pass
     # ---------- seeding ----------
-    async def seed(self, lookback_bars: int = 200):
+    async def seed(self, lookback_bars: int = 200, max_stale_minutes: int = 60):
+        """
+        Seed historical data for all symbols.
+
+        Uses the unified data pipeline which:
+        - Automatically selects best data source (Alpaca or Schwab)
+        - Falls back if one source is unavailable
+        - Processes data through the full ML pipeline
+
+        Args:
+            lookback_bars: Number of bars to load for each symbol
+            max_stale_minutes: If data is older than this, fetch fresh data
+        """
+        # Check available data sources
+        self.logger.info("Checking data source availability...")
+        sources = await self.data_pipeline.check_sources()
+        self.logger.info(f"Recommended data source: {sources['recommended']}")
+
+        if sources['recommended'] == 'none':
+            self.logger.error("No data sources available! Check credentials.")
+            # Try to continue with existing data
+
+        # Check data freshness and update if needed
+        symbols_to_update = []
+        for sym in self.symbols:
+            freshness = self.data_updater.get_data_freshness(sym)
+            if freshness is None:
+                self.logger.warning(f"[{sym}] No historical data found - will fetch")
+                symbols_to_update.append(sym)
+            elif freshness['age_minutes'] > max_stale_minutes:
+                self.logger.info(
+                    f"[{sym}] Data is stale ({freshness['age_minutes']} min old) - will update"
+                )
+                symbols_to_update.append(sym)
+            else:
+                self.logger.info(
+                    f"[{sym}] Data is fresh ({freshness['age_minutes']} min old, "
+                    f"{freshness['bar_count']} bars)"
+                )
+
+        # Fetch fresh data for stale symbols using unified pipeline
+        # This handles source selection and full data processing
+        if symbols_to_update:
+            self.logger.info(f"Updating historical data for: {symbols_to_update}")
+            await self.data_pipeline.update_symbols(
+                symbols_to_update,
+                days=30,  # Fetch more days for proper processing
+                source=None,  # Auto-select best source
+                process_data=True,  # Run through ML pipeline
+            )
+
+        # Load data from files
         loader = HistoricalBarLoader(str(ROOT / "data" / "data_storage" / "proc_data"))
         for sym in self.symbols:
-            for b in loader.load_last_n_bars(sym, n=lookback_bars):
-                # assume loader returns dict-like
+            bars = loader.load_last_n_bars(sym, n=lookback_bars)
+            if not bars:
+                self.logger.warning(f"[{sym}] No bars loaded after update attempt")
+                continue
+
+            for b in bars:
                 self.history[sym].append({
                     "timestamp": b["timestamp"],
                     "symbol": b["symbol"],
@@ -150,7 +227,10 @@ class AlpacaLiveRunner:
             atr = compute_atr(df, period=14)
             if atr is not None:
                 self.atr_hist[sym].append(atr)
-        self.logger.info(f"Seeded {len(self.symbols)} symbols with {lookback_bars} bars.")
+
+            self.logger.info(f"[{sym}] Seeded with {len(bars)} bars")
+
+        self.logger.info(f"Seeded {len(self.symbols)} symbols with up to {lookback_bars} bars.")
 
     # ---------- bar callback ----------
     async def on_alpaca_bar(self, raw_bar):
@@ -261,7 +341,9 @@ class AlpacaLiveRunner:
 
     # ---------- run ----------
     async def run(self):
-        await self.seed(self.settings.get("SEED_BARS", 200))
+        # Seed historical data (fetches fresh if stale)
+        max_stale = self.settings.get("MAX_STALE_MINUTES", 60)
+        await self.seed(self.settings.get("SEED_BARS", 200), max_stale_minutes=max_stale)
         await self.event_handler.subscribe("BAR", self._bar_debug_logger)
 
         # connect + subscribe
@@ -274,15 +356,59 @@ class AlpacaLiveRunner:
         stream_task = asyncio.create_task(self.broker.start_stream())
         self.logger.info(f"LiveRunner (Alpaca) started for: {', '.join(self.symbols)}")
 
+        # Start periodic historical data updates (runs in background)
+        update_interval = self.settings.get("HISTORICAL_UPDATE_INTERVAL_MINUTES", 60)
+        if update_interval > 0:
+            self._update_task = asyncio.create_task(
+                self._periodic_data_update(interval_minutes=update_interval)
+            )
+            self.logger.info(f"Periodic data updates enabled (every {update_interval} min)")
+
         try:
             while True:
                 await asyncio.sleep(0.5)
         finally:
+            # Cancel background tasks
+            if self._update_task:
+                self._update_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await self._update_task
             stream_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await stream_task
             self.trade_logger.flush()
             self.logger.info("LiveRunner shut down cleanly.")
+
+    async def _periodic_data_update(self, interval_minutes: int = 60):
+        """
+        Background task to periodically update historical data.
+
+        Uses the unified pipeline which:
+        - Auto-selects best data source
+        - Processes data through ML pipeline
+        - Handles source failover
+
+        This ensures historical data files stay fresh for strategy warmup
+        and indicator calculations.
+        """
+        while True:
+            await asyncio.sleep(interval_minutes * 60)
+
+            try:
+                self.logger.info("Running periodic historical data update...")
+
+                # Use unified pipeline for full processing
+                results = await self.data_pipeline.update_symbols(
+                    self.symbols,
+                    days=5,  # Fetch enough for processing
+                    source=None,  # Auto-select
+                    process_data=True,  # Full ML pipeline
+                )
+                total_bars = sum(results.values())
+                self.logger.info(f"Periodic update complete: {total_bars} total bars fetched")
+
+            except Exception as e:
+                self.logger.exception(f"Periodic data update failed: {e}")
 
 
 # -------- entrypoint --------

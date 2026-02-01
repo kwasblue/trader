@@ -32,7 +32,9 @@ from loggers.logger import Logger
 from core.events.eventhandler import EventHandler
 from core.events.events import (
     EVENT_NEW_TRADE, EVENT_POSITION_UPDATE, EVENT_PNL_UPDATE, EVENT_STRATEGY_SIGNAL,
-    TradePayload, PositionPayload, PnLPayload
+    EVENT_FLATTEN_ALL, EVENT_CANCEL_ALL, EVENT_FLATTEN_SYMBOL, EVENT_MANUAL_ORDER,
+    EVENT_HALTED, EVENT_ALERT, EVENT_ORDER_STATUS,
+    TradePayload, PositionPayload, PnLPayload, AlertPayload, OrderStatusPayload
 )
 from core.logic.trade_logic_router import TradeLogicRouter
 
@@ -141,7 +143,10 @@ class MockExecutionEngine(ExecutionEngineBase):
             logger_name="MockExecutionEngine",
             propagate=True
         ).get_logger()
-        
+
+        # Halt state for GUI control
+        self._halted = False
+
         self.logger.info("MockExecutionEngine initialized")
     
     # ========================================================================
@@ -164,12 +169,24 @@ class MockExecutionEngine(ExecutionEngineBase):
         
         Simulates trade execution with instant fills.
         """
+        # Check if trading is halted
+        if getattr(self, '_halted', False):
+            self.logger.debug(f"[{symbol}] Trading halted - ignoring signal")
+            return None
+
+        # Track bar for bar-based cooldown (call on every signal = every bar)
+        if hasattr(self, 'trade_logic_manager') and self.trade_logic_manager:
+            # Get the trade logic and notify of new bar
+            trade_logic = self.trade_logic_manager.get(symbol, regime)
+            if hasattr(trade_logic, 'on_bar'):
+                trade_logic.on_bar(symbol)
+
         # Skip hold signals
         if signal == 0:
             self.logger.debug(f"[{symbol}] HOLD signal - no action")
             return None
-        
-        # Check drawdown monitor
+
+        # Drawdown monitor check - only if drawdown_monitor is set
         if self.drawdown_monitor and not self.drawdown_monitor.can_trade(symbol):
             self.logger.warning(
                 f"[{symbol}] Trade blocked by drawdown monitor "
@@ -228,16 +245,20 @@ class MockExecutionEngine(ExecutionEngineBase):
             if result:
                 # 5. Update portfolio
                 self._update_mock_portfolio(symbol, side, qty, price)
-                
+
                 # 6. Post-execution tasks
                 self._post_execution(
                     symbol, state, result, action_type, regime, strategy_name
                 )
-                
-                # 7. Emit events
+
+                # 7. Reset bar-based cooldown after trade
+                if hasattr(trade_logic, 'on_trade'):
+                    trade_logic.on_trade(symbol)
+
+                # 8. Emit events
                 if self.event_handler:
                     await self._emit_trade_events(symbol, side, qty, price)
-            
+
             return result
             
         except Exception as e:
@@ -319,10 +340,21 @@ class MockExecutionEngine(ExecutionEngineBase):
         
         # Update drawdown monitor if present
         if self.drawdown_monitor:
-            current_drawdown = self.portfolio.drawdown()
-            #self.drawdown_monitor.update(symbol, current_drawdown)
-            symbol_equity = self.portfolio.unrealized_pnl(symbol)
-            self.drawdown_monitor.update_symbol(symbol, symbol_equity)
+            # Update portfolio-level drawdown first
+            portfolio_equity = self.portfolio.total_equity()
+            self.drawdown_monitor.update_portfolio(portfolio_equity)
+
+            # Update symbol-level drawdown using position market value (not unrealized P&L)
+            position = self.portfolio.positions.get(symbol)
+            if position and position.qty != 0:
+                # Use position market value (qty * last_price) as symbol equity
+                symbol_equity = abs(position.qty) * position.last_price
+            else:
+                # No position - skip symbol update to avoid 0-value issues
+                symbol_equity = None
+
+            if symbol_equity is not None and symbol_equity > 0:
+                self.drawdown_monitor.update_symbol(symbol, symbol_equity)
             
     
     async def _emit_trade_events(
@@ -334,23 +366,39 @@ class MockExecutionEngine(ExecutionEngineBase):
     ) -> None:
         """
         Emit trade-related events.
-        
+
         Emits:
+        - Order status event
         - Trade event
         - Position update event
         - P&L update event
         """
         if not self.event_handler:
             return
-        
+
         try:
+            timestamp = datetime.now(timezone.utc).isoformat()
+
+            # Order status event (for Execution tab)
+            order_payload: OrderStatusPayload = {
+                "order_id": f"MOCK_{symbol}_{timestamp}",
+                "symbol": symbol,
+                "status": "filled",
+                "filled_qty": float(qty),
+                "avg_price": float(price),
+                "timestamp": timestamp,
+            }
+            asyncio.create_task(
+                self.event_handler.emit(EVENT_ORDER_STATUS, order_payload)
+            )
+
             # Trade event
             trade_payload: TradePayload = {
                 "symbol": symbol,
                 "side": side.value.lower(),
                 "qty": qty,
                 "price": price,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": timestamp,
                 "pnl": self.portfolio.unrealized_pnl(symbol),
             }
             asyncio.create_task(
@@ -489,8 +537,12 @@ class MockExecutionEngine(ExecutionEngineBase):
         )
         
         if action_type in ("exit", "reversal"):
+            self.logger.info(
+                f"[MOCK] [{symbol}] Resetting state after {action_type} "
+                f"(bars_held={getattr(state, 'bars_held', 0)})"
+            )
             state.reset()
-        
+
         self.logger.info(
             f"[MOCK] [{symbol}] Trade logged: {action_type} "
             f"{result.side.value} {result.filled_qty}@${result.avg_price:.2f}"
@@ -502,20 +554,21 @@ class MockExecutionEngine(ExecutionEngineBase):
     
     async def subscribe_signals(self) -> None:
         """
-        Subscribe to strategy signal events.
-        
+        Subscribe to strategy signal events and GUI commands.
+
         Automatically handles signals emitted to EVENT_STRATEGY_SIGNAL.
         Creates/manages SymbolState for each symbol.
+        Also handles GUI commands (flatten, cancel, halt, manual orders).
         """
         if not self.event_handler:
             self.logger.warning("No event handler - cannot subscribe to signals")
             return
-        
+
         async def on_signal(event):
             """Handle incoming signal event."""
             payload = event.payload
             symbol = payload["symbol"]
-            
+
             # Parse signal
             signal_raw = payload["signal"]
             if signal_raw in (1, "buy"):
@@ -524,16 +577,16 @@ class MockExecutionEngine(ExecutionEngineBase):
                 sig_val = -1
             else:
                 sig_val = 0
-            
+
             # Ensure symbol state exists
             if symbol not in self.symbol_states:
                 self.symbol_states[symbol] = SymbolState(symbol=symbol)
                 self.logger.debug(f"[{symbol}] Created new SymbolState")
-            
+
             state = self.symbol_states[symbol]
-            
+
             # Handle signal
-            self.handle_signal(
+            await self.handle_signal(
                 symbol=symbol,
                 state=state,
                 signal=sig_val,
@@ -542,9 +595,125 @@ class MockExecutionEngine(ExecutionEngineBase):
                 regime=payload.get("regime", "normal"),
                 strategy_name=payload.get("strategy")
             )
-        
+
         await self.event_handler.subscribe(EVENT_STRATEGY_SIGNAL, on_signal)
         self.logger.info("Subscribed to strategy signals")
+
+        # Subscribe to GUI commands
+        await self._subscribe_gui_events()
+
+    async def _subscribe_gui_events(self) -> None:
+        """Subscribe to GUI command events (flatten, cancel, halt, manual orders)."""
+        if not self.event_handler:
+            return
+
+        await self.event_handler.subscribe(EVENT_FLATTEN_ALL, self._handle_flatten_all)
+        await self.event_handler.subscribe(EVENT_FLATTEN_SYMBOL, self._handle_flatten_symbol)
+        await self.event_handler.subscribe(EVENT_CANCEL_ALL, self._handle_cancel_all)
+        await self.event_handler.subscribe(EVENT_MANUAL_ORDER, self._handle_manual_order)
+        await self.event_handler.subscribe(EVENT_HALTED, self._handle_halt)
+
+        self.logger.info("Subscribed to GUI command events")
+
+    async def _handle_flatten_all(self, event) -> None:
+        """Flatten all positions in the mock portfolio."""
+        self.logger.info("[GUI] Flatten ALL positions (mock)")
+
+        for symbol, position in list(self.portfolio.positions.items()):
+            if position.qty != 0:
+                try:
+                    qty = abs(position.qty)
+                    side = OrderSide.SELL if position.qty > 0 else OrderSide.BUY
+                    price = position.last_price
+
+                    # Execute mock close
+                    self._update_mock_portfolio(symbol, side, qty, price)
+
+                    # Emit events
+                    if self.event_handler:
+                        await self._emit_trade_events(symbol, side, qty, price)
+
+                    self.logger.info(f"[FLATTEN] Closed {symbol}: {qty} @ ${price:.2f}")
+                except Exception as e:
+                    self.logger.error(f"[FLATTEN] Failed for {symbol}: {e}")
+
+        self._emit_alert("info", "All positions flattened")
+
+    async def _handle_flatten_symbol(self, event) -> None:
+        """Flatten a specific symbol."""
+        symbol = event.payload.get("symbol")
+        if not symbol:
+            return
+
+        position = self.portfolio.positions.get(symbol)
+        if not position or position.qty == 0:
+            self.logger.info(f"[FLATTEN] No position in {symbol}")
+            return
+
+        try:
+            qty = abs(position.qty)
+            side = OrderSide.SELL if position.qty > 0 else OrderSide.BUY
+            price = position.last_price
+
+            self._update_mock_portfolio(symbol, side, qty, price)
+
+            if self.event_handler:
+                await self._emit_trade_events(symbol, side, qty, price)
+
+            self.logger.info(f"[FLATTEN] Closed {symbol}: {qty} @ ${price:.2f}")
+            self._emit_alert("info", f"Position {symbol} flattened")
+        except Exception as e:
+            self.logger.error(f"[FLATTEN] Failed for {symbol}: {e}")
+
+    async def _handle_cancel_all(self, event) -> None:
+        """Cancel all orders (no-op in mock since fills are instant)."""
+        self.logger.info("[GUI] Cancel all orders (mock - no pending orders)")
+        self._emit_alert("info", "All orders cancelled (mock)")
+
+    async def _handle_manual_order(self, event) -> None:
+        """Handle manual order from GUI."""
+        payload = event.payload
+        symbol = payload.get("symbol", "")
+        qty = int(payload.get("qty", 0))
+        side_str = payload.get("side", "BUY").upper()
+        price = float(payload.get("price", 0))
+
+        if not symbol or qty <= 0:
+            self.logger.warning(f"[MANUAL] Invalid order: {payload}")
+            return
+
+        side = OrderSide.BUY if side_str == "BUY" else OrderSide.SELL
+
+        self.logger.info(f"[MANUAL] {side_str} {qty} {symbol} @ ${price:.2f}")
+
+        # Execute mock trade
+        self._update_mock_portfolio(symbol, side, qty, price)
+
+        if self.event_handler:
+            await self._emit_trade_events(symbol, side, qty, price)
+
+        self._emit_alert("info", f"Manual order executed: {side_str} {qty} {symbol}")
+
+    async def _handle_halt(self, event) -> None:
+        """Handle halt/resume trading."""
+        halted = event.payload.get("halted", False)
+        self._halted = halted
+        state = "HALTED" if halted else "RESUMED"
+        self.logger.info(f"[GUI] Trading {state}")
+        self._emit_alert("warning" if halted else "info", f"Trading {state}")
+
+    def _emit_alert(self, level: str, message: str, symbol: str = None) -> None:
+        """Emit an alert event."""
+        if not self.event_handler:
+            return
+
+        payload: AlertPayload = {
+            "level": level,
+            "message": message,
+            "symbol": symbol,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        asyncio.create_task(self.event_handler.emit(EVENT_ALERT, payload))
     
     # ========================================================================
     # LOGIC REGISTRATION

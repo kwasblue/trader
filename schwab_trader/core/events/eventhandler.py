@@ -253,7 +253,8 @@ class EventHandler(EventHandlerBase):
             finally:
                 self._queue.task_done()
 
-    async def emit_guardrail(event_handler: EventHandler, guard_name: str, triggered: bool, message: str, value: float | None = None):
+    async def emit_guardrail(self, guard_name: str, triggered: bool, message: str, value: float | None = None):
+        """Emit a guardrail event (drawdown, risk limit, etc.)."""
         payload: GuardrailPayload = {
             "guard_name": guard_name,
             "triggered": triggered,
@@ -261,7 +262,7 @@ class EventHandler(EventHandlerBase):
             "value": value,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
-        await event_handler.emit(EVENT_GUARDRAIL_TRIGGERED, payload)
+        await self.emit(EVENT_GUARDRAIL_TRIGGERED, payload)
 
 # --- Global Singleton Accessor ---
 _global_event_handler: EventHandler | None = None

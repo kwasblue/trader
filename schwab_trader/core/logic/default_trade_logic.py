@@ -55,8 +55,11 @@ class DefaultTradeLogicManager(TradeLogicManagerBase):
         # Position management
         exit_fraction: float = 0.25,
         trailing_stop: bool = True,
-        # General settings
+        min_bars_to_hold: int = 3,  # Minimum bars before allowing TP/reversal exits
+        # General settings - cooldown can be time-based, bar-based, or both
         cooldown_seconds: int = 300,
+        cooldown_bars: int = 5,
+        cooldown_mode: str = 'bars',  # 'time', 'bars', or 'both'
         max_positions: int = 10,
         event_handler: Optional[EventHandler] = None,
         **kwargs
@@ -79,6 +82,8 @@ class DefaultTradeLogicManager(TradeLogicManagerBase):
         """
         super().__init__(
             cooldown_seconds=cooldown_seconds,
+            cooldown_bars=cooldown_bars,
+            cooldown_mode=cooldown_mode,
             max_positions=max_positions,
             **kwargs
         )
@@ -97,9 +102,11 @@ class DefaultTradeLogicManager(TradeLogicManagerBase):
         
         self.exit_fraction = exit_fraction
         self.trailing_stop = trailing_stop
+        self.min_bars_to_hold = min_bars_to_hold
         self.event_handler = event_handler
 
-        logger.info(f"DefaultTradeLogicManager initialized: cooldown={cooldown_seconds}s, max_positions={max_positions}, trailing_stop={trailing_stop}")
+        cooldown_info = f"{cooldown_bars} bars" if cooldown_mode == 'bars' else f"{cooldown_seconds}s" if cooldown_mode == 'time' else f"{cooldown_bars} bars/{cooldown_seconds}s"
+        logger.info(f"DefaultTradeLogicManager initialized: cooldown={cooldown_info} (mode={cooldown_mode}), max_positions={max_positions}, trailing_stop={trailing_stop}, min_hold={min_bars_to_hold} bars")
     
     # ========================================================================
     # MAIN DECISION LOGIC
@@ -292,35 +299,43 @@ class DefaultTradeLogicManager(TradeLogicManagerBase):
         state.bars_held += 1
         avg_price = kwargs.get('avg_price', price)
         self._update_excursions(state, price, avg_price)
-        
-        # Check for signal reversal (opposite direction)
-        if self.is_long(state) and signal == -1:
-            return True, "Signal reversal: exit long"
-        if self.is_short(state) and signal == 1:
-            return True, "Signal reversal: exit short"
-        
+
+        # Minimum hold period - don't exit within first few bars (except stop loss)
+        min_bars_to_hold = getattr(self, 'min_bars_to_hold', 3)
+
+        # Check for signal reversal (opposite direction) - but respect minimum hold
+        if state.bars_held >= min_bars_to_hold:
+            if self.is_long(state) and signal == -1:
+                return True, "Signal reversal: exit long"
+            if self.is_short(state) and signal == 1:
+                return True, "Signal reversal: exit short"
+
         # Check stop loss / take profit
         if self.is_long(state):
-            hit_tp = price >= state.take_profit
-            hit_sl = price <= state.stop_loss
+            hit_tp = state.take_profit is not None and price >= state.take_profit
+            hit_sl = state.stop_loss is not None and price <= state.stop_loss
         else:
-            hit_tp = price <= state.take_profit
-            hit_sl = price >= state.stop_loss
-        
-        if hit_tp:
-            return True, "Take profit hit"
+            hit_tp = state.take_profit is not None and price <= state.take_profit
+            hit_sl = state.stop_loss is not None and price >= state.stop_loss
+
+        # Stop loss always triggers (protection)
         if hit_sl:
             return True, "Stop loss hit"
-        
-        # Check partial exit targets
-        should_partial, reason = self._check_partial_exit(state, price)
-        if should_partial:
-            return True, reason
-        
+
+        # Take profit requires minimum hold period
+        if hit_tp and state.bars_held >= min_bars_to_hold:
+            return True, "Take profit hit"
+
+        # Check partial exit targets (only after minimum hold)
+        if state.bars_held >= min_bars_to_hold:
+            should_partial, reason = self._check_partial_exit(state, price)
+            if should_partial:
+                return True, reason
+
         # Update trailing stop if enabled
         if self.trailing_stop:
             self._update_trailing_stop(state, price, atr, condition)
-        
+
         # No exit condition met, continue holding
         return False, "Continue holding position"
     

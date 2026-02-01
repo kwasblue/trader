@@ -5,12 +5,15 @@ A comprehensive algorithmic trading platform with support for Schwab and Alpaca 
 ## Features
 
 - **Multi-Broker Support**: Trade with Schwab or Alpaca (paper/live)
+- **Autonomous Trading (AutoTrader)**: Fully automated trading daemon with market hours awareness
 - **Real-Time Streaming**: WebSocket-based price feeds with automatic reconnection
 - **Strategy Framework**: Pluggable strategies with regime-based routing
 - **Risk Management**: Drawdown monitoring, position sizing, trade gates
 - **Professional GUI**: PySide6-based monitoring dashboard with real-time charts
 - **Comprehensive Backtesting**: Vectorized backtester with walk-forward analysis and Monte Carlo simulation
 - **Event-Driven Architecture**: Async event bus for decoupled components
+- **Pre-Flight Checks**: Automated validation before trading sessions
+- **Historical Data Management**: Unified data pipeline with multiple sources
 
 ## Quick Start
 
@@ -220,6 +223,107 @@ The monitoring dashboard provides:
 | Ctrl+M | Manual Order |
 | Ctrl+L | Flatten All |
 | Ctrl+K | Cancel All |
+
+## AutoTrader (Autonomous Trading)
+
+The AutoTrader is a fully autonomous trading daemon that manages the complete daily trading cycle.
+
+### Features
+
+- **Market Hours Awareness**: Automatically waits for market open and stops at close
+- **Pre-Flight Checks**: Validates credentials, data freshness, and system config before trading
+- **Historical Data Updates**: Updates data after market close for next session
+- **Holiday Handling**: Automatically skips US market holidays
+- **Graceful Shutdown**: Proper cleanup on SIGTERM/SIGINT signals
+- **State Machine**: Clear state transitions (WAITING → PRE_FLIGHT → TRADING → POST_MARKET → SLEEPING)
+
+### Quick Start
+
+```bash
+# Run AutoTrader (foreground)
+python autotrader.py --symbols AAPL MSFT --broker alpaca
+
+# Dry run mode (no actual trades)
+python autotrader.py --dry-run
+
+# Run as background daemon
+nohup python autotrader.py > logs/autotrader_stdout.log 2>&1 &
+```
+
+### Control Script
+
+```bash
+# Start the AutoTrader daemon
+python autotrader_ctl.py start
+
+# Check status
+python autotrader_ctl.py status
+
+# Stop gracefully
+python autotrader_ctl.py stop
+
+# View logs
+python autotrader_ctl.py logs
+python autotrader_ctl.py logs --tail 100
+```
+
+### macOS Auto-Start (launchd)
+
+```bash
+# Install the launch agent
+cp com.schwabtrader.autotrader.plist ~/Library/LaunchAgents/
+
+# Load (start on login)
+launchctl load ~/Library/LaunchAgents/com.schwabtrader.autotrader.plist
+
+# Unload
+launchctl unload ~/Library/LaunchAgents/com.schwabtrader.autotrader.plist
+```
+
+### Configuration
+
+AutoTrader settings in `config/trading_config.json`:
+
+```json
+{
+  "autotrader": {
+    "enabled": true,
+    "default_broker": "alpaca",
+    "pre_market_buffer_minutes": 15,
+    "post_market_delay_minutes": 5,
+    "data_update_days": 5,
+    "dry_run": false
+  }
+}
+```
+
+### Daily Cycle
+
+1. **WAITING_FOR_MARKET**: Sleeps until 15 minutes before market open
+2. **PRE_FLIGHT**: Runs credential and data validation checks
+3. **TRADING**: Executes strategies during market hours (9:30 AM - 4:00 PM ET)
+4. **POST_MARKET**: Waits 5 minutes after close, updates historical data
+5. **SLEEPING**: Calculates next trading day and sleeps until then
+
+See [docs/autotrader.md](docs/autotrader.md) for complete documentation.
+
+## Pre-Flight Checks
+
+Run validation before trading:
+
+```bash
+# Quick check
+python preflight.py
+
+# Verbose output
+python preflight.py -v
+
+# Update stale data
+python preflight.py --update-data
+
+# Re-authenticate Schwab tokens
+python preflight.py --reauth-schwab
+```
 
 ## Deployment
 

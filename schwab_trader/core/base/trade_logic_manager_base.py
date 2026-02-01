@@ -70,18 +70,25 @@ class TradeLogicManagerBase(ABC):
     def __init__(self, **kwargs):
         """
         Initialize trade logic manager.
-        
+
         Args:
             **kwargs: Configuration parameters like:
-                - cooldown_seconds: Minimum time between trades per symbol
+                - cooldown_seconds: Minimum time between trades per symbol (time-based)
+                - cooldown_bars: Minimum bars between trades per symbol (bar-based)
+                - cooldown_mode: 'time', 'bars', or 'both' (default: 'time')
                 - max_positions: Maximum concurrent positions
                 - allow_after_hours: Whether to trade outside regular hours
                 - min_signal_strength: Minimum signal confidence
         """
         self.params = dict(kwargs)
         self.cooldown_seconds = kwargs.get('cooldown_seconds', 300)  # 5 min default
+        self.cooldown_bars = kwargs.get('cooldown_bars', 5)  # 5 bars default
+        self.cooldown_mode = kwargs.get('cooldown_mode', 'time')  # 'time', 'bars', or 'both'
         self.max_positions = kwargs.get('max_positions', 10)
         self.allow_after_hours = kwargs.get('allow_after_hours', False)
+
+        # Track bars since last trade per symbol (for bar-based cooldown)
+        self._bars_since_trade: Dict[str, int] = {}
     
     # ========================================================================
     # ABSTRACT METHODS - CORE LOGIC
@@ -207,27 +214,65 @@ class TradeLogicManagerBase(ABC):
         current_time: Optional[datetime] = None
     ) -> Tuple[bool, Optional[str]]:
         """
-        Check if cooldown period has elapsed.
-        
+        Check if cooldown period has elapsed (supports time, bars, or both modes).
+
         Args:
             symbol: Trading symbol
-            state: Symbol state with last_trade_time
+            state: Symbol state with last_trade_time and optionally bars_since_trade
             current_time: Current time (defaults to now)
-            
+
         Returns:
             (is_allowed, reason) tuple
         """
-        if not hasattr(state, 'last_trade_time') or state.last_trade_time is None:
-            return True, None
-        
-        current_time = current_time or datetime.now(timezone.utc)
-        time_since_last = (current_time - state.last_trade_time).total_seconds()
-        
-        if time_since_last < self.cooldown_seconds:
-            remaining = self.cooldown_seconds - time_since_last
-            return False, f"Cooldown active ({remaining:.0f}s remaining)"
-        
+        # Bar-based cooldown check
+        if self.cooldown_mode in ('bars', 'both'):
+            bars_elapsed = self._bars_since_trade.get(symbol, self.cooldown_bars + 1)
+            if bars_elapsed < self.cooldown_bars:
+                remaining = self.cooldown_bars - bars_elapsed
+                return False, f"Cooldown active ({remaining} bars remaining)"
+
+        # Time-based cooldown check
+        if self.cooldown_mode in ('time', 'both'):
+            if hasattr(state, 'last_trade_time') and state.last_trade_time is not None:
+                current_time = current_time or datetime.now(timezone.utc)
+                time_since_last = (current_time - state.last_trade_time).total_seconds()
+
+                if time_since_last < self.cooldown_seconds:
+                    remaining = self.cooldown_seconds - time_since_last
+                    return False, f"Cooldown active ({remaining:.0f}s remaining)"
+
         return True, None
+
+    def on_bar(self, symbol: str) -> None:
+        """
+        Call this on each new bar to track bar-based cooldowns.
+
+        Args:
+            symbol: Trading symbol
+        """
+        if symbol in self._bars_since_trade:
+            self._bars_since_trade[symbol] += 1
+
+    def on_trade(self, symbol: str) -> None:
+        """
+        Call this when a trade executes to reset bar cooldown.
+
+        Args:
+            symbol: Trading symbol
+        """
+        self._bars_since_trade[symbol] = 0
+
+    def reset_bar_cooldown(self, symbol: Optional[str] = None) -> None:
+        """
+        Reset bar cooldown counter.
+
+        Args:
+            symbol: Specific symbol to reset, or None for all
+        """
+        if symbol is None:
+            self._bars_since_trade.clear()
+        elif symbol in self._bars_since_trade:
+            del self._bars_since_trade[symbol]
     
     def check_position_limit(
         self,

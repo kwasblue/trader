@@ -1,29 +1,73 @@
 {
   "general": {
     "default_symbols": ["AAPL", "MSFT"],
-    "default_mode": "simulation"
+    "default_mode": "simulation",
+    "log_level": "INFO"
   },
+
   "simulation": {
+    "enabled": true,
+    "steps": 999999,
     "bar_sleep": 0.1,
     "warmup_bars": 200,
-    "starting_cash": 100000.0
+    "starting_cash": 100000.0,
+    "gbm_mu": 0.05,
+    "gbm_sigma": 0.2
   },
+
   "alpaca": {
+    "enabled": true,
     "paper": true,
     "data_feed": "iex"
   },
+
   "schwab": {
+    "enabled": true,
     "session": "NORMAL"
   },
+
   "risk": {
     "risk_per_trade": 0.01,
-    "max_position_pct": 0.10,
+    "max_trade_pct": 0.10,
+    "max_holding_pct": 0.25,
     "max_pyramid_layers": 2,
     "min_bars_between_layers": 2,
-    "max_symbol_drawdown": 0.12,
-    "max_portfolio_drawdown": 0.15,
     "daily_loss_limit": 1000.0
   },
+
+  "drawdown_monitor": {
+    "enabled": false,
+    "max_symbol_drawdown": 0.30,
+    "max_symbol_daily_drawdown": 0.15,
+    "symbol_cooldown_seconds": 5,
+    "max_portfolio_drawdown": 0.25,
+    "max_portfolio_daily_drawdown": 0.10,
+    "portfolio_cooldown_seconds": 5
+  },
+
+  "position_sizer": {
+    "type": "dynamic",
+    "risk_percentage": 0.01,
+    "max_trade_pct": 0.10,
+    "max_holding_pct": 0.25,
+    "min_position_size": 1,
+    "max_position_size": 1000
+  },
+
+  "trade_logic": {
+    "cooldown_mode": "bars",
+    "cooldown_bars": 5,
+    "cooldown_seconds": 300,
+    "tp_mult_normal": 2.0,
+    "tp_mult_trending": 3.0,
+    "sl_mult_normal": 1.5,
+    "sl_mult_trending": 1.0,
+    "exit_fraction": 0.25,
+    "trailing_stop": true,
+    "max_positions": 10,
+    "min_bars_to_hold": 3
+  },
+
   "indicators": {
     "atr_period": 14,
     "sma_short": 20,
@@ -32,14 +76,38 @@
     "bollinger_period": 20,
     "bollinger_std": 2.0
   },
+
   "data": {
     "historical_data_path": "data/data_storage/proc_data",
     "raw_data_path": "data/data_storage/raw_data",
-    "logs_path": "logs"
+    "logs_path": "logs",
+    "max_stale_minutes": 60,
+    "historical_update_interval_minutes": 60,
+    "seed_bars": 200,
+    "historical_days_to_fetch": 5
   },
+
   "gui": {
     "update_interval_ms": 1000,
     "equity_maxlen": 5000,
-    "price_maxlen": 2000
+    "price_maxlen": 2000,
+    "auto_refresh_history": true,
+    "auto_refresh_performance": true
+  },
+
+  "logging": {
+    "console_enabled": true,
+    "file_enabled": true,
+    "propagate_to_app_log": true,
+    "debug_print_enabled": true
+  },
+
+  "autotrader": {
+    "enabled": true,
+    "default_broker": "alpaca",
+    "pre_market_buffer_minutes": 15,
+    "post_market_delay_minutes": 5,
+    "data_update_days": 5,
+    "dry_run": false
   }
 }

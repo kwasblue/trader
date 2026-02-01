@@ -41,13 +41,13 @@ class DrawdownMonitor:
     def __init__(
         self,
         # --- Per-symbol limits ---
-        max_symbol_drawdown: float = 0.05,         # 30% symbol intraday
-        max_symbol_daily_drawdown: float = 0.02,   # 10% symbol daily
+        max_symbol_drawdown: float = 0.30,         # 30% symbol intraday
+        max_symbol_daily_drawdown: float = 0.15,   # 15% symbol daily
         symbol_cooldown_seconds: int = 5,
 
         # --- Portfolio limits ---
-        max_portfolio_drawdown: float = 0.05,      # 25% portfolio intraday
-        max_portfolio_daily_drawdown: float = 0.02,# 10% portfolio daily
+        max_portfolio_drawdown: float = 0.25,      # 25% portfolio intraday
+        max_portfolio_daily_drawdown: float = 0.10,# 10% portfolio daily
         portfolio_cooldown_seconds: int = 5,
     ):
         # Per-symbol state
@@ -309,3 +309,8 @@ class DrawdownMonitor:
         self.portfolio_daily_start = None
         self.portfolio_last_unlock_time = None
         self.logger.info("[PORTFOLIO RESET]")
+
+    async def _emit_guardrail(self, guard_name: str, triggered: bool, message: str, value: float = None) -> None:
+        """Helper to emit guardrail events."""
+        if self.event_handler:
+            await self.event_handler.emit_guardrail(guard_name, triggered, message, value)

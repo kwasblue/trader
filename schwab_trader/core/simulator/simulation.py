@@ -49,10 +49,13 @@ from core.events.events import (
     EVENT_NEW_BAR,
     EVENT_STRATEGY_SIGNAL,
     EVENT_PNL_UPDATE,
+    EVENT_REGIME_UPDATE,
     PnLPayload,
     BarPayload,
     StrategySignalPayload,
+    RegimePayload,
 )
+from core.config_loader import get_config
 
 
 # ============================================================================
@@ -135,32 +138,67 @@ def classify_regime(atr: Optional[float], atr_history: list) -> str:
 @dataclass
 class SimConfig:
     """Simulation configuration"""
-    
+
     # Core settings
     symbols: list[str]
     steps: int = 600
     bar_sleep: float = 0.05
     starting_cash: float = 100_000.0
-    
+
     # Paths
     strategy_routing: str = "config/strategy_routing.json"
     trade_logic_routing: str = "config/trade_logic_routing.json"
     historical_data_path: str = "data/data_storage/proc_data"
     trade_log_file: str = "trades_sim.csv"
     trade_log_dir: str = "logs"
-    
+
     # Position sizing
     risk_per_trade: float = 0.01  # 1% risk per trade
-    
-    # Drawdown limits
-    max_symbol_drawdown: float = 0.30
-    max_portfolio_drawdown: float = 0.25
-    
+    max_trade_pct: float = 0.10   # Max 10% of portfolio per trade
+    max_holding_pct: float = 0.25  # Max 25% in any single position
+
+    # Drawdown limits (intraday = from peak, daily = from day start)
+    drawdown_monitor_enabled: bool = False      # Enable/disable drawdown monitor
+    max_symbol_drawdown: float = 0.30           # 30% symbol intraday
+    max_symbol_daily_drawdown: float = 0.15     # 15% symbol daily
+    max_portfolio_drawdown: float = 0.25        # 25% portfolio intraday
+    max_portfolio_daily_drawdown: float = 0.10  # 10% portfolio daily
+
     # History buffers
     max_history_bars: int = 500
     max_atr_history: int = 300
     atr_period: int = 14
     warmup_bars: int = 200
+
+    @classmethod
+    def from_config_file(cls, symbols: list[str] = None) -> "SimConfig":
+        """
+        Create SimConfig from the global trading_config.json file.
+
+        Args:
+            symbols: Override symbols (if None, uses config default)
+
+        Returns:
+            SimConfig populated from config file
+        """
+        cfg = get_config()
+
+        return cls(
+            symbols=symbols or cfg.general.default_symbols,
+            steps=cfg.simulation.steps,
+            bar_sleep=cfg.simulation.bar_sleep,
+            starting_cash=cfg.simulation.starting_cash,
+            risk_per_trade=cfg.risk.risk_per_trade,
+            max_trade_pct=cfg.position_sizer.max_trade_pct,
+            max_holding_pct=cfg.position_sizer.max_holding_pct,
+            drawdown_monitor_enabled=cfg.drawdown_monitor.enabled,
+            max_symbol_drawdown=cfg.drawdown_monitor.max_symbol_drawdown,
+            max_symbol_daily_drawdown=cfg.drawdown_monitor.max_symbol_daily_drawdown,
+            max_portfolio_drawdown=cfg.drawdown_monitor.max_portfolio_drawdown,
+            max_portfolio_daily_drawdown=cfg.drawdown_monitor.max_portfolio_daily_drawdown,
+            atr_period=cfg.indicators.atr_period,
+            warmup_bars=cfg.simulation.warmup_bars,
+        )
     
     def __post_init__(self):
         """Validate and create directories"""
@@ -184,7 +222,7 @@ class SimulationRunner:
     """
     Simulation runner using improved architecture
     """
-    
+
     def __init__(self, cfg: SimConfig):
         self.cfg = cfg
         # Logger - own file with propagation to app.log
@@ -193,13 +231,16 @@ class SimulationRunner:
             logger_name="SimulationRunner",
             propagate=True
         ).get_logger()
-        
+
+        # Stop flag for graceful shutdown
+        self._stop_requested = False
+
         # Core state
         self.portfolio = PortfolioState(cash=cfg.starting_cash)
         self.symbol_states: Dict[str, SymbolState] = {
             s: SymbolState(symbol=s) for s in cfg.symbols
         }
-        
+
         # History buffers
         self.history: Dict[str, Deque[dict]] = {
             s: deque(maxlen=cfg.max_history_bars) for s in cfg.symbols
@@ -213,11 +254,16 @@ class SimulationRunner:
         self.equity_history.append(cfg.starting_cash)
 
         # Utilities
-        
+
         # Initialize components
         self._init_components()
-        
+
         self.logger.info(f"SimulationRunner initialized for {cfg.symbols}")
+
+    def stop(self):
+        """Request graceful stop of the simulation."""
+        self._stop_requested = True
+        self.logger.info("Stop requested")
     
     def _init_components(self):
         """Initialize all components"""
@@ -227,20 +273,22 @@ class SimulationRunner:
             base_price=300.0
         )
         
+        # Event handler - use global singleton so GUI receives events
+        # NOTE: Must be created BEFORE trade logic manager to pass event handler
+        from core.events.eventhandler import get_event_handler
+        self.events = get_event_handler()
+        print(f"[SIM] EventHandler instance ID: {id(self.events)}")
+
         # Strategy routing
         self.strategy_routing = StrategyRoutingManager(
             self.cfg.strategy_routing
         )
-        
-        # Trade logic routing
+
+        # Trade logic routing (with event handler for signal emission)
         self.trade_logic_manager = DynamicTradeLogicManager(
-            self.cfg.trade_logic_routing
+            self.cfg.trade_logic_routing,
+            event_handler=self.events
         )
-        
-        # Event handler - use global singleton so GUI receives events
-        from core.events.eventhandler import get_event_handler
-        self.events = get_event_handler()
-        print(f"[SIM] EventHandler instance ID: {id(self.events)}")
         
         # Broker
         self.broker = MockBroker(self.cfg.starting_cash)
@@ -248,8 +296,13 @@ class SimulationRunner:
         # Executor
         self.executor = MockExecutor(self.broker)
         
-        # Position sizer
-        self.sizer = DynamicPositionSizer2(risk_percentage=0.05)
+        # Position sizer - use config values
+        self.sizer = DynamicPositionSizer2(
+            risk_percentage=self.cfg.risk_per_trade,
+            max_trade_pct=self.cfg.max_trade_pct,
+            max_holding_pct=self.cfg.max_holding_pct
+        )
+        self.logger.info(f"[SIM] Position sizer: risk={self.cfg.risk_per_trade:.1%}, max_trade={self.cfg.max_trade_pct:.1%}")
         
         # Trade logger
         self.trade_logger = FileTradeLogger(
@@ -257,12 +310,19 @@ class SimulationRunner:
             log_dir=self.cfg.trade_log_dir
         )
         
-        # Drawdown monitor
-        self.ddm = DrawdownMonitor(
-            max_symbol_drawdown=self.cfg.max_symbol_drawdown,
-            max_portfolio_drawdown=self.cfg.max_portfolio_drawdown
-        )
-        
+        # Drawdown monitor - controlled by config
+        if self.cfg.drawdown_monitor_enabled:
+            self.ddm = DrawdownMonitor(
+                max_symbol_drawdown=self.cfg.max_symbol_drawdown,
+                max_symbol_daily_drawdown=self.cfg.max_symbol_daily_drawdown,
+                max_portfolio_drawdown=self.cfg.max_portfolio_drawdown,
+                max_portfolio_daily_drawdown=self.cfg.max_portfolio_daily_drawdown
+            )
+            self.logger.info("[SIM] Drawdown monitor ENABLED")
+        else:
+            self.ddm = None
+            self.logger.info("[SIM] Drawdown monitor DISABLED (via config)")
+
         # Execution engine
         self.engine = MockExecutionEngine(
             broker=self.broker,
@@ -382,10 +442,31 @@ class SimulationRunner:
             except Exception as e:
                 self.logger.error(f"Strategy error for {symbol}: {e}")
                 signal = 0
-            
+
+            # Emit strategy signal event (for Strategies tab)
+            signal_payload = {
+                "symbol": symbol,
+                "strategy": strategy_name,
+                "signal": "buy" if signal == 1 else "sell" if signal == -1 else "hold",
+                "confidence": None,
+                "regime": regime,  # Include regime for Strategies tab
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+            await self.events.emit(EVENT_STRATEGY_SIGNAL, signal_payload)
+
+            # Emit regime update event (for Market/Strategies tab)
+            regime_payload: RegimePayload = {
+                "symbol": symbol,
+                "volatility": regime,  # low_volatility, normal, high_volatility
+                "trend": "bullish" if signal == 1 else "bearish" if signal == -1 else "sideways",
+                "market": "neutral",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+            await self.events.emit(EVENT_REGIME_UPDATE, regime_payload)
+
             # Get state
             state = self.symbol_states[symbol]
-            
+
             # Handle signal via engine
             await self.engine.handle_signal(
                 symbol=symbol,
@@ -428,9 +509,22 @@ class SimulationRunner:
         """Generate and emit bars"""
         try:
             for step in range(self.cfg.steps):
+                # Check for stop request
+                if self._stop_requested:
+                    self.logger.info(f"Simulation stopped at step {step}")
+                    break
+
+                # Reset position sizer reservations for new bar cycle
+                # This prevents accumulated reservations from blocking new trades
+                self.sizer.reset_bar_reservations()
+
                 all_bars = self.sim.update_all()
-                
+
                 for bar in all_bars.values():
+                    # Check stop flag before each bar emission
+                    if self._stop_requested:
+                        break
+
                     # Emit bar event
                     payload: BarPayload = {
                         "symbol": bar["symbol"],
@@ -442,11 +536,20 @@ class SimulationRunner:
                         "volume": int(bar.get("volume", 0)),
                     }
                     await self.events.emit(EVENT_NEW_BAR, payload)
-                
+
+                if self._stop_requested:
+                    break
+
                 await asyncio.sleep(self.cfg.bar_sleep)
-            
-            self.logger.info("Bar production complete")
-        
+
+            if self._stop_requested:
+                self.logger.info("Bar production stopped by user")
+            else:
+                self.logger.info("Bar production complete")
+
+        except asyncio.CancelledError:
+            self.logger.info("Bar producer cancelled")
+            raise
         except Exception as e:
             self.logger.error(f"Bar producer failed: {e}", exc_info=True)
     
@@ -459,6 +562,10 @@ class SimulationRunner:
             # NOTE: Do NOT call engine.subscribe_signals() here!
             # The simulation directly calls engine.handle_signal() in _on_bar,
             # so subscribing to EVENT_STRATEGY_SIGNAL would cause duplicate processing.
+
+            # But DO subscribe to GUI events (flatten, cancel, halt, manual orders)
+            if hasattr(self.engine, '_subscribe_gui_events'):
+                await self.engine._subscribe_gui_events()
 
         except Exception as e:
             self.logger.error(f"Bar consumer failed: {e}", exc_info=True)

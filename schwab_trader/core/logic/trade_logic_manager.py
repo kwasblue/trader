@@ -93,19 +93,22 @@ class DynamicTradeLogicManager:
     def __init__(
         self,
         config_path: str,
-        auto_create: bool = True
+        auto_create: bool = True,
+        event_handler=None
     ):
         """
         Initialize dynamic trade logic router.
-        
+
         Args:
             config_path: Path to JSON routing configuration
             auto_create: Create default config if not found
-            
+            event_handler: Event handler for signal emission
+
         Raises:
             FileNotFoundError: If config not found and auto_create=False
         """
         self.config_path = Path(config_path)
+        self.event_handler = event_handler
         # Logger - own file with propagation to app.log
         self.logger = Logger(
             log_file="trade_logic_manager.log",
@@ -265,19 +268,22 @@ class DynamicTradeLogicManager:
             )
             logic_class = TRADE_LOGIC_CLASS_REGISTRY["default"]
         
-        # Instantiate with params
+        # Instantiate with params, including event_handler if available
         try:
+            # Add event_handler to params for signal emission
+            if self.event_handler is not None:
+                params = {**params, 'event_handler': self.event_handler}
             instance = logic_class(**params)
             self.logger.info(
                 f"Created {logic_key} logic for {symbol}/{regime}"
             )
             return instance
-            
+
         except Exception as e:
             self.logger.error(
                 f"Failed to instantiate {logic_key}: {e}, using default"
             )
-            return TRADE_LOGIC_CLASS_REGISTRY["default"]()
+            return TRADE_LOGIC_CLASS_REGISTRY["default"](event_handler=self.event_handler)
     
     # ========================================================================
     # CONFIGURATION MANAGEMENT
