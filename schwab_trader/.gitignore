@@ -40,6 +40,7 @@ venv/
 *.db3
 .db-shm
 .db-wal
+.claude
 
 # === Data storage (large files) ===
 data/data_storage/raw_data/

@@ -125,7 +125,7 @@ class SchwabLiveRunner:
         self.sizer = DynamicPositionSizer(
             risk_percentage=settings.get("BASE_RISK_PCT", 0.05)
         )
-        self.router = StrategyRoutingManager(str(ROOT.parent / "config" / "strategy_routing.json"))
+        self.router = StrategyRoutingManager(str(ROOT / "config" / "strategy_routing.json"))
         self.executor = LiveExecutor(
             broker=self.broker,
             event_handler=self.event_handler,
@@ -135,7 +135,7 @@ class SchwabLiveRunner:
             executor=self.executor,
             sizer=self.sizer,
             performance_tracker=self.trade_logger,
-            trade_logic_manager=DynamicTradeLogicManager(str(ROOT.parent / "config" / "trade_logic_routing.json")),
+            trade_logic_manager=DynamicTradeLogicManager(str(ROOT / "config" / "trade_logic_routing.json")),
             portfolio=self.portfolio,
         )
 
