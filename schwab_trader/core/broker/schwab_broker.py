@@ -406,7 +406,14 @@ class SchwabBroker(BaseBrokerInterface):
 
     async def get_account_info(self) -> BrokerSnapshot:
         acct = await self._to_thread(self.client.accounts_number, self.account_number)
-        return self._mk_broker_snapshot(acct)
+        # Extract positions from account response
+        positions_list = (acct.get("securitiesAccount", {}) or {}).get("positions", []) or []
+        positions = {}
+        for p in positions_list:
+            symbol = (p.get("instrument", {}) or {}).get("symbol")
+            if symbol:
+                positions[symbol] = self._mk_position_view(p)
+        return self._mk_broker_snapshot(acct, positions)
 
     async def is_market_open(self) -> bool:
         """
@@ -550,6 +557,17 @@ class SchwabBroker(BaseBrokerInterface):
         acct = self.client.accounts_number(self.account_number)
         return float((acct.get("securitiesAccount", {}) or {}).get("currentBalances", {}).get("availableFunds", 0.0))
 
+    def get_buying_power(self) -> float:
+        """
+        Get buying power from broker API.
+
+        Returns:
+            Available buying power in dollars
+        """
+        acct = self.client.accounts_number(self.account_number)
+        balances = (acct.get("securitiesAccount", {}) or {}).get("currentBalances", {})
+        return float(balances.get("buyingPower", 0.0) or 0.0)
+
     def mark_price(self, symbol: str, price: float) -> None:
         self._last_price[symbol] = float(price)
 
@@ -691,7 +709,7 @@ class SchwabBroker(BaseBrokerInterface):
             side=side,
         )
 
-    def _mk_broker_snapshot(self, acct: Dict[str, Any]) -> BrokerSnapshot:
+    def _mk_broker_snapshot(self, acct: Dict[str, Any], positions: dict = None) -> BrokerSnapshot:
         bal = (acct.get("securitiesAccount", {}) or {}).get("currentBalances", {}) or {}
         return BrokerSnapshot(
             account_number=self.account_number,
@@ -700,4 +718,5 @@ class SchwabBroker(BaseBrokerInterface):
             buying_power=_to_float(bal.get("buyingPower")) or (_to_float(bal.get("availableFunds")) or 0.0),
             equity=_to_float(bal.get("liquidationValue")) or 0.0,
             portfolio_value=_to_float(bal.get("liquidationValue")) or 0.0,
+            positions=positions,
         )

@@ -150,9 +150,7 @@ class EventHandler(EventHandlerBase):
         # Optimization: Early exit before validation if no listeners
         callbacks = self.listeners.get(event_name)
         if not callbacks:
-            # Debug: Log when no listeners
-            if event_name == "PNL_UPDATE":
-                print(f"[EventHandler] NO LISTENERS for {event_name}!")
+            # No listeners for this event - silently skip
             return
 
         # Debug logging (commented out for production)

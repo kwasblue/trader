@@ -34,6 +34,8 @@ import sys
 import asyncio
 import signal
 import argparse
+import atexit
+import fcntl
 from pathlib import Path
 from datetime import datetime, time, timedelta
 from typing import List, Optional, Dict, Any
@@ -44,6 +46,89 @@ from zoneinfo import ZoneInfo
 ROOT = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+
+
+# ============================================================================
+# INSTANCE LOCK - Prevents multiple autotraders from running simultaneously
+# ============================================================================
+
+class InstanceLock:
+    """
+    Prevents multiple instances of autotrader from running.
+
+    Uses a PID file with file locking to ensure only one instance runs at a time.
+    This prevents websocket connection limit issues with Alpaca/Schwab.
+    """
+
+    def __init__(self, name: str = "autotrader"):
+        self.lock_file = ROOT / "logs" / f"{name}.pid"
+        self.lock_fd = None
+        self._locked = False
+
+    def acquire(self) -> bool:
+        """
+        Attempt to acquire the instance lock.
+
+        Returns:
+            True if lock acquired, False if another instance is running
+        """
+        # Ensure logs directory exists
+        self.lock_file.parent.mkdir(parents=True, exist_ok=True)
+
+        try:
+            # Open (or create) the lock file
+            self.lock_fd = open(self.lock_file, 'w')
+
+            # Try to get an exclusive lock (non-blocking)
+            fcntl.flock(self.lock_fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+            # Write our PID
+            self.lock_fd.write(str(os.getpid()))
+            self.lock_fd.flush()
+            self._locked = True
+
+            # Register cleanup on exit
+            atexit.register(self.release)
+
+            return True
+
+        except (IOError, OSError):
+            # Lock is held by another process
+            if self.lock_fd:
+                self.lock_fd.close()
+                self.lock_fd = None
+
+            # Try to read the other PID
+            try:
+                with open(self.lock_file, 'r') as f:
+                    other_pid = f.read().strip()
+                print(f"ERROR: Another autotrader instance is running (PID: {other_pid})")
+                print(f"       Kill it with: kill {other_pid}")
+                print(f"       Or force: kill -9 {other_pid}")
+            except Exception:
+                print("ERROR: Another autotrader instance is running")
+
+            return False
+
+    def release(self):
+        """Release the instance lock."""
+        if self._locked and self.lock_fd:
+            try:
+                fcntl.flock(self.lock_fd.fileno(), fcntl.LOCK_UN)
+                self.lock_fd.close()
+                self.lock_file.unlink(missing_ok=True)
+            except Exception:
+                pass
+            self._locked = False
+            self.lock_fd = None
+
+    def __enter__(self):
+        if not self.acquire():
+            sys.exit(1)
+        return self
+
+    def __exit__(self, *args):
+        self.release()
 
 from dotenv import load_dotenv
 load_dotenv(ROOT / ".venv" / ".env")
@@ -618,8 +703,8 @@ Background:
     parser.add_argument(
         '--symbols', '-s',
         nargs='+',
-        default=['AAPL', 'MSFT'],
-        help='Symbols to trade (default: AAPL MSFT)'
+        default=None,
+        help='Symbols to trade (default: uses trade list from symbol manager)'
     )
     parser.add_argument(
         '--broker', '-b',
@@ -641,9 +726,21 @@ Background:
 
     args = parser.parse_args()
 
+    # Get symbols from trade list if not specified
+    if args.symbols is None:
+        from core.symbol_list_manager import get_list_manager
+        symbols = get_list_manager().get_trade_list()
+        if not symbols:
+            print("Error: No symbols in trade list. Add symbols with:")
+            print("  python autotrader_ctl.py add AAPL --trade")
+            sys.exit(1)
+        print(f"Using trade list: {symbols}")
+    else:
+        symbols = args.symbols
+
     # Create autotrader
     trader = AutoTrader(
-        symbols=args.symbols,
+        symbols=symbols,
         broker=args.broker,
         dry_run=args.dry_run,
         update_data_days=args.update_days,
@@ -668,4 +765,14 @@ Background:
 
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    # Acquire instance lock to prevent multiple autotraders
+    lock = InstanceLock("autotrader")
+    if not lock.acquire():
+        print("\nTo run anyway, first stop the existing instance:")
+        print("  python autotrader_ctl.py stop")
+        sys.exit(1)
+
+    try:
+        asyncio.run(main())
+    finally:
+        lock.release()

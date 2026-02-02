@@ -50,6 +50,8 @@ from core.simulator.simulation import compute_atr, classify_regime
 from core.broker.schwab_broker import SchwabBroker
 from core.logic.live_execution_engine import LiveExecutionEngine
 from core.logic.trade_logic_manager import DynamicTradeLogicManager
+from core.executor import LiveExecutor
+from core.state_reconciler import StateReconciler, ReconcilerConfig
 from data.streaming.schwab_client import SchwabClient
 
 load_dotenv(ROOT / ".venv" / ".env")
@@ -119,16 +121,22 @@ class SchwabLiveRunner:
             symbol_cooldown_seconds=settings.get("DDM_COOLDOWN_BARS", 5),
         )
 
-        # Sizer, router, engine
+        # Sizer, router, executor, engine
         self.sizer = DynamicPositionSizer(
             risk_percentage=settings.get("BASE_RISK_PCT", 0.05)
         )
         self.router = StrategyRoutingManager(str(ROOT.parent / "config" / "strategy_routing.json"))
+        self.executor = LiveExecutor(
+            broker=self.broker,
+            event_handler=self.event_handler,
+        )
         self.engine = LiveExecutionEngine(
             broker=self.broker,
+            executor=self.executor,
             sizer=self.sizer,
             performance_tracker=self.trade_logger,
             trade_logic_manager=DynamicTradeLogicManager(str(ROOT.parent / "config" / "trade_logic_routing.json")),
+            portfolio=self.portfolio,
         )
 
         # Wire optional attrs
@@ -136,6 +144,19 @@ class SchwabLiveRunner:
             self.engine.trade_gate = self.trade_gate
         if hasattr(self.engine, "drawdown_monitor"):
             self.engine.drawdown_monitor = self.ddm
+
+        # State reconciler - ensures local state matches broker
+        reconciler_config = ReconcilerConfig(
+            reconcile_interval=settings.get("RECONCILE_INTERVAL", 60),
+            halt_on_critical=settings.get("HALT_ON_MISMATCH", True),
+            auto_correct_minor=settings.get("AUTO_CORRECT_MINOR", True),
+        )
+        self.reconciler = StateReconciler(
+            broker=self.broker,
+            portfolio=self.portfolio,
+            config=reconciler_config,
+            on_halt=self._on_reconciler_halt,
+        )
 
         # Bar tracking
         self._last_bar_id: Dict[str, int] = {}
@@ -147,6 +168,13 @@ class SchwabLiveRunner:
 
         # Quote callback registry
         self._quote_callbacks: Dict[str, Any] = {}
+
+    # ---------- Reconciler Callback ----------
+    def _on_reconciler_halt(self, message: str):
+        """Called when reconciler detects critical state mismatch."""
+        self.logger.critical(f"TRADING HALTED: {message}")
+        self.logger.critical("Manual intervention required. Review positions at broker.")
+        self._running = False  # Stop the run loop
 
     # ---------- Helpers ----------
     @staticmethod
@@ -325,7 +353,7 @@ class SchwabLiveRunner:
         state.regime_persist = gs.regime_persist
 
         # Hand off to execution engine
-        self.engine.handle_signal(
+        await self.engine.handle_signal(
             symbol=symbol,
             state=state,
             signal=signal,
@@ -446,9 +474,26 @@ class SchwabLiveRunner:
             self.logger.error("Failed to establish initial connection")
             return
 
+        # CRITICAL: Sync state with broker before trading
+        self.logger.info("Syncing portfolio state with broker...")
+        sync_result = await self.reconciler.full_sync()
+        if not sync_result.success:
+            self.logger.error("Failed to sync with broker - check credentials and connectivity")
+        else:
+            self.logger.info(
+                f"Portfolio synced: {sync_result.broker_positions} positions, "
+                f"${sync_result.broker_cash:,.2f} cash"
+            )
+
         # Start streaming
         stream_task = asyncio.create_task(self.broker.start_stream())
         self.logger.info(f"SchwabLiveRunner started for: {', '.join(self.symbols)}")
+
+        # Start periodic state reconciliation
+        reconcile_interval = self.settings.get("RECONCILE_INTERVAL", 60)
+        if reconcile_interval > 0:
+            await self.reconciler.start_periodic(interval_seconds=reconcile_interval)
+            self.logger.info(f"State reconciliation enabled (every {reconcile_interval}s)")
 
         try:
             while self._running:
@@ -470,6 +515,11 @@ class SchwabLiveRunner:
             self.logger.info("Runner cancelled")
         finally:
             self._running = False
+
+            # Stop reconciler
+            await self.reconciler.stop_periodic()
+            self.logger.info("State reconciler stopped")
+
             stream_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await stream_task

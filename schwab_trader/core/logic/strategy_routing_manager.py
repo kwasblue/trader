@@ -137,18 +137,22 @@ class StrategyRoutingManager:
         """
         # Resolve strategy name
         strategy_name = self._resolve_strategy_name(symbol, regime)
-        
+
+        # Ensure all cache key components are strings (defensive)
+        regime_str = str(regime) if not isinstance(regime, str) else regime
+        strategy_str = str(strategy_name) if not isinstance(strategy_name, str) else strategy_name
+
         self.logger.debug(
-            f"Resolved strategy for {symbol} in '{regime}': {strategy_name}"
+            f"Resolved strategy for {symbol} in '{regime_str}': {strategy_str}"
         )
-        
+
         # Check cache
-        cache_key = (symbol, regime, strategy_name)
+        cache_key = (symbol, regime_str, strategy_str)
         if cache_key in self._strategy_cache:
             return self._strategy_cache[cache_key]
         
         # Instantiate and cache
-        strategy = self._instantiate_strategy(strategy_name)
+        strategy = self._instantiate_strategy(strategy_str)
         self._strategy_cache[cache_key] = strategy
         
         return strategy
@@ -346,7 +350,7 @@ class StrategyRoutingManager:
     ) -> str:
         """
         Resolve strategy name for symbol-regime pair.
-        
+
         Resolution order:
         1. symbol -> regime
         2. symbol -> default
@@ -354,26 +358,41 @@ class StrategyRoutingManager:
         4. default -> default
         5. "default" (hardcoded fallback)
         """
+        # Ensure regime is a string
+        if not isinstance(regime, str):
+            self.logger.warning(f"regime is not a string: {type(regime).__name__}, using 'normal'")
+            regime = "normal"
+
+        result = None
+
         # Try symbol-specific regime
         if symbol in self.routing_map:
-            if regime in self.routing_map[symbol]:
-                return self.routing_map[symbol][regime]
-            
-            # Try symbol default
-            if "default" in self.routing_map[symbol]:
-                return self.routing_map[symbol]["default"]
-        
+            symbol_map = self.routing_map[symbol]
+            if isinstance(symbol_map, dict):
+                if regime in symbol_map:
+                    result = symbol_map[regime]
+                elif "default" in symbol_map:
+                    result = symbol_map["default"]
+
         # Try global regime
-        if "default" in self.routing_map:
-            if regime in self.routing_map["default"]:
-                return self.routing_map["default"][regime]
-            
-            # Try global default
-            if "default" in self.routing_map["default"]:
-                return self.routing_map["default"]["default"]
-        
+        if result is None and "default" in self.routing_map:
+            default_map = self.routing_map["default"]
+            if isinstance(default_map, dict):
+                if regime in default_map:
+                    result = default_map[regime]
+                elif "default" in default_map:
+                    result = default_map["default"]
+
         # Final fallback
-        return "default"
+        if result is None:
+            result = "momentum_strategy"
+
+        # Ensure result is a string
+        if not isinstance(result, str):
+            self.logger.warning(f"Strategy resolved to non-string: {type(result).__name__}, using default")
+            result = "momentum_strategy"
+
+        return result
     
     def _instantiate_strategy(self, strategy_name: str) -> BaseStrategy:
         """

@@ -65,7 +65,9 @@
     "exit_fraction": 0.25,
     "trailing_stop": true,
     "max_positions": 10,
-    "min_bars_to_hold": 3
+    "min_bars_to_hold": 3,
+    "swing_mode": true,
+    "min_hold_days": 1
   },
 
   "indicators": {

@@ -112,53 +112,56 @@ class LiveExecutionEngine(ExecutionEngineBase):
             self.logic_router = TradeLogicRouter(trade_logic_manager)
         
         # Setup logging
-        self.logger = Logger("app.log", "LiveExecutionEngine").get_logger()
+        self.logger = Logger("execution_engine.log", "LiveExecutionEngine", propagate=True).get_logger()
         
         self.logger.info("LiveExecutionEngine initialized")
         
         # Sync portfolio with broker if requested
+        # NOTE: sync_on_start should be False for live trading -
+        # the AlpacaRunner/SchwabRunner handles sync via StateReconciler
         if sync_on_start:
-            self._sync_portfolio_with_broker()
+            # Can't await in __init__, use asyncio.run for one-time sync
+            import asyncio
+            asyncio.run(self._sync_portfolio_with_broker())
     
     # ========================================================================
     # INITIALIZATION
     # ========================================================================
     
-    def _sync_portfolio_with_broker(self) -> None:
+    async def _sync_portfolio_with_broker(self) -> None:
         """
         Sync portfolio state with live broker positions.
-        
+
         Critical for live trading to ensure internal state matches broker.
         """
         try:
             self.logger.info("Syncing portfolio with broker...")
-            
+
             # Get account info from broker
-            account = self.broker.get_account_info()
-            
+            account = await self.broker.get_account_info()
+
             # Update portfolio cash/equity
             self.portfolio.cash = getattr(account, 'cash', 0.0)
             self.portfolio.total_value = getattr(account, 'equity', 0.0)
-            
+
             # Sync positions
-            broker_positions = getattr(account, 'positions', [])
-            
-            for pos in broker_positions:
-                symbol = pos.symbol
+            broker_positions = getattr(account, 'positions', {})
+
+            for symbol, pos in broker_positions.items():
                 qty = pos.qty
                 avg_price = pos.avg_price
-                
+
                 self.portfolio.positions[symbol] = pos
-                
+
                 self.logger.info(
                     f"Synced position: {symbol} qty={qty} avg=${avg_price:.2f}"
                 )
-            
+
             self.logger.info(
                 f"Portfolio synced: ${self.portfolio.total_value:,.2f}, "
                 f"{len(self.portfolio.positions)} positions"
             )
-            
+
         except Exception as e:
             self.logger.error(f"Failed to sync portfolio: {e}")
             self.logger.warning("Starting with unsynced portfolio - positions may be inaccurate!")
@@ -167,7 +170,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
     # MAIN SIGNAL HANDLING
     # ========================================================================
     
-    def handle_signal(
+    async def handle_signal(
         self,
         symbol: str,
         state: SymbolState,
@@ -227,10 +230,10 @@ class LiveExecutionEngine(ExecutionEngineBase):
             )
             
             # 1. Sync position from broker (live safety check)
-            self._refresh_position(symbol)
+            await self._refresh_position(symbol)
             
             # 2. Check trade approval
-            should_trade, reason = self._check_trade_approval(
+            should_trade, reason = await self._check_trade_approval(
                 trade_logic, symbol, state, signal, price, atr, regime, **kwargs
             )
             
@@ -247,7 +250,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
             
             # 4. Calculate quantity
             qty = self._calculate_quantity(
-                symbol, state, action_type, price, atr, regime, trade_logic, **kwargs
+                symbol, state, action_type, price, atr, regime, trade_logic, signal=signal, **kwargs
             )
             
             if qty <= 0:
@@ -255,12 +258,12 @@ class LiveExecutionEngine(ExecutionEngineBase):
                 return None
             
             # 5. Pre-execution validation (live safety)
-            if not self._validate_live_execution(symbol, side, qty, price):
+            if not await self._validate_live_execution(symbol, side, qty, price):
                 self.logger.error(f"[LIVE] [{symbol}] Pre-execution validation failed")
                 return None
             
             # 6. Execute trade (LIVE)
-            result = self._execute_live_trade(
+            result = await self._execute_live_trade(
                 symbol, state, side, qty, price, atr, action_type, **kwargs
             )
             
@@ -293,17 +296,23 @@ class LiveExecutionEngine(ExecutionEngineBase):
     # LIVE-SPECIFIC METHODS
     # ========================================================================
     
-    def _refresh_position(self, symbol: str) -> None:
+    async def _refresh_position(self, symbol: str) -> None:
         """
         Refresh position from broker before executing.
-        
+
         Critical for live trading to avoid stale state.
         """
         try:
-            broker_position = self.broker.get_position(symbol)
-            
+            broker_position = await self.broker.get_position(symbol)
+
             if broker_position:
-                self.portfolio.positions[symbol] = broker_position
+                # Convert PositionView to SymbolPosition for portfolio
+                from core.logic.portfolio_state import SymbolPosition
+                self.portfolio.positions[symbol] = SymbolPosition(
+                    qty=int(broker_position.qty),
+                    avg_price=float(broker_position.avg_price),
+                    last_price=float(broker_position.last_price or broker_position.avg_price),
+                )
                 self.logger.debug(
                     f"[{symbol}] Position refreshed: qty={broker_position.qty}"
                 )
@@ -313,11 +322,11 @@ class LiveExecutionEngine(ExecutionEngineBase):
                 self.logger.warning(
                     f"[{symbol}] Position removed (not found on broker)"
                 )
-                
+
         except Exception as e:
             self.logger.warning(f"[{symbol}] Failed to refresh position: {e}")
     
-    def _validate_live_execution(
+    async def _validate_live_execution(
         self,
         symbol: str,
         side: OrderSide,
@@ -326,50 +335,59 @@ class LiveExecutionEngine(ExecutionEngineBase):
     ) -> bool:
         """
         Final validation before live execution.
-        
+
         Checks:
         - Market is open (for market orders)
         - Sufficient buying power
         - Symbol is tradeable
         - Quantity within limits
-        
+
         Returns:
             True if safe to execute
         """
         try:
             # Check market status
-            if not self.broker.is_market_open():
+            if not await self.broker.is_market_open():
                 self.logger.warning("Market is closed - order may not fill immediately")
                 # Continue anyway - some brokers accept orders when closed
-            
+
             # Check buying power
-            available = self.broker.get_available_funds()
+            if hasattr(self.broker, 'get_buying_power'):
+                available = self.broker.get_buying_power()
+            else:
+                available = self.broker.get_available_funds()
+
             required = qty * price
-            
+
             if side == OrderSide.BUY and required > available:
                 self.logger.error(
-                    f"Insufficient funds: need ${required:,.2f}, have ${available:,.2f}"
+                    f"[{symbol}] Insufficient buying power: need ${required:,.2f}, "
+                    f"have ${available:,.2f} (qty={qty} @ ${price:.2f})"
                 )
                 return False
-            
+
             # Check quantity limits
             if qty <= 0:
-                self.logger.error(f"Invalid quantity: {qty}")
+                self.logger.error(f"[{symbol}] Invalid quantity: {qty}")
                 return False
-            
+
             # Check if symbol is tradeable (if broker supports)
             if hasattr(self.broker, 'is_tradeable'):
                 if not self.broker.is_tradeable(symbol):
                     self.logger.error(f"Symbol not tradeable: {symbol}")
                     return False
-            
+
+            self.logger.debug(
+                f"[{symbol}] Validation passed: {qty} shares @ ${price:.2f} = "
+                f"${required:,.2f} (buying_power=${available:,.2f})"
+            )
             return True
-            
+
         except Exception as e:
             self.logger.error(f"Validation error: {e}")
             return False
     
-    def _execute_live_trade(
+    async def _execute_live_trade(
         self,
         symbol: str,
         state: SymbolState,
@@ -382,30 +400,28 @@ class LiveExecutionEngine(ExecutionEngineBase):
     ) -> Optional[OrderResult]:
         """
         Execute LIVE trade via broker.
-        
+
         This places actual orders in the market!
+        All logic (sizing, validation) already done upstream.
         """
-        df = kwargs.get('df')
-        signal = 1 if side == OrderSide.BUY else -1
-        
         try:
             self.logger.info(
                 f"[LIVE EXECUTION] [{symbol}] Placing {side.value} order: "
-                f"{qty} shares @ ${price:.2f}"
+                f"{qty} shares @ ~${price:.2f}"
             )
-            
-            # Execute via executor (which calls broker)
-            self.executor.execute(
+
+            # Place order directly via broker (qty already calculated)
+            side_str = "buy" if side == OrderSide.BUY else "sell"
+            await self.broker.place_order(
                 symbol=symbol,
-                df=df,
-                signal=signal,
-                price=price,
-                atr_value=atr
+                qty=qty,
+                side=side_str,
+                order_type="market",
+                time_in_force="day"
             )
-            
-            # Get actual fill from broker
-            # In real implementation, executor would return OrderResult
-            # For now, create from expected values
+
+            # Create result from expected values
+            # Note: Actual fill price/qty will be tracked via order events
             result = OrderResult(
                 order_id=f"LIVE_{symbol}_{datetime.now(timezone.utc).timestamp()}",
                 symbol=symbol,
@@ -414,16 +430,16 @@ class LiveExecutionEngine(ExecutionEngineBase):
                 avg_price=price,
                 timestamp=datetime.now(timezone.utc)
             )
-            
+
             self.logger.info(
-                f"[LIVE] [{symbol}] Order executed: {side.value} {qty}@${price:.2f}"
+                f"[LIVE] [{symbol}] Order submitted: {side.value} {qty} shares"
             )
-            
+
             return result
-            
+
         except Exception as e:
             self.logger.exception(f"[LIVE] [{symbol}] Execution failed: {e}")
-            
+
             # Log to performance tracker
             self.performance_tracker.log_error(
                 message=f"Order execution failed for {symbol}",
@@ -435,25 +451,28 @@ class LiveExecutionEngine(ExecutionEngineBase):
                     'price': price
                 }
             )
-            
+
             return None
     
     # ========================================================================
     # DELEGATION TO GENERIC ENGINE LOGIC
     # ========================================================================
     
-    def _check_trade_approval(self, trade_logic, symbol, state, signal, price, atr, regime, **kwargs):
+    async def _check_trade_approval(self, trade_logic, symbol, state, signal, price, atr, regime, **kwargs):
         """Use same approval logic as generic engine."""
         position = self.portfolio.positions.get(symbol)
         current_qty = 0 if not position else position.qty
         avg_price = None if not position else position.avg_price
-        
+
         state.current_position = current_qty
         state.side = ("long" if current_qty > 0 else
                      "short" if current_qty < 0 else None)
-        
-        market_open = kwargs.get('market_open', self.broker.is_market_open())
-        
+
+        # Get market_open from kwargs or fetch from broker (async)
+        market_open = kwargs.get('market_open')
+        if market_open is None:
+            market_open = await self.broker.is_market_open()
+
         return trade_logic.should_trade(
             symbol=symbol,
             state=state,
@@ -487,7 +506,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
         if action_type in ("exit", "reversal"):
             position = self.portfolio.positions.get(symbol)
             return abs(position.qty) if position else 0
-        
+
         if action_type == "partial_exit":
             position = self.portfolio.positions.get(symbol)
             if not position:
@@ -496,19 +515,59 @@ class LiveExecutionEngine(ExecutionEngineBase):
                 return trade_logic.get_exit_quantity(position.qty, is_partial=True)
             exit_fraction = trade_logic.get_param('exit_fraction', 0.25)
             return max(int(abs(position.qty) * exit_fraction), 1)
-        
+
+        # Get signal from kwargs (passed from handle_signal)
+        signal = kwargs.get('signal', 1)
+
         sl_mults = getattr(trade_logic, 'sl_mults', {"normal": 1.5})
         sl_mult = sl_mults.get(regime, 1.5)
-        stop_loss_price = (price - (atr * sl_mult) if state.side != "short"
-                          else price + (atr * sl_mult))
-        
+
+        # ATR sanity check: if ATR is 0 or suspiciously small (< 0.5% of price),
+        # it's likely from minute bars or missing data. Use a floor.
+        min_atr = price * 0.005  # 0.5% of price
+        if atr <= 0 or atr < min_atr:
+            old_atr = atr
+            atr = max(min_atr, price * 0.01)  # Use 1% of price as default
+            self.logger.warning(
+                f"[{symbol}] ATR too small (${old_atr:.2f}), using ${atr:.2f} "
+                f"(1% of ${price:.2f})"
+            )
+
+        # Calculate stop loss based on signal direction (not current position)
+        # Long (signal > 0): stop below price
+        # Short (signal < 0): stop above price
+        if signal > 0:
+            stop_loss_price = price - (atr * sl_mult)
+        else:
+            stop_loss_price = price + (atr * sl_mult)
+
+        # Get actual buying power from broker
+        buying_power = self.portfolio.cash  # Default fallback
+        try:
+            if hasattr(self.broker, 'get_buying_power'):
+                buying_power = self.broker.get_buying_power()
+                self.logger.debug(f"[{symbol}] Broker buying power: ${buying_power:,.2f}")
+            else:
+                buying_power = self.broker.get_available_funds()
+        except Exception as e:
+            self.logger.warning(f"[{symbol}] Failed to get buying power: {e}, using cash")
+            buying_power = self.portfolio.cash
+
+        # Safety: If buying power is 0 or very low, skip sizing
+        if buying_power < 100:
+            self.logger.warning(f"[{symbol}] Insufficient buying power: ${buying_power:.2f}")
+            return 0
+
         return self.sizer.calculate_position_size(
             symbol=symbol,
             price=price,
             account_value=self.portfolio.total_value,
             signal_strength=1.0,
             atr=atr,
-            stop_loss_price=stop_loss_price
+            stop_loss_price=stop_loss_price,
+            signal=signal,
+            market_conditions=regime,
+            current_cash=buying_power  # Use actual buying power, not cash!
         )
     
     def _post_execution(self, symbol, state, result, action_type, regime, strategy_name):

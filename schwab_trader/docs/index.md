@@ -5,18 +5,19 @@ A comprehensive algorithmic trading platform with strategy backtesting, live tra
 ## Table of Contents
 
 1. [Quick Reference](quick-reference.md) - Command cheatsheet
-2. [Getting Started](getting-started.md) - Installation and quick start guide
-3. [System Overview](system-overview.md) - End-to-end system walkthrough
-4. [Architecture](architecture.md) - System design and component overview
-5. [Configuration](configuration.md) - Configuration files and settings
-6. [Strategies](strategies.md) - Available strategies and creating custom ones
-7. [Backtesting](backtesting.md) - Backtesting framework and analysis tools
-8. [Monitoring](monitoring.md) - Real-time GUI monitoring dashboard
-9. [AutoTrader](autotrader.md) - Autonomous trading daemon
-10. [Pre-Flight Checks](preflight.md) - System validation before trading
-11. [Data Pipeline](data-pipeline.md) - Historical data management
-12. [API Reference](api-reference.md) - Detailed API documentation
-13. [Examples](examples.md) - Code examples and tutorials
+2. [Operations Guide](operations.md) - Complete command reference and daily operations
+3. [Getting Started](getting-started.md) - Installation and quick start guide
+4. [System Overview](system-overview.md) - End-to-end system walkthrough
+5. [Architecture](architecture.md) - System design and component overview
+6. [Configuration](configuration.md) - Configuration files and settings
+7. [Strategies](strategies.md) - Available strategies and creating custom ones
+8. [Backtesting](backtesting.md) - Backtesting framework and analysis tools
+9. [Monitoring](monitoring.md) - Real-time GUI monitoring dashboard
+10. [AutoTrader](autotrader.md) - Autonomous trading daemon
+11. [Pre-Flight Checks](preflight.md) - System validation before trading
+12. [Data Pipeline](data-pipeline.md) - Historical data management
+13. [API Reference](api-reference.md) - Detailed API documentation
+14. [Examples](examples.md) - Code examples and tutorials
 
 ---
 
@@ -66,6 +67,8 @@ schwab_trader/
 ├── autotrader.py           # Autonomous trading daemon
 ├── autotrader_ctl.py       # Daemon control script
 ├── preflight.py            # Pre-flight validation
+├── refresh_schwab_token.py # Manual token refresh
+├── token_keeper.py         # Background token service
 ├── run_trading.py          # Manual trading entry point
 ├── run_tests.py            # Test runner
 ├── core/                   # Core trading engine

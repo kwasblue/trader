@@ -18,6 +18,7 @@ import random
 from monitoring.bus import ControlBridge
 from monitoring.models import SymbolsTableModel
 from monitoring.dialogs.manual_order import ManualOrderDialog
+from monitoring.views.symbol_list_widget import SymbolListWidget
 # StateAggregator removed - using direct feeder connections now
 
 from core.events.eventhandler import EventHandler, get_event_handler
@@ -263,6 +264,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._build_execution_tab()
         self._build_alerts_tab()
         self._build_strategy_tab()
+        self._build_lists_tab()
         self._build_ops_tab()
         self._build_history_tab()
         self._build_replay_tab()
@@ -2532,6 +2534,17 @@ class MainWindow(QtWidgets.QMainWindow):
         self._strategy_signal_counts = {}
 
         self.tabs.addTab(tab, "Strategies")
+
+    def _build_lists_tab(self):
+        """Build the symbol lists management tab."""
+        self.symbol_list_widget = SymbolListWidget()
+        self.symbol_list_widget.symbolMoved.connect(self._on_symbol_moved)
+        self.tabs.addTab(self.symbol_list_widget, "Lists")
+
+    def _on_symbol_moved(self, symbol: str, list_type: str):
+        """Handle symbol moved between lists."""
+        action = "trade" if list_type == "trade" else "watch"
+        self._log_event(f"Symbol {symbol} moved to {action} list")
 
     def _build_ops_tab(self):
         tab = QtWidgets.QWidget()

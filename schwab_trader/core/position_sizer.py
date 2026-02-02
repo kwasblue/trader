@@ -47,32 +47,68 @@ class DynamicPositionSizer(PositionSizerBase):
 
     def calculate_position_size(
         self,
-        price: float,
-        stop_loss_price: float,
-        current_cash: float,
-        market_conditions: str,
-        signal: int
+        symbol: str = None,
+        price: float = None,
+        account_value: float = None,
+        signal_strength: float = 1.0,
+        atr: Optional[float] = None,
+        stop_loss_price: Optional[float] = None,
+        **kwargs
     ) -> int:
         """
         Calculates how many shares to buy/sell based on capital and volatility.
 
         Args:
-            price (float): Entry price of the asset
-            stop_loss_price (float): Stop-loss price for the trade
-            current_cash (float): Cash available for the trade
-            market_conditions (str): 'low_volatility', 'high_volatility', or 'normal'
-            signal (int): +1 for long, -1 for short, 0 for no trade
+            symbol: Trading symbol (for logging)
+            price: Entry price of the asset
+            account_value: Total account value
+            signal_strength: Signal confidence (0-1)
+            atr: Average True Range (used to calculate stop if stop_loss_price not given)
+            stop_loss_price: Stop-loss price for the trade
+            **kwargs: Additional parameters:
+                - signal: +1 for long, -1 for short, 0 for no trade
+                - market_conditions: 'low_volatility', 'high_volatility', or 'normal'
+                - current_cash: Cash available (uses account_value if not provided)
 
         Returns:
             int: Number of shares to trade
         """
+        # Extract kwargs with defaults
+        signal = kwargs.get('signal', 1)
+        market_conditions = kwargs.get('market_conditions', 'normal')
+        current_cash = kwargs.get('current_cash', account_value)
+
         if signal == 0:
             return 0
+
+        # ATR sanity check: if ATR is too small relative to price, it's likely
+        # from minute bars instead of daily bars. Use a floor of 0.5% of price.
+        min_atr = price * 0.005  # 0.5% of price as minimum ATR
+        if atr is not None and atr > 0:
+            if atr < min_atr:
+                logger.warning(
+                    f"[{symbol}] ATR too small (${atr:.2f}), likely minute data. "
+                    f"Using floor of ${min_atr:.2f} (0.5% of price)"
+                )
+                atr = min_atr
+        else:
+            # No ATR provided, use 1% of price as default
+            logger.warning(f"[{symbol}] No ATR provided, using 1% of price as default")
+            atr = price * 0.01
+
+        # Calculate stop loss from ATR if not provided
+        if stop_loss_price is None:
+            sl_mult = 1.5  # default stop loss multiplier
+            if signal > 0:
+                stop_loss_price = price - (atr * sl_mult)
+            else:
+                stop_loss_price = price + (atr * sl_mult)
 
         risk_pct = self.adjust_risk_percentage(market_conditions)
         risk_per_trade = current_cash * risk_pct
 
         if risk_per_trade < 5:
+            logger.debug(f"[{symbol}] Risk per trade too small: ${risk_per_trade:.2f}")
             return 0
 
         # Directional risk per share
@@ -82,11 +118,38 @@ class DynamicPositionSizer(PositionSizerBase):
             risk_per_share = stop_loss_price - price
 
         if risk_per_share <= 0:
-            raise ValueError("Invalid stop-loss: must be logically beyond the entry price for signal direction.")
+            logger.warning(f"[{symbol}] Invalid stop-loss positioning, using fallback")
+            risk_per_share = price * 0.02  # 2% fallback
 
         position_size = risk_per_trade / risk_per_share
-        max_affordable = int(current_cash // price)   # or price
-        return max(0, min(int(position_size), max_affordable))
+
+        # Multiple safety caps to prevent over-sized positions:
+        # 1. Can't afford more than cash allows
+        max_affordable = int(current_cash // price) if price > 0 else 0
+
+        # 2. Hard cap: Never risk more than 10% of account on a single position
+        max_position_value = current_cash * 0.10  # 10% max position
+        max_by_position_cap = int(max_position_value // price) if price > 0 else 0
+
+        # 3. Minimum risk per share floor to prevent tiny risk = huge position
+        min_risk_per_share = price * 0.005  # At least 0.5% of price
+        if risk_per_share < min_risk_per_share:
+            logger.warning(
+                f"[{symbol}] Risk/share too small (${risk_per_share:.2f}), "
+                f"using floor ${min_risk_per_share:.2f}"
+            )
+            risk_per_share = min_risk_per_share
+            position_size = risk_per_trade / risk_per_share
+
+        final_size = max(0, min(int(position_size), max_affordable, max_by_position_cap))
+
+        logger.info(
+            f"[{symbol}] Position size: {final_size} shares @ ${price:.2f} "
+            f"(notional=${final_size * price:,.2f}, risk=${risk_per_trade:.2f}, "
+            f"risk/share=${risk_per_share:.2f}, cash=${current_cash:,.2f})"
+        )
+
+        return final_size
         
 
     def update_capital(self, new_capital: float) -> None:

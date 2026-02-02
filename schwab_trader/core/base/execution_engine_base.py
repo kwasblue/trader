@@ -120,7 +120,7 @@ class ExecutionEngineBase(ABC):
         
         This is the main entry point for processing signals. The engine should:
         1. Validate signal and market conditions
-        2. Check trade approval via trade_logic_manager
+        2. Check trade approval via trade_logic_manager and trade gate
         3. Calculate position size via sizer
         4. Execute trade via executor
         5. Update portfolio state

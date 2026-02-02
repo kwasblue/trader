@@ -56,6 +56,9 @@ class DefaultTradeLogicManager(TradeLogicManagerBase):
         exit_fraction: float = 0.25,
         trailing_stop: bool = True,
         min_bars_to_hold: int = 3,  # Minimum bars before allowing TP/reversal exits
+        # Swing mode - prevents same-day exits (uses regular buying power instead of day trading)
+        swing_mode: bool = False,
+        min_hold_days: int = 1,  # Minimum days to hold before exit (for swing mode)
         # General settings - cooldown can be time-based, bar-based, or both
         cooldown_seconds: int = 300,
         cooldown_bars: int = 5,
@@ -103,10 +106,13 @@ class DefaultTradeLogicManager(TradeLogicManagerBase):
         self.exit_fraction = exit_fraction
         self.trailing_stop = trailing_stop
         self.min_bars_to_hold = min_bars_to_hold
+        self.swing_mode = swing_mode
+        self.min_hold_days = min_hold_days
         self.event_handler = event_handler
 
         cooldown_info = f"{cooldown_bars} bars" if cooldown_mode == 'bars' else f"{cooldown_seconds}s" if cooldown_mode == 'time' else f"{cooldown_bars} bars/{cooldown_seconds}s"
-        logger.info(f"DefaultTradeLogicManager initialized: cooldown={cooldown_info} (mode={cooldown_mode}), max_positions={max_positions}, trailing_stop={trailing_stop}, min_hold={min_bars_to_hold} bars")
+        swing_info = f", swing_mode=True (min {min_hold_days} day(s))" if swing_mode else ""
+        logger.info(f"DefaultTradeLogicManager initialized: cooldown={cooldown_info} (mode={cooldown_mode}), max_positions={max_positions}, trailing_stop={trailing_stop}, min_hold={min_bars_to_hold} bars{swing_info}")
     
     # ========================================================================
     # MAIN DECISION LOGIC
@@ -279,6 +285,7 @@ class DefaultTradeLogicManager(TradeLogicManagerBase):
         state.bars_held = 0
         state.max_favorable_excursion = None
         state.max_adverse_excursion = None
+        state.entry_date = datetime.now(timezone.utc)  # Track entry date for swing mode
     
     # ========================================================================
     # EXIT/MANAGEMENT LOGIC
@@ -299,6 +306,24 @@ class DefaultTradeLogicManager(TradeLogicManagerBase):
         state.bars_held += 1
         avg_price = kwargs.get('avg_price', price)
         self._update_excursions(state, price, avg_price)
+
+        # Swing mode check - prevent same-day exits (except stop loss)
+        if self.swing_mode and state.entry_date:
+            now = datetime.now(timezone.utc)
+            days_held = (now.date() - state.entry_date.date()).days
+            if days_held < self.min_hold_days:
+                # Check if it's a stop loss hit (always allowed for protection)
+                if self.is_long(state):
+                    hit_sl = state.stop_loss is not None and price <= state.stop_loss
+                else:
+                    hit_sl = state.stop_loss is not None and price >= state.stop_loss
+
+                if hit_sl:
+                    logger.warning(f"[{symbol}] SWING MODE: Stop loss hit on same day - allowing protective exit")
+                    return True, "Stop loss hit (swing mode override)"
+
+                logger.debug(f"[{symbol}] SWING MODE: Holding position (entered {days_held} day(s) ago, need {self.min_hold_days})")
+                return False, f"Swing mode: must hold {self.min_hold_days} day(s) before exit"
 
         # Minimum hold period - don't exit within first few bars (except stop loss)
         min_bars_to_hold = getattr(self, 'min_bars_to_hold', 3)

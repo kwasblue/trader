@@ -35,6 +35,11 @@ venv/
 *.feather
 *.npy
 *.npz
+*.db
+*.sqlite
+*.db3
+.db-shm
+.db-wal
 
 # === Data storage (large files) ===
 data/data_storage/raw_data/

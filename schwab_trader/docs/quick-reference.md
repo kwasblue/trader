@@ -55,6 +55,23 @@ python preflight.py --update-data
 python preflight.py --reauth-schwab
 ```
 
+## Token Management
+
+```bash
+# Check token status and refresh if needed
+python refresh_schwab_token.py
+
+# Force full re-authentication (browser login)
+python refresh_schwab_token.py --force
+
+# Run token keeper in foreground
+python token_keeper.py
+
+# Token keeper as background service
+launchctl load ~/Library/LaunchAgents/com.schwabtrader.tokenkeeper.plist
+launchctl list | grep tokenkeeper
+```
+
 ## Data Management
 
 ### Update Historical Data
@@ -163,6 +180,7 @@ print(scheduler.is_trading_day())
 |------|---------|
 | `logs/app.log` | Main application log |
 | `logs/autotrader.log` | AutoTrader specific |
+| `logs/token_keeper.log` | Token refresh service |
 | `logs/preflight.log` | Pre-flight checks |
 | `logs/trading.log` | Trade execution |
 
@@ -224,7 +242,10 @@ pytest tests/test_autotrader.py::TestAutoTrader::test_init -v
 schwab_trader/
 ├── .env                    # Credentials (DO NOT COMMIT)
 ├── autotrader.py           # Main daemon
+├── autotrader_ctl.py       # Daemon control script
 ├── preflight.py            # Pre-trading checks
+├── refresh_schwab_token.py # Manual token refresh
+├── token_keeper.py         # Background token service
 ├── run_trading.py          # Manual trading
 ├── config/
 │   └── trading_config.json # Settings
@@ -234,3 +255,5 @@ schwab_trader/
 ├── logs/                   # Log files
 └── tokens/                 # OAuth tokens
 ```
+
+See [Operations Guide](operations.md) for complete command reference.

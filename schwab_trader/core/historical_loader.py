@@ -24,10 +24,18 @@ class HistoricalBarLoader:
         self.logger = Logger("historical_loader.log", "HistoricalBarLoader").get_logger()
 
     def load_last_n_bars(self, symbol: str, n: int = 200) -> List[Dict[str, Any]]:
+        # Try processed data first
         fp = self.path / f"proc_{symbol}_file.json"
         if not fp.exists():
-            self.logger.warning(f"No historical file found for {symbol} at {fp}")
-            return []
+            # Fallback to raw data if processed doesn't exist
+            raw_path = self.path.parent / "raw_data" / f"raw_{symbol}_file.json"
+            if raw_path.exists():
+                self.logger.info(f"[{symbol}] Using raw data (processed not available)")
+                fp = raw_path
+            else:
+                self.logger.warning(f"No historical file found for {symbol} at {fp} or {raw_path}")
+                return []
+
         try:
             with open(fp, "r") as f:
                 raw = json.load(f)  # Python's json accepts NaN by default
@@ -35,7 +43,12 @@ class HistoricalBarLoader:
             self.logger.exception(f"Failed to read {fp}: {e}")
             return []
 
-        rows = raw.get("bars", raw) if isinstance(raw, dict) else raw
+        # Handle different data formats: "bars", "candles", or direct list
+        if isinstance(raw, dict):
+            rows = raw.get("bars") or raw.get("candles") or raw
+        else:
+            rows = raw
+
         if not isinstance(rows, list) or not rows:
             self.logger.warning(f"No bars in {fp}")
             return []
@@ -57,8 +70,9 @@ class HistoricalBarLoader:
     # --- helpers ---
 
     def _normalize_row(self, row: Dict[str, Any], fallback_symbol: str) -> Optional[Dict[str, Any]]:
-        # Parse timestamp from epoch ms (your "Date" field)
-        ts_raw = row.get("Date") or row.get("timestamp") or row.get("Datetime") or row.get("date")
+        # Parse timestamp from epoch ms - handle various field names
+        ts_raw = (row.get("Date") or row.get("timestamp") or row.get("Datetime")
+                  or row.get("date") or row.get("datetime"))
         if ts_raw is None:
             return None
         try:
@@ -96,7 +110,9 @@ class HistoricalBarLoader:
 
         # Keep all extra fields
         extra = {k: v for k, v in row.items()
-                 if k not in {"Date", "timestamp", "Datetime", "date", "Open", "High", "Low", "Close", "Volume", "open", "high", "low", "close", "volume"}}
+                 if k not in {"Date", "timestamp", "Datetime", "date", "datetime",
+                              "Open", "High", "Low", "Close", "Volume",
+                              "open", "high", "low", "close", "volume"}}
 
         return {
             "timestamp": ts,

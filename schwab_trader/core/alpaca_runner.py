@@ -37,9 +37,11 @@ from core.simulator.simulation import compute_atr, classify_regime  # reuse your
 from core.broker.alpaca_broker import AlpacaBroker
 from core.logic.live_execution_engine import LiveExecutionEngine
 from core.logic.trade_logic_manager import DynamicTradeLogicManager
+from core.executor import LiveExecutor
 from core.historical_data_updater import HistoricalDataUpdater
 from core.unified_data_pipeline import UnifiedDataPipeline
 from core.credential_validator import CredentialValidator
+from core.state_reconciler import StateReconciler, ReconcilerConfig
 load_dotenv(ROOT / ".venv" / ".env")
 
 class AlpacaLiveRunner:
@@ -54,8 +56,8 @@ class AlpacaLiveRunner:
 
         # broker (Alpaca)
         self.broker = AlpacaBroker(
-            api_key=settings.get("ALPACA_KEY_ID"),
-            api_secret=settings.get("ALPACA_SECRET_KEY"),
+            api_key=settings.get("ALPACA_API_KEY") or os.getenv("ALPACA_API_KEY"),
+            api_secret=settings.get("ALPACA_SECRET_KEY") or os.getenv("ALPACA_SECRET_KEY"),
             paper=bool(settings.get("ALPACA_PAPER", True)),
         )
 
@@ -78,16 +80,23 @@ class AlpacaLiveRunner:
             symbol_cooldown_seconds=settings.get("DDM_COOLDOWN_BARS", 5),
         )
 
-        # sizer, router, engine
+        # sizer, router, executor, engine
         self.sizer = DynamicPositionSizer(
             risk_percentage=settings.get("BASE_RISK_PCT", 0.05)
         )
         self.router = StrategyRoutingManager(str(ROOT.parent / "config" / "strategy_routing.json"))
+        self.executor = LiveExecutor(
+            broker=self.broker,
+            event_handler=self.event_handler,
+        )
         self.engine = LiveExecutionEngine(
             broker=self.broker,
+            executor=self.executor,
             sizer=self.sizer,
             performance_tracker=self.trade_logger,
             trade_logic_manager=DynamicTradeLogicManager(str(ROOT.parent / "config" / "trade_logic_routing.json")),
+            portfolio=self.portfolio,
+            sync_on_start=False,  # Sync is done by reconciler in run()
         )
         # If your engine has optional attrs (per our earlier patch), wire them:
         if hasattr(self.engine, "trade_gate"):
@@ -95,9 +104,24 @@ class AlpacaLiveRunner:
         if hasattr(self.engine, "drawdown_monitor"):
             self.engine.drawdown_monitor = self.ddm
 
+        # State reconciler - ensures local state matches broker
+        reconciler_config = ReconcilerConfig(
+            reconcile_interval=settings.get("RECONCILE_INTERVAL", 60),
+            halt_on_critical=settings.get("HALT_ON_MISMATCH", True),
+            auto_correct_minor=settings.get("AUTO_CORRECT_MINOR", True),
+        )
+        self.reconciler = StateReconciler(
+            broker=self.broker,
+            portfolio=self.portfolio,
+            config=reconciler_config,
+            on_halt=self._on_reconciler_halt,
+        )
+        self._reconciler_task = None
+
         # bar tracking
         self._last_bar_id: dict[str, int] = {}
         self._last_ddm_date = None
+        self._running = False
 
         # Unified data pipeline (supports Alpaca and Schwab with fallback)
         self.data_pipeline = UnifiedDataPipeline(
@@ -107,8 +131,8 @@ class AlpacaLiveRunner:
 
         # Also keep the simple updater for quick freshness checks
         self.data_updater = HistoricalDataUpdater(
-            api_key=settings.get("ALPACA_KEY_ID"),
-            api_secret=settings.get("ALPACA_SECRET_KEY"),
+            api_key=settings.get("ALPACA_API_KEY") or os.getenv("ALPACA_API_KEY"),
+            api_secret=settings.get("ALPACA_SECRET_KEY") or os.getenv("ALPACA_SECRET_KEY"),
             data_path=str(ROOT / "data" / "data_storage" / "proc_data"),
         )
 
@@ -118,6 +142,13 @@ class AlpacaLiveRunner:
         # Background update task reference
         self._update_task: asyncio.Task | None = None
         
+
+    # ---------- reconciler callback ----------
+    def _on_reconciler_halt(self, message: str):
+        """Called when reconciler detects critical state mismatch."""
+        self.logger.critical(f"TRADING HALTED: {message}")
+        self.logger.critical("Manual intervention required. Review positions at broker.")
+        # Could emit event to GUI, send notification, etc.
 
     # ---------- helpers ----------
     @staticmethod
@@ -312,7 +343,7 @@ class AlpacaLiveRunner:
         state.regime_persist = gs.regime_persist
 
         # hand off to engine (engine should enforce gates; runner is context-only)
-        self.engine.handle_signal(
+        await self.engine.handle_signal(
             symbol=symbol,
             state=state,
             signal=signal,
@@ -341,6 +372,8 @@ class AlpacaLiveRunner:
 
     # ---------- run ----------
     async def run(self):
+        self._running = True
+
         # Seed historical data (fetches fresh if stale)
         max_stale = self.settings.get("MAX_STALE_MINUTES", 60)
         await self.seed(self.settings.get("SEED_BARS", 200), max_stale_minutes=max_stale)
@@ -348,13 +381,31 @@ class AlpacaLiveRunner:
 
         # connect + subscribe
         self.broker.api_key = os.getenv("ALPACA_API_KEY")
-        self.broker.api_secret = os.getenv("ALPACA_SECRET")
+        self.broker.api_secret = os.getenv("ALPACA_SECRET_KEY")
         self.broker.connect()
+
+        # CRITICAL: Sync state with broker before trading
+        self.logger.info("Syncing portfolio state with broker...")
+        sync_result = await self.reconciler.full_sync()
+        if not sync_result.success:
+            self.logger.error("Failed to sync with broker - check credentials and connectivity")
+        else:
+            self.logger.info(
+                f"Portfolio synced: {sync_result.broker_positions} positions, "
+                f"${sync_result.broker_cash:,.2f} cash"
+            )
+
         for sym in self.symbols:
             self.broker.subscribe_bars(self.on_alpaca_bar, sym)
 
         stream_task = asyncio.create_task(self.broker.start_stream())
         self.logger.info(f"LiveRunner (Alpaca) started for: {', '.join(self.symbols)}")
+
+        # Start periodic state reconciliation
+        reconcile_interval = self.settings.get("RECONCILE_INTERVAL", 60)
+        if reconcile_interval > 0:
+            await self.reconciler.start_periodic(interval_seconds=reconcile_interval)
+            self.logger.info(f"State reconciliation enabled (every {reconcile_interval}s)")
 
         # Start periodic historical data updates (runs in background)
         update_interval = self.settings.get("HISTORICAL_UPDATE_INTERVAL_MINUTES", 60)
@@ -365,9 +416,18 @@ class AlpacaLiveRunner:
             self.logger.info(f"Periodic data updates enabled (every {update_interval} min)")
 
         try:
-            while True:
+            while self._running:
+                # Check if reconciler halted trading
+                if self.reconciler.is_halted:
+                    self.logger.critical("Trading halted by reconciler - exiting run loop")
+                    break
                 await asyncio.sleep(0.5)
         finally:
+            self._running = False
+            # Stop reconciler
+            await self.reconciler.stop_periodic()
+            self.logger.info("State reconciler stopped")
+
             # Cancel background tasks
             if self._update_task:
                 self._update_task.cancel()
@@ -376,8 +436,20 @@ class AlpacaLiveRunner:
             stream_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await stream_task
+
+            # CRITICAL: Disconnect broker to release websocket connection
+            self.broker.disconnect()
+
             self.trade_logger.flush()
             self.logger.info("LiveRunner shut down cleanly.")
+
+    def stop(self):
+        """Stop the live trading runner."""
+        self._running = False
+        # Disconnect broker to release websocket
+        if hasattr(self.broker, 'disconnect'):
+            self.broker.disconnect()
+        self.logger.info("Stop requested")
 
     async def _periodic_data_update(self, interval_minutes: int = 60):
         """

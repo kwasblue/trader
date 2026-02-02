@@ -115,13 +115,16 @@ class DynamicTradeLogicManager:
             logger_name="DynamicTradeLogicManager",
             propagate=True
         ).get_logger()
-        
+
         # Configuration
         self.routing_config: Dict[str, Dict[str, Dict[str, Any]]] = {}
-        
+
         # Instance cache: symbol -> regime -> logic instance
         self.logic_instances: Dict[str, Dict[str, TradeLogicManagerBase]] = {}
-        
+
+        # Global settings from trading_config.json (swing_mode, etc.)
+        self.global_trade_logic_params = self._load_global_trade_logic_params()
+
         # Load configuration
         if not self.config_path.exists():
             if auto_create:
@@ -130,8 +133,37 @@ class DynamicTradeLogicManager:
                 raise FileNotFoundError(
                     f"Trade logic routing config not found: {config_path}"
                 )
-        
+
         self._load_config()
+
+    def _load_global_trade_logic_params(self) -> Dict[str, Any]:
+        """Load global trade logic params from trading_config.json."""
+        try:
+            # Find trading_config.json relative to config_path
+            trading_config_path = self.config_path.parent / "trading_config.json"
+            if trading_config_path.exists():
+                with open(trading_config_path, 'r') as f:
+                    config = json.load(f)
+                    trade_logic = config.get("trade_logic", {})
+
+                    # Extract relevant params
+                    params = {
+                        "swing_mode": trade_logic.get("swing_mode", False),
+                        "min_hold_days": trade_logic.get("min_hold_days", 1),
+                        "cooldown_mode": trade_logic.get("cooldown_mode", "bars"),
+                        "cooldown_bars": trade_logic.get("cooldown_bars", 5),
+                        "cooldown_seconds": trade_logic.get("cooldown_seconds", 300),
+                        "min_bars_to_hold": trade_logic.get("min_bars_to_hold", 3),
+                    }
+
+                    if params.get("swing_mode"):
+                        self.logger.info(f"SWING MODE ENABLED: min_hold_days={params['min_hold_days']}")
+
+                    return params
+        except Exception as e:
+            self.logger.warning(f"Failed to load global trade logic params: {e}")
+
+        return {}
     
     # ========================================================================
     # CORE ROUTING
@@ -268,12 +300,16 @@ class DynamicTradeLogicManager:
             )
             logic_class = TRADE_LOGIC_CLASS_REGISTRY["default"]
         
-        # Instantiate with params, including event_handler if available
+        # Instantiate with params, including event_handler and global settings
         try:
+            # Merge global params first, then route-specific params override
+            merged_params = {**self.global_trade_logic_params, **params}
+
             # Add event_handler to params for signal emission
             if self.event_handler is not None:
-                params = {**params, 'event_handler': self.event_handler}
-            instance = logic_class(**params)
+                merged_params['event_handler'] = self.event_handler
+
+            instance = logic_class(**merged_params)
             self.logger.info(
                 f"Created {logic_key} logic for {symbol}/{regime}"
             )
@@ -283,7 +319,9 @@ class DynamicTradeLogicManager:
             self.logger.error(
                 f"Failed to instantiate {logic_key}: {e}, using default"
             )
-            return TRADE_LOGIC_CLASS_REGISTRY["default"](event_handler=self.event_handler)
+            # Also include global params in fallback
+            fallback_params = {**self.global_trade_logic_params, 'event_handler': self.event_handler}
+            return TRADE_LOGIC_CLASS_REGISTRY["default"](**fallback_params)
     
     # ========================================================================
     # CONFIGURATION MANAGEMENT

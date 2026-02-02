@@ -391,7 +391,15 @@ class MockBroker(BaseBrokerInterface):
     def get_available_funds(self) -> float:
         """Get available cash."""
         return self.portfolio.cash
-    
+
+    def get_buying_power(self) -> float:
+        """
+        Get buying power for trading.
+
+        For mock broker, returns cash (simulates no leverage/margin).
+        """
+        return self.portfolio.cash
+
     def has_sufficient_funds(self, symbol: str, qty: int) -> bool:
         """Check if enough cash for order."""
         # Simplified check using last known price

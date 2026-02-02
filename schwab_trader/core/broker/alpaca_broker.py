@@ -67,6 +67,7 @@ class AlpacaBroker(BaseBrokerInterface):
         self.stream: Optional[StockDataStream] = None
         self.data_rest: Optional[StockHistoricalDataClient] = None
         self._last_price: Dict[str, float] = {}
+        self._connected = False
         self.logger = Logger("alpaca.log", "AlpacaBroker").get_logger()
         self.event_handler = get_event_handler()
 
@@ -76,10 +77,36 @@ class AlpacaBroker(BaseBrokerInterface):
     @retry(max_attempts=3, base_delay=2.0, circuit_breaker="alpaca_connect")
     def connect(self):
         """Establish trading and streaming connections with retry logic."""
+        # Close any existing connections first to avoid connection limit issues
+        if self.stream is not None:
+            self.logger.warning("Closing existing stream before reconnecting...")
+            self.disconnect()
+
         self.trading_client = TradingClient(self.api_key, self.api_secret, paper=self.paper)
         self.stream = StockDataStream(self.api_key, self.api_secret, feed=DataFeed.IEX)
         self.data_rest = StockHistoricalDataClient(self.api_key, self.api_secret)
+        self._connected = True
         self.logger.info("Connected to Alpaca.")
+
+    def disconnect(self):
+        """Close all connections and clean up resources."""
+        self._connected = False
+        if self.stream is not None:
+            try:
+                # Stop the websocket stream
+                if hasattr(self.stream, 'stop'):
+                    self.stream.stop()
+                elif hasattr(self.stream, 'close'):
+                    self.stream.close()
+                self.logger.info("Stream disconnected.")
+            except Exception as e:
+                self.logger.warning(f"Error closing stream: {e}")
+            finally:
+                self.stream = None
+
+        self.trading_client = None
+        self.data_rest = None
+        self.logger.info("Disconnected from Alpaca.")
 
         # Register health check
         health_checker = get_health_checker()
@@ -355,7 +382,7 @@ class AlpacaBroker(BaseBrokerInterface):
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
                 await self.event_handler.emit(EVENT_ORDER_STATUS, payload)
-        return res
+            raise  # Re-raise so caller knows order failed
 
 
     async def cancel_order(self, order_id: str) -> None:  # no return; emits instead
@@ -488,7 +515,14 @@ class AlpacaBroker(BaseBrokerInterface):
 
         def _acct():
             a = self.trading_client.get_account()
-            return self._mk_broker_snapshot(a)
+            # Also fetch all positions
+            positions_list = self.trading_client.get_all_positions()
+            positions = {}
+            for p in positions_list:
+                symbol = getattr(p, "symbol", None)
+                if symbol:
+                    positions[symbol] = self._mk_position_view(p)
+            return self._mk_broker_snapshot(a, positions)
 
         return await asyncio.to_thread(_acct)
 
@@ -519,10 +553,25 @@ class AlpacaBroker(BaseBrokerInterface):
         return float(price)
 
     def get_available_funds(self) -> float:
+        """Get available funds (cash)."""
         if not self.trading_client:
             raise RuntimeError("Not connected: call connect() first")
         a = self.trading_client.get_account()
         return float(getattr(a, "cash", 0.0))
+
+    def get_buying_power(self) -> float:
+        """
+        Get buying power from broker API.
+
+        Returns:
+            Available buying power in dollars (as reported by Alpaca)
+        """
+        if not self.trading_client:
+            raise RuntimeError("Not connected: call connect() first")
+        a = self.trading_client.get_account()
+        bp = float(getattr(a, "buying_power", 0.0) or 0.0)
+        self.logger.debug(f"Buying power from API: ${bp:,.2f}")
+        return bp
 
     async def get_open_orders(self) -> List[OrderResult]:
         if not self.trading_client:
@@ -582,7 +631,7 @@ class AlpacaBroker(BaseBrokerInterface):
             side=str(getattr(p, "side", "")).lower(),
         )
 
-    def _mk_broker_snapshot(self, a) -> BrokerSnapshot:
+    def _mk_broker_snapshot(self, a, positions: dict = None) -> BrokerSnapshot:
         return BrokerSnapshot(
             account_number=getattr(a, "account_number", getattr(a, "id", "")),
             status=getattr(a, "status", ""),
@@ -590,7 +639,7 @@ class AlpacaBroker(BaseBrokerInterface):
             buying_power=_to_float(getattr(a, "buying_power", 0.0)) or 0.0,
             equity=_to_float(getattr(a, "equity", 0.0)) or 0.0,
             portfolio_value=_to_float(getattr(a, "portfolio_value", 0.0)) or 0.0,
-            multiplier=_to_float(getattr(a, "multiplier", 1.0)) or 1.0,
+            positions=positions,
         )
 
 

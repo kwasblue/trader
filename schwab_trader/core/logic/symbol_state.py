@@ -87,6 +87,7 @@ class SymbolState:
     pyramid_layer: int = 0
     bars_held: int = 0
     last_trade_time: Optional[datetime] = None
+    entry_date: Optional[datetime] = None  # Date position was opened (for swing mode)
     
     # Performance metrics
     max_favorable_excursion: Optional[float] = None  # MFE

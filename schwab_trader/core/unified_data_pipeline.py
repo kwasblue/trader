@@ -34,6 +34,10 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 from loggers.logger import Logger
 from core.credential_validator import CredentialValidator, CredentialStatus
@@ -435,6 +439,7 @@ class UnifiedDataPipeline:
             from alpaca.data.historical.stock import StockHistoricalDataClient
             from alpaca.data.requests import StockBarsRequest
             from alpaca.data.timeframe import TimeFrame
+            from alpaca.data.enums import DataFeed
 
             if self._alpaca_data_client is None:
                 api_key = os.getenv('ALPACA_API_KEY') or os.getenv('ALPACA_KEY_ID')
@@ -450,9 +455,11 @@ class UnifiedDataPipeline:
                     timeframe=TimeFrame.Day,  # Daily bars for processing
                     start=start,
                     end=end,
+                    feed=DataFeed.IEX,  # Use IEX feed (free tier compatible)
                 )
                 response = self._alpaca_data_client.get_stock_bars(request)
-                symbol_bars = response.get(symbol, [])
+                # BarSet uses dict-like access with []
+                symbol_bars = response[symbol] if symbol in response.data else []
 
                 # Convert to Schwab-compatible format
                 bars = []

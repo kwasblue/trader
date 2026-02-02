@@ -34,6 +34,7 @@ from threading import Lock
 from alpaca.data.historical.stock import StockHistoricalDataClient
 from alpaca.data.requests import StockBarsRequest
 from alpaca.data.timeframe import TimeFrame
+from alpaca.data.enums import DataFeed
 
 from loggers.logger import Logger
 
@@ -281,13 +282,15 @@ class HistoricalDataUpdater:
                 timeframe=self.timeframe,
                 start=start,
                 end=end,
+                feed=DataFeed.IEX,  # Use IEX feed (free tier compatible)
             )
 
             bars_response = self.client.get_stock_bars(request)
 
             # Convert to list of dicts
             bars = []
-            symbol_bars = bars_response.get(symbol, [])
+            # BarSet uses dict-like access with []
+            symbol_bars = bars_response[symbol] if symbol in bars_response.data else []
 
             for bar in symbol_bars:
                 bars.append({
