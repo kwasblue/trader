@@ -8,7 +8,8 @@ executors, risk management, position sizing, and brokers.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Optional, Dict, List
+from typing import Any, Optional, Dict, List, Tuple
+from datetime import datetime, timezone
 import logging
 
 from core.base.base_broker_interface import BaseBrokerInterface
@@ -18,6 +19,7 @@ from core.base.trade_logger_base import TradeLoggerBase
 from core.base.trade_logic_manager_base import TradeLogicManagerBase
 from core.logic.portfolio_state import PortfolioState
 from core.app_types import OrderResult
+from core.enums import OrderSide
 
 logger = logging.getLogger(__name__)
 
@@ -185,7 +187,171 @@ class ExecutionEngineBase(ABC):
                 return result
         """
         pass
-    
+
+    # ========================================================================
+    # SHARED IMPLEMENTATIONS
+    # ========================================================================
+
+    def _determine_action(
+        self,
+        symbol: str,
+        state: Any,
+        signal: int,
+        reason: Optional[str]
+    ) -> Tuple[str, OrderSide]:
+        """
+        Determine action type and order side from signal.
+
+        This is a shared implementation used by both Live and Mock engines.
+
+        Args:
+            symbol: Trading symbol
+            state: Symbol state with position info
+            signal: Strategy signal (1 for long, -1 for short)
+            reason: Reason string (may contain "partial" or "reversal")
+
+        Returns:
+            Tuple of (action_type, order_side)
+            - action_type: "entry", "exit", "partial_exit", or "reversal"
+            - order_side: OrderSide.BUY or OrderSide.SELL
+        """
+        in_position = state.side is not None
+
+        if not in_position:
+            return "entry", OrderSide.BUY if signal == 1 else OrderSide.SELL
+        elif reason and "partial" in reason.lower():
+            return "partial_exit", (OrderSide.SELL if state.side == "long"
+                                   else OrderSide.BUY)
+        elif reason and "reversal" in reason.lower():
+            return "reversal", (OrderSide.SELL if state.side == "long"
+                               else OrderSide.BUY)
+        else:
+            return "exit", (OrderSide.SELL if state.side == "long"
+                           else OrderSide.BUY)
+
+    def _setup_approval_state(
+        self,
+        symbol: str,
+        state: Any
+    ) -> Tuple[int, Optional[float]]:
+        """
+        Set up state for trade approval check.
+
+        Syncs the state object with the current portfolio position.
+
+        Args:
+            symbol: Trading symbol
+            state: Symbol state to update
+
+        Returns:
+            Tuple of (current_qty, avg_price)
+        """
+        position = self.portfolio.positions.get(symbol)
+        current_qty = 0 if not position else position.qty
+        avg_price = None if not position else position.avg_price
+
+        state.current_position = current_qty
+        state.side = ("long" if current_qty > 0 else
+                     "short" if current_qty < 0 else None)
+
+        return current_qty, avg_price
+
+    def _get_exit_quantity(
+        self,
+        symbol: str,
+        action_type: str,
+        trade_logic: Any
+    ) -> int:
+        """
+        Calculate quantity for exit/partial_exit actions.
+
+        Args:
+            symbol: Trading symbol
+            action_type: Type of action ("exit", "reversal", "partial_exit")
+            trade_logic: Trade logic manager for partial exit params
+
+        Returns:
+            Exit quantity (positive integer)
+        """
+        position = self.portfolio.positions.get(symbol)
+
+        if action_type in ("exit", "reversal"):
+            return abs(position.qty) if position else 0
+
+        if action_type == "partial_exit":
+            if not position:
+                return 0
+            if hasattr(trade_logic, 'get_exit_quantity'):
+                return trade_logic.get_exit_quantity(position.qty, is_partial=True)
+            exit_fraction = trade_logic.get_param('exit_fraction', 0.25)
+            return max(int(abs(position.qty) * exit_fraction), 1)
+
+        return 0  # Not an exit action
+
+    def _post_execution(
+        self,
+        symbol: str,
+        state: Any,
+        result: OrderResult,
+        action_type: str,
+        regime: str,
+        strategy_name: Optional[str]
+    ) -> None:
+        """
+        Post-execution logging and state updates.
+
+        Shared implementation that:
+        1. Calls _update_portfolio_after_execution hook
+        2. Updates state.last_trade_time
+        3. Logs trade to performance tracker
+        4. Resets state on exit/reversal
+
+        Args:
+            symbol: Trading symbol
+            state: Symbol state to update
+            result: Order execution result
+            action_type: Type of action taken
+            regime: Market regime
+            strategy_name: Strategy that generated signal
+        """
+        # Hook for subclasses to handle portfolio updates
+        self._update_portfolio_after_execution(symbol, result)
+
+        state.last_trade_time = datetime.now(timezone.utc)
+
+        self.performance_tracker.log_trade(
+            symbol=symbol,
+            action=result.side,
+            price=result.avg_price,
+            quantity=result.filled_qty,
+            order_id=result.order_id,
+            strategy=strategy_name,
+            regime=regime,
+            sl=getattr(state, 'stop_loss', None),
+            tp=getattr(state, 'take_profit', None),
+            notes=f"action={action_type}, bars_held={getattr(state, 'bars_held', 0)}"
+        )
+
+        if action_type in ("exit", "reversal"):
+            state.reset()
+
+    def _update_portfolio_after_execution(
+        self,
+        symbol: str,
+        result: OrderResult
+    ) -> None:
+        """
+        Hook for portfolio updates after execution.
+
+        Default implementation updates portfolio from order result.
+        Override in subclasses that handle portfolio updates differently.
+
+        Args:
+            symbol: Trading symbol
+            result: Order execution result
+        """
+        self.portfolio.update_position(symbol, result)
+
     # ========================================================================
     # OPTIONAL METHODS (Can be overridden)
     # ========================================================================

@@ -459,14 +459,8 @@ class LiveExecutionEngine(ExecutionEngineBase):
     # ========================================================================
     
     async def _check_trade_approval(self, trade_logic, symbol, state, signal, price, atr, regime, **kwargs):
-        """Use same approval logic as generic engine."""
-        position = self.portfolio.positions.get(symbol)
-        current_qty = 0 if not position else position.qty
-        avg_price = None if not position else position.avg_price
-
-        state.current_position = current_qty
-        state.side = ("long" if current_qty > 0 else
-                     "short" if current_qty < 0 else None)
+        """Check trade approval with async market status."""
+        current_qty, avg_price = self._setup_approval_state(symbol, state)
 
         # Get market_open from kwargs or fetch from broker (async)
         market_open = kwargs.get('market_open')
@@ -485,36 +479,13 @@ class LiveExecutionEngine(ExecutionEngineBase):
             account_positions=len(self.portfolio.positions)
         )
     
-    def _determine_action(self, symbol, state, signal, reason):
-        """Reuse generic engine logic."""
-        in_position = state.side is not None
-        
-        if not in_position:
-            return "entry", OrderSide.BUY if signal == 1 else OrderSide.SELL
-        elif reason and "partial" in reason.lower():
-            return "partial_exit", (OrderSide.SELL if state.side == "long" 
-                                   else OrderSide.BUY)
-        elif reason and "reversal" in reason.lower():
-            return "reversal", (OrderSide.SELL if state.side == "long" 
-                               else OrderSide.BUY)
-        else:
-            return "exit", (OrderSide.SELL if state.side == "long" 
-                           else OrderSide.BUY)
-    
-    def _calculate_quantity(self, symbol, state, action_type, price, atr, regime, trade_logic, **kwargs):
-        """Reuse generic engine logic."""
-        if action_type in ("exit", "reversal"):
-            position = self.portfolio.positions.get(symbol)
-            return abs(position.qty) if position else 0
+    # _determine_action() is inherited from ExecutionEngineBase
 
-        if action_type == "partial_exit":
-            position = self.portfolio.positions.get(symbol)
-            if not position:
-                return 0
-            if hasattr(trade_logic, 'get_exit_quantity'):
-                return trade_logic.get_exit_quantity(position.qty, is_partial=True)
-            exit_fraction = trade_logic.get_param('exit_fraction', 0.25)
-            return max(int(abs(position.qty) * exit_fraction), 1)
+    def _calculate_quantity(self, symbol, state, action_type, price, atr, regime, trade_logic, **kwargs):
+        """Calculate position size for entries, use base class for exits."""
+        # Handle exits via base class helper
+        if action_type in ("exit", "reversal", "partial_exit"):
+            return self._get_exit_quantity(symbol, action_type, trade_logic)
 
         # Get signal from kwargs (passed from handle_signal)
         signal = kwargs.get('signal', 1)
@@ -571,26 +542,11 @@ class LiveExecutionEngine(ExecutionEngineBase):
         )
     
     def _post_execution(self, symbol, state, result, action_type, regime, strategy_name):
-        """Post-execution logging and state updates."""
-        self.portfolio.update_position(symbol, result)
-        state.last_trade_time = datetime.now(timezone.utc)
-        
-        self.performance_tracker.log_trade(
-            symbol=symbol,
-            action=result.side,
-            price=result.avg_price,
-            quantity=result.filled_qty,
-            order_id=result.order_id,
-            strategy=strategy_name,
-            regime=regime,
-            sl=getattr(state, 'stop_loss', None),
-            tp=getattr(state, 'take_profit', None),
-            notes=f"[LIVE] action={action_type}, bars_held={getattr(state, 'bars_held', 0)}"
-        )
-        
-        if action_type in ("exit", "reversal"):
-            state.reset()
-        
+        """Post-execution logging and state updates with Live-specific logging."""
+        # Use base class implementation for common logic
+        super()._post_execution(symbol, state, result, action_type, regime, strategy_name)
+
+        # Live-specific logging
         self.logger.info(
             f"[LIVE] [{symbol}] Trade logged: {action_type} "
             f"{result.side.value} {result.filled_qty}@${result.avg_price:.2f}"

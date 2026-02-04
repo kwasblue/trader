@@ -445,17 +445,10 @@ class MockExecutionEngine(ExecutionEngineBase):
     # ========================================================================
 
     def _check_trade_approval(self, trade_logic, symbol, state, signal, price, atr, regime, **kwargs):
-        """Check if trade should execute."""
-        position = self.portfolio.positions.get(symbol)
-        current_qty = 0 if not position else position.qty
-        avg_price = None if not position else position.avg_price
-        
-        state.current_position = current_qty
-        state.side = ("long" if current_qty > 0 else
-                    "short" if current_qty < 0 else None)
-        
+        """Check trade approval (sync, no broker call)."""
+        current_qty, avg_price = self._setup_approval_state(symbol, state)
         market_open = kwargs.get('market_open', True)
-        
+
         return trade_logic.should_trade(
             symbol=symbol,
             state=state,
@@ -467,46 +460,24 @@ class MockExecutionEngine(ExecutionEngineBase):
             market_open=market_open,
             account_positions=len(self.portfolio.positions)
         )
-    
-    def _determine_action(self, symbol, state, signal, reason):
-        """Determine action type."""
-        in_position = state.side is not None
-        
-        if not in_position:
-            return "entry", OrderSide.BUY if signal == 1 else OrderSide.SELL
-        elif reason and "partial" in reason.lower():
-            return "partial_exit", (OrderSide.SELL if state.side == "long" 
-                                   else OrderSide.BUY)
-        elif reason and "reversal" in reason.lower():
-            return "reversal", (OrderSide.SELL if state.side == "long" 
-                               else OrderSide.BUY)
-        else:
-            return "exit", (OrderSide.SELL if state.side == "long" 
-                           else OrderSide.BUY)
-    
+
+    # _determine_action() is inherited from ExecutionEngineBase
+
     def _calculate_quantity(self, symbol, state, action_type, price, atr, regime, trade_logic, **kwargs):
-        """Calculate position size."""
-        if action_type in ("exit", "reversal"):
-            position = self.portfolio.positions.get(symbol)
-            return abs(position.qty) if position else 5
-        
-        if action_type == "partial_exit":
-            position = self.portfolio.positions.get(symbol)
-            if not position:
-                return 5
-            if hasattr(trade_logic, 'get_exit_quantity'):
-                return trade_logic.get_exit_quantity(position.qty, is_partial=True)
-            exit_fraction = trade_logic.get_param('exit_fraction', 0.25)
-            return max(int(abs(position.qty) * exit_fraction), 1)
-        
+        """Calculate position size, use base class for exits with mock fallback."""
+        # Handle exits via base class helper
+        if action_type in ("exit", "reversal", "partial_exit"):
+            qty = self._get_exit_quantity(symbol, action_type, trade_logic)
+            return qty if qty > 0 else 5  # Mock fallback for testing
+
         # Get signal from kwargs
         signal = kwargs.get('signal', 0)
-        
+
         sl_mults = getattr(trade_logic, 'sl_mults', {"normal": 1.5})
         sl_mult = sl_mults.get(regime, 1.5)
         stop_loss_price = (price - (atr * sl_mult) if state.side != "short"
                         else price + (atr * sl_mult))
-        
+
         return self.sizer.calculate_position_size(
             symbol=symbol,
             price=price,
@@ -518,31 +489,17 @@ class MockExecutionEngine(ExecutionEngineBase):
             portfolio=self.portfolio,
             market_conditions=regime
         )
-    
-    def _post_execution(self, symbol, state, result, action_type, regime, strategy_name):
-        """Post-execution tasks."""
-        state.last_trade_time = datetime.now(timezone.utc)
-        
-        self.performance_tracker.log_trade(
-            symbol=symbol,
-            action=result.side,
-            price=result.avg_price,
-            quantity=result.filled_qty,
-            order_id=result.order_id,
-            strategy=strategy_name,
-            regime=regime,
-            sl=getattr(state, 'stop_loss', None),
-            tp=getattr(state, 'take_profit', None),
-            notes=f"[MOCK] action={action_type}, bars_held={getattr(state, 'bars_held', 0)}"
-        )
-        
-        if action_type in ("exit", "reversal"):
-            self.logger.info(
-                f"[MOCK] [{symbol}] Resetting state after {action_type} "
-                f"(bars_held={getattr(state, 'bars_held', 0)})"
-            )
-            state.reset()
 
+    def _update_portfolio_after_execution(self, symbol: str, result) -> None:
+        """Skip portfolio update - already handled in _update_mock_portfolio()."""
+        pass
+
+    def _post_execution(self, symbol, state, result, action_type, regime, strategy_name):
+        """Post-execution tasks with Mock-specific logging."""
+        # Use base class implementation for common logic
+        super()._post_execution(symbol, state, result, action_type, regime, strategy_name)
+
+        # Mock-specific logging
         self.logger.info(
             f"[MOCK] [{symbol}] Trade logged: {action_type} "
             f"{result.side.value} {result.filled_qty}@${result.avg_price:.2f}"
