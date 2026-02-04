@@ -124,7 +124,8 @@ class ReconcilerConfig:
     cash_tolerance: float = 1.0           # Cash diff tolerance ($)
 
     # Behavior
-    reconcile_interval: int = 60          # Seconds between periodic checks
+    reconcile_interval: int = 15          # Seconds between periodic checks (reduced from 60)
+    stale_threshold_seconds: int = 30     # Portfolio state staleness threshold
     halt_on_critical: bool = True         # Halt trading on critical mismatch
     auto_correct_minor: bool = True       # Auto-sync minor mismatches
 

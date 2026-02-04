@@ -50,6 +50,7 @@ from core.simulator.simulation import compute_atr, classify_regime
 from core.broker.schwab_broker import SchwabBroker
 from core.logic.live_execution_engine import LiveExecutionEngine
 from core.logic.trade_logic_manager import DynamicTradeLogicManager
+from core.app_types import SignalContext
 from core.executor import LiveExecutor
 from core.state_reconciler import StateReconciler, ReconcilerConfig
 from data.streaming.schwab_client import SchwabClient
@@ -352,16 +353,19 @@ class SchwabLiveRunner:
         state.regime = regime
         state.regime_persist = gs.regime_persist
 
-        # Hand off to execution engine
-        await self.engine.handle_signal(
+        # Hand off to execution engine using SignalContext
+        context = SignalContext(
             symbol=symbol,
-            state=state,
             signal=signal,
             price=last_px,
             atr=float(atr or 0.0),
             regime=regime,
+            timestamp=ts,
             strategy_name=strategy_name,
+            market_open=True,  # Schwab streaming only runs during market hours
+            metadata={'state': state}
         )
+        await self.engine.handle_signal_context(context)
 
         # Telemetry
         pos = self.portfolio.positions.get(symbol)

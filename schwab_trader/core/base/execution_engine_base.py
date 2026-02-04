@@ -18,7 +18,7 @@ from core.base.position_sizer_base import PositionSizerBase
 from core.base.trade_logger_base import TradeLoggerBase
 from core.base.trade_logic_manager_base import TradeLogicManagerBase
 from core.logic.portfolio_state import PortfolioState
-from core.app_types import OrderResult
+from core.app_types import OrderResult, SignalContext
 from core.enums import OrderSide
 
 logger = logging.getLogger(__name__)
@@ -104,8 +104,53 @@ class ExecutionEngineBase(ABC):
     # ========================================================================
     # ABSTRACT METHODS
     # ========================================================================
-    
+
     @abstractmethod
+    async def handle_signal_context(
+        self,
+        context: SignalContext
+    ) -> Optional[OrderResult]:
+        """
+        Process signal using unified context object.
+
+        This is the preferred entry point for signal processing. It uses
+        a single SignalContext object instead of scattered parameters.
+
+        Args:
+            context: SignalContext containing all signal data:
+                - symbol: Trading symbol
+                - signal: Strategy signal (-1, 0, 1)
+                - price: Current market price
+                - atr: Average True Range
+                - regime: Market regime
+                - timestamp: Signal timestamp
+                - strategy_name: Strategy identifier
+                - confidence: Signal strength (0-1)
+                - df: Optional price history
+                - market_open: Whether market is open
+                - metadata: Additional context
+
+        Returns:
+            OrderResult if trade was executed, None if skipped
+
+        Example Implementation:
+            async def handle_signal_context(self, context):
+                # Filter low confidence signals
+                if context.confidence < self.min_signal_confidence:
+                    return None
+
+                # Skip hold signals
+                if context.is_hold():
+                    return None
+
+                # Get or create state
+                state = self._get_or_create_state(context.symbol)
+
+                # Check approval and execute
+                # ... rest of logic using context fields
+        """
+        pass
+
     def handle_signal(
         self,
         symbol: str,
@@ -118,16 +163,13 @@ class ExecutionEngineBase(ABC):
         **kwargs
     ) -> Optional[OrderResult]:
         """
+        DEPRECATED: Use handle_signal_context() instead.
+
         Execute trade logic based on a new signal from strategy.
-        
-        This is the main entry point for processing signals. The engine should:
-        1. Validate signal and market conditions
-        2. Check trade approval via trade_logic_manager and trade gate
-        3. Calculate position size via sizer
-        4. Execute trade via executor
-        5. Update portfolio state
-        6. Log trade via performance_tracker
-        
+
+        This method is kept for backward compatibility. It creates a
+        SignalContext and delegates to handle_signal_context().
+
         Args:
             symbol: Trading symbol (e.g., "AAPL")
             state: Symbol-specific state object (SymbolState or similar)
@@ -141,52 +183,32 @@ class ExecutionEngineBase(ABC):
             regime: Market regime classification (e.g., "trending", "ranging")
             strategy_name: Optional identifier for which strategy generated signal
             **kwargs: Additional context (indicators, metadata, etc.)
-        
+
         Returns:
             OrderResult if trade was executed, None if skipped
-            
-        Example Implementation:
-            def handle_signal(self, symbol, state, signal, price, atr, regime, **kwargs):
-                # Skip if signal is hold
-                if signal == 0:
-                    return None
-                
-                # Check if we should trade
-                if not self.trade_logic_manager.should_trade(
-                    symbol, state, signal, regime
-                ):
-                    logger.info(f"Trade logic blocked signal for {symbol}")
-                    return None
-                
-                # Calculate position size
-                qty = self.sizer.calculate_size(
-                    symbol=symbol,
-                    price=price,
-                    atr=atr,
-                    account_value=self.portfolio.total_value,
-                    signal_strength=1.0
-                )
-                
-                # Get market data for executor
-                df = kwargs.get('df')
-                
-                # Execute trade
-                result = self.executor.execute(
-                    symbol=symbol,
-                    df=df,
-                    signal=signal,
-                    price=price,
-                    atr_value=atr
-                )
-                
-                # Update portfolio
-                if result:
-                    self.portfolio.update_position(symbol, result)
-                    self.performance_tracker.log_trade(result)
-                
-                return result
         """
-        pass
+        import asyncio
+        from datetime import datetime, timezone
+
+        # Create SignalContext from kwargs
+        context = SignalContext.from_kwargs(
+            symbol=symbol,
+            signal=signal,
+            price=price,
+            atr=atr,
+            regime=regime,
+            timestamp=datetime.now(timezone.utc),
+            strategy_name=strategy_name,
+            df=kwargs.get('df'),
+            market_open=kwargs.get('market_open', True),
+            # Pass state in metadata for backward compatibility
+            state=state,
+            **{k: v for k, v in kwargs.items() if k not in ('df', 'market_open')}
+        )
+
+        # Run async method
+        loop = asyncio.get_event_loop()
+        return loop.run_until_complete(self.handle_signal_context(context))
 
     # ========================================================================
     # SHARED IMPLEMENTATIONS

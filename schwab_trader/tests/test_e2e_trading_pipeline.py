@@ -472,6 +472,7 @@ class TestEventEmission:
 
         # Reset singleton for testing
         EventHandler._instance = None
+        EventHandler._initialized = False
         handler = EventHandler()
 
         # Subscribe to events
@@ -496,6 +497,7 @@ class TestEventEmission:
 
         # Cleanup
         EventHandler._instance = None
+        EventHandler._initialized = False
 
     @pytest.mark.asyncio
     async def test_order_status_event(self, event_collector):
@@ -504,6 +506,7 @@ class TestEventEmission:
         from core.events.events import EVENT_ORDER_STATUS
 
         EventHandler._instance = None
+        EventHandler._initialized = False
         handler = EventHandler()
 
         await handler.subscribe(EVENT_ORDER_STATUS, event_collector.handler)
@@ -526,6 +529,7 @@ class TestEventEmission:
         assert events[0].payload['status'] == 'filled'
 
         EventHandler._instance = None
+        EventHandler._initialized = False
 
 
 # ============================================================================
@@ -824,6 +828,7 @@ class TestIntegrationScenarios:
         from core.events.events import EVENT_ORDER_STATUS
 
         EventHandler._instance = None
+        EventHandler._initialized = False
         handler = EventHandler()
 
         await handler.subscribe(EVENT_ORDER_STATUS, event_collector.handler)
@@ -852,6 +857,7 @@ class TestIntegrationScenarios:
         assert len(events) >= 1
 
         EventHandler._instance = None
+        EventHandler._initialized = False
 
 
 if __name__ == '__main__':

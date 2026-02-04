@@ -85,13 +85,14 @@ class TestCalculatePositionSize:
         size = sizer.calculate_position_size(
             price=100.0,
             stop_loss_price=95.0,  # $5 risk per share
-            current_cash=10000.0,
+            current_cash=20000.0,  # $20k: 10% cap = $2k = 20 shares
             market_conditions="normal",
             signal=1  # Buy
         )
-        # Risk = 1% of 10000 = $100
+        # Risk = 1% of 20000 = $200
         # Per share risk = $5
-        # Size = 100 / 5 = 20 shares
+        # Size from risk = 200 / 5 = 40 shares
+        # But 10% position cap = 20000 * 0.10 / 100 = 20 shares
         assert size == 20
 
     def test_basic_calculation_sell(self, sizer):
@@ -99,46 +100,56 @@ class TestCalculatePositionSize:
         size = sizer.calculate_position_size(
             price=100.0,
             stop_loss_price=105.0,  # $5 risk per share
-            current_cash=10000.0,
+            current_cash=20000.0,  # $20k: 10% cap = $2k = 20 shares
             market_conditions="normal",
             signal=-1  # Sell
         )
+        # Risk = 1% of 20000 = $200
+        # Per share risk = $5
+        # Size from risk = 200 / 5 = 40 shares
+        # But 10% position cap = 20 shares
         assert size == 20
 
     def test_low_volatility_increases_size(self, sizer):
         """Test that low volatility increases position size."""
+        # Use wider stop ($20/share risk) so 10% position cap doesn't constrain
         size_normal = sizer.calculate_position_size(
             price=100.0,
-            stop_loss_price=95.0,
+            stop_loss_price=80.0,  # $20 risk per share
             current_cash=10000.0,
             market_conditions="normal",
             signal=1
         )
         size_low_vol = sizer.calculate_position_size(
             price=100.0,
-            stop_loss_price=95.0,
+            stop_loss_price=80.0,  # $20 risk per share
             current_cash=10000.0,
             market_conditions="low_volatility",
             signal=1
         )
+        # Normal: 1% * 10k / 20 = 5 shares
+        # Low vol: 1.25% * 10k / 20 = 6 shares
         assert size_low_vol > size_normal
 
     def test_high_volatility_decreases_size(self, sizer):
         """Test that high volatility decreases position size."""
+        # Use wider stop ($20/share risk) so 10% position cap doesn't constrain
         size_normal = sizer.calculate_position_size(
             price=100.0,
-            stop_loss_price=95.0,
+            stop_loss_price=80.0,  # $20 risk per share
             current_cash=10000.0,
             market_conditions="normal",
             signal=1
         )
         size_high_vol = sizer.calculate_position_size(
             price=100.0,
-            stop_loss_price=95.0,
+            stop_loss_price=80.0,  # $20 risk per share
             current_cash=10000.0,
             market_conditions="high_volatility",
             signal=1
         )
+        # Normal: 1% * 10k / 20 = 5 shares
+        # High vol: 0.5% * 10k / 20 = 2 shares
         assert size_high_vol < size_normal
 
     def test_returns_zero_for_zero_signal(self, sizer):
@@ -188,10 +199,12 @@ class TestCalculatePositionSize:
             signal=1
         )
         # Risk = $100, per share risk = $0.50
+        # But min_risk_per_share floor = $100 * 0.005 = $0.50, so uses $0.50
         # Position size = 100 / 0.50 = 200
-        # But max_affordable = 10000 // 100 = 100
-        # Returns min(200, 100) = 100
-        assert size == 100
+        # Max affordable = 10000 // 100 = 100
+        # 10% position cap = 10000 * 0.10 / 100 = 10 shares
+        # Returns min(200, 100, 10) = 10
+        assert size == 10
 
 
 class TestEdgeCases:
@@ -217,10 +230,10 @@ class TestEdgeCases:
         size = sizer.calculate_position_size(
             price=5000.0,
             stop_loss_price=4900.0,  # $100 risk per share
-            current_cash=100000.0,
+            current_cash=500000.0,  # $500k so 10% cap = 10 shares
             market_conditions="normal",
             signal=1
         )
-        # Risk = $1000, per share risk = $100
-        # Size = 10
+        # Risk = 1% * $500k = $5000, per share risk = $100
+        # Size from risk = 50, but 10% cap = $50k / $5k = 10 shares
         assert size == 10

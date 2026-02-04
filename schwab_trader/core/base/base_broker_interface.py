@@ -7,6 +7,8 @@ must implement to ensure consistent behavior across different execution environm
 
 from __future__ import annotations
 
+import asyncio
+import warnings
 from abc import ABC, abstractmethod
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
@@ -124,11 +126,11 @@ class BaseBrokerInterface(ABC):
         pass
     
     # ========================================================================
-    # ABSTRACT METHODS - SYNCHRONOUS ORDER HELPERS
+    # ABSTRACT METHODS - ASYNC ORDER HELPERS
     # ========================================================================
-    
+
     @abstractmethod
-    def place_market_order(
+    async def place_market_order(
         self,
         symbol: str,
         qty: int,
@@ -136,30 +138,30 @@ class BaseBrokerInterface(ABC):
         price: Optional[float] = None
     ) -> OrderResult:
         """
-        Place a market order (sync).
-        
+        Place a market order (async).
+
         Convenience method for strategies that need immediate execution.
         For simulation, this executes instantly. For live brokers, this
-        may block until order is accepted.
-        
+        awaits until order is accepted.
+
         Args:
             symbol: Trading symbol
             qty: Quantity (positive integer)
             side: OrderSide.BUY or OrderSide.SELL
             price: Optional price hint for simulation (ignored in live)
-            
+
         Returns:
             OrderResult with execution details
-            
+
         Raises:
             InvalidOrderError: If parameters invalid
             InsufficientFundsError: If insufficient funds
             BrokerError: If execution fails
         """
         pass
-    
+
     @abstractmethod
-    def place_oco_order(
+    async def place_oco_order(
         self,
         symbol: str,
         qty: int,
@@ -167,29 +169,73 @@ class BaseBrokerInterface(ABC):
         limit_price: float
     ) -> OrderResult:
         """
-        Place a One-Cancels-Other (OCO) bracket order (sync).
-        
+        Place a One-Cancels-Other (OCO) bracket order (async).
+
         Creates two orders: a stop-loss and a take-profit. When one
         executes, the other is automatically cancelled.
-        
+
         Args:
             symbol: Trading symbol
             qty: Quantity (positive integer)
             stop_price: Stop-loss trigger price
             limit_price: Take-profit limit price
-            
+
         Returns:
             OrderResult for the OCO order group
-            
+
         Raises:
             InvalidOrderError: If parameters invalid
             BrokerError: If execution fails
-            
+
         Note:
             Not all brokers support OCO natively. Implementation may
             simulate this behavior with multiple orders.
         """
         pass
+
+    # ========================================================================
+    # DEPRECATED SYNC WRAPPERS
+    # ========================================================================
+
+    def place_market_order_sync(
+        self,
+        symbol: str,
+        qty: int,
+        side: OrderSide,
+        price: Optional[float] = None
+    ) -> OrderResult:
+        """
+        DEPRECATED: Sync wrapper for place_market_order.
+
+        Use `await place_market_order()` instead.
+        """
+        warnings.warn(
+            "place_market_order_sync is deprecated. Use 'await place_market_order()' instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        loop = asyncio.get_event_loop()
+        return loop.run_until_complete(self.place_market_order(symbol, qty, side, price))
+
+    def place_oco_order_sync(
+        self,
+        symbol: str,
+        qty: int,
+        stop_price: float,
+        limit_price: float
+    ) -> OrderResult:
+        """
+        DEPRECATED: Sync wrapper for place_oco_order.
+
+        Use `await place_oco_order()` instead.
+        """
+        warnings.warn(
+            "place_oco_order_sync is deprecated. Use 'await place_oco_order()' instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        loop = asyncio.get_event_loop()
+        return loop.run_until_complete(self.place_oco_order(symbol, qty, stop_price, limit_price))
     
     # ========================================================================
     # ABSTRACT METHODS - ACCOUNT & POSITION QUERIES

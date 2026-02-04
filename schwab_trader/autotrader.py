@@ -299,11 +299,13 @@ class AutoTrader:
         broker: str = "alpaca",
         dry_run: bool = False,
         update_data_days: int = 5,
+        day_trade: bool = False,
     ):
         self.symbols = symbols
         self.broker = broker
         self.dry_run = dry_run
         self.update_data_days = update_data_days
+        self.day_trade = day_trade
 
         self.state = AutoTraderState.INITIALIZING
         self.scheduler = MarketScheduler()
@@ -330,6 +332,12 @@ class AutoTrader:
         # Config
         self.config = get_config()
 
+        # Override swing mode if day trading is enabled
+        if day_trade:
+            from core.config_loader import enable_day_trade_mode
+            self.config = enable_day_trade_mode()
+            self.logger.info("DAY TRADE MODE: Swing mode disabled, same-day exits allowed")
+
         # Load timing settings from config
         self.pre_market_buffer = self.config.autotrader.pre_market_buffer_minutes
         self.post_market_delay = self.config.autotrader.post_market_delay_minutes
@@ -339,6 +347,7 @@ class AutoTrader:
         self.logger.info(f"Symbols: {symbols}")
         self.logger.info(f"Broker: {broker}")
         self.logger.info(f"Dry run: {dry_run}")
+        self.logger.info(f"Day trade: {day_trade}")
         self.logger.info("=" * 60)
 
     def _set_state(self, new_state: AutoTraderState) -> None:
@@ -718,6 +727,11 @@ Background:
         help='Run without executing actual trades'
     )
     parser.add_argument(
+        '--day-trade',
+        action='store_true',
+        help='Enable day trading (disable swing mode, allow same-day exits)'
+    )
+    parser.add_argument(
         '--update-days',
         type=int,
         default=5,
@@ -744,6 +758,7 @@ Background:
         broker=args.broker,
         dry_run=args.dry_run,
         update_data_days=args.update_days,
+        day_trade=args.day_trade,
     )
 
     # Setup signal handlers for graceful shutdown

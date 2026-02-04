@@ -173,19 +173,24 @@ class SchwabBroker(BaseBrokerInterface):
     # ---------------------------------------------------------------------
     # Connection Lifecycle
     # ---------------------------------------------------------------------
-    async def connect(self) -> bool:
+    async def connect(self) -> None:
         """
         Initialize connection to Schwab API.
 
-        Returns:
-            True if connection successful, False otherwise
+        Connection status is stored in self._connected.
+        Use is_connected property to check connection state.
+
+        Raises:
+            RuntimeError: If connection fails
         """
         try:
             # Verify account access
             account = await self._to_thread(self.client.account_number)
             if not account or not account.get("accountNumbers"):
                 self.logger.error("Failed to retrieve account information")
-                return False
+                self._connected = False
+                await self._emit_health_event("error", "Failed to retrieve account information")
+                raise RuntimeError("Failed to retrieve Schwab account information")
 
             self._connected = True
             self.logger.info(f"Connected to Schwab API, account: {self.account_number}")
@@ -193,12 +198,16 @@ class SchwabBroker(BaseBrokerInterface):
             # Emit health event
             await self._emit_health_event("connected")
 
-            return True
         except Exception as e:
             self.logger.exception(f"Failed to connect to Schwab: {e}")
             self._connected = False
             await self._emit_health_event("error", str(e))
-            return False
+            raise
+
+    @property
+    def is_connected(self) -> bool:
+        """Check if broker is connected."""
+        return self._connected
 
     async def disconnect(self):
         """Disconnect from Schwab API and streaming."""
@@ -491,20 +500,58 @@ class SchwabBroker(BaseBrokerInterface):
         return self._mk_order_result(resp)
 
     # ---------------------------------------------------------------------
-    # BaseBrokerInterface — SYNC helpers
+    # BaseBrokerInterface — ASYNC order helpers
     # ---------------------------------------------------------------------
-    def place_market_order(self, symbol: str, qty: int, side: str, price: float | None = None) -> OrderResult:
+    async def place_market_order(self, symbol: str, qty: int, side, price: float | None = None) -> OrderResult:
+        """
+        Place a market order asynchronously.
+
+        Args:
+            symbol: Trading symbol
+            qty: Quantity to trade
+            side: OrderSide enum or string ("buy"/"sell")
+            price: Optional price hint for mark-to-market
+
+        Returns:
+            OrderResult with execution details
+        """
+        # Handle both OrderSide enum and string
+        if hasattr(side, 'value'):
+            side_str = side.value.lower()
+        else:
+            side_str = str(side).lower()
+
         od = self.client.generate_order(
             orderType="MARKET", session=self.session, duration="DAY",
-            orderStrategyType="SINGLE", instruction=self._instruction(side),
+            orderStrategyType="SINGLE", instruction=self._instruction(side_str),
             quantity=int(qty), symbol=symbol, assetType="EQUITY"
         )
-        resp = self.client.place_orders(self.account_number, od)
+        resp = await self._to_thread(self.client.place_orders, self.account_number, od)
         if price is not None:
             self.mark_price(symbol, float(price))
-        return self._mk_order_result(resp, symbol=symbol, qty=qty, side=side, type="market")
+        result = self._mk_order_result(resp, symbol=symbol, qty=qty, side=side_str, type="market")
 
-    def place_oco_order(self, symbol: str, qty: int, stop_price: float, limit_price: float) -> OrderResult:
+        # Emit order event
+        await self._emit_order_event(result, "placed")
+
+        return result
+
+    async def place_oco_order(self, symbol: str, qty: int, stop_price: float, limit_price: float) -> OrderResult:
+        """
+        Place OCO (One-Cancels-Other) bracket order asynchronously.
+
+        Creates two orders: a stop-loss and a take-profit. When one
+        executes, the other is automatically cancelled.
+
+        Args:
+            symbol: Trading symbol
+            qty: Quantity to trade
+            stop_price: Stop-loss trigger price
+            limit_price: Take-profit limit price
+
+        Returns:
+            OrderResult for the OCO order group
+        """
         # Typical long exit: SELL limit (TP) + SELL stop (SL)
         child_limit = self.client.generate_order(
             orderType="LIMIT", session=self.session, duration="DAY",
@@ -526,9 +573,14 @@ class SchwabBroker(BaseBrokerInterface):
             "duration": "DAY",
             "childOrderStrategies": [child_limit, child_stop],
         }
-        resp = self.client.place_orders(self.account_number, oco)
-        return self._mk_order_result(resp, symbol=symbol, qty=qty, type="oco",
-                                     limit_price=limit_price, stop_price=stop_price)
+        resp = await self._to_thread(self.client.place_orders, self.account_number, oco)
+        result = self._mk_order_result(resp, symbol=symbol, qty=qty, type="oco",
+                                       limit_price=limit_price, stop_price=stop_price)
+
+        # Emit order event
+        await self._emit_order_event(result, "placed")
+
+        return result
 
     # ---------------------------------------------------------------------
     # BaseBrokerInterface — INFO

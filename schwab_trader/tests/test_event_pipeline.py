@@ -21,6 +21,7 @@ if str(ROOT) not in sys.path:
 import asyncio
 import logging
 from datetime import datetime, timezone
+import pytest
 
 # Configure logging
 logging.basicConfig(
@@ -100,6 +101,7 @@ def test_synchronous_subscription():
     return True
 
 
+@pytest.mark.asyncio
 async def test_emit_receive():
     """Test that emit -> receive works correctly."""
     print("\n" + "="*60)
@@ -136,6 +138,7 @@ async def test_emit_receive():
     return True
 
 
+@pytest.mark.asyncio
 async def test_pnl_event_flow():
     """Test PNL_UPDATE event flow (simulating what simulation does)."""
     print("\n" + "="*60)
@@ -183,6 +186,7 @@ async def test_pnl_event_flow():
     return True
 
 
+@pytest.mark.asyncio
 async def test_multiple_subscribers():
     """Test that multiple subscribers all receive events."""
     print("\n" + "="*60)
@@ -230,6 +234,7 @@ async def test_multiple_subscribers():
     return True
 
 
+@pytest.mark.asyncio
 async def test_feeder_subscription():
     """Test that DataFeeder subscribes correctly (without Qt)."""
     print("\n" + "="*60)

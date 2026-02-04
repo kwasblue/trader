@@ -102,6 +102,8 @@ class TradeLogicConfig:
     trailing_stop: bool = True
     max_positions: int = 10
     min_bars_to_hold: int = 3  # Minimum bars before allowing TP/reversal exits
+    swing_mode: bool = True  # If True, prevent same-day exits (except stop loss)
+    min_hold_days: int = 1  # Minimum days to hold before allowing exit
 
 
 @dataclass
@@ -268,6 +270,42 @@ def get_config(reload: bool = False) -> TradingConfig:
     if _config is None or reload:
         _config = load_config()
     return _config
+
+
+def set_config(config: TradingConfig) -> None:
+    """
+    Set the global config instance.
+
+    Use this to apply runtime overrides (e.g., from command line flags).
+
+    Args:
+        config: TradingConfig instance to use globally
+    """
+    global _config
+    _config = config
+
+
+def enable_day_trade_mode() -> TradingConfig:
+    """
+    Enable day trading mode globally.
+
+    Disables swing mode and sets min_hold_days to 0, allowing same-day exits.
+
+    Returns:
+        Updated TradingConfig instance
+    """
+    from dataclasses import replace
+    config = get_config()
+    updated = replace(
+        config,
+        trade_logic=replace(
+            config.trade_logic,
+            swing_mode=False,
+            min_hold_days=0
+        )
+    )
+    set_config(updated)
+    return updated
 
 
 def reload_config() -> TradingConfig:

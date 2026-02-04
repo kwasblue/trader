@@ -90,34 +90,44 @@ class SymbolPosition:
 class PortfolioState:
     """
     Portfolio state tracker.
-    
+
     Tracks:
     - Cash balance
     - Open positions
     - Realized/unrealized P&L
     - Equity history for metrics
     - Total portfolio value
-    
+    - State freshness (last sync/update times)
+
     Example:
         portfolio = PortfolioState(initial_cash=100000)
-        
+
         # Apply trade
         portfolio.apply_fill("AAPL", "buy", 100, 150.25)
-        
+
         # Update price
         portfolio.update_price("AAPL", 152.50)
-        
+
         # Check metrics
         print(f"Equity: ${portfolio.total_equity():,.2f}")
         print(f"Unrealized: ${portfolio.total_unrealized():,.2f}")
         print(f"Drawdown: {portfolio.current_drawdown():.2%}")
+
+        # Check staleness
+        if portfolio.is_stale():
+            await reconciler.full_sync()
     """
-    
+
     cash: float = 100_000.0
     positions: Dict[str, SymbolPosition] = field(default_factory=dict)
     realized_pnl: float = 0.0
     equity_history: List[float] = field(default_factory=list)
     total_value: float = 100_000.0  # Cached total value
+
+    # State freshness tracking
+    last_sync_time: Optional[datetime] = None  # Last full sync with broker
+    last_update_time: Optional[datetime] = None  # Last any update (trade, price, sync)
+
     # Logger - own file with propagation to app.log
     port_logger = Logger(
         log_file="portfolio_state.log",
@@ -132,6 +142,57 @@ class PortfolioState:
             self.equity_history.append(self.cash)
             self.total_value = self.cash
         self.port_logger.info(f"PortfolioState initialized: cash=${self.cash:,.2f}")
+
+    # ========================================================================
+    # STATE FRESHNESS METHODS
+    # ========================================================================
+
+    def is_stale(self, threshold_seconds: float = 30.0) -> bool:
+        """
+        Check if portfolio state is stale (not recently updated).
+
+        Used by reconciler and execution engine to detect when local state
+        may have drifted from broker state.
+
+        Args:
+            threshold_seconds: Number of seconds before considering state stale
+
+        Returns:
+            True if last update was more than threshold_seconds ago,
+            or if never updated
+        """
+        if self.last_update_time is None:
+            return True
+        elapsed = (datetime.now(timezone.utc) - self.last_update_time).total_seconds()
+        return elapsed > threshold_seconds
+
+    def mark_updated(self) -> None:
+        """
+        Mark portfolio as recently updated.
+
+        Called after:
+        - Price updates
+        - Trade fills
+        - Position changes
+
+        This resets the staleness timer.
+        """
+        self.last_update_time = datetime.now(timezone.utc)
+
+    def mark_synced(self) -> None:
+        """
+        Mark portfolio as synced with broker.
+
+        Called after:
+        - Full broker sync
+        - Reconciliation
+
+        Updates both sync and update times.
+        """
+        now = datetime.now(timezone.utc)
+        self.last_sync_time = now
+        self.last_update_time = now
+        self.port_logger.debug("Portfolio marked as synced")
             
     
     # ========================================================================
@@ -172,23 +233,26 @@ class PortfolioState:
     def update_price(self, symbol: str, price: float) -> None:
         """
         Update market price for a symbol.
-        
+
         Recalculates unrealized P&L and tracks equity.
-        
+
         Args:
             symbol: Trading symbol
             price: New market price
         """
         if symbol not in self.positions:
             return
-        
+
         pos = self.positions[symbol]
         pos.last_price = float(price)
         pos.update_unrealized_pnl()
-        
+
         # Update total value and history
         self.total_value = self.total_equity()
         self.equity_history.append(self.total_value)
+
+        # Mark as updated
+        self.mark_updated()
     
     def apply_fill(
         self,
@@ -251,7 +315,10 @@ class PortfolioState:
         # Track equity
         self.total_value = self.total_equity()
         self.equity_history.append(self.total_value)
-        
+
+        # Mark as updated
+        self.mark_updated()
+
         self.port_logger.info(
             f"[{symbol}] Fill applied: {side} {qty}@${px:.2f}, "
             f"new_qty={new_qty}, cash=${self.cash:,.2f}, "
@@ -487,7 +554,10 @@ class PortfolioState:
         portfolio_value = snap.portfolio_value or self.total_equity()
         self.total_value = portfolio_value
         self.equity_history.append(portfolio_value)
-        
+
+        # Mark as synced
+        self.mark_synced()
+
         self.port_logger.info(
             f"Portfolio synced from broker: ${portfolio_value:,.2f}, "
             f"{len(self.positions)} positions"

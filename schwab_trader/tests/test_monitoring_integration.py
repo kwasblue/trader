@@ -39,9 +39,11 @@ def event_handler():
     """Create fresh EventHandler for testing."""
     from core.events.eventhandler import EventHandler
     EventHandler._instance = None
+    EventHandler._initialized = False  # Must reset both flags!
     handler = EventHandler()
     yield handler
     EventHandler._instance = None
+    EventHandler._initialized = False
 
 
 @pytest.fixture
@@ -151,6 +153,7 @@ class TestDataFeederWiring:
 
         # Reset singleton to ensure clean state
         EventHandler._instance = None
+        EventHandler._initialized = False
 
         feeder = DataFeeder()
 
@@ -165,6 +168,7 @@ class TestDataFeederWiring:
 
         # Cleanup
         EventHandler._instance = None
+        EventHandler._initialized = False
 
 
 # ============================================================================

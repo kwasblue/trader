@@ -31,7 +31,7 @@ from core.events.events import (
     EVENT_HEALTH_UPDATE, HealthPayload,
     EVENT_ALERT, AlertPayload
 )
-from core.utils.retry import retry, async_retry, get_circuit_breaker
+from core.utils.retry import retry, async_retry, get_circuit_breaker, CircuitOpenError
 from core.utils.health import get_health_checker
 
 
@@ -74,9 +74,32 @@ class AlpacaBroker(BaseBrokerInterface):
     # ---------------------------------------------------------
     # Connections / Streaming
     # ---------------------------------------------------------
+    @async_retry(max_attempts=3, base_delay=2.0, circuit_breaker="alpaca_connect")
+    async def connect(self) -> None:
+        """
+        Establish trading and streaming connections with retry logic.
+
+        Returns:
+            None (connection status stored in self._connected)
+        """
+        # Close any existing connections first to avoid connection limit issues
+        if self.stream is not None:
+            self.logger.warning("Closing existing stream before reconnecting...")
+            self.disconnect()
+
+        self.trading_client = TradingClient(self.api_key, self.api_secret, paper=self.paper)
+        self.stream = StockDataStream(self.api_key, self.api_secret, feed=DataFeed.IEX)
+        self.data_rest = StockHistoricalDataClient(self.api_key, self.api_secret)
+        self._connected = True
+        self.logger.info("Connected to Alpaca.")
+
     @retry(max_attempts=3, base_delay=2.0, circuit_breaker="alpaca_connect")
-    def connect(self):
-        """Establish trading and streaming connections with retry logic."""
+    def connect_sync(self) -> None:
+        """
+        Sync wrapper for connect(). For backward compatibility.
+
+        Use `await connect()` in async code.
+        """
         # Close any existing connections first to avoid connection limit issues
         if self.stream is not None:
             self.logger.warning("Closing existing stream before reconnecting...")
@@ -326,7 +349,13 @@ class AlpacaBroker(BaseBrokerInterface):
         stop_price: float | None = None,
         time_in_force: str = "gtc",
         **kwargs,
-    ) -> None:   # 🚨 emits, does not return
+    ) -> OrderResult:
+        """
+        Place an order asynchronously.
+
+        Returns:
+            OrderResult with order details and status
+        """
         if not self.trading_client:
             if self.event_handler:
                 payload: OrderStatusPayload = {
@@ -369,6 +398,8 @@ class AlpacaBroker(BaseBrokerInterface):
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
                 await self.event_handler.emit(EVENT_ORDER_STATUS, payload)
+
+            return res
 
         except Exception as e:
             self.logger.error(f"Order failed for {symbol}: {e}")
@@ -435,51 +466,38 @@ class AlpacaBroker(BaseBrokerInterface):
                 await self.event_handler.emit(EVENT_ORDER_STATUS, payload)
             return res
 
-    def place_market_order(self, symbol: str, qty: int, side: str, price: float | None = None) -> OrderResult:
-        if not self.trading_client:
-            raise RuntimeError("Not connected: call connect() first")
-        o = self.trading_client.submit_order(
-            MarketOrderRequest(symbol=symbol, qty=qty, side=_map_side(side), time_in_force=TimeInForce.DAY)
-        )
-        res = self._mk_order_result(o)
+    async def place_market_order(self, symbol: str, qty: int, side, price: float | None = None) -> OrderResult:
+        """
+        Place a market order asynchronously.
 
-        # 🚨 Emit event
-        if self.event_handler:
-            payload = {
-                "order_id": res.order_id,
-                "symbol": res.symbol,
-                "status": res.status,
-                "side": res.side,
-                "qty": res.qty,
-                "filled_qty": res.filled_qty,
-                "avg_price": res.avg_fill_price,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-            }
-            asyncio.create_task(self.event_handler.emit(EVENT_ORDER_STATUS, payload))
+        Args:
+            symbol: Trading symbol
+            qty: Quantity to trade
+            side: OrderSide enum or string ("buy"/"sell")
+            price: Optional price hint (ignored for market orders)
 
-        return res  # still return for synchronous contexts (tests, notebooks)
-
-
-    def place_oco_order(self, symbol: str, qty: int, stop_price: float, limit_price: float) -> OrderResult:
-        """Simple OCO via bracket: TP limit + SL stop.
-        Note: Alpaca uses bracket order_class with take_profit/stop_loss.
+        Returns:
+            OrderResult with execution details
         """
         if not self.trading_client:
             raise RuntimeError("Not connected: call connect() first")
 
-        req = MarketOrderRequest(
-            symbol=symbol,
-            qty=qty,
-            side=OrderSide.SELL,  # typical for exiting a long
-            time_in_force=TimeInForce.GTC,
-            order_class=OrderClass.BRACKET,  # type: ignore[arg-type]
-            take_profit={"limit_price": limit_price},
-            stop_loss={"stop_price": stop_price},
-        )
-        o = self.trading_client.submit_order(req)
+        # Handle both OrderSide enum and string
+        if isinstance(side, str):
+            alpaca_side = _map_side(side)
+        else:
+            # Assume it's an OrderSide enum from core.enums
+            alpaca_side = _map_side(side.value if hasattr(side, 'value') else str(side))
+
+        def _submit():
+            return self.trading_client.submit_order(
+                MarketOrderRequest(symbol=symbol, qty=qty, side=alpaca_side, time_in_force=TimeInForce.DAY)
+            )
+
+        o = await asyncio.to_thread(_submit)
         res = self._mk_order_result(o)
 
-        # 🚨 Emit order status
+        # Emit event
         if self.event_handler:
             payload = {
                 "order_id": res.order_id,
@@ -491,9 +509,59 @@ class AlpacaBroker(BaseBrokerInterface):
                 "avg_price": res.avg_fill_price,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
-            asyncio.create_task(self.event_handler.emit(EVENT_ORDER_STATUS, payload))
+            await self.event_handler.emit(EVENT_ORDER_STATUS, payload)
 
-        return res  # hybrid: return for sync code, emit for event-driven system
+        return res
+
+
+    async def place_oco_order(self, symbol: str, qty: int, stop_price: float, limit_price: float) -> OrderResult:
+        """
+        Place OCO (One-Cancels-Other) bracket order asynchronously.
+
+        Uses Alpaca's bracket order_class with take_profit/stop_loss.
+
+        Args:
+            symbol: Trading symbol
+            qty: Quantity to trade
+            stop_price: Stop-loss trigger price
+            limit_price: Take-profit limit price
+
+        Returns:
+            OrderResult for the OCO order group
+        """
+        if not self.trading_client:
+            raise RuntimeError("Not connected: call connect() first")
+
+        def _submit():
+            req = MarketOrderRequest(
+                symbol=symbol,
+                qty=qty,
+                side=OrderSide.SELL,  # typical for exiting a long
+                time_in_force=TimeInForce.GTC,
+                order_class=OrderClass.BRACKET,  # type: ignore[arg-type]
+                take_profit={"limit_price": limit_price},
+                stop_loss={"stop_price": stop_price},
+            )
+            return self.trading_client.submit_order(req)
+
+        o = await asyncio.to_thread(_submit)
+        res = self._mk_order_result(o)
+
+        # Emit order status
+        if self.event_handler:
+            payload = {
+                "order_id": res.order_id,
+                "symbol": res.symbol,
+                "status": res.status,
+                "side": res.side,
+                "qty": res.qty,
+                "filled_qty": res.filled_qty,
+                "avg_price": res.avg_fill_price,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+            await self.event_handler.emit(EVENT_ORDER_STATUS, payload)
+
+        return res
 
 
     async def get_position(self, symbol: str) -> Optional[PositionView]:

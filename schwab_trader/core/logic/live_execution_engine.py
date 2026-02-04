@@ -22,7 +22,7 @@ from core.base.trade_logger_base import TradeLoggerBase
 from core.base.trade_logic_manager_base import TradeLogicManagerBase
 from core.logic.portfolio_state import PortfolioState
 from core.logic.symbol_state import SymbolState
-from core.app_types import OrderResult
+from core.app_types import OrderResult, SignalContext
 from core.enums import OrderSide
 from loggers.logger import Logger
 
@@ -169,7 +169,145 @@ class LiveExecutionEngine(ExecutionEngineBase):
     # ========================================================================
     # MAIN SIGNAL HANDLING
     # ========================================================================
-    
+
+    # Minimum confidence threshold for signal processing
+    min_signal_confidence: float = 0.0
+
+    async def handle_signal_context(
+        self,
+        context: SignalContext
+    ) -> Optional[OrderResult]:
+        """
+        Handle live trading signal using unified context.
+
+        Orchestrates:
+        1. Route to appropriate trade logic
+        2. Check approval
+        3. Size position
+        4. Execute via live broker
+        5. Log and update state
+
+        Args:
+            context: SignalContext containing all signal data
+
+        Returns:
+            OrderResult if executed, None if skipped
+        """
+        # Filter low confidence signals
+        if context.confidence < self.min_signal_confidence:
+            self.logger.debug(
+                f"[{context.symbol}] Signal confidence {context.confidence:.2f} "
+                f"below threshold {self.min_signal_confidence:.2f}"
+            )
+            return None
+
+        # Skip hold signals
+        if context.is_hold():
+            self.logger.debug(f"[{context.symbol}] HOLD signal - no action")
+            return None
+
+        # Get or create state from metadata or create new
+        state = context.metadata.get('state')
+        if state is None:
+            if context.symbol not in getattr(self, 'symbol_states', {}):
+                if not hasattr(self, 'symbol_states'):
+                    self.symbol_states: Dict[str, SymbolState] = {}
+                self.symbol_states[context.symbol] = SymbolState(symbol=context.symbol)
+            state = self.symbol_states[context.symbol]
+
+        # Set strategy name
+        state.strategy_name = context.strategy_name
+
+        self.logger.info(
+            f"[LIVE] [{context.symbol}] Processing signal: {context.signal} @ ${context.price:.2f} "
+            f"(regime={context.regime}, strategy={context.strategy_name}, confidence={context.confidence:.2f})"
+        )
+
+        try:
+            # Get appropriate trade logic
+            trade_logic = self.logic_router.get_logic(
+                symbol=context.symbol,
+                strategy=context.strategy_name,
+                regime=context.regime
+            )
+
+            self.logger.debug(
+                f"[{context.symbol}] Using logic: {trade_logic.__class__.__name__}"
+            )
+
+            # 1. Sync position from broker (live safety check)
+            await self._refresh_position(context.symbol)
+
+            # Filter out 'state' from metadata to avoid duplicate argument
+            extra_kwargs = {k: v for k, v in context.metadata.items() if k != 'state'}
+
+            # 2. Check trade approval
+            should_trade, reason = await self._check_trade_approval(
+                trade_logic, context.symbol, state, context.signal,
+                context.price, context.atr, context.regime,
+                market_open=context.market_open, df=context.df, **extra_kwargs
+            )
+
+            if not should_trade:
+                self.logger.info(f"[LIVE] [{context.symbol}] Trade blocked: {reason}")
+                return None
+
+            # 3. Determine action
+            action_type, side = self._determine_action(
+                context.symbol, state, context.signal, reason
+            )
+
+            self.logger.info(
+                f"[LIVE] [{context.symbol}] Action approved: {action_type} {side.value}"
+            )
+
+            # 4. Calculate quantity
+            qty = self._calculate_quantity(
+                context.symbol, state, action_type, context.price, context.atr,
+                context.regime, trade_logic, signal=context.signal,
+                df=context.df, **extra_kwargs
+            )
+
+            if qty <= 0:
+                self.logger.warning(f"[LIVE] [{context.symbol}] Position size too small: {qty}")
+                return None
+
+            # 5. Pre-execution validation (live safety)
+            if not await self._validate_live_execution(context.symbol, side, qty, context.price):
+                self.logger.error(f"[LIVE] [{context.symbol}] Pre-execution validation failed")
+                return None
+
+            # 6. Execute trade (LIVE)
+            result = await self._execute_live_trade(
+                context.symbol, state, side, qty, context.price, context.atr, action_type,
+                df=context.df, **extra_kwargs
+            )
+
+            if result:
+                # 7. Post-execution tasks
+                self._post_execution(
+                    context.symbol, state, result, action_type, context.regime, context.strategy_name
+                )
+
+            return result
+
+        except Exception as e:
+            self.logger.exception(f"[LIVE] [{context.symbol}] Error in live execution: {e}")
+
+            # Alert on live execution errors
+            self.performance_tracker.log_error(
+                message=f"Live execution error for {context.symbol}",
+                error=e,
+                context={
+                    'symbol': context.symbol,
+                    'signal': context.signal,
+                    'price': context.price,
+                    'strategy': context.strategy_name
+                }
+            )
+
+            return None
+
     async def handle_signal(
         self,
         symbol: str,
@@ -182,15 +320,10 @@ class LiveExecutionEngine(ExecutionEngineBase):
         **kwargs
     ) -> Optional[OrderResult]:
         """
-        Handle live trading signal.
-        
-        Orchestrates:
-        1. Route to appropriate trade logic
-        2. Check approval
-        3. Size position
-        4. Execute via live broker
-        5. Log and update state
-        
+        DEPRECATED: Use handle_signal_context() instead.
+
+        Handle live trading signal (backward compatible wrapper).
+
         Args:
             symbol: Trading symbol
             state: Symbol state
@@ -200,97 +333,28 @@ class LiveExecutionEngine(ExecutionEngineBase):
             regime: Market regime
             strategy_name: Strategy identifier
             **kwargs: Additional context (df, market_open, etc.)
-            
+
         Returns:
             OrderResult if executed, None if skipped
         """
-        # Skip hold signals
-        if signal == 0:
-            self.logger.debug(f"[{symbol}] HOLD signal - no action")
-            return None
-        
-        # Set strategy name
-        state.strategy_name = strategy_name
-        
-        self.logger.info(
-            f"[LIVE] [{symbol}] Processing signal: {signal} @ ${price:.2f} "
-            f"(regime={regime}, strategy={strategy_name})"
+        from datetime import datetime, timezone
+
+        # Create SignalContext from parameters
+        context = SignalContext.from_kwargs(
+            symbol=symbol,
+            signal=signal,
+            price=price,
+            atr=atr,
+            regime=regime,
+            timestamp=datetime.now(timezone.utc),
+            strategy_name=strategy_name,
+            df=kwargs.get('df'),
+            market_open=kwargs.get('market_open', True),
+            state=state,
+            **{k: v for k, v in kwargs.items() if k not in ('df', 'market_open')}
         )
-        
-        try:
-            # Get appropriate trade logic
-            trade_logic = self.logic_router.get_logic(
-                symbol=symbol,
-                strategy=strategy_name,
-                regime=regime
-            )
-            
-            self.logger.debug(
-                f"[{symbol}] Using logic: {trade_logic.__class__.__name__}"
-            )
-            
-            # 1. Sync position from broker (live safety check)
-            await self._refresh_position(symbol)
-            
-            # 2. Check trade approval
-            should_trade, reason = await self._check_trade_approval(
-                trade_logic, symbol, state, signal, price, atr, regime, **kwargs
-            )
-            
-            if not should_trade:
-                self.logger.info(f"[LIVE] [{symbol}] Trade blocked: {reason}")
-                return None
-            
-            # 3. Determine action
-            action_type, side = self._determine_action(symbol, state, signal, reason)
-            
-            self.logger.info(
-                f"[LIVE] [{symbol}] Action approved: {action_type} {side.value}"
-            )
-            
-            # 4. Calculate quantity
-            qty = self._calculate_quantity(
-                symbol, state, action_type, price, atr, regime, trade_logic, signal=signal, **kwargs
-            )
-            
-            if qty <= 0:
-                self.logger.warning(f"[LIVE] [{symbol}] Position size too small: {qty}")
-                return None
-            
-            # 5. Pre-execution validation (live safety)
-            if not await self._validate_live_execution(symbol, side, qty, price):
-                self.logger.error(f"[LIVE] [{symbol}] Pre-execution validation failed")
-                return None
-            
-            # 6. Execute trade (LIVE)
-            result = await self._execute_live_trade(
-                symbol, state, side, qty, price, atr, action_type, **kwargs
-            )
-            
-            if result:
-                # 7. Post-execution tasks
-                self._post_execution(
-                    symbol, state, result, action_type, regime, strategy_name
-                )
-            
-            return result
-            
-        except Exception as e:
-            self.logger.exception(f"[LIVE] [{symbol}] Error in live execution: {e}")
-            
-            # Alert on live execution errors
-            self.performance_tracker.log_error(
-                message=f"Live execution error for {symbol}",
-                error=e,
-                context={
-                    'symbol': symbol,
-                    'signal': signal,
-                    'price': price,
-                    'strategy': strategy_name
-                }
-            )
-            
-            return None
+
+        return await self.handle_signal_context(context)
     
     # ========================================================================
     # LIVE-SPECIFIC METHODS
@@ -403,6 +467,9 @@ class LiveExecutionEngine(ExecutionEngineBase):
 
         This places actual orders in the market!
         All logic (sizing, validation) already done upstream.
+
+        After order placement, applies optimistic update to portfolio.
+        The reconciler will correct if the actual fill differs.
         """
         try:
             self.logger.info(
@@ -428,7 +495,15 @@ class LiveExecutionEngine(ExecutionEngineBase):
                 side=side,
                 filled_qty=qty,
                 avg_price=price,
-                timestamp=datetime.now(timezone.utc)
+            )
+
+            # Optimistic portfolio update
+            # Apply expected fill immediately so UI/logic sees updated state
+            # The reconciler will correct if actual fill differs
+            self.portfolio.apply_fill(symbol, side_str, qty, price)
+            self.portfolio.mark_updated()
+            self.logger.debug(
+                f"[{symbol}] Optimistic portfolio update applied: {side_str} {qty}@${price:.2f}"
             )
 
             self.logger.info(
@@ -541,6 +616,16 @@ class LiveExecutionEngine(ExecutionEngineBase):
             current_cash=buying_power  # Use actual buying power, not cash!
         )
     
+    def _update_portfolio_after_execution(self, symbol: str, result) -> None:
+        """
+        Skip portfolio update - already handled in _execute_live_trade().
+
+        LiveExecutionEngine applies optimistic updates immediately after
+        order placement, so we skip the base class update to avoid
+        double-counting.
+        """
+        pass  # Already done in _execute_live_trade()
+
     def _post_execution(self, symbol, state, result, action_type, regime, strategy_name):
         """Post-execution logging and state updates with Live-specific logging."""
         # Use base class implementation for common logic

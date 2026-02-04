@@ -108,10 +108,10 @@ class MockBroker(BaseBrokerInterface):
         )
     
     # ========================================================================
-    # ORDER PLACEMENT (Sync - for backward compatibility)
+    # ORDER PLACEMENT (Async)
     # ========================================================================
-    
-    def place_market_order(
+
+    async def place_market_order(
         self,
         symbol: str,
         qty: int,
@@ -119,14 +119,14 @@ class MockBroker(BaseBrokerInterface):
         price: Optional[float] = None
     ) -> OrderResult:
         """
-        Place market order with instant fill.
-        
+        Place market order with instant fill (async).
+
         Args:
             symbol: Trading symbol
             qty: Quantity (positive)
             side: OrderSide.BUY or OrderSide.SELL
             price: Market price (required for mock)
-            
+
         Returns:
             OrderResult with fill details
         """
@@ -135,13 +135,13 @@ class MockBroker(BaseBrokerInterface):
                 success=False,
                 message="MockBroker requires price parameter"
             )
-        
+
         if qty <= 0:
             return OrderResult(
                 success=False,
                 message=f"Invalid quantity: {qty}"
             )
-        
+
         # Convert OrderSide enum to string for internal use
         if side == OrderSide.BUY:
             side_str = "buy"
@@ -152,7 +152,7 @@ class MockBroker(BaseBrokerInterface):
                 success=False,
                 message=f"Invalid side: {side}"
             )
-        
+
         # Apply slippage
         if self.slippage > 0:
             if side == OrderSide.BUY:
@@ -161,10 +161,10 @@ class MockBroker(BaseBrokerInterface):
             else:
                 # Slippage decreases sell price
                 price = price * (1 - self.slippage)
-        
+
         # Generate order ID
         order_id = f"mock_{uuid.uuid4().hex[:8]}"
-        
+
         # Check affordability
         if side == OrderSide.BUY:
             cost = (qty * price) + self.commission
@@ -184,21 +184,21 @@ class MockBroker(BaseBrokerInterface):
                     order_id=order_id,
                     message=f"Insufficient position: need {qty}, have {have}"
                 )
-        
+
         # Apply fill to portfolio (use string for portfolio)
         try:
             self.portfolio.apply_fill(symbol, side_str, qty, price)
-            
+
             # Deduct commission
             self.portfolio.cash -= self.commission
-            
+
         except Exception as e:
             return OrderResult(
                 success=False,
                 order_id=order_id,
                 message=f"Fill failed: {e}"
             )
-        
+
         # Create result
         result = OrderResult(
             success=True,
@@ -208,25 +208,24 @@ class MockBroker(BaseBrokerInterface):
             filled_qty=qty,
             avg_price=price,
             status=OrderStatus.FILLED,
-            timestamp=datetime.now(timezone.utc),
             commission=self.commission
         )
-        
+
         # Store order
         self.orders[order_id] = result
-        
-        # Emit events (fire and forget)
+
+        # Emit events (await instead of create_task)
         if self.event_handler:
-            asyncio.create_task(self._emit_order_events(result))
-        
+            await self._emit_order_events(result)
+
         self.logger.info(
             f"[{symbol}] {side.value.upper()} {qty}@${price:.2f} "
             f"(commission=${self.commission:.2f})"
         )
-        
+
         return result
-    
-    def place_oco_order(
+
+    async def place_oco_order(
         self,
         symbol: str,
         qty: int,
@@ -234,17 +233,17 @@ class MockBroker(BaseBrokerInterface):
         limit_price: float
     ) -> OrderResult:
         """
-        Place OCO order (one-cancels-other).
-        
+        Place OCO order (one-cancels-other) async.
+
         Not implemented in mock - just returns success.
         """
         order_id = f"mock_oco_{uuid.uuid4().hex[:8]}"
-        
+
         self.logger.warning(
             f"[{symbol}] OCO order placed but not tracked "
             f"(stop=${stop_price:.2f}, limit=${limit_price:.2f})"
         )
-        
+
         return OrderResult(
             success=True,
             order_id=order_id,

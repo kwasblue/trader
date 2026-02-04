@@ -315,17 +315,19 @@ class TestSchwabBrokerConnection:
     @pytest.mark.asyncio
     async def test_connect_success(self, broker, mock_client):
         """Test successful connection."""
-        result = await broker.connect()
-        assert result is True
+        await broker.connect()
+        # connect() returns None per standardized interface (Phase 1)
+        # Check internal state instead
         assert broker._connected is True
 
     @pytest.mark.asyncio
     async def test_connect_failure(self, broker, mock_client):
-        """Test connection failure."""
+        """Test connection failure raises RuntimeError."""
         mock_client.account_number.return_value = {"accountNumbers": []}
 
-        result = await broker.connect()
-        assert result is False
+        with pytest.raises(RuntimeError, match="Failed to retrieve Schwab account"):
+            await broker.connect()
+        # After failure, _connected should be False
         assert broker._connected is False
 
     @pytest.mark.asyncio

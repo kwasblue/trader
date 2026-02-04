@@ -36,6 +36,7 @@ from core.events.events import (EVENT_NEW_BAR, BarPayload, EVENT_STRATEGY_SIGNAL
 from core.simulator.simulation import compute_atr, classify_regime  # reuse your helpers
 from core.broker.alpaca_broker import AlpacaBroker
 from core.logic.live_execution_engine import LiveExecutionEngine
+from core.app_types import SignalContext
 from core.logic.trade_logic_manager import DynamicTradeLogicManager
 from core.executor import LiveExecutor
 from core.historical_data_updater import HistoricalDataUpdater
@@ -343,15 +344,18 @@ class AlpacaLiveRunner:
         state.regime_persist = gs.regime_persist
 
         # hand off to engine (engine should enforce gates; runner is context-only)
-        await self.engine.handle_signal(
+        context = SignalContext(
             symbol=symbol,
-            state=state,
             signal=signal,
             price=last_px,
             atr=float(atr or 0.0),
             regime=regime,
+            timestamp=ts,
             strategy_name=strategy_name,
+            market_open=True,  # Alpaca streaming only runs during market hours
+            metadata={'state': state}
         )
+        await self.engine.handle_signal_context(context)
 
         # telemetry
         pos = self.portfolio.positions.get(symbol)
@@ -382,7 +386,7 @@ class AlpacaLiveRunner:
         # connect + subscribe
         self.broker.api_key = os.getenv("ALPACA_API_KEY")
         self.broker.api_secret = os.getenv("ALPACA_SECRET_KEY")
-        self.broker.connect()
+        self.broker.connect_sync()  # Use sync wrapper for non-async context
 
         # CRITICAL: Sync state with broker before trading
         self.logger.info("Syncing portfolio state with broker...")

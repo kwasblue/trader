@@ -24,8 +24,9 @@ from core.events.events import (
 @pytest.fixture
 def event_handler():
     """Create a fresh EventHandler for testing."""
-    # Reset singleton for testing
+    # Reset singleton for testing - must reset BOTH flags!
     EventHandler._instance = None
+    EventHandler._initialized = False
     handler = EventHandler()
     return handler
 
@@ -35,6 +36,7 @@ def reset_singleton():
     """Reset the EventHandler singleton after each test."""
     yield
     EventHandler._instance = None
+    EventHandler._initialized = False  # Must reset this too!
 
 
 class TestEventHandlerBasics:

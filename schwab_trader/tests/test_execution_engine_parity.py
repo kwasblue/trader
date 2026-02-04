@@ -422,5 +422,147 @@ class TestBaseClassInheritance:
         assert mock_method is ExecutionEngineBase._get_exit_quantity
 
 
+# ============================================================================
+# Phase 2: Portfolio State Management Tests
+# ============================================================================
+
+class TestPortfolioStaleDetection:
+    """Test portfolio state staleness detection."""
+
+    def test_portfolio_stale_when_never_updated(self):
+        """Portfolio should be stale if never updated."""
+        portfolio = PortfolioState(cash=100000)
+        assert portfolio.is_stale() is True
+
+    def test_portfolio_not_stale_after_update(self):
+        """Portfolio should not be stale immediately after update."""
+        portfolio = PortfolioState(cash=100000)
+        portfolio.mark_updated()
+        assert portfolio.is_stale() is False
+
+    def test_portfolio_not_stale_after_sync(self):
+        """Portfolio should not be stale after sync."""
+        portfolio = PortfolioState(cash=100000)
+        portfolio.mark_synced()
+        assert portfolio.is_stale() is False
+        assert portfolio.last_sync_time is not None
+        assert portfolio.last_update_time is not None
+
+    def test_portfolio_stale_with_custom_threshold(self):
+        """Portfolio staleness respects custom threshold."""
+        portfolio = PortfolioState(cash=100000)
+        portfolio.mark_updated()
+
+        # Should not be stale with very short threshold
+        assert portfolio.is_stale(threshold_seconds=0.001) is False
+
+    def test_apply_fill_marks_updated(self):
+        """Apply fill should mark portfolio as updated."""
+        portfolio = PortfolioState(cash=100000)
+        portfolio.apply_fill("AAPL", "buy", 10, 150.0)
+        assert portfolio.last_update_time is not None
+        assert portfolio.is_stale() is False
+
+    def test_update_price_marks_updated(self):
+        """Update price should mark portfolio as updated."""
+        portfolio = PortfolioState(cash=100000)
+        portfolio.positions["AAPL"] = SymbolPosition(qty=10, avg_price=150.0)
+        portfolio.update_price("AAPL", 152.0)
+        assert portfolio.last_update_time is not None
+
+
+class TestLiveEngineOptimisticUpdates:
+    """Test LiveExecutionEngine optimistic portfolio updates."""
+
+    @pytest.mark.asyncio
+    async def test_live_engine_updates_portfolio_on_trade(self, shared_components):
+        """LiveExecutionEngine should update portfolio after order placement."""
+        # Create fresh portfolio
+        portfolio = PortfolioState(cash=100000)
+        shared_components['portfolio'] = portfolio
+
+        # Create engine
+        with patch.object(LiveExecutionEngine, '_sync_portfolio_with_broker', return_value=None):
+            engine = LiveExecutionEngine(
+                broker=shared_components['broker'],
+                executor=shared_components['executor'],
+                sizer=shared_components['sizer'],
+                performance_tracker=shared_components['performance_tracker'],
+                trade_logic_manager=shared_components['trade_logic_manager'],
+                portfolio=portfolio,
+                sync_on_start=False
+            )
+
+        # Execute a buy trade
+        state = SymbolState(symbol="AAPL")
+        result = await engine._execute_live_trade(
+            symbol="AAPL",
+            state=state,
+            side=OrderSide.BUY,
+            qty=10,
+            price=150.0,
+            atr=2.5,
+            action_type="entry"
+        )
+
+        # Verify portfolio was updated
+        assert result is not None
+        assert "AAPL" in portfolio.positions
+        assert portfolio.positions["AAPL"].qty == 10
+        assert portfolio.last_update_time is not None
+
+    @pytest.mark.asyncio
+    async def test_live_engine_skips_double_update(self, shared_components):
+        """LiveExecutionEngine should not double-update portfolio in _post_execution."""
+        portfolio = PortfolioState(cash=100000)
+        shared_components['portfolio'] = portfolio
+
+        with patch.object(LiveExecutionEngine, '_sync_portfolio_with_broker', return_value=None):
+            engine = LiveExecutionEngine(
+                broker=shared_components['broker'],
+                executor=shared_components['executor'],
+                sizer=shared_components['sizer'],
+                performance_tracker=shared_components['performance_tracker'],
+                trade_logic_manager=shared_components['trade_logic_manager'],
+                portfolio=portfolio,
+                sync_on_start=False
+            )
+
+        # Verify the override exists
+        assert hasattr(engine, '_update_portfolio_after_execution')
+
+        # The override should do nothing
+        from core.app_types import OrderResult
+        result = OrderResult(symbol="AAPL", filled_qty=10, avg_fill_price=150.0)
+
+        # Store initial position count
+        initial_positions = len(portfolio.positions)
+
+        # Call _update_portfolio_after_execution (should be no-op)
+        engine._update_portfolio_after_execution("AAPL", result)
+
+        # Position count should not have changed
+        assert len(portfolio.positions) == initial_positions
+
+
+class TestReconcilerConfig:
+    """Test ReconcilerConfig defaults and settings."""
+
+    def test_reconciler_interval_reduced(self):
+        """ReconcilerConfig interval should be 15 seconds."""
+        from core.state_reconciler import ReconcilerConfig
+
+        config = ReconcilerConfig()
+        assert config.reconcile_interval == 15  # Reduced from 60
+
+    def test_reconciler_stale_threshold_exists(self):
+        """ReconcilerConfig should have stale_threshold_seconds."""
+        from core.state_reconciler import ReconcilerConfig
+
+        config = ReconcilerConfig()
+        assert hasattr(config, 'stale_threshold_seconds')
+        assert config.stale_threshold_seconds == 30
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

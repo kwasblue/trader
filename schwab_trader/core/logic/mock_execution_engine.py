@@ -26,7 +26,7 @@ from core.logic.default_trade_logic import DefaultTradeLogicManager
 from core.logic.portfolio_state import PortfolioState
 from core.logic.symbol_state import SymbolState
 from core.drawdown_monitor import DrawdownMonitor
-from core.app_types import OrderResult
+from core.app_types import OrderResult, SignalContext
 from core.enums import OrderSide
 from loggers.logger import Logger
 from core.events.eventhandler import EventHandler
@@ -152,7 +152,142 @@ class MockExecutionEngine(ExecutionEngineBase):
     # ========================================================================
     # MAIN SIGNAL HANDLING
     # ========================================================================
-    
+
+    # Minimum confidence threshold for signal processing
+    min_signal_confidence: float = 0.0
+
+    async def handle_signal_context(
+        self,
+        context: SignalContext
+    ) -> Optional[OrderResult]:
+        """
+        Handle signal with mock execution using unified context.
+
+        Simulates trade execution with instant fills.
+
+        Args:
+            context: SignalContext containing all signal data
+
+        Returns:
+            OrderResult if executed, None if skipped
+        """
+        # Filter low confidence signals
+        if context.confidence < self.min_signal_confidence:
+            self.logger.debug(
+                f"[{context.symbol}] Signal confidence {context.confidence:.2f} "
+                f"below threshold {self.min_signal_confidence:.2f}"
+            )
+            return None
+
+        # Check if trading is halted
+        if getattr(self, '_halted', False):
+            self.logger.debug(f"[{context.symbol}] Trading halted - ignoring signal")
+            return None
+
+        # Get or create state from metadata or symbol_states
+        state = context.metadata.get('state')
+        if state is None:
+            if context.symbol not in self.symbol_states:
+                self.symbol_states[context.symbol] = SymbolState(symbol=context.symbol)
+            state = self.symbol_states[context.symbol]
+
+        # Track bar for bar-based cooldown (call on every signal = every bar)
+        if hasattr(self, 'trade_logic_manager') and self.trade_logic_manager:
+            # Get the trade logic and notify of new bar
+            trade_logic = self.trade_logic_manager.get(context.symbol, context.regime)
+            if hasattr(trade_logic, 'on_bar'):
+                trade_logic.on_bar(context.symbol)
+
+        # Skip hold signals
+        if context.is_hold():
+            self.logger.debug(f"[{context.symbol}] HOLD signal - no action")
+            return None
+
+        # Drawdown monitor check - only if drawdown_monitor is set
+        if self.drawdown_monitor and not self.drawdown_monitor.can_trade(context.symbol):
+            self.logger.warning(
+                f"[{context.symbol}] Trade blocked by drawdown monitor "
+                f"(drawdown lock or cooldown active)"
+            )
+            return None
+
+        # Set strategy name
+        state.strategy_name = context.strategy_name
+
+        self.logger.info(
+            f"[MOCK] [{context.symbol}] Processing signal: {context.signal} @ ${context.price:.2f} "
+            f"(regime={context.regime}, strategy={context.strategy_name}, confidence={context.confidence:.2f})"
+        )
+
+        try:
+            # Get appropriate trade logic
+            trade_logic = self.trade_logic_manager.get(context.symbol, context.regime)
+
+            self.logger.debug(
+                f"[{context.symbol}] Using logic: {trade_logic.__class__.__name__}"
+            )
+
+            # 1. Check trade approval
+            # Filter out 'state' from metadata to avoid duplicate argument
+            extra_kwargs = {k: v for k, v in context.metadata.items() if k != 'state'}
+            should_trade, reason = self._check_trade_approval(
+                trade_logic, context.symbol, state, context.signal,
+                context.price, context.atr, context.regime,
+                market_open=context.market_open, df=context.df, **extra_kwargs
+            )
+
+            if not should_trade:
+                self.logger.info(f"[MOCK] [{context.symbol}] Trade blocked: {reason}")
+                return None
+
+            # 2. Determine action
+            action_type, side = self._determine_action(
+                context.symbol, state, context.signal, reason
+            )
+
+            self.logger.info(
+                f"[MOCK] [{context.symbol}] Action approved: {action_type} {side.value}"
+            )
+
+            # 3. Calculate quantity - PASS SIGNAL IN KWARGS
+            qty = self._calculate_quantity(
+                context.symbol, state, action_type, context.price, context.atr,
+                context.regime, trade_logic, signal=context.signal,
+                df=context.df, **extra_kwargs
+            )
+
+            if qty <= 0:
+                self.logger.warning(f"[MOCK] [{context.symbol}] Position size too small: {qty}")
+                return None
+
+            # 4. Execute mock trade (instant fill)
+            result = self._execute_mock_trade(
+                context.symbol, state, side, qty, context.price, action_type
+            )
+
+            if result:
+                # 5. Update portfolio
+                self._update_mock_portfolio(context.symbol, side, qty, context.price)
+
+                # 6. Post-execution tasks
+                self._post_execution(
+                    context.symbol, state, result, action_type, context.regime, context.strategy_name
+                )
+
+                # 7. Reset bar-based cooldown after trade
+                if hasattr(trade_logic, 'on_trade'):
+                    trade_logic.on_trade(context.symbol)
+
+                # 8. Emit events
+                if self.event_handler:
+                    await self._emit_trade_events(context.symbol, side, qty, context.price)
+
+            return result
+
+        except Exception as e:
+            self.logger.exception(f"[MOCK] [{context.symbol}] Error in mock execution: {e}")
+            return None
+
     async def handle_signal(
         self,
         symbol: str,
@@ -165,105 +300,30 @@ class MockExecutionEngine(ExecutionEngineBase):
         **kwargs
     ) -> Optional[OrderResult]:
         """
-        Handle signal with mock execution.
-        
+        DEPRECATED: Use handle_signal_context() instead.
+
+        Handle signal with mock execution (backward compatible wrapper).
+
         Simulates trade execution with instant fills.
         """
-        # Check if trading is halted
-        if getattr(self, '_halted', False):
-            self.logger.debug(f"[{symbol}] Trading halted - ignoring signal")
-            return None
+        from datetime import datetime, timezone
 
-        # Track bar for bar-based cooldown (call on every signal = every bar)
-        if hasattr(self, 'trade_logic_manager') and self.trade_logic_manager:
-            # Get the trade logic and notify of new bar
-            trade_logic = self.trade_logic_manager.get(symbol, regime)
-            if hasattr(trade_logic, 'on_bar'):
-                trade_logic.on_bar(symbol)
-
-        # Skip hold signals
-        if signal == 0:
-            self.logger.debug(f"[{symbol}] HOLD signal - no action")
-            return None
-
-        # Drawdown monitor check - only if drawdown_monitor is set
-        if self.drawdown_monitor and not self.drawdown_monitor.can_trade(symbol):
-            self.logger.warning(
-                f"[{symbol}] Trade blocked by drawdown monitor "
-                f"(drawdown lock or cooldown active)"
-            )
-            return None
-        
-        # Set strategy name
-        state.strategy_name = strategy_name
-        
-        self.logger.info(
-            f"[MOCK] [{symbol}] Processing signal: {signal} @ ${price:.2f} "
-            f"(regime={regime}, strategy={strategy_name})"
+        # Create SignalContext from parameters
+        context = SignalContext.from_kwargs(
+            symbol=symbol,
+            signal=signal,
+            price=price,
+            atr=atr,
+            regime=regime,
+            timestamp=datetime.now(timezone.utc),
+            strategy_name=strategy_name,
+            df=kwargs.get('df'),
+            market_open=kwargs.get('market_open', True),
+            state=state,
+            **{k: v for k, v in kwargs.items() if k not in ('df', 'market_open')}
         )
-        
-        try:
-            # Get appropriate trade logic
-            trade_logic  = self.trade_logic_manager.get(symbol, regime)
 
-            
-            self.logger.debug(
-                f"[{symbol}] Using logic: {trade_logic.__class__.__name__}"
-            )
-            
-            # 1. Check trade approval
-            should_trade, reason = self._check_trade_approval(
-                trade_logic, symbol, state, signal, price, atr, regime, **kwargs
-            )
-            
-            if not should_trade:
-                self.logger.info(f"[MOCK] [{symbol}] Trade blocked: {reason}")
-                return None
-            
-            # 2. Determine action
-            action_type, side = self._determine_action(symbol, state, signal, reason)
-            
-            self.logger.info(
-                f"[MOCK] [{symbol}] Action approved: {action_type} {side.value}"
-            )
-            
-            # 3. Calculate quantity - PASS SIGNAL IN KWARGS
-            qty = self._calculate_quantity(
-                symbol, state, action_type, price, atr, regime, trade_logic, 
-                signal=signal, **kwargs
-            )
-            
-            if qty <= 0:
-                self.logger.warning(f"[MOCK] [{symbol}] Position size too small: {qty}")
-                return None
-            
-            # 4. Execute mock trade (instant fill)
-            result = self._execute_mock_trade(
-                symbol, state, side, qty, price, action_type
-            )
-            
-            if result:
-                # 5. Update portfolio
-                self._update_mock_portfolio(symbol, side, qty, price)
-
-                # 6. Post-execution tasks
-                self._post_execution(
-                    symbol, state, result, action_type, regime, strategy_name
-                )
-
-                # 7. Reset bar-based cooldown after trade
-                if hasattr(trade_logic, 'on_trade'):
-                    trade_logic.on_trade(symbol)
-
-                # 8. Emit events
-                if self.event_handler:
-                    await self._emit_trade_events(symbol, side, qty, price)
-
-            return result
-            
-        except Exception as e:
-            self.logger.exception(f"[MOCK] [{symbol}] Error in mock execution: {e}")
-            return None
+        return await self.handle_signal_context(context)
         
     # ========================================================================
     # MOCK-SPECIFIC METHODS
