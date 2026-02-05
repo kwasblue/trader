@@ -1,0 +1,8 @@
+{
+    "default": {
+        "trending": "momentum_strategy",
+        "ranging": "mean_reversion_strategy",
+        "volatile": "defensive_strategy",
+        "default": "momentum_strategy"
+    }
+}

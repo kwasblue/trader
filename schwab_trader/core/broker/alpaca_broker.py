@@ -689,11 +689,13 @@ class AlpacaBroker(BaseBrokerInterface):
             return OrderResult(order_id=getattr(o, "id", None))
 
     def _mk_position_view(self, p) -> PositionView:
+        current_price = _to_float(getattr(p, "current_price", None))
         return PositionView(
             symbol=getattr(p, "symbol", None),
             qty=float(getattr(p, "qty", 0) or 0),
             avg_entry_price=_to_float(getattr(p, "avg_entry_price", None)),
-            market_price=_to_float(getattr(p, "current_price", None)),
+            market_price=current_price,
+            last_price=current_price,  # Set last_price for compatibility
             unrealized_pl=_to_float(getattr(p, "unrealized_pl", None)),
             unrealized_plpc=_to_float(getattr(p, "unrealized_plpc", None)),
             side=str(getattr(p, "side", "")).lower(),

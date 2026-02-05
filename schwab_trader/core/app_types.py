@@ -209,13 +209,23 @@ class PositionView:
     market_price: Optional[float] = None
     side: Optional[str] = None  # 'long', 'short', 'flat'
     last_price: Optional[float] = None  # alias for market_price
+    unrealized_pl: Optional[float] = None  # P&L from broker
+    unrealized_plpc: Optional[float] = None  # P&L percentage from broker
 
     def to_dict(self) -> Dict:
         return asdict(self)
 
     @property
+    def avg_price(self) -> float:
+        """Alias for avg_entry_price for backwards compatibility."""
+        return self.avg_entry_price
+
+    @property
     def unrealized_pnl(self) -> float:
         """Calculate unrealized P&L if market price is available."""
+        # Use broker-provided P&L if available
+        if self.unrealized_pl is not None:
+            return self.unrealized_pl
         if self.market_price is None or self.qty == 0:
             return 0.0
         return (self.market_price - self.avg_entry_price) * self.qty

@@ -404,19 +404,25 @@ class AutoTrader:
             self.stats["errors"].append(f"{self.scheduler.now_et()}: Pre-flight failed")
             # Still do post-market activities
         else:
-            # 3. Run trading session
+            # 3. Wait for market to actually open (preflight runs in pre-market buffer)
+            await self._wait_for_market_to_open()
+
+            if not self.running:
+                return
+
+            # 4. Run trading session
             await self._run_trading_session()
 
         if not self.running:
             return
 
-        # 4. Post-market: update historical data
+        # 5. Post-market: update historical data
         await self._run_post_market()
 
         if not self.running:
             return
 
-        # 5. Sleep until next trading day
+        # 6. Sleep until next trading day
         await self._sleep_until_next_day()
 
     async def _wait_for_market_open(self) -> None:
@@ -453,6 +459,34 @@ class AutoTrader:
             # Sleep in chunks to allow graceful shutdown
             sleep_time = min(wait_seconds, 300)  # Max 5 minute sleep chunks
             await asyncio.sleep(sleep_time)
+
+    async def _wait_for_market_to_open(self) -> None:
+        """Wait until market is actually open (after preflight completes in pre-market buffer)."""
+        if self.scheduler.is_market_open():
+            return
+
+        now = self.scheduler.now_et()
+        next_open = self.scheduler.get_next_market_open()
+        wait_seconds = (next_open - now).total_seconds()
+
+        if wait_seconds <= 0:
+            return
+
+        minutes = int(wait_seconds // 60)
+        seconds = int(wait_seconds % 60)
+
+        self.logger.info(f"Waiting {minutes}m {seconds}s for market to open at {next_open.strftime('%H:%M')} ET")
+        print(f"[{now.strftime('%H:%M:%S')}] Pre-flight complete. Market opens in {minutes}m {seconds}s")
+
+        # Sleep in small chunks to allow graceful shutdown
+        while self.running and wait_seconds > 0:
+            chunk = min(wait_seconds, 30)  # 30 second chunks
+            await asyncio.sleep(chunk)
+            wait_seconds -= chunk
+
+            # Check if market opened (handles edge cases)
+            if self.scheduler.is_market_open():
+                return
 
     async def _run_preflight(self) -> bool:
         """Run pre-flight checks."""

@@ -360,11 +360,41 @@ class LiveExecutionEngine(ExecutionEngineBase):
     # LIVE-SPECIFIC METHODS
     # ========================================================================
     
+    async def _has_pending_orders(self, symbol: str) -> bool:
+        """
+        Check if there are any pending orders for a symbol.
+
+        Used to prevent race conditions where we delete position state
+        while orders are still pending (not yet filled).
+
+        Args:
+            symbol: Trading symbol to check
+
+        Returns:
+            True if there are open/pending orders for this symbol
+        """
+        try:
+            open_orders = await self.broker.get_open_orders()
+            for order in open_orders:
+                if order.symbol == symbol:
+                    self.logger.debug(
+                        f"[{symbol}] Found pending order: {order.order_id} "
+                        f"({order.side} {order.qty} @ status={order.status})"
+                    )
+                    return True
+            return False
+        except Exception as e:
+            self.logger.warning(f"[{symbol}] Failed to check pending orders: {e}")
+            # Conservative: assume pending orders exist on error
+            return True
+
     async def _refresh_position(self, symbol: str) -> None:
         """
         Refresh position from broker before executing.
 
         Critical for live trading to avoid stale state.
+        Checks for pending orders before deleting positions to prevent
+        race conditions.
         """
         try:
             broker_position = await self.broker.get_position(symbol)
@@ -381,7 +411,14 @@ class LiveExecutionEngine(ExecutionEngineBase):
                     f"[{symbol}] Position refreshed: qty={broker_position.qty}"
                 )
             elif symbol in self.portfolio.positions:
-                # Position closed on broker but still in our state
+                # Position not on broker - check for pending orders before deleting
+                # This prevents race condition where order is placed but not yet filled
+                if await self._has_pending_orders(symbol):
+                    self.logger.debug(
+                        f"[{symbol}] Position pending (has open orders), keeping local state"
+                    )
+                    return
+                # No pending orders, safe to remove position
                 del self.portfolio.positions[symbol]
                 self.logger.warning(
                     f"[{symbol}] Position removed (not found on broker)"
@@ -390,6 +427,52 @@ class LiveExecutionEngine(ExecutionEngineBase):
         except Exception as e:
             self.logger.warning(f"[{symbol}] Failed to refresh position: {e}")
     
+    async def _cancel_conflicting_orders(self, symbol: str, side: OrderSide) -> None:
+        """
+        Cancel any open orders that would conflict with a new order.
+
+        Alpaca rejects orders that would create a "wash trade" (opposite-side
+        order while another is pending). This method cancels existing orders
+        on the same symbol before placing a new order.
+
+        Args:
+            symbol: Trading symbol
+            side: Side of the new order (buy/sell)
+        """
+        try:
+            open_orders = await self.broker.get_open_orders()
+            orders_to_cancel = []
+
+            for order in open_orders:
+                if order.symbol != symbol:
+                    continue
+
+                # Cancel orders on opposite side (would cause wash trade)
+                order_side = order.side.lower() if order.side else ""
+                new_side = "buy" if side == OrderSide.BUY else "sell"
+
+                if order_side != new_side:
+                    orders_to_cancel.append(order)
+                    self.logger.info(
+                        f"[{symbol}] Will cancel conflicting {order_side} order "
+                        f"{order.order_id} before placing {new_side} order"
+                    )
+
+            # Cancel conflicting orders
+            for order in orders_to_cancel:
+                try:
+                    await self.broker.cancel_order(order.order_id)
+                    self.logger.info(
+                        f"[{symbol}] Cancelled conflicting order {order.order_id}"
+                    )
+                except Exception as e:
+                    self.logger.warning(
+                        f"[{symbol}] Failed to cancel order {order.order_id}: {e}"
+                    )
+
+        except Exception as e:
+            self.logger.warning(f"[{symbol}] Failed to check/cancel conflicting orders: {e}")
+
     async def _validate_live_execution(
         self,
         symbol: str,
@@ -476,6 +559,10 @@ class LiveExecutionEngine(ExecutionEngineBase):
                 f"[LIVE EXECUTION] [{symbol}] Placing {side.value} order: "
                 f"{qty} shares @ ~${price:.2f}"
             )
+
+            # Cancel any conflicting orders before placing new one
+            # This prevents wash trade rejections from Alpaca
+            await self._cancel_conflicting_orders(symbol, side)
 
             # Place order directly via broker (qty already calculated)
             side_str = "buy" if side == OrderSide.BUY else "sell"

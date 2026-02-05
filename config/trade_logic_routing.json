@@ -1,0 +1,41 @@
+{
+    "default": {
+        "trending": {
+            "trade_logic_class": "default",
+            "params": {
+                "tp_mult_normal": 2.0,
+                "sl_mult_normal": 1.5,
+                "exit_fraction": 0.25,
+                "trailing_stop": true,
+                "cooldown_seconds": 300,
+                "max_positions": 10
+            }
+        },
+        "ranging": {
+            "trade_logic_class": "default",
+            "params": {
+                "tp_mult_normal": 1.5,
+                "sl_mult_normal": 2.0,
+                "exit_fraction": 0.5,
+                "trailing_stop": false,
+                "cooldown_seconds": 600,
+                "max_positions": 5
+            }
+        },
+        "volatile": {
+            "trade_logic_class": "default",
+            "params": {
+                "tp_mult_normal": 3.0,
+                "sl_mult_normal": 2.5,
+                "exit_fraction": 0.25,
+                "trailing_stop": true,
+                "cooldown_seconds": 300,
+                "max_positions": 3
+            }
+        },
+        "default": {
+            "trade_logic_class": "default",
+            "params": {}
+        }
+    }
+}
