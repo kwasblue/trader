@@ -10,10 +10,13 @@ Tracks all state for a single symbol including:
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
 from typing import Optional, List
 from datetime import datetime, timezone
 from loggers.logger import Logger
+
+from core.enums import PositionState
 
 # Module-level logger instance
 _logger_instance = Logger(
@@ -98,6 +101,14 @@ class SymbolState:
     
     # Legacy/optional fields
     portfolio_value: float = 0.0  # For reference if needed
+
+    # Concurrency control
+    position_state: PositionState = PositionState.NONE
+    pending_order_id: Optional[str] = None
+
+    def __post_init__(self):
+        """Initialize asyncio lock for thread-safe operations."""
+        self._lock = asyncio.Lock()
     
     # ========================================================================
     # PROPERTIES
@@ -295,7 +306,7 @@ class SymbolState:
     def reset(self) -> None:
         """
         Reset state when position closed.
-        
+
         Clears all trade-specific fields but preserves symbol.
         """
         self.side = None
@@ -308,6 +319,9 @@ class SymbolState:
         self.bars_held = 0
         self.max_favorable_excursion = None
         self.max_adverse_excursion = None
+        # Reset position lifecycle state
+        self.position_state = PositionState.NONE
+        self.pending_order_id = None
         # Note: strategy_name preserved (may use same strategy next time)
 
         logger.debug(f"[{self.symbol}] State reset")

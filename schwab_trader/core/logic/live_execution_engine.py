@@ -10,7 +10,7 @@ Executes real trades using:
 
 from __future__ import annotations
 
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, TYPE_CHECKING
 from datetime import datetime, timezone
 import logging
 
@@ -23,11 +23,22 @@ from core.base.trade_logic_manager_base import TradeLogicManagerBase
 from core.logic.portfolio_state import PortfolioState
 from core.logic.symbol_state import SymbolState
 from core.app_types import OrderResult, SignalContext
-from core.enums import OrderSide
+from core.enums import OrderSide, PositionState
+from core.order_registry import OrderRegistry
+from core.trade_validator import TradeValidator
+from core.logging_config import (
+    get_component_logger,
+    generate_correlation_id,
+    set_correlation_id,
+    format_log_message,
+)
 from loggers.logger import Logger
 
 # Import the router we created
 from core.logic.trade_logic_router import TradeLogicRouter
+
+if TYPE_CHECKING:
+    from core.state_reconciler import StateReconciler
 
 class LiveExecutionEngine(ExecutionEngineBase):
     """
@@ -82,11 +93,12 @@ class LiveExecutionEngine(ExecutionEngineBase):
         performance_tracker: TradeLoggerBase,
         trade_logic_manager: TradeLogicManagerBase,
         portfolio: PortfolioState,
-        sync_on_start: bool = True
+        sync_on_start: bool = True,
+        reconciler: Optional["StateReconciler"] = None
     ):
         """
         Initialize live execution engine.
-        
+
         Args:
             broker: Live broker connection
             executor: Trade executor
@@ -95,6 +107,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
             trade_logic_manager: Default trade logic (or router)
             portfolio: Portfolio state tracker
             sync_on_start: Whether to sync portfolio with broker on start
+            reconciler: State reconciler for halt checking
         """
         super().__init__(
             broker=broker,
@@ -104,18 +117,32 @@ class LiveExecutionEngine(ExecutionEngineBase):
             trade_logic_manager=trade_logic_manager,
             portfolio=portfolio
         )
-        
+
+        # Store reconciler reference for halt checking
+        self.reconciler = reconciler
+
         # Setup logic router
         if isinstance(trade_logic_manager, TradeLogicRouter):
             self.logic_router = trade_logic_manager
         else:
             self.logic_router = TradeLogicRouter(trade_logic_manager)
-        
-        # Setup logging
+
+        # Initialize order registry for local order tracking
+        self.order_registry = OrderRegistry()
+
+        # Initialize trade validator
+        self.validator = TradeValidator(
+            portfolio=portfolio,
+            order_registry=self.order_registry,
+            reconciler=reconciler,
+            broker=broker,
+        )
+
+        # Setup logging with structured support
         self.logger = Logger("execution_engine.log", "LiveExecutionEngine", propagate=True).get_logger()
-        
-        self.logger.info("LiveExecutionEngine initialized")
-        
+
+        self.logger.info("LiveExecutionEngine initialized with order registry and validator")
+
         # Sync portfolio with broker if requested
         # NOTE: sync_on_start should be False for live trading -
         # the AlpacaRunner/SchwabRunner handles sync via StateReconciler
@@ -181,11 +208,16 @@ class LiveExecutionEngine(ExecutionEngineBase):
         Handle live trading signal using unified context.
 
         Orchestrates:
-        1. Route to appropriate trade logic
-        2. Check approval
-        3. Size position
-        4. Execute via live broker
-        5. Log and update state
+        1. Check halt state (enforced)
+        2. Pre-trade validation
+        3. Route to appropriate trade logic
+        4. Check approval
+        5. Size position
+        6. Set pending state
+        7. Register order
+        8. Execute via live broker
+        9. Update state on result
+        10. Log and update state
 
         Args:
             context: SignalContext containing all signal data
@@ -193,17 +225,37 @@ class LiveExecutionEngine(ExecutionEngineBase):
         Returns:
             OrderResult if executed, None if skipped
         """
+        # Generate correlation ID for tracing this operation
+        correlation_id = generate_correlation_id()
+        set_correlation_id(correlation_id)
+
+        # 1. HALT CHECK (enforced!)
+        if self.reconciler and self.reconciler.is_halted:
+            self.logger.warning(
+                format_log_message(
+                    "Trading halted by reconciler - skipping signal",
+                    correlation_id=correlation_id,
+                    symbol=context.symbol
+                )
+            )
+            return None
+
         # Filter low confidence signals
         if context.confidence < self.min_signal_confidence:
             self.logger.debug(
-                f"[{context.symbol}] Signal confidence {context.confidence:.2f} "
-                f"below threshold {self.min_signal_confidence:.2f}"
+                format_log_message(
+                    f"Signal confidence {context.confidence:.2f} below threshold",
+                    correlation_id=correlation_id,
+                    symbol=context.symbol
+                )
             )
             return None
 
         # Skip hold signals
         if context.is_hold():
-            self.logger.debug(f"[{context.symbol}] HOLD signal - no action")
+            self.logger.debug(
+                format_log_message("HOLD signal - no action", correlation_id=correlation_id, symbol=context.symbol)
+            )
             return None
 
         # Get or create state from metadata or create new
@@ -219,8 +271,12 @@ class LiveExecutionEngine(ExecutionEngineBase):
         state.strategy_name = context.strategy_name
 
         self.logger.info(
-            f"[LIVE] [{context.symbol}] Processing signal: {context.signal} @ ${context.price:.2f} "
-            f"(regime={context.regime}, strategy={context.strategy_name}, confidence={context.confidence:.2f})"
+            format_log_message(
+                f"Processing signal: {context.signal} @ ${context.price:.2f} "
+                f"(regime={context.regime}, strategy={context.strategy_name})",
+                correlation_id=correlation_id,
+                symbol=context.symbol
+            )
         )
 
         try:
@@ -232,7 +288,11 @@ class LiveExecutionEngine(ExecutionEngineBase):
             )
 
             self.logger.debug(
-                f"[{context.symbol}] Using logic: {trade_logic.__class__.__name__}"
+                format_log_message(
+                    f"Using logic: {trade_logic.__class__.__name__}",
+                    correlation_id=correlation_id,
+                    symbol=context.symbol
+                )
             )
 
             # 1. Sync position from broker (live safety check)
@@ -249,16 +309,18 @@ class LiveExecutionEngine(ExecutionEngineBase):
             )
 
             if not should_trade:
-                self.logger.info(f"[LIVE] [{context.symbol}] Trade blocked: {reason}")
+                self.logger.info(
+                    format_log_message(
+                        f"Trade blocked: {reason}",
+                        correlation_id=correlation_id,
+                        symbol=context.symbol
+                    )
+                )
                 return None
 
             # 3. Determine action
             action_type, side = self._determine_action(
                 context.symbol, state, context.signal, reason
-            )
-
-            self.logger.info(
-                f"[LIVE] [{context.symbol}] Action approved: {action_type} {side.value}"
             )
 
             # 4. Calculate quantity
@@ -269,30 +331,125 @@ class LiveExecutionEngine(ExecutionEngineBase):
             )
 
             if qty <= 0:
-                self.logger.warning(f"[LIVE] [{context.symbol}] Position size too small: {qty}")
+                self.logger.warning(
+                    format_log_message(
+                        f"Position size too small: {qty}",
+                        correlation_id=correlation_id,
+                        symbol=context.symbol
+                    )
+                )
                 return None
 
-            # 5. Pre-execution validation (live safety)
+            # 5. PRE-TRADE VALIDATION via TradeValidator
+            position_state = self.portfolio.get_position_state(context.symbol)
+            validation = await self.validator.validate(
+                symbol=context.symbol,
+                side="buy" if side == OrderSide.BUY else "sell",
+                qty=qty,
+                price=context.price,
+                action_type=action_type,
+                position_state=position_state,
+            )
+
+            if not validation.valid:
+                self.logger.warning(
+                    format_log_message(
+                        f"Validation failed: {validation.errors}",
+                        correlation_id=correlation_id,
+                        symbol=context.symbol
+                    )
+                )
+                return None
+
+            if validation.warnings:
+                self.logger.info(
+                    format_log_message(
+                        f"Validation warnings: {validation.warnings}",
+                        correlation_id=correlation_id,
+                        symbol=context.symbol
+                    )
+                )
+
+            # Legacy validation (kept for additional safety)
             if not await self._validate_live_execution(context.symbol, side, qty, context.price):
-                self.logger.error(f"[LIVE] [{context.symbol}] Pre-execution validation failed")
+                self.logger.error(
+                    format_log_message(
+                        "Pre-execution validation failed",
+                        correlation_id=correlation_id,
+                        symbol=context.symbol
+                    )
+                )
                 return None
 
-            # 6. Execute trade (LIVE)
+            # 6. SET PENDING STATE
+            pending_state = (
+                PositionState.PENDING_ENTRY if action_type == "entry"
+                else PositionState.PENDING_EXIT if action_type in ("exit", "reversal")
+                else PositionState.PENDING_ADD
+            )
+            await self.portfolio.set_position_state(context.symbol, pending_state)
+            state.position_state = pending_state
+
+            self.logger.info(
+                format_log_message(
+                    f"Action approved: {action_type} {side.value} {qty} @ ${context.price:.2f}",
+                    correlation_id=correlation_id,
+                    symbol=context.symbol,
+                    state=pending_state.value
+                )
+            )
+
+            # 7. Execute trade (LIVE) - order registration happens inside
             result = await self._execute_live_trade(
                 context.symbol, state, side, qty, context.price, context.atr, action_type,
+                correlation_id=correlation_id,
                 df=context.df, **extra_kwargs
             )
 
+            # 8. UPDATE STATE ON RESULT
             if result:
-                # 7. Post-execution tasks
+                # Order filled - update to OPEN or NONE
+                new_state = PositionState.OPEN if action_type == "entry" else PositionState.NONE
+                await self.portfolio.set_position_state(context.symbol, new_state)
+                state.position_state = new_state
+
+                # 9. Post-execution tasks
                 self._post_execution(
                     context.symbol, state, result, action_type, context.regime, context.strategy_name
                 )
 
+                self.logger.info(
+                    format_log_message(
+                        f"Execution complete: {side.value} {qty} filled",
+                        correlation_id=correlation_id,
+                        symbol=context.symbol,
+                        state=new_state.value
+                    )
+                )
+            else:
+                # Order failed - revert state
+                await self.portfolio.set_position_state(
+                    context.symbol,
+                    PositionState.OPEN if action_type in ("exit", "partial_exit") else PositionState.NONE
+                )
+                state.position_state = PositionState.NONE
+
             return result
 
         except Exception as e:
-            self.logger.exception(f"[LIVE] [{context.symbol}] Error in live execution: {e}")
+            self.logger.exception(
+                format_log_message(
+                    f"Error in live execution: {e}",
+                    correlation_id=correlation_id,
+                    symbol=context.symbol
+                )
+            )
+
+            # Revert position state on error
+            try:
+                await self.portfolio.set_position_state(context.symbol, PositionState.NONE)
+            except Exception:
+                pass
 
             # Alert on live execution errors
             self.performance_tracker.log_error(
@@ -302,7 +459,8 @@ class LiveExecutionEngine(ExecutionEngineBase):
                     'symbol': context.symbol,
                     'signal': context.signal,
                     'price': context.price,
-                    'strategy': context.strategy_name
+                    'strategy': context.strategy_name,
+                    'correlation_id': correlation_id,
                 }
             )
 
@@ -364,8 +522,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
         """
         Check if there are any pending orders for a symbol.
 
-        Used to prevent race conditions where we delete position state
-        while orders are still pending (not yet filled).
+        Uses local OrderRegistry first (fast), falls back to broker query.
 
         Args:
             symbol: Trading symbol to check
@@ -373,12 +530,18 @@ class LiveExecutionEngine(ExecutionEngineBase):
         Returns:
             True if there are open/pending orders for this symbol
         """
+        # First check local registry (fast, no network call)
+        if await self.order_registry.has_pending_orders(symbol):
+            self.logger.debug(f"[{symbol}] Found pending order in local registry")
+            return True
+
+        # Fall back to broker query for orders we might have missed
         try:
             open_orders = await self.broker.get_open_orders()
             for order in open_orders:
                 if order.symbol == symbol:
                     self.logger.debug(
-                        f"[{symbol}] Found pending order: {order.order_id} "
+                        f"[{symbol}] Found pending order on broker: {order.order_id} "
                         f"({order.side} {order.qty} @ status={order.status})"
                     )
                     return True
@@ -393,8 +556,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
         Refresh position from broker before executing.
 
         Critical for live trading to avoid stale state.
-        Checks for pending orders before deleting positions to prevent
-        race conditions.
+        Uses local OrderRegistry for fast pending order checks.
         """
         try:
             broker_position = await self.broker.get_position(symbol)
@@ -411,15 +573,23 @@ class LiveExecutionEngine(ExecutionEngineBase):
                     f"[{symbol}] Position refreshed: qty={broker_position.qty}"
                 )
             elif symbol in self.portfolio.positions:
-                # Position not on broker - check for pending orders before deleting
-                # This prevents race condition where order is placed but not yet filled
-                if await self._has_pending_orders(symbol):
+                # Position not on broker - use local registry for fast check
+                if await self.order_registry.has_pending_orders(symbol):
                     self.logger.debug(
-                        f"[{symbol}] Position pending (has open orders), keeping local state"
+                        f"[{symbol}] Has pending orders in registry, keeping local state"
                     )
                     return
+
+                # Double-check with broker (in case registry missed something)
+                if await self._has_pending_orders(symbol):
+                    self.logger.debug(
+                        f"[{symbol}] Has pending orders on broker, keeping local state"
+                    )
+                    return
+
                 # No pending orders, safe to remove position
                 del self.portfolio.positions[symbol]
+                await self.portfolio.clear_position_state(symbol)
                 self.logger.warning(
                     f"[{symbol}] Position removed (not found on broker)"
                 )
@@ -431,44 +601,59 @@ class LiveExecutionEngine(ExecutionEngineBase):
         """
         Cancel any open orders that would conflict with a new order.
 
+        Uses local OrderRegistry for fast lookup, then cancels via broker.
         Alpaca rejects orders that would create a "wash trade" (opposite-side
-        order while another is pending). This method cancels existing orders
-        on the same symbol before placing a new order.
+        order while another is pending).
 
         Args:
             symbol: Trading symbol
             side: Side of the new order (buy/sell)
         """
+        new_side = "buy" if side == OrderSide.BUY else "sell"
+
         try:
+            # Use local registry for fast lookup
+            conflicting = await self.order_registry.get_conflicting_orders(symbol, new_side)
+
+            if conflicting:
+                self.logger.info(
+                    f"[{symbol}] Found {len(conflicting)} conflicting orders in registry"
+                )
+
+                for order in conflicting:
+                    try:
+                        await self.broker.cancel_order(order.order_id)
+                        await self.order_registry.update_status(order.order_id, "cancelled")
+                        self.logger.info(
+                            f"[{symbol}] Cancelled conflicting order {order.order_id}"
+                        )
+                    except Exception as e:
+                        self.logger.warning(
+                            f"[{symbol}] Failed to cancel order {order.order_id}: {e}"
+                        )
+
+            # Also check broker for orders not in our registry
             open_orders = await self.broker.get_open_orders()
-            orders_to_cancel = []
 
             for order in open_orders:
                 if order.symbol != symbol:
                     continue
 
-                # Cancel orders on opposite side (would cause wash trade)
+                # Skip if already in registry (handled above)
+                if await self.order_registry.get(order.order_id):
+                    continue
+
                 order_side = order.side.lower() if order.side else ""
-                new_side = "buy" if side == OrderSide.BUY else "sell"
-
                 if order_side != new_side:
-                    orders_to_cancel.append(order)
-                    self.logger.info(
-                        f"[{symbol}] Will cancel conflicting {order_side} order "
-                        f"{order.order_id} before placing {new_side} order"
-                    )
-
-            # Cancel conflicting orders
-            for order in orders_to_cancel:
-                try:
-                    await self.broker.cancel_order(order.order_id)
-                    self.logger.info(
-                        f"[{symbol}] Cancelled conflicting order {order.order_id}"
-                    )
-                except Exception as e:
-                    self.logger.warning(
-                        f"[{symbol}] Failed to cancel order {order.order_id}: {e}"
-                    )
+                    try:
+                        await self.broker.cancel_order(order.order_id)
+                        self.logger.info(
+                            f"[{symbol}] Cancelled conflicting broker order {order.order_id}"
+                        )
+                    except Exception as e:
+                        self.logger.warning(
+                            f"[{symbol}] Failed to cancel order {order.order_id}: {e}"
+                        )
 
         except Exception as e:
             self.logger.warning(f"[{symbol}] Failed to check/cancel conflicting orders: {e}")
@@ -543,6 +728,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
         price: float,
         atr: float,
         action_type: str,
+        correlation_id: Optional[str] = None,
         **kwargs
     ) -> Optional[OrderResult]:
         """
@@ -551,13 +737,21 @@ class LiveExecutionEngine(ExecutionEngineBase):
         This places actual orders in the market!
         All logic (sizing, validation) already done upstream.
 
-        After order placement, applies optimistic update to portfolio.
+        After order placement:
+        1. Registers order in local OrderRegistry
+        2. Applies optimistic update to portfolio
         The reconciler will correct if the actual fill differs.
         """
+        correlation_id = correlation_id or generate_correlation_id()
+        side_str = "buy" if side == OrderSide.BUY else "sell"
+
         try:
             self.logger.info(
-                f"[LIVE EXECUTION] [{symbol}] Placing {side.value} order: "
-                f"{qty} shares @ ~${price:.2f}"
+                format_log_message(
+                    f"Placing {side.value} order: {qty} shares @ ~${price:.2f}",
+                    correlation_id=correlation_id,
+                    symbol=symbol
+                )
             )
 
             # Cancel any conflicting orders before placing new one
@@ -565,8 +759,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
             await self._cancel_conflicting_orders(symbol, side)
 
             # Place order directly via broker (qty already calculated)
-            side_str = "buy" if side == OrderSide.BUY else "sell"
-            await self.broker.place_order(
+            order_response = await self.broker.place_order(
                 symbol=symbol,
                 qty=qty,
                 side=side_str,
@@ -574,10 +767,38 @@ class LiveExecutionEngine(ExecutionEngineBase):
                 time_in_force="day"
             )
 
+            # Extract order ID from response if available
+            order_id = (
+                getattr(order_response, 'order_id', None) or
+                getattr(order_response, 'id', None) or
+                f"LIVE_{symbol}_{datetime.now(timezone.utc).timestamp()}"
+            )
+
+            # Register order in local registry for tracking
+            tracked_order = await self.order_registry.register(
+                order_id=str(order_id),
+                symbol=symbol,
+                side=side_str,
+                qty=qty,
+                correlation_id=correlation_id,
+                status="pending"
+            )
+
+            # Update symbol state with pending order
+            state.pending_order_id = str(order_id)
+
+            self.logger.debug(
+                format_log_message(
+                    f"Order registered in local registry: {order_id}",
+                    correlation_id=correlation_id,
+                    symbol=symbol
+                )
+            )
+
             # Create result from expected values
             # Note: Actual fill price/qty will be tracked via order events
             result = OrderResult(
-                order_id=f"LIVE_{symbol}_{datetime.now(timezone.utc).timestamp()}",
+                order_id=str(order_id),
                 symbol=symbol,
                 side=side,
                 filled_qty=qty,
@@ -587,20 +808,30 @@ class LiveExecutionEngine(ExecutionEngineBase):
             # Optimistic portfolio update
             # Apply expected fill immediately so UI/logic sees updated state
             # The reconciler will correct if actual fill differs
-            self.portfolio.apply_fill(symbol, side_str, qty, price)
+            await self.portfolio.apply_fill_safe(symbol, side_str, qty, price)
             self.portfolio.mark_updated()
-            self.logger.debug(
-                f"[{symbol}] Optimistic portfolio update applied: {side_str} {qty}@${price:.2f}"
-            )
+
+            # Update order status to filled (optimistic)
+            await self.order_registry.update_status(str(order_id), "filled", qty)
 
             self.logger.info(
-                f"[LIVE] [{symbol}] Order submitted: {side.value} {qty} shares"
+                format_log_message(
+                    f"Order submitted and optimistic fill applied: {side.value} {qty}@${price:.2f}",
+                    correlation_id=correlation_id,
+                    symbol=symbol
+                )
             )
 
             return result
 
         except Exception as e:
-            self.logger.exception(f"[LIVE] [{symbol}] Execution failed: {e}")
+            self.logger.exception(
+                format_log_message(
+                    f"Execution failed: {e}",
+                    correlation_id=correlation_id,
+                    symbol=symbol
+                )
+            )
 
             # Log to performance tracker
             self.performance_tracker.log_error(
@@ -610,7 +841,8 @@ class LiveExecutionEngine(ExecutionEngineBase):
                     'symbol': symbol,
                     'side': side.value,
                     'qty': qty,
-                    'price': price
+                    'price': price,
+                    'correlation_id': correlation_id,
                 }
             )
 

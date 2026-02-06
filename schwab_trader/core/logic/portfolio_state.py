@@ -11,13 +11,14 @@ Maintains real-time portfolio state including:
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 from datetime import datetime, timezone
 from loggers.logger import Logger
 
 from core.app_types import BrokerSnapshot, OrderResult
-from core.enums import OrderSide
+from core.enums import OrderSide, PositionState
 
 
 
@@ -134,13 +135,19 @@ class PortfolioState:
         logger_name="PortfolioState",
         propagate=True
     ).get_logger()
-    
-    
+
     def __post_init__(self):
-        """Initialize equity history with starting cash."""
+        """Initialize equity history, lock, and position states."""
         if not self.equity_history:
             self.equity_history.append(self.cash)
             self.total_value = self.cash
+
+        # Concurrency protection - asyncio.Lock for thread-safe operations
+        self._lock = asyncio.Lock()
+
+        # Position states per symbol for lifecycle tracking
+        self._position_states: Dict[str, PositionState] = {}
+
         self.port_logger.info(f"PortfolioState initialized: cash=${self.cash:,.2f}")
 
     # ========================================================================
@@ -328,7 +335,7 @@ class PortfolioState:
     def update_position(self, symbol: str, order_result: OrderResult) -> None:
         """
         Update position from OrderResult (convenience method).
-        
+
         Args:
             symbol: Trading symbol
             order_result: Result from broker execution
@@ -340,7 +347,134 @@ class PortfolioState:
             qty=order_result.filled_qty,
             price=order_result.avg_price
         )
-    
+
+    # ========================================================================
+    # THREAD-SAFE ASYNC METHODS
+    # ========================================================================
+
+    def get_position_state(self, symbol: str) -> PositionState:
+        """
+        Get the current position state for a symbol.
+
+        Args:
+            symbol: Trading symbol
+
+        Returns:
+            PositionState for the symbol (NONE if not tracked)
+        """
+        return self._position_states.get(symbol, PositionState.NONE)
+
+    async def apply_fill_safe(
+        self,
+        symbol: str,
+        side: str,
+        qty: int,
+        price: float
+    ) -> None:
+        """
+        Thread-safe fill application with lock.
+
+        Use this method when applying fills from async contexts
+        to prevent race conditions.
+
+        Args:
+            symbol: Trading symbol
+            side: Order side ("buy" or "sell")
+            qty: Quantity traded
+            price: Fill price
+        """
+        async with self._lock:
+            self.apply_fill(symbol, side, qty, price)
+
+    async def set_position_state(
+        self,
+        symbol: str,
+        state: PositionState,
+        order_id: Optional[str] = None
+    ) -> bool:
+        """
+        Set the position state for a symbol (thread-safe).
+
+        Validates state transitions and logs changes.
+
+        Args:
+            symbol: Trading symbol
+            state: New position state
+            order_id: Optional order ID associated with state change
+
+        Returns:
+            True if state was updated, False if transition not allowed
+        """
+        async with self._lock:
+            current = self._position_states.get(symbol, PositionState.NONE)
+
+            # Validate transition
+            if not self._is_valid_state_transition(current, state):
+                self.port_logger.warning(
+                    f"[{symbol}] Invalid state transition: {current.value} -> {state.value}"
+                )
+                return False
+
+            self._position_states[symbol] = state
+
+            log_msg = f"[{symbol}] Position state: {current.value} -> {state.value}"
+            if order_id:
+                log_msg += f" (order={order_id})"
+
+            self.port_logger.debug(log_msg)
+            return True
+
+    def _is_valid_state_transition(
+        self,
+        current: PositionState,
+        new: PositionState
+    ) -> bool:
+        """
+        Check if a state transition is valid.
+
+        Valid transitions:
+        - NONE -> PENDING_ENTRY
+        - PENDING_ENTRY -> OPEN, NONE (cancelled/rejected)
+        - OPEN -> PENDING_EXIT, PENDING_ADD, NONE (closed)
+        - PENDING_EXIT -> OPEN (cancel), NONE (filled)
+        - PENDING_ADD -> OPEN (filled or cancelled)
+
+        Args:
+            current: Current state
+            new: Proposed new state
+
+        Returns:
+            True if transition is allowed
+        """
+        valid_transitions = {
+            PositionState.NONE: {PositionState.PENDING_ENTRY},
+            PositionState.PENDING_ENTRY: {PositionState.OPEN, PositionState.NONE},
+            PositionState.OPEN: {
+                PositionState.PENDING_EXIT,
+                PositionState.PENDING_ADD,
+                PositionState.NONE
+            },
+            PositionState.PENDING_EXIT: {PositionState.OPEN, PositionState.NONE},
+            PositionState.PENDING_ADD: {PositionState.OPEN},
+        }
+
+        allowed = valid_transitions.get(current, set())
+        return new in allowed
+
+    async def clear_position_state(self, symbol: str) -> None:
+        """
+        Clear position state for a symbol (set to NONE).
+
+        Args:
+            symbol: Trading symbol
+        """
+        async with self._lock:
+            old_state = self._position_states.pop(symbol, PositionState.NONE)
+            if old_state != PositionState.NONE:
+                self.port_logger.debug(
+                    f"[{symbol}] Position state cleared: {old_state.value} -> none"
+                )
+
     # ========================================================================
     # P&L CALCULATIONS
     # ========================================================================

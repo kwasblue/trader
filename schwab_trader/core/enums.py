@@ -99,10 +99,10 @@ class PositionSide(str, Enum):
     LONG = "long"
     SHORT = "short"
     FLAT = "flat"  # No position
-    
+
     def __str__(self) -> str:
         return self.value
-    
+
     @property
     def sign(self) -> int:
         """Return +1 for long, -1 for short, 0 for flat."""
@@ -111,7 +111,7 @@ class PositionSide(str, Enum):
         elif self == PositionSide.SHORT:
             return -1
         return 0
-    
+
     @classmethod
     def from_quantity(cls, qty: float) -> "PositionSide":
         """Determine position side from quantity."""
@@ -120,6 +120,37 @@ class PositionSide(str, Enum):
         elif qty < 0:
             return cls.SHORT
         return cls.FLAT
+
+
+class PositionState(str, Enum):
+    """
+    Position lifecycle state for concurrency control.
+
+    Tracks the state of a position through order placement and fills
+    to prevent race conditions and duplicate orders.
+    """
+    NONE = "none"                    # No position, no pending orders
+    PENDING_ENTRY = "pending_entry"  # Entry order placed, awaiting fill
+    OPEN = "open"                    # Position active
+    PENDING_EXIT = "pending_exit"    # Exit order placed
+    PENDING_ADD = "pending_add"      # Adding to existing position
+
+    def __str__(self) -> str:
+        return self.value
+
+    @property
+    def is_pending(self) -> bool:
+        """Check if state represents a pending order."""
+        return self in (
+            PositionState.PENDING_ENTRY,
+            PositionState.PENDING_EXIT,
+            PositionState.PENDING_ADD
+        )
+
+    @property
+    def allows_new_orders(self) -> bool:
+        """Check if this state allows placing new orders."""
+        return self in (PositionState.NONE, PositionState.OPEN)
 
 
 # ============================================================================
