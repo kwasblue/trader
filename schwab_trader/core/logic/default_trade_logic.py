@@ -394,15 +394,21 @@ class DefaultTradeLogicManager(TradeLogicManagerBase):
     ) -> None:
         """Update trailing stop loss."""
         sl_mult = self.sl_mults[condition]
-        
+
         if self.is_long(state):
             # Trail stop up as price rises
             new_stop = price - (atr * sl_mult)
-            state.stop_loss = max(state.stop_loss, new_stop)
+            if state.stop_loss is None:
+                state.stop_loss = new_stop
+            else:
+                state.stop_loss = max(state.stop_loss, new_stop)
         else:
             # Trail stop down as price falls
             new_stop = price + (atr * sl_mult)
-            state.stop_loss = min(state.stop_loss, new_stop)
+            if state.stop_loss is None:
+                state.stop_loss = new_stop
+            else:
+                state.stop_loss = min(state.stop_loss, new_stop)
     
     def _update_excursions(
         self,
