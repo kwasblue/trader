@@ -14,7 +14,11 @@ Usage:
     python monitoring/app.py
 """
 import sys
+import warnings
 from pathlib import Path
+
+# Suppress sklearn warnings for small sample sizes
+warnings.filterwarnings("ignore", category=RuntimeWarning, module="sklearn")
 
 # Project root setup
 ROOT = Path(__file__).resolve().parents[1]

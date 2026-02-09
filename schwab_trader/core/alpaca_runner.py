@@ -31,7 +31,7 @@ from core.drawdown_monitor import DrawdownMonitor
 from core.historical_loader import HistoricalBarLoader
 from core.events.eventhandler import EventHandler, get_event_handler
 from core.events.events import (EVENT_NEW_BAR, BarPayload, EVENT_STRATEGY_SIGNAL, StrategySignalPayload,
-    EVENT_PNL_UPDATE, PnLPayload)
+    EVENT_PNL_UPDATE, PnLPayload, EVENT_POSITION_UPDATE, PositionPayload)
 
 from core.simulator.simulation import compute_atr, classify_regime  # reuse your helpers
 from core.broker.alpaca_broker import AlpacaBroker
@@ -98,6 +98,7 @@ class AlpacaLiveRunner:
             trade_logic_manager=DynamicTradeLogicManager(str(ROOT / "config" / "trade_logic_routing.json")),
             portfolio=self.portfolio,
             sync_on_start=False,  # Sync is done by reconciler in run()
+            event_handler=self.event_handler,  # For GUI visibility of trade decisions
         )
         # If your engine has optional attrs (per our earlier patch), wire them:
         if hasattr(self.engine, "trade_gate"):
@@ -398,6 +399,41 @@ class AlpacaLiveRunner:
                 f"Portfolio synced: {sync_result.broker_positions} positions, "
                 f"${sync_result.broker_cash:,.2f} cash"
             )
+
+            # Get actual broker values for GUI (not calculated)
+            broker_snapshot = await self.broker.get_account_info()
+
+            # Emit initial position updates for GUI
+            for symbol, pos_view in broker_snapshot.positions.items():
+                last_price = pos_view.market_price or pos_view.avg_entry_price
+                unrealized = pos_view.unrealized_pl or 0.0
+                await self.event_handler.emit(EVENT_POSITION_UPDATE, PositionPayload(
+                    symbol=symbol,
+                    qty=pos_view.qty,
+                    avg_price=pos_view.avg_entry_price,
+                    avg=pos_view.avg_entry_price,  # GUI model uses 'avg'
+                    last=last_price,  # GUI model uses 'last'
+                    unrealized=unrealized,
+                    unreal=unrealized,  # GUI model uses 'unreal'
+                    realized=0.0,
+                    market_value=pos_view.qty * last_price,
+                    side=pos_view.side or ("long" if pos_view.qty > 0 else "short"),
+                    timestamp=datetime.now(timezone.utc).isoformat(),
+                ))
+
+            # Emit initial PnL for GUI using broker's actual values
+            await self.event_handler.emit(EVENT_PNL_UPDATE, PnLPayload(
+                portfolio_value=broker_snapshot.equity,  # Use broker's equity, not calculated
+                equity_curve=[broker_snapshot.equity],
+                unrealized=sum(p.unrealized_pl or 0.0 for p in broker_snapshot.positions.values()),
+                realized=0.0,
+                drawdown=0.0,
+                cash=broker_snapshot.cash,
+                buying_power=broker_snapshot.buying_power,
+                timestamp=datetime.now(timezone.utc).isoformat(),
+            ))
+            self.logger.info(f"[GUI] Emitted initial state: equity=${broker_snapshot.equity:,.2f}, "
+                           f"cash=${broker_snapshot.cash:,.2f}, positions={len(broker_snapshot.positions)}")
 
         for sym in self.symbols:
             self.broker.subscribe_bars(self.on_alpaca_bar, sym)

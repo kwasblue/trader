@@ -11,6 +11,7 @@ Executes real trades using:
 from __future__ import annotations
 
 from typing import Optional, Dict, Any, TYPE_CHECKING
+import asyncio
 from datetime import datetime, timezone
 import logging
 
@@ -33,6 +34,7 @@ from core.logging_config import (
     format_log_message,
 )
 from loggers.logger import Logger
+from core.events.events import EVENT_ALERT, AlertPayload, EVENT_NEW_TRADE, TradePayload
 
 # Import the router we created
 from core.logic.trade_logic_router import TradeLogicRouter
@@ -94,7 +96,8 @@ class LiveExecutionEngine(ExecutionEngineBase):
         trade_logic_manager: TradeLogicManagerBase,
         portfolio: PortfolioState,
         sync_on_start: bool = True,
-        reconciler: Optional["StateReconciler"] = None
+        reconciler: Optional["StateReconciler"] = None,
+        event_handler: Optional[Any] = None
     ):
         """
         Initialize live execution engine.
@@ -108,6 +111,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
             portfolio: Portfolio state tracker
             sync_on_start: Whether to sync portfolio with broker on start
             reconciler: State reconciler for halt checking
+            event_handler: Event handler for emitting trade decision events
         """
         super().__init__(
             broker=broker,
@@ -120,6 +124,9 @@ class LiveExecutionEngine(ExecutionEngineBase):
 
         # Store reconciler reference for halt checking
         self.reconciler = reconciler
+
+        # Event handler for GUI notifications
+        self.event_handler = event_handler
 
         # Setup logic router
         if isinstance(trade_logic_manager, TradeLogicRouter):
@@ -316,6 +323,15 @@ class LiveExecutionEngine(ExecutionEngineBase):
                         symbol=context.symbol
                     )
                 )
+                # Emit alert for GUI visibility
+                if self.event_handler:
+                    signal_text = {-1: "SELL", 0: "HOLD", 1: "BUY"}.get(context.signal, "?")
+                    await self.event_handler.emit(EVENT_ALERT, AlertPayload(
+                        level="info",
+                        message=f"[{context.symbol}] {signal_text} blocked: {reason}",
+                        symbol=context.symbol,
+                        timestamp=datetime.now(timezone.utc).isoformat(),
+                    ))
                 return None
 
             # 3. Determine action
@@ -821,6 +837,18 @@ class LiveExecutionEngine(ExecutionEngineBase):
                     symbol=symbol
                 )
             )
+
+            # Emit trade event for GUI
+            if self.event_handler:
+                trade_payload: TradePayload = {
+                    "symbol": symbol,
+                    "side": side_str,
+                    "qty": qty,
+                    "price": price,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "pnl": None,  # P&L calculated separately
+                }
+                await self.event_handler.emit(EVENT_NEW_TRADE, trade_payload)
 
             return result
 

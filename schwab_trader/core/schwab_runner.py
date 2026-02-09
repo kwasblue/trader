@@ -43,7 +43,8 @@ from core.events.events import (
     EVENT_NEW_BAR, BarPayload,
     EVENT_STRATEGY_SIGNAL, StrategySignalPayload,
     EVENT_PNL_UPDATE, PnLPayload,
-    EVENT_HEALTH_UPDATE
+    EVENT_HEALTH_UPDATE,
+    EVENT_POSITION_UPDATE, PositionPayload
 )
 
 from core.simulator.simulation import compute_atr, classify_regime
@@ -138,6 +139,7 @@ class SchwabLiveRunner:
             performance_tracker=self.trade_logger,
             trade_logic_manager=DynamicTradeLogicManager(str(ROOT / "config" / "trade_logic_routing.json")),
             portfolio=self.portfolio,
+            event_handler=self.event_handler,  # For GUI visibility of trade decisions
         )
 
         # Wire optional attrs
@@ -488,6 +490,41 @@ class SchwabLiveRunner:
                 f"Portfolio synced: {sync_result.broker_positions} positions, "
                 f"${sync_result.broker_cash:,.2f} cash"
             )
+
+            # Get actual broker values for GUI (not calculated)
+            broker_snapshot = await self.broker.get_account_info()
+
+            # Emit initial position updates for GUI
+            for symbol, pos_view in broker_snapshot.positions.items():
+                last_price = pos_view.market_price or pos_view.avg_entry_price
+                unrealized = pos_view.unrealized_pl or 0.0
+                await self.event_handler.emit(EVENT_POSITION_UPDATE, PositionPayload(
+                    symbol=symbol,
+                    qty=pos_view.qty,
+                    avg_price=pos_view.avg_entry_price,
+                    avg=pos_view.avg_entry_price,  # GUI model uses 'avg'
+                    last=last_price,  # GUI model uses 'last'
+                    unrealized=unrealized,
+                    unreal=unrealized,  # GUI model uses 'unreal'
+                    realized=0.0,
+                    market_value=pos_view.qty * last_price,
+                    side=pos_view.side or ("long" if pos_view.qty > 0 else "short"),
+                    timestamp=datetime.now(timezone.utc).isoformat(),
+                ))
+
+            # Emit initial PnL for GUI using broker's actual values
+            await self.event_handler.emit(EVENT_PNL_UPDATE, PnLPayload(
+                portfolio_value=broker_snapshot.equity,
+                equity_curve=[broker_snapshot.equity],
+                unrealized=sum(p.unrealized_pl or 0.0 for p in broker_snapshot.positions.values()),
+                realized=0.0,
+                drawdown=0.0,
+                cash=broker_snapshot.cash,
+                buying_power=broker_snapshot.buying_power,
+                timestamp=datetime.now(timezone.utc).isoformat(),
+            ))
+            self.logger.info(f"[GUI] Emitted initial state: equity=${broker_snapshot.equity:,.2f}, "
+                           f"cash=${broker_snapshot.cash:,.2f}, positions={len(broker_snapshot.positions)}")
 
         # Start streaming
         stream_task = asyncio.create_task(self.broker.start_stream())

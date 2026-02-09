@@ -134,6 +134,7 @@ class ReconcilerConfig:
     stale_threshold_seconds: int = 30     # Portfolio state staleness threshold
     halt_on_critical: bool = True         # Halt trading on critical mismatch
     auto_correct_minor: bool = True       # Auto-sync minor mismatches
+    auto_sync_cash: bool = True           # Auto-sync cash on mismatch
 
     # Severity thresholds
     minor_qty_diff: float = 1.0           # Qty diff for 'minor'
@@ -482,12 +483,29 @@ class StateReconciler:
 
         # Also check cash mismatch
         if not result.cash_match:
-            await self._emit_alert(
-                f"Cash mismatch: local=${result.local_cash:,.2f} broker=${result.broker_cash:,.2f}",
-                "warning",
-                result,
-                correlation_id
-            )
+            if self.config.auto_sync_cash:
+                logger.info(
+                    format_log_message(
+                        f"Auto-syncing cash: local=${result.local_cash:,.2f} -> broker=${result.broker_cash:,.2f}",
+                        correlation_id=correlation_id
+                    )
+                )
+                if await self.sync_cash(correlation_id):
+                    actions_taken.append("cash_synced")
+                else:
+                    await self._emit_alert(
+                        f"Cash sync failed: local=${result.local_cash:,.2f} broker=${result.broker_cash:,.2f}",
+                        "warning",
+                        result,
+                        correlation_id
+                    )
+            else:
+                await self._emit_alert(
+                    f"Cash mismatch: local=${result.local_cash:,.2f} broker=${result.broker_cash:,.2f}",
+                    "warning",
+                    result,
+                    correlation_id
+                )
 
         result.action_taken = ", ".join(actions_taken) if actions_taken else "none"
 
@@ -696,6 +714,44 @@ class StateReconciler:
         result = await self.full_sync()
         self.clear_halt()
         return result
+
+    async def sync_cash(self, correlation_id: Optional[str] = None) -> bool:
+        """
+        Sync only cash balance from broker.
+
+        Lighter than full_sync when only cash is out of sync.
+
+        Returns:
+            True if sync successful, False otherwise
+        """
+        correlation_id = correlation_id or generate_correlation_id()
+
+        try:
+            snapshot = await self.broker.get_account_info()
+
+            if snapshot is None:
+                logger.error(
+                    format_log_message("Failed to get broker snapshot for cash sync", correlation_id=correlation_id)
+                )
+                return False
+
+            old_cash = self.portfolio.cash
+            self.portfolio.cash = snapshot.cash
+
+            logger.info(
+                format_log_message(
+                    f"Cash synced: ${old_cash:,.2f} -> ${snapshot.cash:,.2f}",
+                    correlation_id=correlation_id
+                )
+            )
+
+            return True
+
+        except Exception as e:
+            logger.error(
+                format_log_message(f"Cash sync failed: {e}", correlation_id=correlation_id)
+            )
+            return False
 
     # ========================================================================
     # HELPERS

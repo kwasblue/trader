@@ -468,12 +468,18 @@ class MockExecutionEngine(ExecutionEngineBase):
             # Position update event
             position = self.portfolio.positions.get(symbol)
             if position:
+                side = "long" if position.qty > 0 else "short" if position.qty < 0 else "flat"
                 position_payload: PositionPayload = {
                     "symbol": symbol,
                     "qty": position.qty,
                     "avg_price": position.avg_price,
+                    "avg": position.avg_price,  # GUI model uses 'avg'
+                    "last": position.last_price,  # GUI model uses 'last'
                     "unrealized": position.unrealized_pnl,
+                    "unreal": position.unrealized_pnl,  # GUI model uses 'unreal'
                     "realized": position.realized_pnl,
+                    "side": side,
+                    "market_value": position.qty * position.last_price,
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
                 asyncio.create_task(

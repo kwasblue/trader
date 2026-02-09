@@ -36,11 +36,15 @@ import signal
 import argparse
 import atexit
 import fcntl
+import warnings
 from pathlib import Path
 from datetime import datetime, time, timedelta
 from typing import List, Optional, Dict, Any
 from enum import Enum
 from zoneinfo import ZoneInfo
+
+# Suppress sklearn warnings for small sample sizes
+warnings.filterwarnings("ignore", category=RuntimeWarning, module="sklearn")
 
 # Add project root to path
 ROOT = Path(__file__).resolve().parent

@@ -237,6 +237,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.symbol_input.setMinimumWidth(120)
         self.symbol_input.setPlaceholderText("AAPL,MSFT,GOOGL")
 
+        # Day trade checkbox
+        self.day_trade_checkbox = QtWidgets.QCheckBox("Day Trade")
+        self.day_trade_checkbox.setToolTip("Enable day trading (allow same-day exits)")
+
         for a in [self.start_act, self.stop_act, self.clear_logs_act, self.export_csv_act, self.export_pdf_act]:
             tb.addAction(a)
         tb.addSeparator()
@@ -244,6 +248,7 @@ class MainWindow(QtWidgets.QMainWindow):
         tb.addWidget(self.mode_combo)
         tb.addWidget(self.symbol_label)
         tb.addWidget(self.symbol_input)
+        tb.addWidget(self.day_trade_checkbox)
         tb.addSeparator()
         tb.addWidget(self.panic_btn)
         tb.addWidget(self.flatten_btn_tb)
@@ -382,10 +387,21 @@ class MainWindow(QtWidgets.QMainWindow):
             if 'drawdown' in data:
                 self._set_kpi(self.dd_lbl, drawdown, pct=True)
 
-            # Buying Power (cash remaining)
+            # Buying Power and Cash from broker
             if hasattr(self, 'buying_power_lbl'):
-                cash = value - unrealized if value and unrealized else value
-                self.buying_power_lbl.setText(f"${cash:,.0f}")
+                buying_power = data.get('buying_power')
+                if buying_power is not None:
+                    self.buying_power_lbl.setText(f"${buying_power:,.0f}")
+                else:
+                    # Fallback: estimate from portfolio value - unrealized
+                    cash = value - unrealized if value and unrealized else value
+                    self.buying_power_lbl.setText(f"${cash:,.0f}")
+
+            # Cash label if exists
+            if hasattr(self, 'cash_lbl'):
+                cash = data.get('cash')
+                if cash is not None:
+                    self.cash_lbl.setText(f"${cash:,.0f}")
 
             # Update equity curve
             if value:
@@ -548,15 +564,22 @@ class MainWindow(QtWidgets.QMainWindow):
     def _gui_on_position(self, data: dict):
         """Handle position update from feeder (SYNC)."""
         try:
-            if hasattr(self, 'pos_model') and hasattr(self.pos_model, 'update_position'):
-                self.pos_model.update_position(data)
+            symbol = data.get('symbol', '')
+            qty = data.get('qty', 0)
+
+            if hasattr(self, 'pos_model'):
+                if qty != 0:
+                    # Update or add position
+                    if hasattr(self.pos_model, 'update_position'):
+                        self.pos_model.update_position(data)
+                else:
+                    # Remove position when qty is 0
+                    if hasattr(self.pos_model, 'remove_position'):
+                        self.pos_model.remove_position(symbol)
 
             # Track open positions
             if not hasattr(self, '_open_positions'):
                 self._open_positions = {}
-
-            symbol = data.get('symbol', '')
-            qty = data.get('qty', 0)
 
             if symbol:
                 if qty != 0:
@@ -1051,6 +1074,13 @@ class MainWindow(QtWidgets.QMainWindow):
         if not symbols:
             self._append_log("[ERROR] No symbols specified")
             return
+
+        # Enable day trade mode if checkbox is checked
+        day_trade = self.day_trade_checkbox.isChecked() if hasattr(self, 'day_trade_checkbox') else False
+        if day_trade:
+            from core.config_loader import enable_day_trade_mode
+            enable_day_trade_mode()
+            self._append_log("[CONFIG] Day trade mode enabled (swing mode disabled)")
 
         self._trading_active = True
         self._sim_running = True  # Also set sim_running for consistency
@@ -1803,15 +1833,17 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.unreal_lbl = self._kpi_label()
         self.realized_lbl = self._kpi_label()
+        self.cash_lbl = self._kpi_label()
         self.buying_power_lbl = self._kpi_label()
-        self.buying_power_lbl.setText("$100,000")
 
         rl.addWidget(self._metric_label("Unrealized P&L"), 0, 0)
         rl.addWidget(self.unreal_lbl, 0, 1)
         rl.addWidget(self._metric_label("Realized P&L"), 1, 0)
         rl.addWidget(self.realized_lbl, 1, 1)
-        rl.addWidget(self._metric_label("Buying Power"), 2, 0)
-        rl.addWidget(self.buying_power_lbl, 2, 1)
+        rl.addWidget(self._metric_label("Cash"), 2, 0)
+        rl.addWidget(self.cash_lbl, 2, 1)
+        rl.addWidget(self._metric_label("Buying Power"), 3, 0)
+        rl.addWidget(self.buying_power_lbl, 3, 1)
 
         left_col.addWidget(risk_box)
 

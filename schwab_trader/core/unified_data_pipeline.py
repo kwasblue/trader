@@ -621,6 +621,20 @@ class UnifiedDataPipeline:
             # Make a copy to avoid modifying original
             df_copy = df.copy()
 
+            # Reset index if it's a DatetimeIndex (processor sets Date as index)
+            if isinstance(df_copy.index, pd.DatetimeIndex):
+                df_copy = df_copy.reset_index()
+
+            # Convert datetime/Timestamp columns to ISO strings for JSON serialization
+            for col in df_copy.columns:
+                if pd.api.types.is_datetime64_any_dtype(df_copy[col]):
+                    df_copy[col] = df_copy[col].dt.strftime('%Y-%m-%dT%H:%M:%S')
+                elif df_copy[col].dtype == 'object':
+                    # Handle any Timestamp objects in object columns
+                    df_copy[col] = df_copy[col].apply(
+                        lambda x: x.isoformat() if isinstance(x, (pd.Timestamp, datetime)) else x
+                    )
+
             # Handle NaN and infinity values
             df_copy = df_copy.where(df_copy.notna(), None)
             df_copy = df_copy.replace({float('inf'): None, float('-inf'): None})

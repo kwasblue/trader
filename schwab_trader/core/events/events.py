@@ -112,22 +112,30 @@ class OrderStatusPayload(TypedDict):
     avg_price: Optional[float]
     timestamp: str
 
-class PositionPayload(TypedDict):
+class PositionPayload(TypedDict, total=False):
     symbol: str
     qty: float
     avg_price: float
     unrealized: float
     realized: float
     timestamp: str
+    # Extended fields for GUI display
+    side: str  # "long" or "short"
+    last: float  # Last/current price
+    avg: float  # Alias for avg_price (GUI model uses this)
+    unreal: float  # Alias for unrealized (GUI model uses this)
+    market_value: float  # Position market value
 
 # --- Performance ---
-class PnLPayload(TypedDict):
+class PnLPayload(TypedDict, total=False):
     portfolio_value: float
     equity_curve: List[float]
     unrealized: float
     realized: float
     drawdown: float
     timestamp: str
+    cash: float  # Available cash
+    buying_power: float  # Buying power from broker
 
 class PerformanceMetricsPayload(TypedDict):
     sharpe: float

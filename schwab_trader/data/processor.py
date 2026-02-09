@@ -235,8 +235,21 @@ class Processor:
             out["moy_cos"] = np.cos(2*np.pi*month/12.0)
             out["dow"] = idx.dayofweek.astype(float)
 
-        # tidy up
-        out = out.replace([np.inf, -np.inf], np.nan).dropna()
+        # tidy up - replace inf values with NaN
+        out = out.replace([np.inf, -np.inf], np.nan)
+
+        # Only require short-term features to be present (not 252-day lookbacks)
+        # This allows processing with less historical data
+        essential_features = ["ret_1d", "vol_21d", "ATR14", "rsi14", "sma_20"]
+        essential_existing = [f for f in essential_features if f in out.columns]
+
+        if essential_existing:
+            # Drop rows only where essential features are NaN
+            out = out.dropna(subset=essential_existing)
+        else:
+            # Fallback: drop rows where ALL values are NaN
+            out = out.dropna(how="all")
+
         return out
 
     def normalizing_scaling(self, df: pd.DataFrame, method='standard') -> pd.DataFrame:
@@ -397,8 +410,38 @@ class Processor:
         # keep a tidy column order: raw base then features
         combined = combined.loc[:, ~combined.columns.duplicated()].copy()
 
+        # --- 2b) Handle empty result from join (insufficient historical data) ---
+        if len(combined) == 0:
+            # Fall back to left join with base data if inner join produced nothing
+            # This happens when feature_engineering dropna() removes all rows
+            self.logger.warning(
+                f"Inner join produced 0 rows for {self.stock}. "
+                f"Falling back to base data with available indicators."
+            )
+            # Try joining with just indicators (less strict requirements)
+            combined = base.join(inds, how="left")
+            combined = combined.loc[:, ~combined.columns.duplicated()].copy()
+            # Drop rows with NaN in essential columns only
+            essential_cols = ["Open", "High", "Low", "Close", "Volume"]
+            essential_existing = [c for c in essential_cols if c in combined.columns]
+            if essential_existing:
+                combined = combined.dropna(subset=essential_existing)
+
+            if len(combined) == 0:
+                self.logger.error(f"No valid data for {self.stock} after fallback")
+                return (pd.DataFrame(), {}) if return_artifacts else pd.DataFrame()
+
         # --- 3) build numeric matrix for transforms ---
         num = combined.select_dtypes(include=[np.number]).copy()
+
+        # --- 3b) Validate numeric data before scaling ---
+        if len(num) == 0 or num.shape[1] == 0:
+            self.logger.warning(
+                f"No numeric columns for scaling in {self.stock}. Returning combined data without scaling."
+            )
+            out = combined.reset_index().rename(columns={"index": "Date"})
+            return (out, {"feature_cols": []}) if return_artifacts else out
+
         # bound PCA components by numeric dimensionality and samples
         max_pca = max(1, min(pca_components, num.shape[1], max(1, num.shape[0]-1)))
 

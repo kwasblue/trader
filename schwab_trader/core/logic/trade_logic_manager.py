@@ -137,29 +137,29 @@ class DynamicTradeLogicManager:
         self._load_config()
 
     def _load_global_trade_logic_params(self) -> Dict[str, Any]:
-        """Load global trade logic params from trading_config.json."""
+        """Load global trade logic params from config loader (respects runtime overrides)."""
         try:
-            # Find trading_config.json relative to config_path
-            trading_config_path = self.config_path.parent / "trading_config.json"
-            if trading_config_path.exists():
-                with open(trading_config_path, 'r') as f:
-                    config = json.load(f)
-                    trade_logic = config.get("trade_logic", {})
+            # Use config loader to get runtime config (includes day_trade mode overrides)
+            from core.config_loader import get_config
+            config = get_config()
+            trade_logic = config.trade_logic
 
-                    # Extract relevant params
-                    params = {
-                        "swing_mode": trade_logic.get("swing_mode", False),
-                        "min_hold_days": trade_logic.get("min_hold_days", 1),
-                        "cooldown_mode": trade_logic.get("cooldown_mode", "bars"),
-                        "cooldown_bars": trade_logic.get("cooldown_bars", 5),
-                        "cooldown_seconds": trade_logic.get("cooldown_seconds", 300),
-                        "min_bars_to_hold": trade_logic.get("min_bars_to_hold", 3),
-                    }
+            # Extract relevant params from dataclass
+            params = {
+                "swing_mode": trade_logic.swing_mode,
+                "min_hold_days": trade_logic.min_hold_days,
+                "cooldown_mode": trade_logic.cooldown_mode,
+                "cooldown_bars": trade_logic.cooldown_bars,
+                "cooldown_seconds": trade_logic.cooldown_seconds,
+                "min_bars_to_hold": trade_logic.min_bars_to_hold,
+            }
 
-                    if params.get("swing_mode"):
-                        self.logger.info(f"SWING MODE ENABLED: min_hold_days={params['min_hold_days']}")
+            if params.get("swing_mode"):
+                self.logger.info(f"SWING MODE ENABLED: min_hold_days={params['min_hold_days']}")
+            else:
+                self.logger.info(f"DAY TRADE MODE: swing_mode=False, min_hold_days={params['min_hold_days']}")
 
-                    return params
+            return params
         except Exception as e:
             self.logger.warning(f"Failed to load global trade logic params: {e}")
 

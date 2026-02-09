@@ -402,11 +402,25 @@ class CredentialValidator:
 
     def _get_schwab_token_paths(self) -> list:
         """Get possible paths for Schwab token file."""
-        return [
-            Path(self.program_path) / "tokens" / "token_file.json",
-            self.root / "tokens" / "token_file.json",
-            Path.home() / ".schwab" / "token_file.json",
-        ]
+        paths = []
+
+        # First, check config-specified path (e.g., "tokens/token_file")
+        config_token_path = self.config.get("folders", {}).get("tokens")
+        if config_token_path:
+            paths.append(self.root / config_token_path)
+            # Also check with .json extension
+            paths.append(self.root / f"{config_token_path}.json")
+
+        # Standard locations (with and without .json extension)
+        for base in [Path(self.program_path), self.root]:
+            paths.append(base / "tokens" / "token_file")
+            paths.append(base / "tokens" / "token_file.json")
+
+        # Home directory fallback
+        paths.append(Path.home() / ".schwab" / "token_file")
+        paths.append(Path.home() / ".schwab" / "token_file.json")
+
+        return paths
 
     def _check_access_token(self, token_data: dict) -> Tuple[CredentialStatus, Optional[int]]:
         """

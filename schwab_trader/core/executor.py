@@ -500,12 +500,18 @@ class LiveExecutor(BaseExecutor):
         avg_price = self.entry_prices.get(symbol, 0.0)
         # Calculate unrealized P&L for this position
         unrealized = qty * (last_price - avg_price) if qty and avg_price else 0.0
+        side = "long" if qty > 0 else "short" if qty < 0 else "flat"
         payload: PositionPayload = {
             "symbol": symbol,
             "qty": qty,
             "avg_price": avg_price,
+            "avg": avg_price,  # GUI model uses 'avg'
+            "last": last_price,  # GUI model uses 'last'
             "unrealized": unrealized,
+            "unreal": unrealized,  # GUI model uses 'unreal'
             "realized": 0.0,  # Per-symbol realized not tracked; global in _realized_pnl
+            "side": side,
+            "market_value": qty * last_price,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
         asyncio.create_task(self.bus.emit(EVENT_POSITION_UPDATE, payload))
