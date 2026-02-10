@@ -35,6 +35,32 @@ This installs the `trader` command globally in your virtual environment.
 
 ---
 
+## Daily Startup Workflow
+
+Recommended sequence to start trading each day:
+
+```bash
+# 1. Activate virtual environment
+source .venv/bin/activate
+
+# 2. Run preflight checks (also starts token keeper)
+trader preflight -v
+
+# 3. Check token status
+trader token status
+
+# 4. Update historical data if needed
+trader data update
+
+# 5. Launch GUI for simulation/monitoring
+trader gui
+
+# Or start autonomous trading
+trader start --broker alpaca
+```
+
+---
+
 ## Trading Commands
 
 ### Start Daemon
@@ -93,6 +119,8 @@ trader gui --speed 1.0
 
 ## Pre-Flight Checks
 
+The preflight command validates system readiness before trading. When Schwab credentials are valid, it automatically starts the token keeper daemon to maintain token freshness.
+
 ```bash
 # Quick check
 trader preflight
@@ -109,6 +137,14 @@ trader preflight --reauth-schwab
 # Full check with data update
 trader preflight -v --update-data
 ```
+
+**What preflight checks:**
+- Environment variables (API keys)
+- Broker credentials (Alpaca, Schwab)
+- Token expiry status
+- Historical data freshness
+- Configuration files
+- Auto-starts token keeper daemon if Schwab tokens are valid
 
 ---
 
@@ -398,8 +434,68 @@ The original standalone scripts are still available for compatibility:
 
 ---
 
+## Global Options
+
+```bash
+# Show version
+trader --version
+
+# Show help for any command
+trader --help
+trader start --help
+trader token --help
+```
+
+---
+
+## Troubleshooting
+
+### Environment Variables Not Loading
+
+If `trader token status` shows MISSING for credentials that are set in `.env`:
+
+```bash
+# Verify .env exists in project root
+ls -la .env
+
+# Check .env contents (redacted)
+head -5 .env
+
+# Ensure you're in the virtual environment
+which python  # Should show .venv/bin/python
+```
+
+### Token Keeper Not Starting
+
+```bash
+# Check if already running
+pgrep -f token_keeper.py
+
+# View token keeper logs
+tail -f logs/token_keeper.log
+
+# Start manually
+trader token keeper --daemon
+```
+
+### Strategy Selection Fails
+
+```bash
+# Ensure historical data exists
+trader data status --symbols AAPL
+
+# Update data if needed
+trader data update --symbols AAPL --days 365
+
+# Then retry
+trader strategy select AAPL --save
+```
+
+---
+
 ## See Also
 
 - [Quick Reference](quick-reference.md) - Condensed cheatsheet
-- [Operations Guide](operations.md) - Daily operations procedures
-- [Pre-Flight Checks](preflight.md) - Detailed pre-flight documentation
+- [Architecture](architecture.md) - System design overview
+- [Event System](event-system.md) - Event-driven architecture
+- [Strategies](strategies.md) - Available trading strategies

@@ -1,82 +1,228 @@
-#%%
-import sys, os
+"""
+Test suite for the Aggregator class.
+
+Tests data aggregation, storage, and retrieval operations.
+"""
+import sys
+import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import unittest
 import json
+import tempfile
+import shutil
 from unittest.mock import patch, MagicMock, mock_open
-from data.aggregate import Aggregator
 from datetime import datetime, timedelta
+import pandas as pd
 
 
-@unittest.skip("Tests are for older Aggregator API - needs rewrite to match current implementation")
-class TestAggregator(unittest.TestCase):
+class TestAggregatorInit(unittest.TestCase):
+    """Test Aggregator initialization."""
 
-    @classmethod
-    def setUpClass(cls):
-        cls.apikey = 'test_api_key'
-        cls.secret = 'test_secret_key'
-        # Skip instantiation since it requires real services
-        cls.aggregator = None
-        cls.stock = 'AAPL'
-        cls.start_date = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
-        cls.end_date = datetime.now().strftime('%Y-%m-%d')
-        cls.mock_data = {'symbol': cls.stock, 'candles': [{'datetime': '2023-06-01', 'open': 150.0, 'high': 155.0, 'low': 148.0, 'close': 152.0, 'volume': 1000000}]}
+    @patch('data.aggregate.SchwabClient')
+    @patch('data.aggregate.ConfigLoader')
+    @patch('data.aggregate.Authenticator')
+    @patch('data.aggregate.DataStore')
+    @patch('data.aggregate.Logger')
+    @patch('data.aggregate.FileWriter')
+    @patch('data.aggregate.CacheManager')
+    def test_init(self, mock_cache, mock_writer, mock_logger, mock_store,
+                  mock_auth, mock_config, mock_client):
+        """Aggregator should initialize with required dependencies."""
+        mock_config.return_value.load_config.return_value = {
+            'folders': {'logs': '/tmp/logs'}
+        }
 
-    @patch('data.aggregate.SchwabClient.daily_price_history')
-    @patch('data.aggregate.write_json')
-    def test_raw_data_store(self, mock_write_json, mock_daily_price_history):
-        mock_daily_price_history.return_value = self.mock_data
-        result = self.aggregator.raw_data_store(self.stock, self.start_date, self.end_date)
-        mock_write_json.assert_called_once()
-        self.assertIn('File Generated!', result)
+        from data.aggregate import Aggregator
+        agg = Aggregator(apikey='test_key', secret='test_secret')
 
-    @patch('data.aggregate.write_json')
-    def test_update_raw_data(self, mock_write_json):
-        # Use patch as context manager for dynamic read_data
-        mock_data = {'symbol': 'AAPL', 'candles': [{'datetime': '2023-06-01', 'open': 150.0, 'high': 155.0, 'low': 148.0, 'close': 152.0, 'volume': 1000000}]}
-        with patch('builtins.open', mock_open(read_data=json.dumps(mock_data))):
-            new_data = [{'datetime': '2023-06-02', 'open': 152.0, 'high': 157.0, 'low': 150.0, 'close': 155.0, 'volume': 1200000}]
-            result = self.aggregator.update_raw_data(self.stock, new_data)
-            mock_write_json.assert_called_once()
-            self.assertIn('Raw data updated!', result)
+        mock_client.assert_called_once_with('test_key', 'test_secret')
+        self.assertIsNotNone(agg.session)
 
-    @patch('data.aggregate.DataStore.create_database')
-    @patch('data.aggregate.DataStore.fill_database')
-    @patch('data.aggregate.DataStore.commit')
-    @patch('data.aggregate.DataStore.close_db')
-    def test_store_processed_data(self, mock_close_db, mock_commit, mock_fill_database, mock_create_database):
-        processed_data = self.mock_data['candles']
-        result = self.aggregator.store_processed_data(self.stock, processed_data)
-        mock_create_database.assert_called_once_with(f"{self.stock}_data")
-        mock_fill_database.assert_called_once()
-        mock_commit.assert_called_once()
-        mock_close_db.assert_called_once()
-        self.assertIn('Processed data stored!', result)
 
-    @patch('data.aggregate.DataStore.fill_database')
-    @patch('data.aggregate.DataStore.commit')
-    @patch('data.aggregate.DataStore.close_db')
-    def test_update_processed_data(self, mock_close_db, mock_commit, mock_fill_database):
-        new_processed_data = self.mock_data['candles']
-        result = self.aggregator.update_processed_data(self.stock, new_processed_data)
-        mock_fill_database.assert_called_once()
-        mock_commit.assert_called_once()
-        mock_close_db.assert_called_once()
-        self.assertIn('Processed data updated!', result)
+class TestIsStockOutdated(unittest.TestCase):
+    """Test stock outdated detection."""
 
-    @patch.object(Aggregator, 'raw_data_store')
-    @patch.object(Aggregator, 'update_raw_data')
-    @patch.object(Aggregator, 'store_processed_data')
-    @patch.object(Aggregator, 'update_processed_data')
-    def test_aggregate_data(self, mock_update_processed_data, mock_store_processed_data, mock_update_raw_data, mock_raw_data_store):
-        self.aggregator.aggregate_data([self.stock], self.start_date, self.end_date)
-        mock_raw_data_store.assert_called_once_with(self.stock, self.start_date, self.end_date)
-        mock_update_raw_data.assert_called_once()
-        mock_store_processed_data.assert_called_once()
-        mock_update_processed_data.assert_called_once()
+    @patch('data.aggregate.SchwabClient')
+    @patch('data.aggregate.ConfigLoader')
+    @patch('data.aggregate.Authenticator')
+    @patch('data.aggregate.DataStore')
+    @patch('data.aggregate.Logger')
+    @patch('data.aggregate.FileWriter')
+    @patch('data.aggregate.CacheManager')
+    def setUp(self, mock_cache, mock_writer, mock_logger, mock_store,
+              mock_auth, mock_config, mock_client):
+        mock_config.return_value.load_config.return_value = {
+            'folders': {'logs': '/tmp/logs'}
+        }
+        mock_logger.return_value.get_logger.return_value = MagicMock()
 
-#%%
+        from data.aggregate import Aggregator
+        self.aggregator = Aggregator(apikey='test_key', secret='test_secret')
+
+    def test_no_timestamp_is_outdated(self):
+        """No timestamp should be considered outdated."""
+        result = self.aggregator.is_stock_outdated(None)
+        self.assertTrue(result)
+
+    def test_old_timestamp_is_outdated(self):
+        """Timestamp from last week should be outdated."""
+        # 7 days ago in milliseconds
+        old_timestamp = int((datetime.utcnow() - timedelta(days=7)).timestamp() * 1000)
+        result = self.aggregator.is_stock_outdated(old_timestamp)
+        self.assertTrue(result)
+
+    def test_recent_timestamp_not_outdated(self):
+        """Timestamp from today should not be outdated."""
+        # Current time in milliseconds
+        recent_timestamp = int(datetime.utcnow().timestamp() * 1000)
+        today = pd.Timestamp.utcnow().normalize().tz_localize(None)
+        result = self.aggregator.is_stock_outdated(recent_timestamp, today)
+        self.assertFalse(result)
+
+
+class TestRawDataStore(unittest.TestCase):
+    """Test raw data storage operations."""
+
+    @patch('data.aggregate.SchwabClient')
+    @patch('data.aggregate.ConfigLoader')
+    @patch('data.aggregate.Authenticator')
+    @patch('data.aggregate.DataStore')
+    @patch('data.aggregate.Logger')
+    @patch('data.aggregate.FileWriter')
+    @patch('data.aggregate.CacheManager')
+    def setUp(self, mock_cache, mock_writer, mock_logger, mock_store,
+              mock_auth, mock_config, mock_client):
+        mock_config.return_value.load_config.return_value = {
+            'folders': {'logs': '/tmp/logs'}
+        }
+        mock_logger.return_value.get_logger.return_value = MagicMock()
+        mock_auth.return_value.program_path = '/tmp'
+
+        from data.aggregate import Aggregator
+        self.aggregator = Aggregator(apikey='test_key', secret='test_secret')
+        self.mock_cache = mock_cache
+        self.mock_writer = mock_writer
+        self.mock_client = mock_client
+
+    def test_up_to_date_returns_no_update(self):
+        """Should return 'No Update Needed' if data is current."""
+        # Mock cache to return recent timestamp
+        self.aggregator.cache.get_last_processed_date.return_value = int(
+            datetime.utcnow().timestamp() * 1000
+        )
+        self.aggregator.is_stock_outdated = MagicMock(return_value=False)
+
+        result = self.aggregator.raw_data_store('AAPL')
+        self.assertEqual(result, "No Update Needed")
+
+    def test_no_candles_returns_no_update(self):
+        """Should return 'No Update Needed' if API returns no candles."""
+        self.aggregator.cache.get_last_processed_date.return_value = None
+        self.aggregator.session.daily_price_history.return_value = {'candles': []}
+
+        result = self.aggregator.raw_data_store('AAPL')
+        self.assertEqual(result, "No Update Needed")
+
+    @patch('os.path.exists', return_value=False)
+    def test_new_file_created(self, mock_exists):
+        """Should create new file when none exists."""
+        self.aggregator.cache.get_last_processed_date.return_value = None
+        self.aggregator.session.daily_price_history.return_value = {
+            'candles': [{'datetime': 1672531200000, 'open': 150.0, 'close': 152.0}]
+        }
+
+        result = self.aggregator.raw_data_store('AAPL')
+
+        self.assertEqual(result, "File Generated!")
+        self.aggregator.writer.write_json.assert_called_once()
+
+
+class TestStoreProcessedData(unittest.TestCase):
+    """Test processed data storage."""
+
+    @patch('data.aggregate.SchwabClient')
+    @patch('data.aggregate.ConfigLoader')
+    @patch('data.aggregate.Authenticator')
+    @patch('data.aggregate.DataStore')
+    @patch('data.aggregate.Logger')
+    @patch('data.aggregate.FileWriter')
+    @patch('data.aggregate.CacheManager')
+    def setUp(self, mock_cache, mock_writer, mock_logger, mock_store,
+              mock_auth, mock_config, mock_client):
+        mock_config.return_value.load_config.return_value = {
+            'folders': {'logs': '/tmp/logs'}
+        }
+        mock_logger.return_value.get_logger.return_value = MagicMock()
+
+        from data.aggregate import Aggregator
+        self.aggregator = Aggregator(apikey='test_key', secret='test_secret')
+
+    def test_store_processed_data_success(self):
+        """Should store processed data in database."""
+        test_data = pd.DataFrame({
+            'datetime': [1672531200000],
+            'open': [150.0],
+            'close': [152.0]
+        })
+
+        # Mock the datastore context manager
+        mock_store_instance = MagicMock()
+        self.aggregator.datastore.__enter__ = MagicMock(return_value=mock_store_instance)
+        self.aggregator.datastore.__exit__ = MagicMock(return_value=False)
+
+        result = self.aggregator.store_processed_data('AAPL', test_data)
+
+        self.assertEqual(result, "Processed data stored!")
+
+    def test_store_empty_dataframe(self):
+        """Should handle empty dataframe gracefully."""
+        test_data = pd.DataFrame()
+
+        # Should not raise, just log warning
+        self.aggregator.store_processed_data_files('AAPL', test_data)
+
+
+class TestFetchData(unittest.TestCase):
+    """Test data fetching from database."""
+
+    @patch('data.aggregate.SchwabClient')
+    @patch('data.aggregate.ConfigLoader')
+    @patch('data.aggregate.Authenticator')
+    @patch('data.aggregate.DataStore')
+    @patch('data.aggregate.Logger')
+    @patch('data.aggregate.FileWriter')
+    @patch('data.aggregate.CacheManager')
+    def setUp(self, mock_cache, mock_writer, mock_logger, mock_store,
+              mock_auth, mock_config, mock_client):
+        mock_config.return_value.load_config.return_value = {
+            'folders': {'logs': '/tmp/logs'}
+        }
+        mock_logger.return_value.get_logger.return_value = MagicMock()
+
+        from data.aggregate import Aggregator
+        self.aggregator = Aggregator(apikey='test_key', secret='test_secret')
+
+    def test_fetch_data_returns_dataframe(self):
+        """Should return DataFrame from database."""
+        mock_df = pd.DataFrame({
+            'symbol': ['AAPL'],
+            'close': [150.0]
+        })
+        self.aggregator.datastore.get_data_by_symbol.return_value = mock_df
+
+        result = self.aggregator.fetch_data('AAPL')
+
+        self.assertIsInstance(result, pd.DataFrame)
+
+    def test_fetch_data_error_returns_empty(self):
+        """Should return empty DataFrame on error."""
+        self.aggregator.datastore.get_data_by_symbol.side_effect = Exception("DB error")
+
+        result = self.aggregator.fetch_data('AAPL')
+
+        self.assertTrue(result.empty)
+
+
 if __name__ == '__main__':
     unittest.main()
-
-# %%

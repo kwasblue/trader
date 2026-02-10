@@ -26,7 +26,7 @@ import click
 from dotenv import load_dotenv
 
 # Load environment
-load_dotenv(ROOT / ".venv" / ".env")
+load_dotenv(ROOT / ".env")
 
 
 @click.group()

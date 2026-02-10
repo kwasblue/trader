@@ -12,6 +12,7 @@ from unittest.mock import Mock, MagicMock, patch, mock_open
 import json
 import tempfile
 import shutil
+import pandas as pd
 
 
 class TestDataStore(unittest.TestCase):
@@ -19,37 +20,119 @@ class TestDataStore(unittest.TestCase):
 
     def test_datastore_create_database(self):
         """DataStore should create database table."""
-        try:
-            from utils.datastore import DataStore
+        from data.datastorage import DataStore
 
-            # Use in-memory database for testing
-            store = DataStore(":memory:")
-            store.create_database("test_table")
+        # Use in-memory database for testing
+        with DataStore(":memory:", use_config=False) as store:
+            test_df = pd.DataFrame({
+                'symbol': ['AAPL'],
+                'close': [150.0]
+            })
+            store.create_database("test_table", test_df)
 
-            self.assertTrue(True)  # If no exception, test passes
-        except ImportError:
-            self.skipTest("DataStore not found")
+            # Verify table exists
+            self.assertTrue(store.table_exists("test_table"))
 
     def test_datastore_fill_database(self):
         """DataStore should insert data into database."""
-        try:
-            from utils.datastore import DataStore
+        from data.datastorage import DataStore
 
-            store = DataStore(":memory:")
-            store.create_database("test_data")
-
+        with DataStore(":memory:", use_config=False) as store:
             # Sample data
-            data = [
-                {"timestamp": "2023-01-01", "open": 100, "close": 101},
-                {"timestamp": "2023-01-02", "open": 101, "close": 102},
-            ]
+            data = pd.DataFrame({
+                'timestamp': ['2023-01-01', '2023-01-02'],
+                'open': [100.0, 101.0],
+                'close': [101.0, 102.0]
+            })
 
-            store.fill_database(data)
-            store.commit()
+            store.fill_database("test_data", data)
 
-            self.assertTrue(True)
-        except ImportError:
-            self.skipTest("DataStore not found")
+            # Verify data was inserted
+            result = store.get_data_base("test_data")
+            self.assertEqual(len(result), 2)
+
+    def test_datastore_get_by_symbol(self):
+        """DataStore should retrieve data by symbol."""
+        from data.datastorage import DataStore
+
+        with DataStore(":memory:", use_config=False) as store:
+            data = pd.DataFrame({
+                'symbol': ['AAPL', 'MSFT', 'AAPL'],
+                'close': [150.0, 300.0, 151.0]
+            })
+
+            store.fill_database("stock_data", data)
+            result = store.get_data_by_symbol("stock_data", "AAPL")
+
+            self.assertEqual(len(result), 2)
+
+    def test_datastore_upsert(self):
+        """DataStore should upsert data correctly."""
+        from data.datastorage import DataStore
+
+        with DataStore(":memory:", use_config=False) as store:
+            # Initial data
+            data1 = pd.DataFrame({
+                'symbol': ['AAPL'],
+                'date': ['2023-01-01'],
+                'close': [150.0]
+            })
+            store.fill_database("test_upsert", data1)
+
+            # Upsert with updated value
+            data2 = pd.DataFrame({
+                'symbol': ['AAPL'],
+                'date': ['2023-01-01'],
+                'close': [155.0]
+            })
+            store.upsert_data("test_upsert", data2, ['symbol', 'date'])
+
+            result = store.get_data_base("test_upsert")
+            # Should still have 1 row, with updated close
+            self.assertEqual(len(result), 1)
+
+    def test_datastore_list_tables(self):
+        """DataStore should list all tables."""
+        from data.datastorage import DataStore
+
+        with DataStore(":memory:", use_config=False) as store:
+            df = pd.DataFrame({'col': [1]})
+            store.fill_database("table1", df)
+            store.fill_database("table2", df)
+
+            tables = store.list_tables()
+            self.assertIn("table1", tables)
+            self.assertIn("table2", tables)
+
+    def test_datastore_row_count(self):
+        """DataStore should return correct row count."""
+        from data.datastorage import DataStore
+
+        with DataStore(":memory:", use_config=False) as store:
+            data = pd.DataFrame({
+                'value': [1, 2, 3, 4, 5]
+            })
+            store.fill_database("count_test", data)
+
+            count = store.get_row_count("count_test")
+            self.assertEqual(count, 5)
+
+    def test_datastore_delete_data(self):
+        """DataStore should delete data correctly."""
+        from data.datastorage import DataStore
+
+        with DataStore(":memory:", use_config=False) as store:
+            data = pd.DataFrame({
+                'symbol': ['AAPL', 'MSFT'],
+                'close': [150.0, 300.0]
+            })
+            store.fill_database("delete_test", data)
+
+            # Delete AAPL
+            store.delete_data("delete_test", "symbol = ?", ("AAPL",))
+
+            result = store.get_data_base("delete_test")
+            self.assertEqual(len(result), 1)
 
 
 class TestJsonFileOperations(unittest.TestCase):

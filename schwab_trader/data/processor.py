@@ -17,6 +17,24 @@ from loggers.logger import Logger
 from utils.configloader import ConfigLoader
 from indicators.technical_indicators import TechnicalIndicators
 
+
+def _parse_date_column(series: pd.Series) -> pd.Series:
+    """
+    Parse a date column handling both epoch milliseconds and string formats.
+
+    Args:
+        series: A pandas Series containing dates (epoch ms or strings)
+
+    Returns:
+        Series with datetime64 dtype
+    """
+    if series.dtype in ('int64', 'float64'):
+        # Epoch milliseconds (from Alpaca/Schwab)
+        return pd.to_datetime(series, unit='ms')
+    else:
+        # String or already datetime
+        return pd.to_datetime(series)
+
 # Optimization: Cache FFT frequency bins by length
 _fft_freq_cache: Dict[int, np.ndarray] = {}
 
@@ -148,7 +166,7 @@ class Processor:
 
         df = self.clean_stock_data().copy()  # expects ['Date','Open','High','Low','Close','Volume', ...]
         if "Date" in df.columns:
-            df["Date"] = pd.to_datetime(df["Date"])
+            df["Date"] = _parse_date_column(df["Date"])
             df.set_index("Date", inplace=True)
 
         # use adjusted close if present
@@ -400,7 +418,7 @@ class Processor:
         # --- 1) load/prepare base frames with a consistent DateTimeIndex ---
         base = self.clean_stock_data().copy()           # must contain 'Date'
         if "Date" in base.columns:
-            base["Date"] = pd.to_datetime(base["Date"])
+            base["Date"] = _parse_date_column(base["Date"])
             base = base.set_index("Date", drop=True)
 
         if denoise_cols:
@@ -411,14 +429,14 @@ class Processor:
 
         inds = self.apply_indicators(sma_window=sma_window, ema_window=ema_window).copy()
         if "Date" in inds.columns:
-            inds["Date"] = pd.to_datetime(inds["Date"])
+            inds["Date"] = _parse_date_column(inds["Date"])
             inds = inds.set_index("Date", drop=True)
         # drop raw OHLCV from indicators frame to avoid duplicates
         inds = inds.drop(columns=[c for c in ("Open","High","Low","Close","Volume","Date") if c in inds.columns], errors="ignore")
 
         eng = self.feature_engineering().copy()
         if "Date" in eng.columns:
-            eng["Date"] = pd.to_datetime(eng["Date"])
+            eng["Date"] = _parse_date_column(eng["Date"])
             eng = eng.set_index("Date", drop=True)
 
         # --- 2) align & combine on index (inner join keeps common timestamps) ---

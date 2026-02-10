@@ -56,7 +56,9 @@ class Backtester:
         self.portfolio_history = []
 
         # Ensure 'Date' is a datetime column and sort the data
-        if self.data['Date'].dtype == 'O':
+        if self.data['Date'].dtype in ('int64', 'float64'):
+            self.data['Date'] = pd.to_datetime(self.data['Date'], unit='ms')
+        elif self.data['Date'].dtype == 'O':
             self.data['Date'] = pd.to_datetime(self.data['Date'])
         self.data.sort_values(by='Date', inplace=True)
 

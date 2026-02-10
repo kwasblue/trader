@@ -40,12 +40,12 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from dotenv import load_dotenv
-load_dotenv(ROOT / ".venv" / ".env")
-load_dotenv()
+load_dotenv(ROOT / ".env")
 
 from core.credential_validator import CredentialValidator, CredentialStatus, ValidationResult
 from core.unified_data_pipeline import UnifiedDataPipeline
 from core.historical_data_updater import HistoricalDataUpdater
+import subprocess
 
 
 class PreFlightChecker:
@@ -194,10 +194,14 @@ class PreFlightChecker:
                 print(f"      Access expires in: {schwab.details.get('access_expires_in_minutes', '?')} min")
                 print(f"      Refresh expires in: {schwab.details.get('refresh_expires_in_days', '?')} days")
             self.passed.append("Schwab credentials")
+            # Start token keeper to maintain token freshness
+            self._start_token_keeper()
 
         elif schwab.status == CredentialStatus.EXPIRING_SOON:
             self.print_warning("Schwab", schwab.message)
             self.warnings.append(f"Schwab token expiring soon")
+            # Still start token keeper - it will handle renewal
+            self._start_token_keeper()
 
             if reauth_schwab:
                 print("\n  Initiating Schwab re-authentication...")
@@ -210,6 +214,8 @@ class PreFlightChecker:
             if reauth_schwab:
                 print("\n  Initiating Schwab re-authentication...")
                 await self._reauth_schwab()
+                # Start token keeper after successful re-auth
+                self._start_token_keeper()
 
         elif schwab.status == CredentialStatus.MISSING:
             self.print_warning("Schwab", schwab.message)
@@ -322,6 +328,43 @@ class PreFlightChecker:
 
         except Exception as e:
             print(f"    ✗ Schwab re-authentication error: {e}")
+
+    def _is_token_keeper_running(self) -> bool:
+        """Check if token keeper is already running."""
+        try:
+            result = subprocess.run(
+                ['pgrep', '-f', 'token_keeper.py'],
+                capture_output=True,
+                text=True
+            )
+            return result.returncode == 0
+        except Exception:
+            return False
+
+    def _start_token_keeper(self) -> bool:
+        """Start the token keeper as a background daemon."""
+        if self._is_token_keeper_running():
+            self.print_status("Token Keeper", True, "Already running")
+            self.logger.info("Token keeper already running")
+            return True
+
+        try:
+            # Start token keeper as background daemon
+            subprocess.Popen(
+                [sys.executable, str(ROOT / "token_keeper.py"), "--daemon", "--interval", "60"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True
+            )
+            self.print_status("Token Keeper", True, "Started background daemon")
+            self.logger.info("Token keeper daemon started")
+            self.passed.append("Token keeper started")
+            return True
+        except Exception as e:
+            self.print_warning("Token Keeper", f"Failed to start: {e}")
+            self.logger.error(f"Failed to start token keeper: {e}")
+            self.warnings.append("Token keeper failed to start")
+            return False
 
     def _print_summary(self) -> bool:
         """Print summary and return success status."""

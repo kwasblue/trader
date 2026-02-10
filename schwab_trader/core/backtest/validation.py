@@ -130,7 +130,10 @@ def validate_ohlcv_data(
 
     # Check date sorting
     if 'Date' in df.columns:
-        df['Date'] = pd.to_datetime(df['Date'])
+        if df['Date'].dtype in ('int64', 'float64'):
+            df['Date'] = pd.to_datetime(df['Date'], unit='ms')
+        else:
+            df['Date'] = pd.to_datetime(df['Date'])
         if not df['Date'].is_monotonic_increasing:
             if fix_issues:
                 df = df.sort_values('Date').reset_index(drop=True)
