@@ -496,6 +496,100 @@ strategy = load_strategy('my', params={'period': 20, 'threshold': 0.3})
 
 ---
 
+## Automated Strategy Selection
+
+The system includes an automated strategy selector that evaluates all strategies using backtesting and walk-forward validation.
+
+### Using the CLI
+
+```bash
+# Evaluate all strategies for a symbol
+trader strategy select AAPL
+
+# Save best strategy to routing config
+trader strategy select AAPL --save
+
+# Optimize for high volatility regime
+trader strategy select TSLA --regime high_volatility --save
+
+# Use more historical data
+trader strategy select MSFT --days 365 --save
+```
+
+### How It Works
+
+1. **Parameter Optimization**: Each strategy is tested with multiple parameter combinations
+2. **Walk-Forward Validation**: Prevents overfitting by testing on out-of-sample data
+3. **Composite Scoring**: Strategies are ranked by a weighted combination of:
+   - Sharpe Ratio (35%)
+   - Sortino Ratio (25%)
+   - Total Return (20%)
+   - Max Drawdown (15%, inverted)
+   - Win Rate (5%)
+4. **Overfit Detection**: Flags strategies where in-sample >> out-of-sample performance
+
+### Viewing Results
+
+```bash
+# Show current strategy routing
+trader strategy show
+
+# Show routing for specific symbol
+trader strategy show --symbol AAPL
+```
+
+### Configuration Files
+
+Strategy selection saves to:
+- `config/strategy_routing.json` - Maps (symbol, regime) → strategy name
+- `config/strategy_params.json` - Best parameters for each strategy
+
+### Programmatic Usage
+
+```python
+from core.backtest.strategy_selector import StrategySelector
+from core.unified_data_pipeline import UnifiedDataPipeline
+
+# Load data
+pipeline = UnifiedDataPipeline()
+data = pipeline.load_symbol_data("AAPL")
+
+# Run selection
+selector = StrategySelector(data)
+result = selector.select_best_strategies(
+    symbol="AAPL",
+    top_n=3,
+    metric="composite",
+    use_walk_forward=True
+)
+
+# Access results
+for eval in result.top_strategies:
+    print(f"{eval.strategy_name}: Sharpe={eval.sharpe_ratio:.2f}")
+
+# Save to config
+selector.save_to_config(result, regime="normal")
+```
+
+### Strategy Routing Manager
+
+At runtime, the `StrategyRoutingManager` loads the configuration:
+
+```python
+from core.logic.strategy_routing_manager import StrategyRoutingManager
+
+router = StrategyRoutingManager("config/strategy_routing.json")
+
+# Get strategy for symbol and market regime
+strategy = router.get_strategy("AAPL", "trending")
+signal = strategy.generate_signal(data)
+
+# Hot reload after config changes
+router.refresh()
+```
+
+---
+
 ## Performance Comparison
 
 Run backtests to compare strategy performance:

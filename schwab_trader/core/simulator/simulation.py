@@ -50,6 +50,7 @@ from core.events.events import (
     EVENT_STRATEGY_SIGNAL,
     EVENT_PNL_UPDATE,
     EVENT_REGIME_UPDATE,
+    EVENT_HALTED,
     PnLPayload,
     BarPayload,
     StrategySignalPayload,
@@ -559,6 +560,9 @@ class SimulationRunner:
             # Subscribe to bars
             await self.events.subscribe(EVENT_NEW_BAR, self._on_bar)
 
+            # Subscribe to HALT events from GUI
+            await self.events.subscribe(EVENT_HALTED, self._on_halt)
+
             # NOTE: Do NOT call engine.subscribe_signals() here!
             # The simulation directly calls engine.handle_signal() in _on_bar,
             # so subscribing to EVENT_STRATEGY_SIGNAL would cause duplicate processing.
@@ -569,6 +573,14 @@ class SimulationRunner:
 
         except Exception as e:
             self.logger.error(f"Bar consumer failed: {e}", exc_info=True)
+
+    async def _on_halt(self, event) -> None:
+        """Handle HALT event from GUI."""
+        payload = event.payload if hasattr(event, 'payload') else event
+        halted = payload.get('halted', False)
+        if halted:
+            self.logger.info("HALT received - stopping simulation")
+            self.stop()
     
     def _seed(self):
         """Seed with warm-up bars"""

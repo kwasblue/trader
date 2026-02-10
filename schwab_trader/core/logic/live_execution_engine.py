@@ -959,6 +959,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
             atr=atr,
             stop_loss_price=stop_loss_price,
             signal=signal,
+            portfolio=self.portfolio,
             market_conditions=regime,
             current_cash=buying_power  # Use actual buying power, not cash!
         )

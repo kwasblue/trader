@@ -261,27 +261,30 @@ class TestUpdateSymbols:
     @pytest.mark.asyncio
     async def test_update_symbols_success(self, pipeline):
         """Test successful symbol update."""
-        with patch.object(pipeline, '_select_best_source', new_callable=AsyncMock, return_value='alpaca'):
-            with patch.object(pipeline, '_update_symbol', new_callable=AsyncMock, return_value=100):
-                results = await pipeline.update_symbols(['AAPL'], days=1)
-                assert 'AAPL' in results
-                assert results['AAPL'] == 100
+        with patch.object(pipeline, 'check_and_warn_credentials', new_callable=AsyncMock, return_value={}):
+            with patch.object(pipeline, '_select_best_source', new_callable=AsyncMock, return_value='alpaca'):
+                with patch.object(pipeline, '_update_symbol', new_callable=AsyncMock, return_value=100):
+                    results = await pipeline.update_symbols(['AAPL'], days=1)
+                    assert 'AAPL' in results
+                    assert results['AAPL'] == 100
 
     @pytest.mark.asyncio
     async def test_update_symbols_multiple(self, pipeline):
         """Test updating multiple symbols."""
-        with patch.object(pipeline, '_select_best_source', new_callable=AsyncMock, return_value='alpaca'):
-            with patch.object(pipeline, '_update_symbol', new_callable=AsyncMock, return_value=50):
-                results = await pipeline.update_symbols(['AAPL', 'MSFT', 'GOOGL'], days=1)
-                assert len(results) == 3
+        with patch.object(pipeline, 'check_and_warn_credentials', new_callable=AsyncMock, return_value={}):
+            with patch.object(pipeline, '_select_best_source', new_callable=AsyncMock, return_value='alpaca'):
+                with patch.object(pipeline, '_update_symbol', new_callable=AsyncMock, return_value=50):
+                    results = await pipeline.update_symbols(['AAPL', 'MSFT', 'GOOGL'], days=1)
+                    assert len(results) == 3
 
     @pytest.mark.asyncio
     async def test_update_symbols_with_failure(self, pipeline):
         """Test handling of fetch failures."""
-        with patch.object(pipeline, '_select_best_source', new_callable=AsyncMock, return_value='alpaca'):
-            with patch.object(pipeline, '_update_symbol', new_callable=AsyncMock, side_effect=Exception("API Error")):
-                results = await pipeline.update_symbols(['AAPL'], days=1)
-                assert results.get('AAPL', 0) == 0
+        with patch.object(pipeline, 'check_and_warn_credentials', new_callable=AsyncMock, return_value={}):
+            with patch.object(pipeline, '_select_best_source', new_callable=AsyncMock, return_value='alpaca'):
+                with patch.object(pipeline, '_update_symbol', new_callable=AsyncMock, side_effect=Exception("API Error")):
+                    results = await pipeline.update_symbols(['AAPL'], days=1)
+                    assert results.get('AAPL', 0) == 0
 
 
 class TestCacheManagement:

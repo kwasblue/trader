@@ -1,166 +1,152 @@
 # Quick Reference
 
-A cheatsheet for common Schwab Trader operations.
+A cheatsheet for common Schwab Trader operations using the `trader` CLI.
+
+## Getting Started
+
+```bash
+# Install the CLI
+cd schwab_trader
+source .venv/bin/activate
+pip install -e .
+
+# Verify installation
+trader --help
+```
 
 ## Starting the System
 
 ### Autonomous Mode (Recommended)
 
 ```bash
-# Start AutoTrader daemon
-python autotrader_ctl.py start --symbols AAPL MSFT
+# Start trading daemon
+trader start --symbols AAPL,MSFT
 
 # Check status
-python autotrader_ctl.py status
+trader status
 
-# View logs
-python autotrader_ctl.py logs --follow
+# View logs in real-time
+trader logs -f
 
 # Stop
-python autotrader_ctl.py stop
+trader stop
 ```
 
-### Manual Trading
+### GUI Trading
 
 ```bash
-# Simulation mode
-python run_trading.py --mode simulation
+# Simulation mode (no real trades)
+trader gui
 
 # Alpaca paper trading
-python run_trading.py --mode alpaca --paper --symbols AAPL MSFT
+trader gui --mode alpaca
 
 # Schwab live trading
-python run_trading.py --mode schwab --symbols AAPL
-```
+trader gui --mode schwab
 
-### GUI Only
-
-```bash
-python run_live.py
+# Custom symbols
+trader gui --symbols AAPL,GOOGL,TSLA
 ```
 
 ## Pre-Trading Checks
 
 ```bash
 # Quick validation
-python preflight.py
+trader preflight
 
 # Verbose output
-python preflight.py -v
+trader preflight -v
 
 # Update stale data
-python preflight.py --update-data
-
-# Refresh Schwab tokens
-python preflight.py --reauth-schwab
+trader preflight --update-data
 ```
 
 ## Token Management
 
 ```bash
-# Check token status and refresh if needed
-python refresh_schwab_token.py
+# Check token status
+trader token status
 
-# Force full re-authentication (browser login)
-python refresh_schwab_token.py --force
+# Refresh tokens
+trader token refresh
 
-# Run token keeper in foreground
-python token_keeper.py
+# Force re-authentication (browser)
+trader token refresh --force
 
-# Token keeper as background service
-launchctl load ~/Library/LaunchAgents/com.schwabtrader.tokenkeeper.plist
-launchctl list | grep tokenkeeper
+# Run token keeper service
+trader token keeper
 ```
 
 ## Data Management
 
-### Update Historical Data
-
 ```bash
-# Via command line
-python -m core.unified_data_pipeline --symbols AAPL MSFT --days 30
+# Update historical data
+trader data update --symbols AAPL,MSFT
 
-# Via pre-flight
-python preflight.py --update-data
+# Check data freshness
+trader data status
 ```
 
-### Python API
+## Symbol Management
 
-```python
-from core.unified_data_pipeline import UnifiedDataPipeline
+```bash
+# List all symbols
+trader symbols list
 
-pipeline = UnifiedDataPipeline()
-await pipeline.update_symbols(['AAPL', 'MSFT'], days=30)
+# Add to trade list
+trader symbols add TSLA --trade
 
-# Get data
-df = pipeline.get_data('AAPL')
+# Add to watch list
+trader symbols add AMD --watch
+
+# Remove symbol
+trader symbols remove AAPL
 ```
 
 ## Testing
 
 ```bash
-# All tests
-pytest tests/ -v
-
-# Specific module
-pytest tests/test_autotrader.py -v
+# Run all tests
+trader test
 
 # With coverage
-pytest tests/ --cov=core --cov-report=html
+trader test --coverage
 
-# Quick run
-python run_tests.py
+# Specific file
+trader test tests/test_autotrader.py
 ```
 
-## Configuration Files
+## Viewing Logs
+
+```bash
+# Recent app logs
+trader logs
+
+# Follow in real-time
+trader logs -f
+
+# Trade execution logs
+trader logs --file trades
+
+# More lines
+trader logs -n 100
+```
+
+## Configuration
 
 | File | Purpose |
 |------|---------|
 | `.env` | API credentials |
-| `config/trading_config.json` | General settings |
-| `config/symbol_configuration.json` | Symbol-specific settings |
+| `config/trading_config.json` | Trading settings |
+| `config/symbols.json` | Symbol lists |
 
 ### Key Environment Variables
 
 ```bash
-# Alpaca
 ALPACA_API_KEY=xxx
 ALPACA_SECRET_KEY=xxx
-
-# Schwab
 SCHWAB_API_KEY=xxx
 SCHWAB_SECRET=xxx
-```
-
-## Common Operations
-
-### Check Credentials
-
-```python
-from core.credential_validator import can_use_alpaca, can_use_schwab
-
-print(await can_use_alpaca())  # True/False
-print(await can_use_schwab())  # True/False
-```
-
-### Run Backtest
-
-```python
-from core.backtest_suite import VectorizedBacktester
-
-bt = VectorizedBacktester(data, initial_capital=10000)
-result = bt.run("sma_strategy", {"fast": 10, "slow": 30})
-print(bt.get_metrics(result))
-```
-
-### Get Market Status
-
-```python
-from autotrader import MarketScheduler
-
-scheduler = MarketScheduler()
-print(scheduler.is_market_open())
-print(scheduler.is_trading_day())
 ```
 
 ## Keyboard Shortcuts (GUI)
@@ -172,88 +158,33 @@ print(scheduler.is_trading_day())
 | `Ctrl+L` | Flatten All |
 | `Ctrl+K` | Cancel All |
 
-## Logging
+## Common Workflows
 
-### Log Files
-
-| File | Content |
-|------|---------|
-| `logs/app.log` | Main application log |
-| `logs/autotrader.log` | AutoTrader specific |
-| `logs/token_keeper.log` | Token refresh service |
-| `logs/preflight.log` | Pre-flight checks |
-| `logs/trading.log` | Trade execution |
-
-### View Logs
+### Morning Startup
 
 ```bash
-# Recent entries
-tail -100 logs/app.log
-
-# Follow in real-time
-tail -f logs/app.log
-
-# AutoTrader logs
-python autotrader_ctl.py logs --follow
+trader preflight -v          # Check system
+trader token status          # Verify tokens
+trader start --symbols AAPL  # Start trading
 ```
 
-## Troubleshooting
-
-### AutoTrader won't start
+### Evening Shutdown
 
 ```bash
-# Check if already running
-python autotrader_ctl.py status
-
-# Check logs
-python autotrader_ctl.py logs
-
-# Run pre-flight
-python preflight.py -v
+trader stop                  # Stop daemon
+trader logs --file trades    # Review trades
 ```
 
-### No data
+### Troubleshooting
 
 ```bash
-# Update data
-python preflight.py --update-data
-
-# Check sources
-python -c "
-from core.credential_validator import check_credentials
-import asyncio
-print(asyncio.run(check_credentials()))
-"
+trader status                # Is daemon running?
+trader token status          # Token issues?
+trader preflight -v          # Full system check
+trader logs -f               # Watch for errors
 ```
 
-### Tests failing
+## More Information
 
-```bash
-# Run with verbose output
-pytest tests/ -v --tb=long
-
-# Run single test
-pytest tests/test_autotrader.py::TestAutoTrader::test_init -v
-```
-
-## File Locations
-
-```
-schwab_trader/
-├── .env                    # Credentials (DO NOT COMMIT)
-├── autotrader.py           # Main daemon
-├── autotrader_ctl.py       # Daemon control script
-├── preflight.py            # Pre-trading checks
-├── refresh_schwab_token.py # Manual token refresh
-├── token_keeper.py         # Background token service
-├── run_trading.py          # Manual trading
-├── config/
-│   └── trading_config.json # Settings
-├── data/data_storage/
-│   ├── proc_data/          # Processed data
-│   └── raw_data/           # Raw API data
-├── logs/                   # Log files
-└── tokens/                 # OAuth tokens
-```
-
-See [Operations Guide](operations.md) for complete command reference.
+- [Commands Reference](commands.md) - Complete CLI documentation
+- [Operations Guide](operations.md) - Daily operations procedures

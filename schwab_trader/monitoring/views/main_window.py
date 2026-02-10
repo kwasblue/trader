@@ -1761,12 +1761,20 @@ class MainWindow(QtWidgets.QMainWindow):
         QtWidgets.QMessageBox.information(self, "Export", f"CSV logs exported to {self._csv_dir}")
 
     def closeEvent(self, event: QtGui.QCloseEvent):
+        # Flush CSV buffers
         for fname in self._buffers.keys():
             if self._buffers[fname]:
                 self._flush_csv(fname)
             self._write_footer(fname)
-        event.accept()
+
+        # Stop the trading backend
+        if hasattr(self, '_trading_backend') and self._trading_backend:
+            asyncio.create_task(self._trading_backend.stop())
+
+        # Stop the feeder
         asyncio.create_task(self.feeder.stop())
+
+        event.accept()
         super().closeEvent(event)
     # ---------------- Tab Builders ----------------
     def _build_dashboard_tab(self):
@@ -3059,6 +3067,16 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ctrl.halt_changed.emit(self._halted)
         self._style_panic(self._halted)
         self._emit_and_log(events.EVENT_HALTED, {"halted": self._halted})
+
+        # Stop/resume the backend
+        if hasattr(self, '_trading_backend') and self._trading_backend:
+            if self._halted:
+                # Stop the simulation/trading
+                asyncio.create_task(self._trading_backend.stop())
+                self._append_log("[HALT] Trading stopped")
+            else:
+                # Resume would require restarting - just log for now
+                self._append_log("[HALT] Resume requested - restart the application to resume trading")
     
 
     def _kpi_label(self) -> QtWidgets.QLabel:

@@ -35,7 +35,7 @@ from core.logic.portfolio_state import PortfolioState
 from core.logic.symbol_state import SymbolState
 from core.logic.trade_gate import TradeGate
 from core.logic.strategy_routing_manager import StrategyRoutingManager
-from core.position_sizer import DynamicPositionSizer
+from core.position_sizer import DynamicPositionSizer2
 from core.drawdown_monitor import DrawdownMonitor
 from core.historical_loader import HistoricalBarLoader
 from core.events.eventhandler import EventHandler, get_event_handler
@@ -48,6 +48,7 @@ from core.events.events import (
 )
 
 from core.simulator.simulation import compute_atr, classify_regime
+from core.credential_validator import CredentialValidator, CredentialStatus
 from core.broker.schwab_broker import SchwabBroker
 from core.logic.live_execution_engine import LiveExecutionEngine
 from core.logic.trade_logic_manager import DynamicTradeLogicManager
@@ -124,8 +125,10 @@ class SchwabLiveRunner:
         )
 
         # Sizer, router, executor, engine
-        self.sizer = DynamicPositionSizer(
-            risk_percentage=settings.get("BASE_RISK_PCT", 0.05)
+        self.sizer = DynamicPositionSizer2(
+            risk_percentage=settings.get("BASE_RISK_PCT", 0.05),
+            max_trade_pct=settings.get("MAX_TRADE_PCT", 0.10),
+            max_holding_pct=settings.get("MAX_HOLDING_PCT", 0.20),
         )
         self.router = StrategyRoutingManager(str(ROOT / "config" / "strategy_routing.json"))
         self.executor = LiveExecutor(
@@ -404,6 +407,42 @@ class SchwabLiveRunner:
             "timestamp": datetime.now(timezone.utc).isoformat(),
         })
 
+    # ---------- Preflight Checks ----------
+    async def _preflight_credential_check(self) -> None:
+        """
+        Check Schwab token status before starting.
+
+        Logs warnings/errors about token expiry to alert the user.
+        Does not block startup - just provides visibility.
+        """
+        validator = CredentialValidator()
+        result = await validator.validate_schwab()
+
+        if result.status == CredentialStatus.EXPIRED:
+            self.logger.warning(
+                "\n" + "=" * 60 + "\n"
+                "SCHWAB TOKEN EXPIRED - Renewal required!\n"
+                "Run: python -m data.streaming.authenticator\n"
+                "=" * 60
+            )
+
+        elif result.status == CredentialStatus.EXPIRING_SOON:
+            hours = result.expires_in // 3600 if result.expires_in else 0
+            self.logger.warning(
+                f"SCHWAB TOKEN EXPIRING in {hours} hours. "
+                f"Renew soon: python -m data.streaming.authenticator"
+            )
+
+        elif result.status == CredentialStatus.MISSING:
+            self.logger.warning(
+                "Schwab credentials not configured. "
+                "Run: python -m data.streaming.authenticator"
+            )
+
+        elif result.status == CredentialStatus.VALID:
+            days = result.expires_in // 86400 if result.expires_in else 0
+            self.logger.info(f"Schwab credentials valid ({days} days until refresh expires)")
+
     # ---------- Connection Management ----------
     async def connect(self) -> bool:
         """
@@ -468,6 +507,9 @@ class SchwabLiveRunner:
         Connects to Schwab streaming and processes quotes until stopped.
         """
         self._running = True
+
+        # Preflight: Check Schwab token status and alert if renewal needed
+        await self._preflight_credential_check()
 
         # Seed historical data
         await self.seed(self.settings.get("SEED_BARS", 200))
@@ -564,6 +606,13 @@ class SchwabLiveRunner:
             stream_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await stream_task
+
+            # Disconnect broker (async)
+            await self.broker.disconnect()
+
+            # Shutdown event handler (waits for pending tasks, closes thread pool)
+            await self.event_handler.shutdown()
+
             self.trade_logger.flush()
             await self._emit_health_status("disconnected", {"reason": "shutdown"})
             self.logger.info("SchwabLiveRunner shut down cleanly.")
@@ -571,6 +620,9 @@ class SchwabLiveRunner:
     async def stop(self):
         """Stop the live trading runner."""
         self._running = False
+        # Disconnect broker
+        if hasattr(self.broker, 'disconnect'):
+            await self.broker.disconnect()
         self.logger.info("Stop requested")
 
 

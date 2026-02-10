@@ -15,7 +15,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timezone
 import asyncio
 
-from core.broker.schwab_broker import SchwabBroker, CircuitBreaker
+from core.broker.schwab_broker import SchwabBroker
+from core.utils.retry import CircuitBreaker, CircuitBreakerConfig, CircuitState
 from core.app_types import OrderResult, PositionView, BrokerSnapshot
 
 
@@ -237,37 +238,46 @@ class TestCircuitBreaker:
 
     def test_initial_state(self):
         """Test circuit breaker starts closed."""
-        cb = CircuitBreaker(failure_threshold=3, recovery_timeout=60)
-        assert cb.state == CircuitBreaker.CLOSED
-        assert cb.can_execute() is True
+        cb = CircuitBreaker(
+            name="test",
+            config=CircuitBreakerConfig(failure_threshold=3, timeout=60)
+        )
+        assert cb.state == CircuitState.CLOSED
+        assert cb._should_allow_request() is True
 
     def test_opens_after_threshold(self):
         """Test circuit breaker opens after failure threshold."""
-        cb = CircuitBreaker(failure_threshold=3, recovery_timeout=60)
+        cb = CircuitBreaker(
+            name="test",
+            config=CircuitBreakerConfig(failure_threshold=3, timeout=60)
+        )
 
         for _ in range(3):
-            cb.record_failure()
+            cb.record_failure(Exception("test error"))
 
-        assert cb.state == CircuitBreaker.OPEN
-        assert cb.can_execute() is False
+        assert cb.state == CircuitState.OPEN
+        assert cb._should_allow_request() is False
 
     def test_resets_on_success(self):
         """Test circuit breaker resets on success."""
-        cb = CircuitBreaker(failure_threshold=3, recovery_timeout=60)
+        cb = CircuitBreaker(
+            name="test",
+            config=CircuitBreakerConfig(failure_threshold=3, timeout=60)
+        )
 
-        cb.record_failure()
-        cb.record_failure()
+        cb.record_failure(Exception("test error"))
+        cb.record_failure(Exception("test error"))
         cb.record_success()
 
-        assert cb.failures == 0
-        assert cb.state == CircuitBreaker.CLOSED
+        assert cb.failure_count == 0
+        assert cb.state == CircuitState.CLOSED
 
     @pytest.mark.asyncio
     async def test_circuit_breaker_rejects_order(self, broker, mock_client):
         """Test that orders are rejected when circuit breaker is open."""
         # Open the circuit breaker
         for _ in range(5):
-            broker._circuit_breaker.record_failure()
+            broker._circuit_breaker.record_failure(Exception("test error"))
 
         result = await broker.place_order(
             symbol="AAPL",

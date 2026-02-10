@@ -395,3 +395,12 @@ CREATE TABLE positions (
 3. **New Indicators**: Add to `indicators/` directory
 4. **Custom Slippage**: Inherit from `SlippageModel`
 5. **Custom Position Sizing**: Inherit from `DynamicPositionSizer`
+
+---
+
+## Related Documentation
+
+- [Event System](event-system.md) - Detailed event bus architecture and usage
+- [Data Flow](data-flow.md) - Visual diagram of complete data flow
+- [Data Pipeline](data-pipeline.md) - Historical data management API
+- [Monitoring](monitoring.md) - GUI architecture and event bridging

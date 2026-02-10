@@ -405,3 +405,11 @@ def _emit_safe(self, signal, *args):
     except Exception as e:
         self._logger.error(f"Signal emit failed: {e}")
 ```
+
+---
+
+## Related Documentation
+
+- [Event System](event-system.md) - Event bus and DataFeeder architecture
+- [Architecture](architecture.md) - System design overview
+- [Commands](commands.md) - GUI launch commands

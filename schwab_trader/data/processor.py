@@ -1,6 +1,13 @@
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
-from sklearn.decomposition import PCA
-from scipy.fft import fft, ifft
+"""
+Data Processor Module
+
+Provides data cleaning, feature engineering, and optional research features.
+
+Note: sklearn and scipy are imported lazily inside methods that use them
+(denoise_fft, pca_feature_selection, scale_features, feature_engineer with
+include_pca=True or scaling_method). This keeps production trading code
+from requiring these heavy ML dependencies.
+"""
 import numpy as np
 import pandas as pd
 import functools
@@ -253,9 +260,12 @@ class Processor:
         return out
 
     def normalizing_scaling(self, df: pd.DataFrame, method='standard') -> pd.DataFrame:
+        # Lazy import - only load sklearn when actually needed
         if method == 'standard':
+            from sklearn.preprocessing import StandardScaler
             self.scaler = StandardScaler()
         elif method == 'minmax':
+            from sklearn.preprocessing import MinMaxScaler
             self.scaler = MinMaxScaler()
         else:
             raise ValueError("Unsupported scaling method")
@@ -280,6 +290,9 @@ class Processor:
         - Early return for invalid signals
         - In-place array modification
         """
+        # Lazy import - only load scipy when actually needed
+        from scipy.fft import fft, ifft
+
         # Validate input
         if signal is None or len(signal) == 0:
             return signal
@@ -312,6 +325,9 @@ class Processor:
         return df_copy
 
     def pca_feature_selection(self, df, n_components):
+        # Lazy import - only load sklearn when actually needed
+        from sklearn.decomposition import PCA
+
         # Ensure n_components is within the valid range
         n_components = min(n_components, df.drop(columns=['Date', 'Close']).shape[1])  # Exclude 'Date' and 'Close'
 

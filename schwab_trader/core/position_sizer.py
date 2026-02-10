@@ -1,4 +1,32 @@
-# core/base/position_sizer.py (or wherever your DynamicPositionSizer lives)
+"""
+Position Sizer Module
+
+Provides risk-based position sizing for trading systems.
+
+Recommended Usage:
+    from core.position_sizer import PositionSizer  # Alias for production sizer
+
+    sizer = PositionSizer(
+        risk_percentage=0.02,
+        max_trade_pct=0.10,
+        max_holding_pct=0.20,
+    )
+
+Available Classes:
+    PositionSizer (alias)     - Recommended. Points to DynamicPositionSizer2.
+    DynamicPositionSizer2     - Production sizer with full feature set:
+                                * Requires PortfolioState in kwargs
+                                * Per-symbol reservation tracking
+                                * Per-trade and per-holding caps
+                                * Fee rate and lot size awareness
+    DynamicPositionSizer      - Legacy sizer for simple use cases:
+                                * Uses account_value and current_cash directly
+                                * No portfolio awareness
+                                * Good for standalone backtests
+    LegacyPositionSizer       - Explicit alias for DynamicPositionSizer
+
+For live trading and simulation, use PositionSizer (DynamicPositionSizer2).
+"""
 import logging
 from core.base.position_sizer_base import PositionSizerBase
 from core.logic.portfolio_state import PortfolioState
@@ -352,3 +380,21 @@ class DynamicPositionSizer2(PositionSizerBase):
 
     # 🔑 Alias for engine compatibility
     reset_bar_reservations = reset_reserved
+
+
+# ============================================================================
+# Module-level Aliases
+# ============================================================================
+
+# Canonical name - use this for new code
+PositionSizer = DynamicPositionSizer2
+
+# Legacy alias kept for backward compatibility
+LegacyPositionSizer = DynamicPositionSizer
+
+__all__ = [
+    'PositionSizer',           # Recommended: alias for DynamicPositionSizer2
+    'DynamicPositionSizer2',   # Production sizer with portfolio awareness
+    'DynamicPositionSizer',    # Legacy sizer (simpler API, no portfolio required)
+    'LegacyPositionSizer',     # Explicit legacy alias
+]

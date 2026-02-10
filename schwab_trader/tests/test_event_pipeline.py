@@ -171,6 +171,8 @@ async def test_pnl_event_flow():
         "realized": 0,
         "drawdown": 0.0,
         "timestamp": datetime.now(timezone.utc).isoformat(),
+        "cash": 50000.0,
+        "buying_power": 100000.0,
     }
 
     print(f"  Emitting PNL: ${pnl_payload['portfolio_value']:,.2f}")
@@ -281,6 +283,8 @@ async def test_feeder_subscription():
         "realized": 0.0,
         "drawdown": 0.0,
         "timestamp": datetime.now(timezone.utc).isoformat(),
+        "cash": 50000.0,
+        "buying_power": 100000.0,
     })
 
     # Emit BAR

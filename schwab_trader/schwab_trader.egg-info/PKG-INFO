@@ -1,3 +1,49 @@
+Metadata-Version: 2.4
+Name: schwab-trader
+Version: 1.0.0
+Summary: Algorithmic trading platform with Schwab and Alpaca support
+License: MIT
+Project-URL: Documentation, docs/index.md
+Keywords: trading,algorithmic,schwab,alpaca,finance
+Classifier: Development Status :: 4 - Beta
+Classifier: Environment :: Console
+Classifier: Environment :: X11 Applications :: Qt
+Classifier: Intended Audience :: Financial and Insurance Industry
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Office/Business :: Financial :: Investment
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: numpy>=2.0.0
+Requires-Dist: pandas>=2.0.0
+Requires-Dist: scipy>=1.10.0
+Requires-Dist: python-dotenv>=1.0.0
+Requires-Dist: requests>=2.31.0
+Requires-Dist: ta>=0.11.0
+Requires-Dist: aiohttp>=3.9.0
+Requires-Dist: websockets>=12.0
+Requires-Dist: PySide6>=6.6.0
+Requires-Dist: click>=8.1.0
+Requires-Dist: scikit-learn>=1.4.0
+Requires-Dist: joblib>=1.3.0
+Requires-Dist: pydantic>=2.0.0
+Requires-Dist: pyqtgraph>=0.13.0
+Requires-Dist: qasync>=0.27.0
+Provides-Extra: dev
+Requires-Dist: pytest>=8.0.0; extra == "dev"
+Requires-Dist: pytest-cov>=4.0.0; extra == "dev"
+Requires-Dist: pytest-asyncio>=0.23.0; extra == "dev"
+Provides-Extra: ml
+Requires-Dist: xgboost>=2.0.0; extra == "ml"
+Requires-Dist: transformers>=4.35.0; extra == "ml"
+Provides-Extra: charts
+Requires-Dist: matplotlib>=3.8.0; extra == "charts"
+Requires-Dist: seaborn>=0.13.0; extra == "charts"
+
 # Schwab Trader
 
 A comprehensive algorithmic trading platform with support for Schwab and Alpaca brokers, featuring real-time streaming, backtesting, and a professional monitoring GUI.
@@ -22,37 +68,33 @@ A comprehensive algorithmic trading platform with support for Schwab and Alpaca 
 cd schwab_trader
 python -m venv .venv
 source .venv/bin/activate
-pip install -e .
+pip install -r requirements.txt
 
 # Configure credentials in .env
 cp .env.example .env
 # Edit .env with your API keys
 
 # Run pre-flight checks
-trader preflight -v
+python preflight.py -v
 
 # Start simulation mode (no real trades)
-trader gui
+python run_trading.py --mode simulation
 
 # Start autonomous trading (waits for market open)
-trader start --symbols AAPL,MSFT
+python autotrader.py --symbols AAPL MSFT
 ```
 
 ## Common Commands
 
 | Task | Command |
 |------|---------|
-| Start trading | `trader start` |
-| Stop trading | `trader stop` |
-| Check status | `trader status` |
-| Launch GUI | `trader gui` |
-| Pre-flight check | `trader preflight -v` |
-| Check tokens | `trader token status` |
-| Refresh tokens | `trader token refresh` |
-| Select strategies | `trader strategy select AAPL --save` |
-| Show routing | `trader strategy show` |
-| Run tests | `trader test` |
-| View logs | `trader logs -f` |
+| Start trading | `python autotrader.py` |
+| Stop trading | `python autotrader_ctl.py stop` |
+| Check status | `python autotrader_ctl.py status` |
+| Pre-flight check | `python preflight.py -v` |
+| Renew Schwab token | `python -m data.streaming.authenticator` |
+| Run simulation GUI | `python run_trading.py --mode simulation` |
+| Run tests | `pytest tests/ -v` |
 
 ## Documentation
 

@@ -1,4 +1,22 @@
+"""
+Trade Logic Router
 
+Internal routing layer used by execution engines. NOT intended for direct use.
+
+Architecture:
+    Runners pass a DynamicTradeLogicManager to the execution engine.
+    The engine wraps it in a TradeLogicRouter for internal routing.
+
+    DynamicTradeLogicManager (config-driven, used by runners)
+              |
+              v
+    TradeLogicRouter (engine-internal, adds symbol/strategy overrides)
+              |
+              v
+    TradeLogicManagerBase (actual trade logic - DefaultTradeLogicManager etc.)
+
+For normal usage, just pass DynamicTradeLogicManager to your execution engine.
+"""
 from __future__ import annotations
 
 from typing import Optional, Dict, Union, TYPE_CHECKING

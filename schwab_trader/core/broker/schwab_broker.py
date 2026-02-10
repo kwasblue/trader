@@ -2,16 +2,14 @@
 from __future__ import annotations
 
 import asyncio
-import inspect
-import time
 from datetime import datetime, timezone, time as dt_time
-from functools import wraps
 from typing import Optional, List, Dict, Any, Literal, Union, Callable
 
 from core.base.base_broker_interface import BaseBrokerInterface
 from core.app_types import OrderResult, PositionView, BrokerSnapshot
 from core.events.eventhandler import get_event_handler
 from core.events.events import EVENT_ORDER_STATUS, EVENT_HEALTH_UPDATE
+from core.utils.retry import CircuitBreaker, CircuitBreakerConfig, async_retry
 from data.streaming.schwab_client import SchwabClient
 from data.streaming.streamer import SchwabStreamingClient
 from loggers.logger import Logger
@@ -28,98 +26,6 @@ def _to_float(v: Any) -> float | None:
         return None if v is None else float(v)
     except Exception:
         return None
-
-
-def retry(max_attempts: int = 3, delay: float = 1.0, backoff: float = 2.0, exceptions: tuple = (Exception,)):
-    """
-    Retry decorator with exponential backoff.
-
-    Args:
-        max_attempts: Maximum number of retry attempts
-        delay: Initial delay between retries in seconds
-        backoff: Multiplier for delay after each retry
-        exceptions: Tuple of exception types to catch and retry
-    """
-    def decorator(func: Callable):
-        @wraps(func)
-        async def async_wrapper(*args, **kwargs):
-            current_delay = delay
-            last_exception = None
-            for attempt in range(max_attempts):
-                try:
-                    return await func(*args, **kwargs)
-                except exceptions as e:
-                    last_exception = e
-                    if attempt < max_attempts - 1:
-                        await asyncio.sleep(current_delay)
-                        current_delay *= backoff
-            raise last_exception
-
-        @wraps(func)
-        def sync_wrapper(*args, **kwargs):
-            current_delay = delay
-            last_exception = None
-            for attempt in range(max_attempts):
-                try:
-                    return func(*args, **kwargs)
-                except exceptions as e:
-                    last_exception = e
-                    if attempt < max_attempts - 1:
-                        import time
-                        time.sleep(current_delay)
-                        current_delay *= backoff
-            raise last_exception
-
-        if inspect.iscoroutinefunction(func):
-            return async_wrapper
-        return sync_wrapper
-    return decorator
-
-
-class CircuitBreaker:
-    """
-    Circuit breaker pattern for handling API failures.
-
-    States:
-    - CLOSED: Normal operation, requests pass through
-    - OPEN: Circuit is open, requests fail immediately
-    - HALF_OPEN: Testing if service recovered
-    """
-    CLOSED = "closed"
-    OPEN = "open"
-    HALF_OPEN = "half_open"
-
-    def __init__(self, failure_threshold: int = 5, recovery_timeout: float = 60.0):
-        self.failure_threshold = failure_threshold
-        self.recovery_timeout = recovery_timeout
-        self.failures = 0
-        self.state = self.CLOSED
-        self.last_failure_time: Optional[float] = None
-
-    def record_failure(self):
-        """Record a failure and potentially open the circuit."""
-        self.failures += 1
-        self.last_failure_time = time.monotonic()
-        if self.failures >= self.failure_threshold:
-            self.state = self.OPEN
-
-    def record_success(self):
-        """Record a success and reset the circuit."""
-        self.failures = 0
-        self.state = self.CLOSED
-
-    def can_execute(self) -> bool:
-        """Check if a request can be executed."""
-        if self.state == self.CLOSED:
-            return True
-        if self.state == self.OPEN:
-            if self.last_failure_time and \
-               (time.monotonic() - self.last_failure_time) > self.recovery_timeout:
-                self.state = self.HALF_OPEN
-                return True
-            return False
-        # HALF_OPEN - allow one request through
-        return True
 
 
 class SchwabBroker(BaseBrokerInterface):
@@ -162,7 +68,10 @@ class SchwabBroker(BaseBrokerInterface):
         self._quote_callbacks: Dict[str, List[Callable]] = {}
 
         # Circuit breaker for API calls
-        self._circuit_breaker = CircuitBreaker(failure_threshold=5, recovery_timeout=60.0)
+        self._circuit_breaker = CircuitBreaker(
+            name="schwab_broker",
+            config=CircuitBreakerConfig(failure_threshold=5, timeout=60.0)
+        )
 
         # Health check callback
         self._health_callback: Optional[Callable] = None
@@ -274,7 +183,7 @@ class SchwabBroker(BaseBrokerInterface):
     # ---------------------------------------------------------------------
     # BaseBrokerInterface — ASYNC
     # ---------------------------------------------------------------------
-    @retry(max_attempts=3, delay=1.0, backoff=2.0)
+    @async_retry(max_attempts=3, base_delay=1.0)
     async def place_order(
         self,
         symbol: str,
@@ -287,7 +196,7 @@ class SchwabBroker(BaseBrokerInterface):
         **kwargs,
     ) -> OrderResult:
         # Circuit breaker check
-        if not self._circuit_breaker.can_execute():
+        if not self._circuit_breaker._should_allow_request():
             self.logger.warning("Circuit breaker is open, rejecting order")
             return OrderResult(
                 order_id=None,
@@ -358,14 +267,14 @@ class SchwabBroker(BaseBrokerInterface):
             return result
 
         except Exception as e:
-            self._circuit_breaker.record_failure()
+            self._circuit_breaker.record_failure(e)
             self.logger.exception(f"Failed to place order: {e}")
             raise
 
-    @retry(max_attempts=3, delay=1.0, backoff=2.0)
+    @async_retry(max_attempts=3, base_delay=1.0)
     async def cancel_order(self, order_id: str) -> OrderResult:
         """Cancel an order by ID."""
-        if not self._circuit_breaker.can_execute():
+        if not self._circuit_breaker._should_allow_request():
             self.logger.warning("Circuit breaker is open, rejecting cancel request")
             return OrderResult(
                 order_id=order_id,
@@ -386,7 +295,7 @@ class SchwabBroker(BaseBrokerInterface):
             return result
 
         except Exception as e:
-            self._circuit_breaker.record_failure()
+            self._circuit_breaker.record_failure(e)
             self.logger.exception(f"Failed to cancel order {order_id}: {e}")
             raise
 

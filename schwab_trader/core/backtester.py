@@ -1,5 +1,27 @@
+"""
+Legacy Backtester Module (DEPRECATED)
+
+This module is deprecated. Use core.backtest instead:
+
+    from core.backtest import VectorizedBacktester, grid_search, walk_forward_analysis
+
+The VectorizedBacktester provides:
+- Faster vectorized execution
+- Built-in slippage models
+- Integration with optimization and walk-forward analysis
+
+This legacy Backtester is kept for backward compatibility but will be
+removed in a future version.
+"""
+import warnings
 import os
 import pandas as pd
+
+warnings.warn(
+    "core.backtester.Backtester is deprecated. Use core.backtest.VectorizedBacktester instead.",
+    DeprecationWarning,
+    stacklevel=2
+)
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates

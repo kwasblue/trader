@@ -26,7 +26,7 @@ from core.logic.portfolio_state import PortfolioState
 from core.logic.symbol_state import SymbolState
 from core.logic.trade_gate import TradeGate
 from core.logic.strategy_routing_manager import StrategyRoutingManager
-from core.position_sizer import DynamicPositionSizer
+from core.position_sizer import DynamicPositionSizer2
 from core.drawdown_monitor import DrawdownMonitor
 from core.historical_loader import HistoricalBarLoader
 from core.events.eventhandler import EventHandler, get_event_handler
@@ -82,8 +82,10 @@ class AlpacaLiveRunner:
         )
 
         # sizer, router, executor, engine
-        self.sizer = DynamicPositionSizer(
-            risk_percentage=settings.get("BASE_RISK_PCT", 0.05)
+        self.sizer = DynamicPositionSizer2(
+            risk_percentage=settings.get("BASE_RISK_PCT", 0.05),
+            max_trade_pct=settings.get("MAX_TRADE_PCT", 0.10),
+            max_holding_pct=settings.get("MAX_HOLDING_PCT", 0.20),
         )
         self.router = StrategyRoutingManager(str(ROOT / "config" / "strategy_routing.json"))
         self.executor = LiveExecutor(
@@ -479,6 +481,9 @@ class AlpacaLiveRunner:
 
             # CRITICAL: Disconnect broker to release websocket connection
             self.broker.disconnect()
+
+            # Shutdown event handler (waits for pending tasks, closes thread pool)
+            await self.event_handler.shutdown()
 
             self.trade_logger.flush()
             self.logger.info("LiveRunner shut down cleanly.")
