@@ -8,21 +8,246 @@ Configuration values are resolved in the following order (highest to lowest prio
 
 1. **Environment variables** (`.env` file or system environment)
 2. **Runtime overrides** (passed to Settings constructor)
-3. **Unified symbol configuration** (`config/symbol_configuration.json`)
+3. **Centralized config** (`config/trading_config.json`) - Primary config source
 4. **Individual config files** (`config/*.json`)
-5. **Default values** (hardcoded in code)
+5. **Default values** (in dataclasses)
 
 ```
 Environment Variables
         ↓
 Runtime Overrides
         ↓
-symbol_configuration.json
+trading_config.json (Centralized)
         ↓
 Individual Config Files
         ↓
-Hardcoded Defaults
+Dataclass Defaults
 ```
+
+---
+
+## Centralized Configuration System
+
+The primary configuration is in `config/trading_config.json`. Access it via:
+
+```python
+from core.config_loader import get_config
+
+cfg = get_config()
+print(cfg.trade_logic.cooldown_bars)  # 5
+print(cfg.position_sizer.risk_percentage)  # 0.05
+```
+
+### Factory Functions
+
+Use factory functions to create pre-configured component instances:
+
+```python
+from core.config_loader import (
+    get_config,
+    create_position_sizer,
+    create_drawdown_monitor,
+    create_trade_approver,
+    create_position_manager,
+)
+
+cfg = get_config()
+
+# Create components from config
+sizer = create_position_sizer(cfg)       # KellyPositionSizer
+ddm = create_drawdown_monitor(cfg)       # DrawdownMonitor (or None if disabled)
+approver = create_trade_approver(cfg)    # StandardTradeApprover
+pm = create_position_manager(cfg)        # PositionManager
+```
+
+### Configuration Sections
+
+#### General
+
+```json
+{
+  "general": {
+    "default_symbols": ["AAPL", "MSFT"],
+    "default_mode": "simulation",
+    "log_level": "INFO"
+  }
+}
+```
+
+#### Simulation
+
+```json
+{
+  "simulation": {
+    "enabled": true,
+    "steps": 2000,
+    "bar_sleep": 0.5,
+    "warmup_bars": 200,
+    "starting_cash": 100000.0,
+    "gbm_mu": 0.05,
+    "gbm_sigma": 0.2
+  }
+}
+```
+
+#### Risk Management
+
+```json
+{
+  "risk": {
+    "risk_per_trade": 0.05,
+    "max_trade_pct": 0.10,
+    "max_holding_pct": 0.25,
+    "max_pyramid_layers": 2,
+    "min_bars_between_layers": 2,
+    "daily_loss_limit": 1000.0
+  }
+}
+```
+
+#### Position Sizer
+
+```json
+{
+  "position_sizer": {
+    "type": "dynamic",
+    "risk_percentage": 0.05,
+    "max_trade_pct": 0.10,
+    "max_holding_pct": 0.25,
+    "min_position_size": 1,
+    "max_position_size": 1000,
+    "fee_rate": 0.001,
+    "allow_fractional": false,
+    "lot_size": 1
+  }
+}
+```
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `risk_percentage` | Fraction of equity risked per trade | 0.05 (5%) |
+| `max_trade_pct` | Max notional as % of equity per trade | 0.10 (10%) |
+| `max_holding_pct` | Max notional in single position | 0.25 (25%) |
+| `fee_rate` | Transaction fee rate | 0.001 (0.1%) |
+| `allow_fractional` | Allow fractional shares | false |
+| `lot_size` | Minimum lot size for rounding | 1 |
+
+#### Trade Logic
+
+```json
+{
+  "trade_logic": {
+    "cooldown_mode": "bars",
+    "cooldown_bars": 5,
+    "cooldown_seconds": 300,
+    "tp_mult_low": 1.5,
+    "tp_mult_normal": 2.0,
+    "tp_mult_high": 3.0,
+    "sl_mult_low": 1.0,
+    "sl_mult_normal": 1.5,
+    "sl_mult_high": 2.0,
+    "exit_fraction": 0.25,
+    "trailing_stop": true,
+    "max_positions": 10,
+    "min_bars_to_hold": 3,
+    "swing_mode": true,
+    "min_hold_days": 1,
+    "allow_after_hours": false
+  }
+}
+```
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `cooldown_mode` | "bars", "time", or "both" | "bars" |
+| `cooldown_bars` | Bars between trades per symbol | 5 |
+| `cooldown_seconds` | Seconds between trades (if time mode) | 300 |
+| `tp_mult_low/normal/high` | Take profit ATR multipliers by regime | 1.5/2.0/3.0 |
+| `sl_mult_low/normal/high` | Stop loss ATR multipliers by regime | 1.0/1.5/2.0 |
+| `exit_fraction` | Fraction for partial exits | 0.25 |
+| `trailing_stop` | Enable trailing stops | true |
+| `max_positions` | Maximum concurrent positions | 10 |
+| `min_bars_to_hold` | Min bars before TP/reversal exits | 3 |
+| `swing_mode` | Prevent same-day exits (except SL) | true |
+| `min_hold_days` | Days to hold in swing mode | 1 |
+| `allow_after_hours` | Trade outside market hours | false |
+
+#### Drawdown Monitor
+
+```json
+{
+  "drawdown_monitor": {
+    "enabled": false,
+    "max_symbol_drawdown": 0.30,
+    "max_symbol_daily_drawdown": 0.15,
+    "symbol_cooldown_seconds": 5,
+    "max_portfolio_drawdown": 0.25,
+    "max_portfolio_daily_drawdown": 0.10,
+    "portfolio_cooldown_seconds": 5
+  }
+}
+```
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `enabled` | Enable drawdown monitoring | false |
+| `max_symbol_drawdown` | Max intraday drawdown per symbol | 0.30 (30%) |
+| `max_symbol_daily_drawdown` | Max daily drawdown per symbol | 0.15 (15%) |
+| `max_portfolio_drawdown` | Max intraday portfolio drawdown | 0.25 (25%) |
+| `max_portfolio_daily_drawdown` | Max daily portfolio drawdown | 0.10 (10%) |
+| `*_cooldown_seconds` | Cooldown after unlock | 5 |
+
+#### Indicators
+
+```json
+{
+  "indicators": {
+    "atr_period": 14,
+    "sma_short": 20,
+    "sma_long": 50,
+    "rsi_period": 14,
+    "bollinger_period": 20,
+    "bollinger_std": 2.0
+  }
+}
+```
+
+#### Error Recovery
+
+```json
+{
+  "error_recovery": {
+    "retry_max_attempts": 3,
+    "retry_base_delay": 1.0,
+    "circuit_breaker_failure_threshold": 5,
+    "circuit_breaker_timeout": 60.0
+  }
+}
+```
+
+### Config Validation
+
+```python
+from core.config_loader import get_config, validate_config
+
+cfg = get_config()
+is_valid, errors = validate_config(cfg)
+
+if not is_valid:
+    print(f"Config errors: {errors}")
+```
+
+### Day Trade Mode
+
+To enable day trading (disable swing mode):
+
+```python
+from core.config_loader import enable_day_trade_mode
+
+cfg = enable_day_trade_mode()  # Sets swing_mode=False, min_hold_days=0
+```
+
+---
 
 ## Unified Symbol Configuration
 

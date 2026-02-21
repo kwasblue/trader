@@ -145,48 +145,67 @@ class VectorizedBacktester:
 
 ---
 
-### DynamicPositionSizer
+### KellyPositionSizer
 
 ```python
-class DynamicPositionSizer:
-    """Risk-based position sizing with volatility adjustment."""
+class KellyPositionSizer:
+    """Production position sizer with full risk management features."""
 
     def __init__(
         self,
-        risk_per_trade: float = 0.02,
-        max_position_pct: float = 0.20,
-        capital: float = 10000
+        risk_percentage: float,
+        *,
+        fee_rate: float = 0.001,
+        max_trade_pct: Optional[float] = None,
+        max_holding_pct: Optional[float] = None,
+        allow_fractional: bool = False,
+        lot_size: int = 1,
     ):
         """
         Initialize position sizer.
 
         Args:
-            risk_per_trade: Risk per trade as capital fraction (0.02 = 2%)
-            max_position_pct: Maximum position as capital fraction
-            capital: Current capital
+            risk_percentage: Risk per trade as capital fraction (0.02 = 2%)
+            fee_rate: Transaction fee rate (0.001 = 0.1%)
+            max_trade_pct: Maximum trade notional as equity fraction
+            max_holding_pct: Maximum holding notional as equity fraction
+            allow_fractional: Allow fractional shares
+            lot_size: Minimum lot size for rounding
         """
 
     def calculate_position_size(
         self,
-        stock_price: float,
-        stop_loss_price: float,
-        current_cash: float,
-        market_conditions: str = 'normal',
-        signal: int = 1
+        symbol: str,
+        price: float,
+        account_value: float,
+        signal_strength: float = 1.0,
+        atr: Optional[float] = None,
+        stop_loss_price: Optional[float] = None,
+        **kwargs
     ) -> int:
         """
         Calculate position size based on risk.
 
         Args:
-            stock_price: Current stock price
+            symbol: Trading symbol
+            price: Current stock price
+            account_value: Total account value (not used, uses portfolio)
+            signal_strength: Signal confidence
+            atr: Average True Range
             stop_loss_price: Stop loss price
-            current_cash: Available cash
-            market_conditions: 'low_volatility', 'normal', 'high_volatility'
-            signal: Trading signal (1=buy, -1=sell)
+            **kwargs: Additional args (signal, portfolio, market_conditions)
 
         Returns:
             Number of shares to trade
         """
+
+    def reset_reserved(self, symbol: Optional[str] = None):
+        """Reset reserved notional (per symbol or all)."""
+
+# Factory function
+from core.config_loader import create_position_sizer
+
+sizer = create_position_sizer()  # Creates from config/trading_config.json
 ```
 
 ---
@@ -195,33 +214,185 @@ class DynamicPositionSizer:
 
 ```python
 class DrawdownMonitor:
-    """Monitor and enforce drawdown limits."""
+    """Unified risk guard for per-symbol and portfolio-level drawdown control."""
 
     def __init__(
         self,
-        max_drawdown: float = 0.15,
-        daily_drawdown: float = 0.05,
-        cooldown_period: int = 300,
-        per_symbol_limit: float = 0.03
+        max_symbol_drawdown: float = 0.30,
+        max_symbol_daily_drawdown: float = 0.15,
+        symbol_cooldown_seconds: int = 5,
+        max_portfolio_drawdown: float = 0.25,
+        max_portfolio_daily_drawdown: float = 0.10,
+        portfolio_cooldown_seconds: int = 5,
     ):
         """
         Initialize drawdown monitor.
 
         Args:
-            max_drawdown: Maximum total drawdown allowed
-            daily_drawdown: Maximum daily drawdown
-            cooldown_period: Seconds to wait after unlocking
-            per_symbol_limit: Maximum drawdown per symbol
+            max_symbol_drawdown: Max intraday drawdown per symbol (0.30 = 30%)
+            max_symbol_daily_drawdown: Max daily drawdown per symbol
+            symbol_cooldown_seconds: Cooldown after symbol unlock
+            max_portfolio_drawdown: Max intraday portfolio drawdown
+            max_portfolio_daily_drawdown: Max daily portfolio drawdown
+            portfolio_cooldown_seconds: Cooldown after portfolio unlock
         """
 
-    def update(self, symbol: str, pnl: float, portfolio_value: float):
-        """Update drawdown tracking with new P&L."""
+    def start_new_day(
+        self,
+        portfolio_equity: Optional[float] = None,
+        per_symbol_equity: Optional[Dict[str, float]] = None,
+    ) -> None:
+        """Reset daily baselines. Call once at session start."""
 
-    def is_locked(self, symbol: str = None) -> bool:
-        """Check if trading is locked for symbol or globally."""
+    def update_portfolio(self, portfolio_equity: float) -> bool:
+        """Update portfolio drawdown state. Returns True if trading allowed."""
 
-    def get_drawdown(self, symbol: str = None) -> float:
-        """Get current drawdown percentage."""
+    def update_symbol(self, symbol: str, symbol_equity: float) -> bool:
+        """Update symbol drawdown state. Returns True if trading allowed."""
+
+    def can_trade(self, symbol: str) -> bool:
+        """Check if trading allowed (portfolio not locked AND symbol not locked)."""
+
+    def is_portfolio_blocked(self) -> bool:
+        """Check if portfolio is blocked (locked or in cooldown)."""
+
+    def is_symbol_blocked(self, symbol: str) -> bool:
+        """Check if symbol is blocked (locked or in cooldown)."""
+
+    def get_portfolio_drawdown(self) -> float:
+        """Current portfolio drawdown vs peak (negative = DD)."""
+
+    def unlock_symbol(self, symbol: str) -> None:
+        """Manually unlock a symbol (starts cooldown)."""
+
+    def unlock_portfolio(self) -> None:
+        """Manually unlock portfolio (starts cooldown)."""
+
+    # Async wrappers for use in async contexts
+    async def can_trade_async(self, symbol: str) -> bool: ...
+    async def update_portfolio_async(self, portfolio_equity: float) -> bool: ...
+    async def update_symbol_async(self, symbol: str, symbol_equity: float) -> bool: ...
+
+# Factory function
+from core.config_loader import create_drawdown_monitor
+
+ddm = create_drawdown_monitor()  # Creates from config, returns None if disabled
+```
+
+---
+
+### StandardTradeApprover
+
+```python
+class StandardTradeApprover(TradeApprover):
+    """Pure gating approver for trade decisions."""
+
+    def __init__(
+        self,
+        tp_mult_low: float = 1.5,
+        tp_mult_normal: float = 2.0,
+        tp_mult_high: float = 3.0,
+        sl_mult_low: float = 1.0,
+        sl_mult_normal: float = 1.5,
+        sl_mult_high: float = 2.0,
+        exit_fraction: float = 0.25,
+        trailing_stop: bool = True,
+        min_bars_to_hold: int = 3,
+        swing_mode: bool = False,
+        min_hold_days: int = 1,
+        cooldown_seconds: int = 300,
+        cooldown_bars: int = 5,
+        cooldown_mode: str = 'bars',
+        max_positions: int = 10,
+        allow_after_hours: bool = False,
+        event_handler: Optional[EventHandler] = None,
+    ):
+        """Initialize trade approver with gating rules."""
+
+    def should_trade(
+        self,
+        context: SignalContext,
+        state: SymbolState,
+        account_positions: int = 0,
+    ) -> Tuple[bool, Optional[str]]:
+        """
+        Pure gating check - are we ALLOWED to trade?
+
+        Returns:
+            (True, None) if allowed
+            (False, reason) if gated
+        """
+
+    def can_enter_position(
+        self, symbol: str, state: SymbolState, side: OrderSide, **kwargs
+    ) -> Tuple[bool, Optional[str]]:
+        """Check if new position can be opened."""
+
+    def can_exit_position(
+        self, symbol: str, state: SymbolState, side: OrderSide, **kwargs
+    ) -> Tuple[bool, Optional[str]]:
+        """Check if position can be closed."""
+
+# Factory function
+from core.config_loader import create_trade_approver
+
+approver = create_trade_approver()  # Creates from config
+```
+
+---
+
+### PositionManager
+
+```python
+class PositionManager:
+    """Manages position lifecycle: entry levels, stops, targets, exits."""
+
+    def __init__(
+        self,
+        tp_mults: Optional[Dict[str, float]] = None,
+        sl_mults: Optional[Dict[str, float]] = None,
+        exit_fraction: float = 0.25,
+        min_bars_to_hold: int = 3,
+        swing_mode: bool = False,
+        min_hold_days: int = 1,
+    ):
+        """Initialize position manager."""
+
+    def calculate_levels(
+        self, state: SymbolState, price: float, atr: float,
+        condition: str, side: OrderSide
+    ) -> None:
+        """Calculate and set SL/TP/partial targets on state."""
+
+    def update_trailing_stop(
+        self, state: SymbolState, price: float, atr: float, condition: str
+    ) -> None:
+        """Update trailing stop based on current price."""
+
+    def update_excursions(
+        self, state: SymbolState, current_price: float, avg_price: float
+    ) -> None:
+        """Track MFE/MAE for trade analytics."""
+
+    def check_exit_conditions(
+        self, state: SymbolState, price: float, signal: int
+    ) -> Tuple[bool, Optional[str]]:
+        """Check all exit conditions for a position."""
+
+    def check_partial_exit(
+        self, state: SymbolState, price: float
+    ) -> Tuple[bool, Optional[str]]:
+        """Check if partial exit target was hit."""
+
+    def get_exit_quantity(
+        self, current_position: float, is_partial: bool = False
+    ) -> int:
+        """Calculate exit quantity."""
+
+# Factory function
+from core.config_loader import create_position_manager
+
+pm = create_position_manager()  # Creates from config
 ```
 
 ---

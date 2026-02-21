@@ -54,12 +54,32 @@ trader start --symbols AAPL,MSFT
 | Run tests | `trader test` |
 | View logs | `trader logs -f` |
 
+## Configuration
+
+All trading settings are centralized in `config/trading_config.json`:
+
+```python
+from core.config_loader import get_config, create_position_sizer
+
+cfg = get_config()
+sizer = create_position_sizer(cfg)  # Pre-configured from config
+```
+
+Key configurable parameters:
+- **Position Sizing**: risk_percentage, max_trade_pct, max_holding_pct
+- **Trade Logic**: cooldown_bars, swing_mode, min_bars_to_hold, SL/TP multipliers
+- **Drawdown Monitor**: enabled, max_portfolio_drawdown, cooldown_seconds
+- **Indicators**: ATR period, SMA periods, RSI settings
+
+See [Configuration Guide](docs/configuration.md) for full details.
+
 ## Documentation
 
 Full documentation is available in the [docs/](docs/) folder:
 
 - [Quick Reference](docs/quick-reference.md) - Command cheatsheet
 - [Commands Reference](docs/commands.md) - Complete command reference
+- [Configuration](docs/configuration.md) - Configuration guide
 - [Getting Started](docs/getting-started.md) - Installation guide
 - [Architecture](docs/architecture.md) - System design
 - [Event System](docs/event-system.md) - Event bus architecture

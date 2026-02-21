@@ -137,8 +137,9 @@ trader logs -n 100
 | File | Purpose |
 |------|---------|
 | `.env` | API credentials |
-| `config/trading_config.json` | Trading settings |
-| `config/symbols.json` | Symbol lists |
+| `config/trading_config.json` | Centralized trading config |
+| `config/strategy_routing.json` | Symbol → strategy mapping |
+| `config/trade_logic_routing.json` | Symbol → trade logic mapping |
 
 ### Key Environment Variables
 
@@ -147,6 +148,35 @@ ALPACA_API_KEY=xxx
 ALPACA_SECRET_KEY=xxx
 SCHWAB_API_KEY=xxx
 SCHWAB_SECRET=xxx
+```
+
+### Key Config Sections (`trading_config.json`)
+
+```json
+{
+  "trade_logic": {
+    "cooldown_bars": 5,
+    "swing_mode": true,
+    "min_bars_to_hold": 3
+  },
+  "position_sizer": {
+    "risk_percentage": 0.05,
+    "max_trade_pct": 0.10
+  },
+  "drawdown_monitor": {
+    "enabled": false,
+    "max_portfolio_drawdown": 0.25
+  }
+}
+```
+
+### Using Config in Code
+
+```python
+from core.config_loader import get_config, create_position_sizer
+
+cfg = get_config()
+sizer = create_position_sizer(cfg)
 ```
 
 ## Keyboard Shortcuts (GUI)

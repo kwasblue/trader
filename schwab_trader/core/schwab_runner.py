@@ -46,6 +46,7 @@ from core.contracts.events import (
     EVENT_HEALTH_UPDATE,
     EVENT_POSITION_UPDATE, PositionPayload
 )
+from core.config_loader import get_config, create_position_sizer, create_drawdown_monitor
 
 from core.simulator.simulation import compute_atr, classify_regime
 from core.credential_validator import CredentialValidator, CredentialStatus
@@ -111,25 +112,31 @@ class SchwabLiveRunner:
         self.history: Dict[str, List[Dict]] = defaultdict(list)
         self.atr_hist: Dict[str, List[float]] = defaultdict(list)
 
-        # Risk & gates
+        # Load centralized config
+        self.config = get_config()
+        risk_cfg = self.config.risk
+
+        # Risk & gates (uses config with settings override)
         self.trade_gate = TradeGate(
-            max_layers=settings.get("MAX_PYRAMID_LAYERS", 2),
-            min_bars_between_layers=settings.get("MIN_BARS_BETWEEN_LAYERS", 2),
+            max_layers=settings.get("MAX_PYRAMID_LAYERS", risk_cfg.max_pyramid_layers),
+            min_bars_between_layers=settings.get("MIN_BARS_BETWEEN_LAYERS", risk_cfg.min_bars_between_layers),
             regime_min_persist_bars=settings.get("REGIME_MIN_PERSIST_BARS", 1),
             flip_cooldown_bars=settings.get("FLIP_COOLDOWN_BARS", 1),
         )
-        self.ddm = DrawdownMonitor(
-            max_symbol_drawdown=settings.get("MAX_SYMBOL_DD", 0.12),
-            max_portfolio_drawdown=settings.get("MAX_PORTFOLIO_DD", 0.15),
-            symbol_cooldown_seconds=settings.get("DDM_COOLDOWN_BARS", 5),
-        )
 
-        # Sizer, router, executor, engine
-        self.sizer = KellyPositionSizer(
-            risk_percentage=settings.get("BASE_RISK_PCT", 0.05),
-            max_trade_pct=settings.get("MAX_TRADE_PCT", 0.10),
-            max_holding_pct=settings.get("MAX_HOLDING_PCT", 0.20),
-        )
+        # DrawdownMonitor from config (returns None if disabled)
+        self.ddm = create_drawdown_monitor(self.config)
+        if self.ddm is None:
+            # Create with settings fallback if config has it disabled but settings override
+            if settings.get("DDM_ENABLED", False):
+                self.ddm = DrawdownMonitor(
+                    max_symbol_drawdown=settings.get("MAX_SYMBOL_DD", 0.12),
+                    max_portfolio_drawdown=settings.get("MAX_PORTFOLIO_DD", 0.15),
+                    symbol_cooldown_seconds=settings.get("DDM_COOLDOWN_BARS", 5),
+                )
+
+        # Sizer from config
+        self.sizer = create_position_sizer(self.config)
         self.router = StrategyRoutingManager(str(ROOT / "config" / "strategy_routing.json"))
         self.executor = LiveExecutor(
             broker=self.broker,
@@ -317,12 +324,13 @@ class SchwabLiveRunner:
             self.atr_hist[symbol].append(atr)
         regime = classify_regime(atr, self.atr_hist[symbol])
 
-        # Drawdown monitor (daily tick + updates)
-        if self._last_ddm_date is None or ts.date() != self._last_ddm_date:
-            self.ddm.start_new_day(portfolio_equity=self.portfolio.total_equity())
-            self._last_ddm_date = ts.date()
-        self.ddm.update_portfolio(self.portfolio.total_equity())
-        self.ddm.update_symbol(symbol, self._symbol_mv(symbol, last_px))
+        # Drawdown monitor (daily tick + updates) - only if enabled
+        if self.ddm is not None:
+            if self._last_ddm_date is None or ts.date() != self._last_ddm_date:
+                self.ddm.start_new_day(portfolio_equity=self.portfolio.total_equity())
+                self._last_ddm_date = ts.date()
+            self.ddm.update_portfolio(self.portfolio.total_equity())
+            self.ddm.update_symbol(symbol, self._symbol_mv(symbol, last_px))
 
         # Emit P&L update
         await self.event_handler.emit(EVENT_PNL_UPDATE, PnLPayload(
@@ -330,7 +338,7 @@ class SchwabLiveRunner:
             equity_curve=self.portfolio.equity_history,
             unrealized=self.portfolio.total_unrealized(),
             realized=self.portfolio.realized_pnl,
-            drawdown=self.ddm.get_portfolio_drawdown(),
+            drawdown=self.ddm.get_portfolio_drawdown() if self.ddm else 0.0,
             timestamp=ts.isoformat(),
         ))
 

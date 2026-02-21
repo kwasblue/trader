@@ -149,10 +149,51 @@ Event emission (NEW_TRADE, POSITION_UPDATE, etc.)
 
 ## Configuration
 
+### Files
+
 | File | Purpose |
 |------|---------|
-| `core/config_loader.py` | Trading configuration (strategies, risk params) |
+| `config/trading_config.json` | Centralized trading configuration |
+| `core/config_loader.py` | Config loader + factory functions |
 | `utils/settings.py` | Infrastructure configuration (API keys, paths) |
+
+### Factory Functions
+
+The config system provides factory functions to create pre-configured components:
+
+```python
+from core.config_loader import (
+    get_config,
+    create_position_sizer,      # → KellyPositionSizer
+    create_drawdown_monitor,    # → DrawdownMonitor or None
+    create_trade_approver,      # → StandardTradeApprover
+    create_position_manager,    # → PositionManager
+)
+
+cfg = get_config()
+sizer = create_position_sizer(cfg)
+ddm = create_drawdown_monitor(cfg)  # Returns None if disabled in config
+```
+
+### Config Structure
+
+```
+trading_config.json
+├── general          # Symbols, mode, log level
+├── simulation       # Steps, sleep, starting cash
+├── risk             # Risk per trade, pyramid layers
+├── position_sizer   # Sizing params, fee rate, lot size
+├── trade_logic      # Cooldowns, SL/TP multipliers, swing mode
+├── drawdown_monitor # Enabled flag, thresholds, cooldowns
+├── indicators       # ATR, SMA, RSI periods
+├── data             # Paths, freshness settings
+├── gui              # Update intervals
+├── logging          # Console/file settings
+├── autotrader       # Daemon settings
+└── error_recovery   # Retry/circuit breaker settings
+```
+
+See [Configuration Guide](configuration.md) for full details.
 
 ---
 
