@@ -1181,6 +1181,13 @@ class MainWindow(QtWidgets.QMainWindow):
         if hasattr(self, '_alpaca_runner') and self._alpaca_runner is not None:
             if hasattr(self._alpaca_runner, 'stop'):
                 self._alpaca_runner.stop()
+                self._append_log("[STOP] Stop signal sent to AlpacaRunner.")
+
+        # Stop schwab runner if it exists
+        if hasattr(self, '_schwab_runner') and self._schwab_runner is not None:
+            if hasattr(self._schwab_runner, 'stop'):
+                asyncio.create_task(self._schwab_runner.stop())
+                self._append_log("[STOP] Stop signal sent to SchwabRunner.")
 
         self._trading_active = False
         self._sim_running = False

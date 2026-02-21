@@ -15,6 +15,7 @@ from typing import Optional, Dict, Any
 from datetime import datetime, timezone
 import asyncio
 import logging
+import math
 
 from core.base.execution_engine_base import ExecutionEngineBase
 from core.base.executor_base import BaseExecutor
@@ -559,6 +560,11 @@ class MockExecutionEngine(ExecutionEngineBase):
 
         # Get signal from kwargs
         signal = kwargs.get('signal', 0)
+
+        # Guard against NaN ATR (not enough bars yet)
+        if atr is None or math.isnan(atr):
+            self.logger.debug(f"[MOCK] [{symbol}] Skipping trade - ATR not yet available")
+            return 0
 
         sl_mults = getattr(trade_logic, 'sl_mults', {"normal": 1.5})
         sl_mult = sl_mults.get(regime, 1.5)

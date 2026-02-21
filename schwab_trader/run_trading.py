@@ -292,7 +292,7 @@ class TradingApplication:
             sys.exit(0)
 
     async def _startup(self):
-        """Async startup sequence."""
+        """Async startup sequence - initializes but does NOT auto-start trading."""
         try:
             await asyncio.sleep(0.5)  # Let Qt settle
 
@@ -300,22 +300,29 @@ class TradingApplication:
             await self.window.feeder.start()
             self.window._append_log(f"[INIT] Data feeder connected to event bus")
 
-            # Start the backend (generates events)
-            await self.backend.start()
-            self.window._append_log(f"[INIT] Backend started: {self.mode.value}")
-            self.window._append_log(f"[INIT] Symbols: {', '.join(self.symbols)}")
+            # Pre-populate the symbol input with command-line symbols
+            if hasattr(self.window, 'symbol_input'):
+                self.window.symbol_input.setText(','.join(self.symbols))
 
-            # Emit initial health status
+            # Set the mode dropdown to match command-line mode
+            if hasattr(self.window, 'mode_combo'):
+                mode_map = {'simulation': 0, 'alpaca': 1, 'schwab': 2}
+                idx = mode_map.get(self.mode.value, 0)
+                self.window.mode_combo.setCurrentIndex(idx)
+
+            # Emit initial health status (system ready, not trading yet)
             from core.events import events
             from datetime import datetime, timezone
             await self.backend.event_handler.emit(events.EVENT_HEALTH_UPDATE, {
                 "broker": self.mode.value,
-                "status": "connected",
+                "status": "ready",
                 "details": {"symbols": self.symbols},
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             })
 
-            self.window._append_log("[INIT] System ready")
+            self.window._append_log(f"[INIT] Mode: {self.mode.value.upper()}")
+            self.window._append_log(f"[INIT] Symbols: {', '.join(self.symbols)}")
+            self.window._append_log("[INIT] System ready - click Start to begin trading")
 
         except Exception as e:
             logger.exception(f"Startup failed: {e}")

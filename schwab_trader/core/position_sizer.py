@@ -309,6 +309,11 @@ class KellyPositionSizer(PositionSizerBase):
         equity = float(portfolio.equity)
         cash = float(portfolio.cash)
 
+        # Guard against NaN/inf values (can happen when ATR not yet calculated)
+        if math.isnan(price) or math.isnan(stop_loss_price) or math.isinf(stop_loss_price):
+            logger.debug(f"[Sizer] {symbol} => No position (invalid price or stop_loss)")
+            return 0
+
         px_gross = price * (1.0 + self.fee_rate)
         if px_gross <= 0 or equity <= 0:
             return 0
