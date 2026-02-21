@@ -1702,7 +1702,6 @@ Total Files: 189
       ├── def _check_configuration(self)
       └── def _print_summary(self)
 
-📄 run_live.py
    ⚙️  def parse_args()
    ⚙️  def run_with_gui(self, symbols)
    ⚙️  def main()

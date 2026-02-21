@@ -112,13 +112,6 @@ python run_trading.py --mode alpaca --symbols AAPL MSFT
 python run_trading.py --mode schwab --symbols AAPL
 ```
 
-### run_live.py - GUI Only
-
-```bash
-# Launch monitoring GUI
-python run_live.py
-```
-
 ## macOS Services (launchd)
 
 ### AutoTrader Service
@@ -447,8 +440,7 @@ schwab_trader/
 ├── preflight.py                  # Pre-trading checks
 ├── refresh_schwab_token.py       # Manual token refresh
 ├── token_keeper.py               # Background token service
-├── run_trading.py                # Manual trading
-├── run_live.py                   # GUI launcher
+├── run_trading.py                # GUI trading application
 ├── com.schwabtrader.autotrader.plist   # macOS service (autotrader)
 ├── com.schwabtrader.tokenkeeper.plist  # macOS service (tokens)
 ├── config/

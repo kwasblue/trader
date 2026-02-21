@@ -18,8 +18,15 @@ The monitoring GUI is built with PySide6 (Qt) and provides:
 ## Launching the Dashboard
 
 ```bash
-# From project root
-python run_live.py
+# Using CLI (recommended)
+trader gui
+
+# With specific mode and symbols
+trader gui --mode simulation
+trader gui --mode alpaca -s AAPL,MSFT
+
+# Or directly
+python run_trading.py
 ```
 
 Or programmatically:

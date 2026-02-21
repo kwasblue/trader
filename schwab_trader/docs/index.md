@@ -69,7 +69,8 @@ print(bt.evaluate_performance(results))
 "
 
 # Run monitoring GUI
-python run_live.py
+trader gui
+# Or: python run_trading.py
 ```
 
 ## Project Structure

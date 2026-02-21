@@ -142,7 +142,11 @@ print(f"Max Drawdown: {metrics['max_drawdown']:.2%}")
 ## Quick Start: Running the Monitoring GUI
 
 ```bash
-python run_live.py
+# Using CLI (recommended)
+trader gui
+
+# Or directly
+python run_trading.py
 ```
 
 This launches the real-time monitoring dashboard with:

@@ -1,24 +1,7 @@
 #!/usr/bin/env python
 """
-===============================================================================
-DEPRECATED ENTRY POINT
-===============================================================================
-
-This entry point is deprecated. Use the CLI instead:
-
-    # Preferred way to run the trading system:
-    schwab-trader run --mode alpaca --symbols AAPL MSFT
-    schwab-trader run --mode schwab --symbols AAPL MSFT
-    schwab-trader run --mode simulation --symbols AAPL MSFT
-
-    # Or via Python module:
-    python -m cli.main run --mode alpaca --symbols AAPL
-
-See: python -m cli.main --help
-
-===============================================================================
-AutoTrader - Autonomous Trading Daemon (Legacy)
-===============================================================================
+AutoTrader - Autonomous Trading Daemon
+=======================================
 
 Runs the trading system automatically:
 1. Waits for market open
@@ -28,21 +11,16 @@ Runs the trading system automatically:
 5. Updates historical data
 6. Sleeps until next trading day
 
-Usage (deprecated):
-    # Run in foreground
-    python autotrader.py
+Usage (via CLI - recommended):
+    trader start                           # Start with defaults
+    trader start -s AAPL,MSFT              # Specific symbols
+    trader start --broker schwab           # Use Schwab
+    trader start --dry-run                 # No real trades
+    trader start --daemon                  # Background mode
 
-    # Run with specific symbols
+Usage (direct - for debugging):
     python autotrader.py --symbols AAPL MSFT TSLA
-
-    # Run with specific broker
-    python autotrader.py --broker alpaca
-
-    # Dry run (no actual trading)
-    python autotrader.py --dry-run
-
-    # Run as background daemon
-    nohup python autotrader.py > logs/autotrader_stdout.log 2>&1 &
+    python autotrader.py --broker alpaca --dry-run
 """
 
 from __future__ import annotations
@@ -60,19 +38,6 @@ from datetime import datetime, time, timedelta
 from typing import List, Optional, Dict, Any
 from enum import Enum
 from zoneinfo import ZoneInfo
-
-# Emit deprecation warning
-warnings.warn(
-    "\n"
-    "=" * 70 + "\n"
-    "DEPRECATION WARNING: autotrader.py is deprecated!\n"
-    "=" * 70 + "\n"
-    "Use the CLI instead: schwab-trader run --mode alpaca --symbols AAPL\n"
-    "Or: python -m cli.main run --mode alpaca --symbols AAPL\n"
-    "=" * 70,
-    DeprecationWarning,
-    stacklevel=2
-)
 
 # Suppress sklearn warnings for small sample sizes
 warnings.filterwarnings("ignore", category=RuntimeWarning, module="sklearn")
