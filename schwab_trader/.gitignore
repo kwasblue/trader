@@ -2,7 +2,7 @@
 __pycache__/
 *.py[cod]
 *.pyo
-
+*.pytrest_cache__/
 # === Virtual environments ===
 .venv/
 env/
@@ -14,6 +14,7 @@ venv/
 # === Logs and temporary files ===
 *.log
 *.tmp
+*.coverage
 
 # === Model and binary artifacts ===
 *.pkl
@@ -41,6 +42,7 @@ venv/
 .db-shm
 .db-wal
 .claude
+.plist
 
 # === Data storage (large files) ===
 data/data_storage/raw_data/
