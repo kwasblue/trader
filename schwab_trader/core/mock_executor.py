@@ -20,13 +20,12 @@ import pandas as pd
 
 from core.base.executor_base import BaseExecutor
 from core.base.base_broker_interface import BaseBrokerInterface
-from core.base.position_sizer_base import PositionSizerBase
 from core.enums import OrderSide, OrderType, OrderStatus
 from core.app_types import OrderResult
 from loggers.logger import Logger
 from core.events.eventhandler import EventHandler, get_event_handler
-from core.events.events import (
-    EVENT_NEW_TRADE, EVENT_ORDER_STATUS, EVENT_PNL_UPDATE, 
+from core.contracts.events import (
+    EVENT_NEW_TRADE, EVENT_ORDER_STATUS, EVENT_PNL_UPDATE,
     EVENT_ALERT, EVENT_POSITION_UPDATE,
     TradePayload, OrderStatusPayload, PnLPayload,
     AlertPayload, PositionPayload
@@ -43,40 +42,35 @@ class MockExecutor(BaseExecutor):
     - Position tracking
     - Event emission for monitoring
     - Compatible with MockBroker
-    
+
     Example:
         broker = MockBroker(starting_cash=100000)
         executor = MockExecutor(broker=broker)
-        
-        # Execute signal
-        executor.execute(
-            symbol="AAPL",
-            df=historical_data,
-            signal=1,
-            price=150.25,
-            atr_value=2.5
-        )
+
+        # Place orders via buy/sell
+        executor.buy(symbol="AAPL", qty=10, price=150.25)
+        executor.sell(symbol="AAPL", qty=10, price=155.00)
     """
     
     def __init__(
         self,
         broker: BaseBrokerInterface,
-        sizer: Optional[PositionSizerBase] = None,
         event_handler: Optional[EventHandler] = None
     ):
         """
         Initialize mock executor.
-        
+
         Args:
             broker: Broker interface (typically MockBroker)
-            sizer: Optional position sizer
             event_handler: Event bus for emissions
+
+        Note: Position sizing is handled by the ExecutionEngine, not the Executor.
+              The Executor is a thin adapter that just places orders with given qty.
         """
         super().__init__()
-        
+
         self.broker = broker
-        self.sizer = sizer
-        
+
         # Event bus
         self.bus = event_handler or get_event_handler()
         
@@ -94,64 +88,10 @@ class MockExecutor(BaseExecutor):
         self.logger.info("MockExecutor initialized")
     
     # ========================================================================
-    # CORE EXECUTION (BaseExecutor Implementation)
     # ========================================================================
-    
-    def execute(
-        self,
-        symbol: str,
-        df: Optional[pd.DataFrame],
-        signal: int,
-        price: float,
-        atr_value: float
-    ) -> None:
-        """
-        Execute trade signal (mock/simulation).
-        
-        Args:
-            symbol: Trading symbol
-            df: Historical data (for context)
-            signal: Signal (1=buy, -1=sell, 0=hold)
-            price: Current price
-            atr_value: ATR value
-        """
-        # Validate ATR
-        if pd.isna(atr_value) or atr_value <= 0:
-            self.logger.warning(
-                f"[{symbol}] Invalid ATR: {atr_value}, skipping"
-            )
-            return
-        
-        # Skip hold signals
-        if signal == 0:
-            self.logger.debug(f"[{symbol}] HOLD signal - no action")
-            return
-        
-        # Calculate position size
-        qty = self._calculate_quantity(symbol, price, atr_value, signal)
-        
-        if qty <= 0:
-            self.logger.warning(
-                f"[{symbol}] Position size too small: {qty}"
-            )
-            return
-        
-        # Determine action based on signal and current position
-        current_pos = self.positions.get(symbol, 0)
-        
-        if signal == 1 and current_pos == 0:
-            # Open long
-            self._place_order(symbol, qty, OrderSide.BUY, price)
-            
-        elif signal == -1 and current_pos > 0:
-            # Close long
-            self._place_order(symbol, current_pos, OrderSide.SELL, price)
-        
-        else:
-            self.logger.debug(
-                f"[{symbol}] No action for signal={signal}, pos={current_pos}"
-            )
-    
+    # ORDER PLACEMENT (BaseExecutor Implementation)
+    # ========================================================================
+
     def buy(self, symbol: str, qty: int, **kwargs) -> bool:
         """Buy (open long position)."""
         price = kwargs.get('price', 0.0)
@@ -305,36 +245,6 @@ class MockExecutor(BaseExecutor):
             f"[{symbol}] Position updated: {self.positions[symbol]} "
             f"@ ${self.entry_prices.get(symbol, 0.0):.2f}"
         )
-    
-    def _calculate_quantity(
-        self,
-        symbol: str,
-        price: float,
-        atr: float,
-        signal: int
-    ) -> int:
-        """Calculate position size."""
-        if self.sizer is None:
-            # Default: $10k position size
-            return int(10000 / price)
-        
-        # Use position sizer
-        stop_loss_price = price - (atr * 2) if signal == 1 else price + (atr * 2)
-        
-        try:
-            cash = self.broker.get_available_funds()
-        except Exception:
-            cash = 100000  # Fallback
-        
-        qty = int(self.sizer.calculate_position_size(
-            symbol=symbol,
-            price=price,
-            account_value=cash,
-            atr=atr,
-            stop_loss_price=stop_loss_price
-        ))
-        
-        return max(qty, 0)
     
     # ========================================================================
     # EVENT EMISSION

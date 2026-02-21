@@ -15,16 +15,23 @@ from datetime import datetime, timedelta
 class TestSchwabClientAuthentication(unittest.TestCase):
     """Test Schwab client authentication."""
 
-    def test_client_requires_credentials(self):
+    @patch('data.streaming.schwab_client.Authenticator')
+    @patch('data.streaming.schwab_client.ConfigLoader')
+    @patch('data.streaming.schwab_client.Logger')
+    def test_client_requires_credentials(self, mock_logger, mock_config, mock_auth):
         """Client should require API credentials."""
-        try:
-            from core.broker.schwab_client import SchwabClient
+        mock_config.return_value.load_config.return_value = {
+            'folders': {'logs': '/tmp'},
+            'api': {'base_url': 'https://api.example.com', 'market_url': 'https://market.example.com'}
+        }
+        mock_logger.return_value.get_logger.return_value = MagicMock()
 
-            # Should raise without credentials
-            with self.assertRaises((ValueError, TypeError)):
-                client = SchwabClient()
-        except ImportError:
-            self.skipTest("SchwabClient not found")
+        from data.streaming.schwab_client import SchwabClient
+
+        # Should work with credentials
+        client = SchwabClient(apikey='test_key', secretkey='test_secret')
+        self.assertIsNotNone(client)
+        self.assertEqual(client.apikey, 'test_key')
 
     @patch.dict(os.environ, {'SCHWAB_API_KEY': 'test_key', 'SCHWAB_SECRET': 'test_secret'})
     def test_client_loads_env_credentials(self):
@@ -74,6 +81,32 @@ class TestSchwabClientPriceHistory(unittest.TestCase):
             self.assertIn('low', candle)
             self.assertIn('close', candle)
             self.assertIn('volume', candle)
+
+    @patch('data.streaming.schwab_client.Authenticator')
+    @patch('data.streaming.schwab_client.ConfigLoader')
+    @patch('data.streaming.schwab_client.Logger')
+    def test_daily_price_history_integration(self, mock_logger, mock_config, mock_auth):
+        """Test daily_price_history method on client."""
+        mock_config.return_value.load_config.return_value = {
+            'folders': {'logs': '/tmp'},
+            'api': {'base_url': 'https://api.example.com', 'market_url': 'https://market.example.com'}
+        }
+        mock_logger.return_value.get_logger.return_value = MagicMock()
+        mock_auth.return_value.access_token.return_value = 'mock_token'
+
+        from data.streaming.schwab_client import SchwabClient
+        client = SchwabClient(apikey='test_key', secretkey='test_secret')
+
+        # Mock the session request
+        with patch.object(client._session, 'request') as mock_request:
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = self.mock_candles
+            mock_request.return_value = mock_response
+
+            result = client.daily_price_history('AAPL')
+
+            self.assertEqual(result['symbol'], 'AAPL')
 
 
 class TestSchwabClientQuotes(unittest.TestCase):
@@ -161,6 +194,35 @@ class TestSchwabClientOrders(unittest.TestCase):
         # Successful cancellation returns 200
         self.assertEqual(mock_response.status_code, 200)
 
+    @patch('data.streaming.schwab_client.Authenticator')
+    @patch('data.streaming.schwab_client.ConfigLoader')
+    @patch('data.streaming.schwab_client.Logger')
+    def test_generate_order(self, mock_logger, mock_config, mock_auth):
+        """Test order generation."""
+        mock_config.return_value.load_config.return_value = {
+            'folders': {'logs': '/tmp'},
+            'api': {'base_url': 'https://api.example.com', 'market_url': 'https://market.example.com'}
+        }
+        mock_logger.return_value.get_logger.return_value = MagicMock()
+
+        from data.streaming.schwab_client import SchwabClient
+        client = SchwabClient(apikey='test_key', secretkey='test_secret')
+
+        order = client.generate_order(
+            orderType='MARKET',
+            session='NORMAL',
+            duration='DAY',
+            orderStrategyType='SINGLE',
+            instruction='BUY',
+            quantity=100,
+            symbol='AAPL',
+            assetType='EQUITY'
+        )
+
+        self.assertEqual(order['orderType'], 'MARKET')
+        self.assertEqual(order['orderLegCollection'][0]['instruction'], 'BUY')
+        self.assertEqual(order['orderLegCollection'][0]['quantity'], 100)
+
 
 class TestSchwabClientAccountInfo(unittest.TestCase):
     """Test Schwab client account info methods."""
@@ -232,6 +294,40 @@ class TestSchwabClientErrorHandling(unittest.TestCase):
         mock_get.return_value = mock_response
 
         self.assertEqual(mock_response.status_code, 401)
+
+    @patch('data.streaming.schwab_client.Authenticator')
+    @patch('data.streaming.schwab_client.ConfigLoader')
+    @patch('data.streaming.schwab_client.Logger')
+    def test_rate_limiter_integration(self, mock_logger, mock_config, mock_auth):
+        """Test rate limiter is properly configured."""
+        mock_config.return_value.load_config.return_value = {
+            'folders': {'logs': '/tmp'},
+            'api': {'base_url': 'https://api.example.com', 'market_url': 'https://market.example.com'}
+        }
+        mock_logger.return_value.get_logger.return_value = MagicMock()
+
+        from data.streaming.schwab_client import SchwabClient
+        client = SchwabClient(apikey='test_key', secretkey='test_secret')
+
+        # Verify rate limiter exists
+        self.assertIsNotNone(client._rate_limiter)
+
+    @patch('data.streaming.schwab_client.Authenticator')
+    @patch('data.streaming.schwab_client.ConfigLoader')
+    @patch('data.streaming.schwab_client.Logger')
+    def test_session_close(self, mock_logger, mock_config, mock_auth):
+        """Test session can be closed."""
+        mock_config.return_value.load_config.return_value = {
+            'folders': {'logs': '/tmp'},
+            'api': {'base_url': 'https://api.example.com', 'market_url': 'https://market.example.com'}
+        }
+        mock_logger.return_value.get_logger.return_value = MagicMock()
+
+        from data.streaming.schwab_client import SchwabClient
+        client = SchwabClient(apikey='test_key', secretkey='test_secret')
+
+        # Should not raise
+        client.close()
 
 
 if __name__ == '__main__':

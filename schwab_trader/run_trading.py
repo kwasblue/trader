@@ -74,6 +74,12 @@ def parse_args():
         default=0.1,
         help="Simulation speed in seconds per bar (default: 0.1)"
     )
+    parser.add_argument(
+        "--steps",
+        type=int,
+        default=600,
+        help="Number of bars to simulate (default: 600 = ~2 min)"
+    )
     return parser.parse_args()
 
 
@@ -89,6 +95,7 @@ class TradingBackend:
         self.kwargs = kwargs
         self._task: Optional[asyncio.Task] = None
         self._running = False
+        self._runner = None  # Store runner reference for clean shutdown
 
         # Import here to avoid circular deps
         from core.events.eventhandler import get_event_handler
@@ -110,12 +117,21 @@ class TradingBackend:
     async def stop(self):
         """Stop the trading backend."""
         self._running = False
+
+        # Stop the runner first (graceful shutdown)
+        if self._runner is not None:
+            if hasattr(self._runner, 'stop'):
+                self._runner.stop()
+                logger.info("Runner stop requested")
+
+        # Then cancel the task
         if self._task:
             self._task.cancel()
             try:
                 await self._task
             except asyncio.CancelledError:
                 pass
+
         logger.info("Backend stopped")
 
     async def _run_simulation(self):
@@ -128,24 +144,29 @@ class TradingBackend:
         speed = self.kwargs.get('speed', 0.1)
 
         # Create simulation config
+        # Use config file settings or default (600 steps = ~2 min at 0.1s/bar)
+        steps = self.kwargs.get('steps', 600)
         config = SimConfig(
             symbols=self.symbols,
-            steps=999999,  # Run indefinitely
+            steps=steps,
             bar_sleep=speed,
         )
 
-        # Create simulation runner
-        runner = SimulationRunner(config)
+        # Create simulation runner and store reference for clean shutdown
+        self._runner = SimulationRunner(config)
 
         logger.info(f"[SIM] Starting simulation for {self.symbols}")
 
         try:
             # Use the runner's run method which handles all the simulation logic
-            await runner.run()
+            await self._runner.run()
         except asyncio.CancelledError:
+            self._runner.stop()  # Ensure stop flag is set
             logger.info("[SIM] Simulation stopped")
         except Exception as e:
             logger.exception(f"[SIM] Error: {e}")
+        finally:
+            self._runner = None
 
     async def _run_alpaca(self):
         """Run Alpaca live/paper trading."""
@@ -271,7 +292,7 @@ class TradingApplication:
             sys.exit(0)
 
     async def _startup(self):
-        """Async startup sequence."""
+        """Async startup sequence - initializes but does NOT auto-start trading."""
         try:
             await asyncio.sleep(0.5)  # Let Qt settle
 
@@ -279,22 +300,29 @@ class TradingApplication:
             await self.window.feeder.start()
             self.window._append_log(f"[INIT] Data feeder connected to event bus")
 
-            # Start the backend (generates events)
-            await self.backend.start()
-            self.window._append_log(f"[INIT] Backend started: {self.mode.value}")
-            self.window._append_log(f"[INIT] Symbols: {', '.join(self.symbols)}")
+            # Pre-populate the symbol input with command-line symbols
+            if hasattr(self.window, 'symbol_input'):
+                self.window.symbol_input.setText(','.join(self.symbols))
 
-            # Emit initial health status
+            # Set the mode dropdown to match command-line mode
+            if hasattr(self.window, 'mode_combo'):
+                mode_map = {'simulation': 0, 'alpaca': 1, 'schwab': 2}
+                idx = mode_map.get(self.mode.value, 0)
+                self.window.mode_combo.setCurrentIndex(idx)
+
+            # Emit initial health status (system ready, not trading yet)
             from core.events import events
             from datetime import datetime, timezone
             await self.backend.event_handler.emit(events.EVENT_HEALTH_UPDATE, {
                 "broker": self.mode.value,
-                "status": "connected",
+                "status": "ready",
                 "details": {"symbols": self.symbols},
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             })
 
-            self.window._append_log("[INIT] System ready")
+            self.window._append_log(f"[INIT] Mode: {self.mode.value.upper()}")
+            self.window._append_log(f"[INIT] Symbols: {', '.join(self.symbols)}")
+            self.window._append_log("[INIT] System ready - click Start to begin trading")
 
         except Exception as e:
             logger.exception(f"Startup failed: {e}")
@@ -321,6 +349,7 @@ def main():
         symbols=symbols,
         paper=args.paper,
         speed=args.speed,
+        steps=args.steps,
     )
     app.run()
 

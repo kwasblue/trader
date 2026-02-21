@@ -23,7 +23,7 @@ from core.app_types import OrderResult, PositionView, BrokerSnapshot
 from core.enums import OrderSide, OrderStatus, OrderType, TimeInForce
 from loggers.logger import Logger
 from core.events.eventhandler import EventHandler, get_event_handler
-from core.events.events import (
+from core.contracts.events import (
     EVENT_ORDER_STATUS, OrderStatusPayload,
     EVENT_NEW_TRADE, TradePayload,
     EVENT_POSITION_UPDATE, PositionPayload,
@@ -494,12 +494,18 @@ class MockBroker(BaseBrokerInterface):
         pos: SymbolPosition
     ) -> None:
         """Emit position update event."""
+        side = "long" if pos.qty > 0 else "short" if pos.qty < 0 else "flat"
         payload: PositionPayload = {
             "symbol": symbol,
             "qty": pos.qty,
             "avg_price": pos.avg_price,
+            "avg": pos.avg_price,  # GUI model uses 'avg'
+            "last": pos.last_price,  # GUI model uses 'last'
             "unrealized": pos.unrealized_pnl,
+            "unreal": pos.unrealized_pnl,  # GUI model uses 'unreal'
             "realized": pos.realized_pnl,
+            "side": side,
+            "market_value": pos.qty * pos.last_price,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
         await self.event_handler.emit(EVENT_POSITION_UPDATE, payload)

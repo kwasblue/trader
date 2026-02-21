@@ -72,7 +72,6 @@ def test_singleton_initialization():
     assert listener_count_2 == listener_count_1, "Listeners should be preserved"
 
     print("  ✅ PASSED: Singleton works correctly")
-    return True
 
 
 def test_synchronous_subscription():
@@ -98,7 +97,6 @@ def test_synchronous_subscription():
 
     assert count == 1, "Should have 1 subscriber immediately"
     print("  ✅ PASSED: Synchronous subscription works")
-    return True
 
 
 @pytest.mark.asyncio
@@ -135,7 +133,6 @@ async def test_emit_receive():
     assert received[0] == test_payload, "Payload should match"
 
     print("  ✅ PASSED: Emit -> Receive works")
-    return True
 
 
 @pytest.mark.asyncio
@@ -171,6 +168,8 @@ async def test_pnl_event_flow():
         "realized": 0,
         "drawdown": 0.0,
         "timestamp": datetime.now(timezone.utc).isoformat(),
+        "cash": 50000.0,
+        "buying_power": 100000.0,
     }
 
     print(f"  Emitting PNL: ${pnl_payload['portfolio_value']:,.2f}")
@@ -183,7 +182,6 @@ async def test_pnl_event_flow():
     assert pnl_received[0]['portfolio_value'] == 100500.75
 
     print("  ✅ PASSED: PNL_UPDATE flow works")
-    return True
 
 
 @pytest.mark.asyncio
@@ -231,7 +229,6 @@ async def test_multiple_subscribers():
     assert len(received_3) == 1, "Handler 3 should receive"
 
     print("  ✅ PASSED: All subscribers receive events")
-    return True
 
 
 @pytest.mark.asyncio
@@ -281,6 +278,8 @@ async def test_feeder_subscription():
         "realized": 0.0,
         "drawdown": 0.0,
         "timestamp": datetime.now(timezone.utc).isoformat(),
+        "cash": 50000.0,
+        "buying_power": 100000.0,
     })
 
     # Emit BAR
@@ -301,7 +300,6 @@ async def test_feeder_subscription():
     assert len(bar_received) == 1, f"Should receive 1 BAR, got {len(bar_received)}"
 
     print("  ✅ PASSED: Feeder-style subscription works")
-    return True
 
 
 def run_all_tests():
@@ -313,18 +311,39 @@ def run_all_tests():
     results = []
 
     # Sync tests
-    results.append(("Singleton Initialization", test_singleton_initialization()))
-    results.append(("Synchronous Subscription", test_synchronous_subscription()))
+    try:
+        test_singleton_initialization()
+        results.append(("Singleton Initialization", True))
+    except AssertionError as e:
+        results.append(("Singleton Initialization", False))
+        print(f"  ❌ FAILED: {e}")
+
+    try:
+        test_synchronous_subscription()
+        results.append(("Synchronous Subscription", True))
+    except AssertionError as e:
+        results.append(("Synchronous Subscription", False))
+        print(f"  ❌ FAILED: {e}")
 
     # Async tests
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
+    async_tests = [
+        ("Emit -> Receive", test_emit_receive),
+        ("PNL_UPDATE Flow", test_pnl_event_flow),
+        ("Multiple Subscribers", test_multiple_subscribers),
+        ("Feeder-style Subscription", test_feeder_subscription),
+    ]
+
     try:
-        results.append(("Emit -> Receive", loop.run_until_complete(test_emit_receive())))
-        results.append(("PNL_UPDATE Flow", loop.run_until_complete(test_pnl_event_flow())))
-        results.append(("Multiple Subscribers", loop.run_until_complete(test_multiple_subscribers())))
-        results.append(("Feeder-style Subscription", loop.run_until_complete(test_feeder_subscription())))
+        for name, test_fn in async_tests:
+            try:
+                loop.run_until_complete(test_fn())
+                results.append((name, True))
+            except AssertionError as e:
+                results.append((name, False))
+                print(f"  ❌ FAILED: {e}")
     finally:
         loop.close()
 

@@ -124,6 +124,72 @@ class UnifiedDataPipeline:
             f"store_to_db={store_to_db}, store_to_files={store_to_files}"
         )
 
+    async def check_and_warn_credentials(self) -> Dict[str, Any]:
+        """
+        Check credentials and log warnings for expiring tokens.
+
+        Call this at startup to get proactive warnings about Schwab tokens.
+
+        Returns:
+            Dict with credential status for each broker
+        """
+        results = await self.validator.validate_all()
+        status = {}
+
+        # Check Schwab
+        schwab = results.get('schwab')
+        if schwab:
+            status['schwab'] = {
+                'status': schwab.status.value,
+                'can_fetch_data': schwab.can_fetch_data,
+                'message': schwab.message,
+            }
+
+            if schwab.status == CredentialStatus.EXPIRED:
+                self.logger.error(
+                    "=" * 60 + "\n"
+                    "SCHWAB TOKENS EXPIRED - Manual re-authentication required!\n"
+                    "Run: python -m data.streaming.authenticator\n"
+                    "=" * 60
+                )
+            elif schwab.status == CredentialStatus.EXPIRING_SOON:
+                hours = schwab.expires_in // 3600 if schwab.expires_in else 0
+                self.logger.warning(
+                    f"SCHWAB TOKEN EXPIRING in {hours} hours. "
+                    f"Consider re-authenticating soon: python -m data.streaming.authenticator"
+                )
+            elif schwab.status == CredentialStatus.MISSING:
+                self.logger.info(
+                    "Schwab not configured. Using Alpaca as primary data source."
+                )
+
+        # Check Alpaca
+        alpaca = results.get('alpaca')
+        if alpaca:
+            status['alpaca'] = {
+                'status': alpaca.status.value,
+                'can_fetch_data': alpaca.can_fetch_data,
+                'message': alpaca.message,
+            }
+
+            if not alpaca.can_fetch_data:
+                self.logger.warning(f"Alpaca unavailable: {alpaca.message}")
+
+        # Determine recommended source
+        recommended = self.validator.get_best_data_source(results)
+        status['recommended'] = recommended
+
+        if recommended == 'none':
+            self.logger.error(
+                "NO DATA SOURCES AVAILABLE! Check your credentials:\n"
+                "  - Alpaca: Set ALPACA_API_KEY and ALPACA_SECRET_KEY\n"
+                "  - Schwab: Run python -m data.streaming.authenticator"
+            )
+        else:
+            self.logger.info(f"Using {recommended.upper()} as primary data source")
+
+        return status
+
     @property
     def datastore(self) -> DataStore:
         """Lazy-load the database connection."""
@@ -159,6 +225,9 @@ class UnifiedDataPipeline:
         self.logger.info("=" * 60)
         self.logger.info(f"UPDATE SYMBOLS: {symbols}")
         self.logger.info(f"Parameters: days={days}, source={source}, force_full={force_full}, process_data={process_data}")
+
+        # Check credentials and warn about expiring tokens
+        await self.check_and_warn_credentials()
 
         # Determine source
         if source is None:
@@ -620,6 +689,20 @@ class UnifiedDataPipeline:
         try:
             # Make a copy to avoid modifying original
             df_copy = df.copy()
+
+            # Reset index if it's a DatetimeIndex (processor sets Date as index)
+            if isinstance(df_copy.index, pd.DatetimeIndex):
+                df_copy = df_copy.reset_index()
+
+            # Convert datetime/Timestamp columns to ISO strings for JSON serialization
+            for col in df_copy.columns:
+                if pd.api.types.is_datetime64_any_dtype(df_copy[col]):
+                    df_copy[col] = df_copy[col].dt.strftime('%Y-%m-%dT%H:%M:%S')
+                elif df_copy[col].dtype == 'object':
+                    # Handle any Timestamp objects in object columns
+                    df_copy[col] = df_copy[col].apply(
+                        lambda x: x.isoformat() if isinstance(x, (pd.Timestamp, datetime)) else x
+                    )
 
             # Handle NaN and infinity values
             df_copy = df_copy.where(df_copy.notna(), None)

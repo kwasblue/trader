@@ -18,8 +18,15 @@ The monitoring GUI is built with PySide6 (Qt) and provides:
 ## Launching the Dashboard
 
 ```bash
-# From project root
-python run_live.py
+# Using CLI (recommended)
+trader gui
+
+# With specific mode and symbols
+trader gui --mode simulation
+trader gui --mode alpaca -s AAPL,MSFT
+
+# Or directly
+python run_trading.py
 ```
 
 Or programmatically:
@@ -405,3 +412,11 @@ def _emit_safe(self, signal, *args):
     except Exception as e:
         self._logger.error(f"Signal emit failed: {e}")
 ```
+
+---
+
+## Related Documentation
+
+- [Event System](event-system.md) - Event bus and DataFeeder architecture
+- [Architecture](architecture.md) - System design overview
+- [Commands](commands.md) - GUI launch commands

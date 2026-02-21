@@ -237,6 +237,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.symbol_input.setMinimumWidth(120)
         self.symbol_input.setPlaceholderText("AAPL,MSFT,GOOGL")
 
+        # Day trade checkbox
+        self.day_trade_checkbox = QtWidgets.QCheckBox("Day Trade")
+        self.day_trade_checkbox.setToolTip("Enable day trading (allow same-day exits)")
+
         for a in [self.start_act, self.stop_act, self.clear_logs_act, self.export_csv_act, self.export_pdf_act]:
             tb.addAction(a)
         tb.addSeparator()
@@ -244,6 +248,7 @@ class MainWindow(QtWidgets.QMainWindow):
         tb.addWidget(self.mode_combo)
         tb.addWidget(self.symbol_label)
         tb.addWidget(self.symbol_input)
+        tb.addWidget(self.day_trade_checkbox)
         tb.addSeparator()
         tb.addWidget(self.panic_btn)
         tb.addWidget(self.flatten_btn_tb)
@@ -302,6 +307,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self._append_log(f"[INIT] Feeder ready: PNL_UPDATE={pnl_count}, NEW_BAR={bar_count} listeners")
         self._append_log("[INIT] GUI signal connections established.")
 
+        # Performance update timer - run every 2 seconds to keep metrics fresh
+        self._perf_timer = QtCore.QTimer()
+        self._perf_timer.timeout.connect(self._periodic_perf_update)
+        self._perf_timer.start(2000)  # Every 2 seconds
+
     def _connect_feeder_signals(self):
         """Connect DataFeeder Qt signals to GUI update methods.
 
@@ -354,9 +364,13 @@ class MainWindow(QtWidgets.QMainWindow):
             realized = data.get('realized', 0)
             drawdown = data.get('drawdown', 0)
 
-            # Log every 10th update to avoid spam
-            if len(self._eq_y) % 10 == 0:
-                self._append_log(f"[PNL] Portfolio: ${value:,.2f} (update #{len(self._eq_y)})")
+            # Debug: Print to console for visibility
+            if len(self._eq_y) < 3:
+                print(f"[GUI] _gui_on_pnl received: value={value}, eq_len={len(self._eq_y)}")
+
+            # Debug: Log first 5 events and every 10th after
+            if len(self._eq_y) < 5 or len(self._eq_y) % 10 == 0:
+                self._append_log(f"[PNL] value=${value:,.2f}, eq_len={len(self._eq_y)}")
 
             # === Update Dashboard KPIs ===
             # Portfolio Value (big label)
@@ -382,10 +396,21 @@ class MainWindow(QtWidgets.QMainWindow):
             if 'drawdown' in data:
                 self._set_kpi(self.dd_lbl, drawdown, pct=True)
 
-            # Buying Power (cash remaining)
+            # Buying Power and Cash from broker
             if hasattr(self, 'buying_power_lbl'):
-                cash = value - unrealized if value and unrealized else value
-                self.buying_power_lbl.setText(f"${cash:,.0f}")
+                buying_power = data.get('buying_power')
+                if buying_power is not None:
+                    self.buying_power_lbl.setText(f"${buying_power:,.0f}")
+                else:
+                    # Fallback: estimate from portfolio value - unrealized
+                    cash = value - unrealized if value and unrealized else value
+                    self.buying_power_lbl.setText(f"${cash:,.0f}")
+
+            # Cash label if exists
+            if hasattr(self, 'cash_lbl'):
+                cash = data.get('cash')
+                if cash is not None:
+                    self.cash_lbl.setText(f"${cash:,.0f}")
 
             # Update equity curve
             if value:
@@ -405,8 +430,10 @@ class MainWindow(QtWidgets.QMainWindow):
                     win_rate = wins / total if total > 0 else 0
                     self._set_kpi(self.win_rate_lbl, win_rate, pct=True)
 
-                # Update performance metrics every 20 updates
-                if len(self._eq_y) % 20 == 0 and len(self._eq_y) > 20:
+                # Update performance metrics starting at 10 bars, then every 5 updates
+                eq_len = len(self._eq_y)
+                if eq_len >= 10 and (eq_len == 10 or eq_len % 5 == 0):
+                    self._append_log(f"[PERF] Triggering performance calc (eq_len={eq_len})")
                     self._calculate_and_update_performance()
 
                 # Auto-update History tab every 30 updates
@@ -548,15 +575,22 @@ class MainWindow(QtWidgets.QMainWindow):
     def _gui_on_position(self, data: dict):
         """Handle position update from feeder (SYNC)."""
         try:
-            if hasattr(self, 'pos_model') and hasattr(self.pos_model, 'update_position'):
-                self.pos_model.update_position(data)
+            symbol = data.get('symbol', '')
+            qty = data.get('qty', 0)
+
+            if hasattr(self, 'pos_model'):
+                if qty != 0:
+                    # Update or add position
+                    if hasattr(self.pos_model, 'update_position'):
+                        self.pos_model.update_position(data)
+                else:
+                    # Remove position when qty is 0
+                    if hasattr(self.pos_model, 'remove_position'):
+                        self.pos_model.remove_position(symbol)
 
             # Track open positions
             if not hasattr(self, '_open_positions'):
                 self._open_positions = {}
-
-            symbol = data.get('symbol', '')
-            qty = data.get('qty', 0)
 
             if symbol:
                 if qty != 0:
@@ -1052,6 +1086,13 @@ class MainWindow(QtWidgets.QMainWindow):
             self._append_log("[ERROR] No symbols specified")
             return
 
+        # Enable day trade mode if checkbox is checked
+        day_trade = self.day_trade_checkbox.isChecked() if hasattr(self, 'day_trade_checkbox') else False
+        if day_trade:
+            from core.config_loader import enable_day_trade_mode
+            enable_day_trade_mode()
+            self._append_log("[CONFIG] Day trade mode enabled (swing mode disabled)")
+
         self._trading_active = True
         self._sim_running = True  # Also set sim_running for consistency
         self._append_log(f"[START] Starting {mode} mode for: {', '.join(symbols)}")
@@ -1096,6 +1137,7 @@ class MainWindow(QtWidgets.QMainWindow):
         )
         self._sim_runner = SimulationRunner(config)
         self._append_log("[SIM] Starting simulation...")
+        print(f"[MainWindow] Starting simulation for {symbols}, EventBus ID: {id(self.bus)}")
         try:
             await self._sim_runner.run()
             self._append_log(f"[SIM] Completed. Final equity: ${self._sim_runner.portfolio.total_equity():,.2f}")
@@ -1151,6 +1193,13 @@ class MainWindow(QtWidgets.QMainWindow):
         if hasattr(self, '_alpaca_runner') and self._alpaca_runner is not None:
             if hasattr(self._alpaca_runner, 'stop'):
                 self._alpaca_runner.stop()
+                self._append_log("[STOP] Stop signal sent to AlpacaRunner.")
+
+        # Stop schwab runner if it exists
+        if hasattr(self, '_schwab_runner') and self._schwab_runner is not None:
+            if hasattr(self._schwab_runner, 'stop'):
+                asyncio.create_task(self._schwab_runner.stop())
+                self._append_log("[STOP] Stop signal sent to SchwabRunner.")
 
         self._trading_active = False
         self._sim_running = False
@@ -1439,7 +1488,7 @@ class MainWindow(QtWidgets.QMainWindow):
         """Calculate and update performance metrics from equity curve."""
         import numpy as np
         try:
-            if len(self._eq_y) < 20:
+            if len(self._eq_y) < 10:
                 return
 
             equity = np.array(self._eq_y[-500:])  # Use last 500 points
@@ -1452,68 +1501,79 @@ class MainWindow(QtWidgets.QMainWindow):
             mean_ret = np.mean(returns)
             std_ret = np.std(returns)
 
-            # Sharpe Ratio (annualized)
-            sharpe = (mean_ret / std_ret * np.sqrt(252)) if std_ret > 0 else 0.0
+            # Sharpe Ratio - NO annualization for intraday/bar data
+            # Raw Sharpe = mean / std (information ratio style)
+            sharpe = (mean_ret / std_ret) if std_ret > 0 else 0.0
 
             # Sortino Ratio (downside deviation only)
             downside = returns[returns < 0]
             downside_std = np.std(downside) if len(downside) > 1 else std_ret
-            sortino = (mean_ret / downside_std * np.sqrt(252)) if downside_std > 0 else 0.0
+            sortino = (mean_ret / downside_std) if downside_std > 0 else 0.0
 
-            # Calmar Ratio (return / max drawdown)
+            # Calmar Ratio (total return / max drawdown)
             peak = np.maximum.accumulate(equity)
             drawdown = (equity - peak) / peak
             max_dd = abs(np.min(drawdown))
             total_return = (equity[-1] - equity[0]) / equity[0]
             calmar = (total_return / max_dd) if max_dd > 0 else 0.0
 
-            # === Trade Statistics ===
-            wins = returns[returns > 0]
-            losses = returns[returns < 0]
-            total_trades = len(returns)
-            win_count = len(wins)
-            loss_count = len(losses)
+            # === Bar Statistics (equity curve based) ===
+            # Note: These are bar-to-bar changes, not actual trades
+            positive_bars = returns[returns > 0]
+            negative_bars = returns[returns < 0]
+            total_bars = len(returns)
 
-            win_rate = win_count / total_trades if total_trades > 0 else 0
-            avg_win = np.mean(wins) * 100 if len(wins) > 0 else 0  # As percentage
-            avg_loss = np.mean(losses) * 100 if len(losses) > 0 else 0
-            max_win = np.max(wins) * 100 if len(wins) > 0 else 0
-            max_loss = np.min(losses) * 100 if len(losses) > 0 else 0
+            # Bar win rate (% of bars with positive return)
+            bar_win_rate = len(positive_bars) / total_bars if total_bars > 0 else 0
 
-            # Profit Factor
-            gross_profit = np.sum(wins) if len(wins) > 0 else 0
-            gross_loss = abs(np.sum(losses)) if len(losses) > 0 else 1
-            profit_factor = gross_profit / gross_loss if gross_loss > 0 else 0
+            # Average bar return (as percentage)
+            avg_pos = np.mean(positive_bars) * 100 if len(positive_bars) > 0 else 0
+            avg_neg = np.mean(negative_bars) * 100 if len(negative_bars) > 0 else 0
+            max_pos = np.max(positive_bars) * 100 if len(positive_bars) > 0 else 0
+            max_neg = np.min(negative_bars) * 100 if len(negative_bars) > 0 else 0
 
-            # Expectancy
-            expectancy = (win_rate * avg_win + (1 - win_rate) * avg_loss)
+            # Profit Factor (gross gains / gross losses)
+            gross_gains = np.sum(positive_bars) if len(positive_bars) > 0 else 0
+            gross_losses = abs(np.sum(negative_bars)) if len(negative_bars) > 0 else 0.0001
+            profit_factor = gross_gains / gross_losses if gross_losses > 0 else 0
 
-            # Kelly Criterion
-            if len(wins) > 0 and len(losses) > 0 and abs(avg_loss) > 0:
-                kelly = (win_rate - (1 - win_rate) / (abs(avg_win / avg_loss))) if avg_loss != 0 else 0.0
+            # Expectancy per bar (in basis points for readability)
+            expectancy_bps = mean_ret * 10000  # Convert to basis points
+
+            # Kelly Criterion: f* = (p * b - q) / b
+            # where p = win rate, q = 1-p, b = avg_win / avg_loss ratio
+            if len(positive_bars) > 0 and len(negative_bars) > 0:
+                win_loss_ratio = abs(np.mean(positive_bars) / np.mean(negative_bars))
+                kelly = (bar_win_rate - (1 - bar_win_rate) / win_loss_ratio) if win_loss_ratio > 0 else 0.0
                 kelly = max(0.0, min(1.0, kelly))
             else:
                 kelly = 0.0
 
-            # Debug output (reduced frequency)
-            if len(self._eq_y) % 100 == 0:
-                self._append_log(f"[PERF] Sharpe={sharpe:.2f}, Sortino={sortino:.2f}, Kelly={kelly:.2%}")
+            # Get actual trade count from trade history if available
+            actual_trades = getattr(self, '_trade_count', 0)
+
+            # Debug output
+            eq_len = len(self._eq_y)
+            if eq_len <= 20 or eq_len % 50 == 0:
+                self._append_log(f"[PERF] bars={total_bars} Sharpe={sharpe:.3f} PF={profit_factor:.2f} Kelly={kelly:.1%}")
 
             # === Update UI ===
             self._update_performance_tab({
-                "sharpe": round(sharpe, 2),
-                "sortino": round(sortino, 2),
-                "kelly": round(kelly, 2),
-                "calmar": round(calmar, 2),
-                "total_trades": total_trades,
-                "win_rate": win_rate,
+                "sharpe": round(sharpe, 3),
+                "sortino": round(sortino, 3),
+                "kelly": kelly,  # Keep as decimal for display formatting
+                "calmar": round(calmar, 3),
+                "total_bars": total_bars,
+                "actual_trades": actual_trades,
+                "win_rate": bar_win_rate,
                 "profit_factor": round(profit_factor, 2),
-                "avg_win": avg_win,
-                "avg_loss": avg_loss,
-                "max_win": max_win,
-                "max_loss": max_loss,
-                "max_dd": max_dd,
-                "expectancy": expectancy,
+                "avg_win": avg_pos,
+                "avg_loss": avg_neg,
+                "max_win": max_pos,
+                "max_loss": max_neg,
+                "max_dd": max_dd * 100,  # Convert to percentage
+                "expectancy_bps": expectancy_bps,
+                "total_return_pct": total_return * 100,
                 "returns": returns,
                 "drawdown": drawdown,
             })
@@ -1522,22 +1582,30 @@ class MainWindow(QtWidgets.QMainWindow):
             import traceback
             print(f"[MainWindow] Performance error: {e}\n{traceback.format_exc()}")
 
+    def _periodic_perf_update(self):
+        """Timer-triggered performance update (runs every 2 seconds)."""
+        # Only update if we have enough data
+        if len(self._eq_y) >= 10:
+            self._calculate_and_update_performance()
+
     def _update_performance_tab(self, metrics: dict):
         """Update all performance metrics."""
         if not metrics:
             return
 
         # === Risk-Adjusted Returns ===
+        # Note: These are raw (non-annualized) ratios for intraday data
         if metrics.get("sharpe") is not None:
             val = metrics["sharpe"]
-            color = "#22c55e" if val > 1 else "#f59e0b" if val > 0 else "#ef4444"
-            self.sharpe_lbl.setText(f"{val:.2f}")
+            # For raw Sharpe, >0.05 is good, >0.1 is excellent
+            color = "#22c55e" if val > 0.05 else "#f59e0b" if val > 0 else "#ef4444"
+            self.sharpe_lbl.setText(f"{val:.3f}")
             self.sharpe_lbl.setStyleSheet(f"font-weight: 700; font-size: 20px; color: {color};")
 
         if metrics.get("sortino") is not None:
             val = metrics["sortino"]
-            color = "#22c55e" if val > 1.5 else "#f59e0b" if val > 0 else "#ef4444"
-            self.sortino_lbl.setText(f"{val:.2f}")
+            color = "#22c55e" if val > 0.05 else "#f59e0b" if val > 0 else "#ef4444"
+            self.sortino_lbl.setText(f"{val:.3f}")
             self.sortino_lbl.setStyleSheet(f"font-weight: 700; font-size: 20px; color: {color};")
 
         if metrics.get("kelly") is not None:
@@ -1548,13 +1616,19 @@ class MainWindow(QtWidgets.QMainWindow):
 
         if metrics.get("calmar") is not None and hasattr(self, 'calmar_lbl'):
             val = metrics["calmar"]
-            color = "#22c55e" if val > 1 else "#f59e0b" if val > 0 else "#ef4444"
-            self.calmar_lbl.setText(f"{val:.2f}")
+            color = "#22c55e" if val > 0 else "#ef4444"
+            self.calmar_lbl.setText(f"{val:.3f}")
             self.calmar_lbl.setStyleSheet(f"font-weight: 700; font-size: 20px; color: {color};")
 
-        # === Trade Statistics ===
-        if metrics.get("total_trades") is not None and hasattr(self, 'perf_total_trades_lbl'):
-            self.perf_total_trades_lbl.setText(str(metrics["total_trades"]))
+        # === Bar/Trade Statistics ===
+        # Show actual trades if available, otherwise show bars
+        if hasattr(self, 'perf_total_trades_lbl'):
+            actual = metrics.get("actual_trades", 0)
+            bars = metrics.get("total_bars", 0)
+            if actual > 0:
+                self.perf_total_trades_lbl.setText(f"{actual} trades")
+            else:
+                self.perf_total_trades_lbl.setText(f"{bars} bars")
 
         if metrics.get("win_rate") is not None and hasattr(self, 'perf_win_rate_lbl'):
             self._set_kpi(self.perf_win_rate_lbl, metrics["win_rate"], pct=True)
@@ -1565,23 +1639,39 @@ class MainWindow(QtWidgets.QMainWindow):
             self.perf_profit_factor_lbl.setText(f"{val:.2f}")
             self.perf_profit_factor_lbl.setStyleSheet(f"font-weight: 700; font-size: 16px; color: {color};")
 
+        # Avg win/loss as percentage (already *100 in calculation)
         if metrics.get("avg_win") is not None and hasattr(self, 'perf_avg_win_lbl'):
-            self._set_kpi(self.perf_avg_win_lbl, metrics["avg_win"], pct=True)
+            val = metrics["avg_win"]
+            self.perf_avg_win_lbl.setText(f"{val:.3f}%")
+            self.perf_avg_win_lbl.setStyleSheet("font-weight: 700; font-size: 16px; color: #22c55e;")
 
         if metrics.get("avg_loss") is not None and hasattr(self, 'perf_avg_loss_lbl'):
-            self._set_kpi(self.perf_avg_loss_lbl, metrics["avg_loss"], pct=True)
+            val = metrics["avg_loss"]
+            self.perf_avg_loss_lbl.setText(f"{val:.3f}%")
+            self.perf_avg_loss_lbl.setStyleSheet("font-weight: 700; font-size: 16px; color: #ef4444;")
 
-        if metrics.get("expectancy") is not None and hasattr(self, 'perf_expectancy_lbl'):
-            self._set_kpi(self.perf_expectancy_lbl, metrics["expectancy"], pct=True)
+        # Expectancy in basis points
+        if metrics.get("expectancy_bps") is not None and hasattr(self, 'perf_expectancy_lbl'):
+            val = metrics["expectancy_bps"]
+            color = "#22c55e" if val > 0 else "#ef4444"
+            self.perf_expectancy_lbl.setText(f"{val:.2f} bps")
+            self.perf_expectancy_lbl.setStyleSheet(f"font-weight: 700; font-size: 16px; color: {color};")
 
         if metrics.get("max_win") is not None and hasattr(self, 'perf_max_win_lbl'):
-            self._set_kpi(self.perf_max_win_lbl, metrics["max_win"], pct=True)
+            val = metrics["max_win"]
+            self.perf_max_win_lbl.setText(f"{val:.3f}%")
+            self.perf_max_win_lbl.setStyleSheet("font-weight: 700; font-size: 16px; color: #22c55e;")
 
         if metrics.get("max_loss") is not None and hasattr(self, 'perf_max_loss_lbl'):
-            self._set_kpi(self.perf_max_loss_lbl, metrics["max_loss"], pct=True)
+            val = metrics["max_loss"]
+            self.perf_max_loss_lbl.setText(f"{val:.3f}%")
+            self.perf_max_loss_lbl.setStyleSheet("font-weight: 700; font-size: 16px; color: #ef4444;")
 
+        # Max drawdown (already as percentage)
         if metrics.get("max_dd") is not None and hasattr(self, 'perf_max_dd_lbl'):
-            self._set_kpi(self.perf_max_dd_lbl, -metrics["max_dd"], pct=True)
+            val = metrics["max_dd"]
+            self.perf_max_dd_lbl.setText(f"-{val:.2f}%")
+            self.perf_max_dd_lbl.setStyleSheet("font-weight: 700; font-size: 16px; color: #ef4444;")
 
         # === Update Charts ===
         # Returns distribution histogram
@@ -1731,12 +1821,20 @@ class MainWindow(QtWidgets.QMainWindow):
         QtWidgets.QMessageBox.information(self, "Export", f"CSV logs exported to {self._csv_dir}")
 
     def closeEvent(self, event: QtGui.QCloseEvent):
+        # Flush CSV buffers
         for fname in self._buffers.keys():
             if self._buffers[fname]:
                 self._flush_csv(fname)
             self._write_footer(fname)
-        event.accept()
+
+        # Stop the trading backend
+        if hasattr(self, '_trading_backend') and self._trading_backend:
+            asyncio.create_task(self._trading_backend.stop())
+
+        # Stop the feeder
         asyncio.create_task(self.feeder.stop())
+
+        event.accept()
         super().closeEvent(event)
     # ---------------- Tab Builders ----------------
     def _build_dashboard_tab(self):
@@ -1803,15 +1901,17 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.unreal_lbl = self._kpi_label()
         self.realized_lbl = self._kpi_label()
+        self.cash_lbl = self._kpi_label()
         self.buying_power_lbl = self._kpi_label()
-        self.buying_power_lbl.setText("$100,000")
 
         rl.addWidget(self._metric_label("Unrealized P&L"), 0, 0)
         rl.addWidget(self.unreal_lbl, 0, 1)
         rl.addWidget(self._metric_label("Realized P&L"), 1, 0)
         rl.addWidget(self.realized_lbl, 1, 1)
-        rl.addWidget(self._metric_label("Buying Power"), 2, 0)
-        rl.addWidget(self.buying_power_lbl, 2, 1)
+        rl.addWidget(self._metric_label("Cash"), 2, 0)
+        rl.addWidget(self.cash_lbl, 2, 1)
+        rl.addWidget(self._metric_label("Buying Power"), 3, 0)
+        rl.addWidget(self.buying_power_lbl, 3, 1)
 
         left_col.addWidget(risk_box)
 
@@ -2186,9 +2286,9 @@ class MainWindow(QtWidgets.QMainWindow):
         trade_layout = QtWidgets.QGridLayout(trade_box)
         trade_layout.setSpacing(15)
 
-        # Row 1
+        # Row 1: Volume metrics
         self.perf_total_trades_lbl = self._kpi_label()
-        trade_layout.addWidget(self._metric_label("Total Trades"), 0, 0)
+        trade_layout.addWidget(self._metric_label("Bars/Trades"), 0, 0)
         trade_layout.addWidget(self.perf_total_trades_lbl, 0, 1)
 
         self.perf_win_rate_lbl = self._kpi_label()
@@ -2199,26 +2299,26 @@ class MainWindow(QtWidgets.QMainWindow):
         trade_layout.addWidget(self._metric_label("Profit Factor"), 0, 4)
         trade_layout.addWidget(self.perf_profit_factor_lbl, 0, 5)
 
-        # Row 2
+        # Row 2: Average metrics
         self.perf_avg_win_lbl = self._kpi_label()
-        trade_layout.addWidget(self._metric_label("Avg Win"), 1, 0)
+        trade_layout.addWidget(self._metric_label("Avg +Bar"), 1, 0)
         trade_layout.addWidget(self.perf_avg_win_lbl, 1, 1)
 
         self.perf_avg_loss_lbl = self._kpi_label()
-        trade_layout.addWidget(self._metric_label("Avg Loss"), 1, 2)
+        trade_layout.addWidget(self._metric_label("Avg -Bar"), 1, 2)
         trade_layout.addWidget(self.perf_avg_loss_lbl, 1, 3)
 
         self.perf_expectancy_lbl = self._kpi_label()
-        trade_layout.addWidget(self._metric_label("Expectancy"), 1, 4)
+        trade_layout.addWidget(self._metric_label("Expect/Bar"), 1, 4)
         trade_layout.addWidget(self.perf_expectancy_lbl, 1, 5)
 
-        # Row 3
+        # Row 3: Extremes
         self.perf_max_win_lbl = self._kpi_label()
-        trade_layout.addWidget(self._metric_label("Max Win"), 2, 0)
+        trade_layout.addWidget(self._metric_label("Best Bar"), 2, 0)
         trade_layout.addWidget(self.perf_max_win_lbl, 2, 1)
 
         self.perf_max_loss_lbl = self._kpi_label()
-        trade_layout.addWidget(self._metric_label("Max Loss"), 2, 2)
+        trade_layout.addWidget(self._metric_label("Worst Bar"), 2, 2)
         trade_layout.addWidget(self.perf_max_loss_lbl, 2, 3)
 
         self.perf_max_dd_lbl = self._kpi_label()
@@ -3027,6 +3127,16 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ctrl.halt_changed.emit(self._halted)
         self._style_panic(self._halted)
         self._emit_and_log(events.EVENT_HALTED, {"halted": self._halted})
+
+        # Stop/resume the backend
+        if hasattr(self, '_trading_backend') and self._trading_backend:
+            if self._halted:
+                # Stop the simulation/trading
+                asyncio.create_task(self._trading_backend.stop())
+                self._append_log("[HALT] Trading stopped")
+            else:
+                # Resume would require restarting - just log for now
+                self._append_log("[HALT] Resume requested - restart the application to resume trading")
     
 
     def _kpi_label(self) -> QtWidgets.QLabel:

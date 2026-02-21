@@ -249,6 +249,9 @@ class HistoricalDataUpdater:
                 last_ts = datetime.fromtimestamp(last_ts_raw / 1000.0, tz=timezone.utc)
             else:
                 last_ts = datetime.fromisoformat(str(last_ts_raw))
+                # Ensure timezone-aware for comparison
+                if last_ts.tzinfo is None:
+                    last_ts = last_ts.replace(tzinfo=timezone.utc)
 
             age = datetime.now(timezone.utc) - last_ts
 

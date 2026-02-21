@@ -87,6 +87,9 @@ class PositionSizerConfig:
     max_holding_pct: float = 0.25
     min_position_size: int = 1
     max_position_size: int = 1000
+    fee_rate: float = 0.001  # Transaction fee rate
+    allow_fractional: bool = False  # Allow fractional shares
+    lot_size: int = 1  # Minimum lot size for rounding
 
 
 @dataclass
@@ -94,16 +97,21 @@ class TradeLogicConfig:
     cooldown_mode: str = "bars"  # "bars", "time", or "both"
     cooldown_bars: int = 5
     cooldown_seconds: int = 300
-    tp_mult_normal: float = 2.0
-    tp_mult_trending: float = 3.0
-    sl_mult_normal: float = 1.5
-    sl_mult_trending: float = 1.0
+    # Take profit multipliers by regime
+    tp_mult_low: float = 1.5  # Low volatility regime
+    tp_mult_normal: float = 2.0  # Normal regime
+    tp_mult_high: float = 3.0  # High volatility regime
+    # Stop loss multipliers by regime
+    sl_mult_low: float = 1.0  # Low volatility regime
+    sl_mult_normal: float = 1.5  # Normal regime
+    sl_mult_high: float = 2.0  # High volatility regime
     exit_fraction: float = 0.25
     trailing_stop: bool = True
     max_positions: int = 10
     min_bars_to_hold: int = 3  # Minimum bars before allowing TP/reversal exits
     swing_mode: bool = True  # If True, prevent same-day exits (except stop loss)
     min_hold_days: int = 1  # Minimum days to hold before allowing exit
+    allow_after_hours: bool = False  # Allow trading outside market hours
 
 
 @dataclass
@@ -155,6 +163,15 @@ class AutoTraderConfig:
 
 
 @dataclass
+class ErrorRecoveryConfig:
+    """Configuration for error recovery and retry behavior."""
+    retry_max_attempts: int = 3
+    retry_base_delay: float = 1.0
+    circuit_breaker_failure_threshold: int = 5
+    circuit_breaker_timeout: float = 60.0
+
+
+@dataclass
 class TradingConfig:
     """Master configuration container."""
     general: GeneralConfig = field(default_factory=GeneralConfig)
@@ -170,6 +187,7 @@ class TradingConfig:
     gui: GUIConfig = field(default_factory=GUIConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     autotrader: AutoTraderConfig = field(default_factory=AutoTraderConfig)
+    error_recovery: ErrorRecoveryConfig = field(default_factory=ErrorRecoveryConfig)
 
     # Raw dict for any custom/unknown fields
     _raw: Dict[str, Any] = field(default_factory=dict)
@@ -233,6 +251,7 @@ def load_config(config_path: Optional[str] = None) -> TradingConfig:
             gui=_dict_to_dataclass(GUIConfig, raw.get("gui")),
             logging=_dict_to_dataclass(LoggingConfig, raw.get("logging")),
             autotrader=_dict_to_dataclass(AutoTraderConfig, raw.get("autotrader")),
+            error_recovery=_dict_to_dataclass(ErrorRecoveryConfig, raw.get("error_recovery")),
             _raw=raw
         )
 
@@ -313,6 +332,77 @@ def reload_config() -> TradingConfig:
     return get_config(reload=True)
 
 
+def validate_config(config: TradingConfig) -> tuple[bool, list[str]]:
+    """
+    Validate configuration values for safety and consistency.
+
+    Checks:
+    - Risk parameters are within safe bounds
+    - Holding limits are greater than trade limits
+    - Retry/circuit breaker values are sensible
+
+    Args:
+        config: TradingConfig to validate
+
+    Returns:
+        Tuple of (is_valid, list_of_errors)
+    """
+    errors = []
+
+    # Risk config validation
+    if not (0.001 <= config.risk.risk_per_trade <= 0.10):
+        errors.append(
+            f"risk_per_trade ({config.risk.risk_per_trade}) must be between 0.1% and 10%"
+        )
+
+    if config.risk.max_holding_pct < config.risk.max_trade_pct:
+        errors.append(
+            f"max_holding_pct ({config.risk.max_holding_pct}) must be >= "
+            f"max_trade_pct ({config.risk.max_trade_pct})"
+        )
+
+    if config.risk.max_trade_pct > 0.25:
+        errors.append(
+            f"max_trade_pct ({config.risk.max_trade_pct}) exceeds 25% safety limit"
+        )
+
+    # Position sizer validation
+    if config.position_sizer.max_holding_pct < config.position_sizer.max_trade_pct:
+        errors.append(
+            f"position_sizer.max_holding_pct ({config.position_sizer.max_holding_pct}) "
+            f"must be >= max_trade_pct ({config.position_sizer.max_trade_pct})"
+        )
+
+    # Drawdown monitor validation
+    if config.drawdown_monitor.enabled:
+        if config.drawdown_monitor.max_portfolio_drawdown > 0.50:
+            errors.append(
+                f"max_portfolio_drawdown ({config.drawdown_monitor.max_portfolio_drawdown}) "
+                f"exceeds 50% safety limit"
+            )
+        if config.drawdown_monitor.max_symbol_drawdown > 0.50:
+            errors.append(
+                f"max_symbol_drawdown ({config.drawdown_monitor.max_symbol_drawdown}) "
+                f"exceeds 50% safety limit"
+            )
+
+    # Error recovery validation
+    if config.error_recovery.retry_max_attempts < 1:
+        errors.append("retry_max_attempts must be at least 1")
+    if config.error_recovery.retry_max_attempts > 10:
+        errors.append("retry_max_attempts exceeds recommended maximum of 10")
+    if config.error_recovery.circuit_breaker_failure_threshold < 2:
+        errors.append("circuit_breaker_failure_threshold must be at least 2")
+    if config.error_recovery.circuit_breaker_timeout < 10.0:
+        errors.append("circuit_breaker_timeout must be at least 10 seconds")
+
+    # Trade logic validation
+    if config.trade_logic.min_bars_to_hold < 0:
+        errors.append("min_bars_to_hold cannot be negative")
+
+    return len(errors) == 0, errors
+
+
 # Convenience alias
 config = property(lambda self: get_config())
 
@@ -324,3 +414,137 @@ class _ConfigProxy:
         return getattr(get_config(), name)
 
 config = _ConfigProxy()
+
+
+# ============================================================================
+# Factory Functions - Create component instances from config
+# ============================================================================
+
+def create_position_sizer(config: Optional[TradingConfig] = None):
+    """
+    Create a KellyPositionSizer instance from config.
+
+    Args:
+        config: TradingConfig instance. Uses global config if not provided.
+
+    Returns:
+        KellyPositionSizer instance configured from config.
+    """
+    from core.position_sizer import KellyPositionSizer
+
+    cfg = config or get_config()
+    ps = cfg.position_sizer
+
+    return KellyPositionSizer(
+        risk_percentage=ps.risk_percentage,
+        max_trade_pct=ps.max_trade_pct,
+        max_holding_pct=ps.max_holding_pct,
+        fee_rate=ps.fee_rate,
+        allow_fractional=ps.allow_fractional,
+        lot_size=ps.lot_size,
+    )
+
+
+def create_drawdown_monitor(config: Optional[TradingConfig] = None):
+    """
+    Create a DrawdownMonitor instance from config.
+
+    Args:
+        config: TradingConfig instance. Uses global config if not provided.
+
+    Returns:
+        DrawdownMonitor instance configured from config, or None if disabled.
+    """
+    from core.drawdown_monitor import DrawdownMonitor
+
+    cfg = config or get_config()
+    ddm_cfg = cfg.drawdown_monitor
+
+    if not ddm_cfg.enabled:
+        return None
+
+    return DrawdownMonitor(
+        max_symbol_drawdown=ddm_cfg.max_symbol_drawdown,
+        max_symbol_daily_drawdown=ddm_cfg.max_symbol_daily_drawdown,
+        symbol_cooldown_seconds=ddm_cfg.symbol_cooldown_seconds,
+        max_portfolio_drawdown=ddm_cfg.max_portfolio_drawdown,
+        max_portfolio_daily_drawdown=ddm_cfg.max_portfolio_daily_drawdown,
+        portfolio_cooldown_seconds=ddm_cfg.portfolio_cooldown_seconds,
+    )
+
+
+def create_trade_approver(
+    config: Optional[TradingConfig] = None,
+    event_handler=None
+):
+    """
+    Create a StandardTradeApprover instance from config.
+
+    Args:
+        config: TradingConfig instance. Uses global config if not provided.
+        event_handler: Optional event handler for signal emission.
+
+    Returns:
+        StandardTradeApprover instance configured from config.
+    """
+    from core.logic.default_trade_logic import StandardTradeApprover
+
+    cfg = config or get_config()
+    tl = cfg.trade_logic
+
+    return StandardTradeApprover(
+        # Multipliers
+        tp_mult_low=tl.tp_mult_low,
+        tp_mult_normal=tl.tp_mult_normal,
+        tp_mult_high=tl.tp_mult_high,
+        sl_mult_low=tl.sl_mult_low,
+        sl_mult_normal=tl.sl_mult_normal,
+        sl_mult_high=tl.sl_mult_high,
+        # Position management
+        exit_fraction=tl.exit_fraction,
+        trailing_stop=tl.trailing_stop,
+        min_bars_to_hold=tl.min_bars_to_hold,
+        swing_mode=tl.swing_mode,
+        min_hold_days=tl.min_hold_days,
+        # Gating
+        cooldown_seconds=tl.cooldown_seconds,
+        cooldown_bars=tl.cooldown_bars,
+        cooldown_mode=tl.cooldown_mode,
+        max_positions=tl.max_positions,
+        event_handler=event_handler,
+        # Market hours
+        allow_after_hours=tl.allow_after_hours,
+    )
+
+
+def create_position_manager(config: Optional[TradingConfig] = None):
+    """
+    Create a PositionManager instance from config.
+
+    Args:
+        config: TradingConfig instance. Uses global config if not provided.
+
+    Returns:
+        PositionManager instance configured from config.
+    """
+    from core.logic.position_manager import PositionManager
+
+    cfg = config or get_config()
+    tl = cfg.trade_logic
+
+    return PositionManager(
+        tp_mults={
+            "low_volatility": tl.tp_mult_low,
+            "normal": tl.tp_mult_normal,
+            "high_volatility": tl.tp_mult_high,
+        },
+        sl_mults={
+            "low_volatility": tl.sl_mult_low,
+            "normal": tl.sl_mult_normal,
+            "high_volatility": tl.sl_mult_high,
+        },
+        exit_fraction=tl.exit_fraction,
+        min_bars_to_hold=tl.min_bars_to_hold,
+        swing_mode=tl.swing_mode,
+        min_hold_days=tl.min_hold_days,
+    )

@@ -46,5 +46,8 @@ watchdog>=4.0.0
 # transformers>=4.35.0
 # xgboost>=2.0.0
 
+# CLI
+click>=8.1.0
+
 # Testing
 pytest>=8.0.0

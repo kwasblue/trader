@@ -1,76 +1,113 @@
+"""
+Trade Approver Router
 
+Routes to appropriate trade approver based on context (symbol, strategy, regime).
+
+Architecture:
+    DynamicTradeLogicManager (config-driven factory)
+              |
+              v
+    TradeApproverRouter (runtime resolver - single authority)
+              |
+              v
+    TradeApprover (approval logic - StandardTradeApprover etc.)
+
+The router is the ONLY authority for approver selection.
+DynamicTradeLogicManager can populate the router on startup.
+Engines depend on the router, not the manager.
+"""
 from __future__ import annotations
 
 from typing import Optional, Dict, Union, TYPE_CHECKING
-from core.base.trade_logic_manager_base import TradeLogicManagerBase
+from core.base.trade_logic_manager_base import TradeApprover
 from loggers.logger import Logger
 
 if TYPE_CHECKING:
     from core.logic.trade_logic_manager import DynamicTradeLogicManager
 
-# Dedicated log file for trade logic routing
+# Dedicated log file for trade approver routing
 logger = Logger(
     log_file="trade_logic_router.log",
-    logger_name="TradeLogicRouter",
+    logger_name="TradeApproverRouter",
     propagate=True
 ).get_logger()
 
 
-class TradeLogicRouter:
+class TradeApproverRouter:
     """
-    Routes to appropriate trade logic based on context.
-    
+    Routes to appropriate trade approver based on context.
+
     Supports multiple routing strategies:
-    - By symbol: Different logic per symbol
-    - By strategy: Different logic per strategy
-    - By regime: Different logic per market condition
+    - By symbol: Different approver per symbol
+    - By strategy: Different approver per strategy
+    - By regime: Different approver per market condition
     - Fallback to default
+
+    This is the SINGLE AUTHORITY for approver selection.
+    Engines should depend on this router, not on DynamicTradeLogicManager directly.
+
+    Example:
+        # Create router with default approver
+        default_approver = StandardTradeApprover()
+        router = TradeApproverRouter(default_approver)
+
+        # Register overrides
+        router.register_symbol_approver("BTC-USD", crypto_approver)
+        router.register_regime_approver("high_volatility", conservative_approver)
+
+        # Get approver for context
+        approver = router.get_approver(symbol="AAPL", strategy="momentum", regime="normal")
     """
-    
-    def __init__(self, default_logic: Union[TradeLogicManagerBase, "DynamicTradeLogicManager"]):
+
+    def __init__(self, default_approver: Union[TradeApprover, "DynamicTradeLogicManager"]):
         """
-        Initialize router with default logic.
+        Initialize router with default approver.
 
         Args:
-            default_logic: Fallback logic if no specific match.
-                          Can be a TradeLogicManagerBase or DynamicTradeLogicManager.
+            default_approver: Fallback approver if no specific match.
+                              Can be a TradeApprover or DynamicTradeLogicManager.
+                              If DynamicTradeLogicManager, its .get() method is used
+                              as the fallback resolver.
         """
-        self.default_logic = default_logic
+        self.default_approver = default_approver
 
-        # Check if default_logic is a DynamicTradeLogicManager (has .get() method)
-        self._is_dynamic_router = hasattr(default_logic, 'get') and callable(getattr(default_logic, 'get', None))
+        # Check if default_approver is a DynamicTradeLogicManager (has .get() method)
+        self._is_dynamic_router = hasattr(default_approver, 'get') and callable(getattr(default_approver, 'get', None))
 
         # Routing tables
-        self.logic_by_symbol: Dict[str, TradeLogicManagerBase] = {}
-        self.logic_by_strategy: Dict[str, TradeLogicManagerBase] = {}
-        self.logic_by_regime: Dict[str, TradeLogicManagerBase] = {}
-    
-    def register_symbol_logic(self, symbol: str, logic: TradeLogicManagerBase) -> None:
-        """Register logic for specific symbol."""
-        self.logic_by_symbol[symbol] = logic
-    
-    def register_strategy_logic(self, strategy: str, logic: TradeLogicManagerBase) -> None:
-        """Register logic for specific strategy."""
-        self.logic_by_strategy[strategy] = logic
-    
-    def register_regime_logic(self, regime: str, logic: TradeLogicManagerBase) -> None:
-        """Register logic for specific regime."""
-        self.logic_by_regime[regime] = logic
-    
-    def get_logic(
+        self.approver_by_symbol: Dict[str, TradeApprover] = {}
+        self.approver_by_strategy: Dict[str, TradeApprover] = {}
+        self.approver_by_regime: Dict[str, TradeApprover] = {}
+
+    def register_symbol_approver(self, symbol: str, approver: TradeApprover) -> None:
+        """Register approver for specific symbol."""
+        self.approver_by_symbol[symbol] = approver
+        logger.debug(f"Registered symbol approver for {symbol}: {approver.__class__.__name__}")
+
+    def register_strategy_approver(self, strategy: str, approver: TradeApprover) -> None:
+        """Register approver for specific strategy."""
+        self.approver_by_strategy[strategy] = approver
+        logger.debug(f"Registered strategy approver for {strategy}: {approver.__class__.__name__}")
+
+    def register_regime_approver(self, regime: str, approver: TradeApprover) -> None:
+        """Register approver for specific regime."""
+        self.approver_by_regime[regime] = approver
+        logger.debug(f"Registered regime approver for {regime}: {approver.__class__.__name__}")
+
+    def get_approver(
         self,
         symbol: str,
         strategy: Optional[str] = None,
         regime: Optional[str] = None
-    ) -> TradeLogicManagerBase:
+    ) -> TradeApprover:
         """
-        Get appropriate logic for context.
+        Get appropriate approver for context.
 
         Priority:
-        1. Symbol-specific logic
-        2. Strategy-specific logic
-        3. Regime-specific logic
-        4. Default logic (or DynamicTradeLogicManager.get() if dynamic)
+        1. Symbol-specific approver
+        2. Strategy-specific approver
+        3. Regime-specific approver
+        4. Default approver (or DynamicTradeLogicManager.get() if dynamic)
 
         Args:
             symbol: Trading symbol
@@ -78,33 +115,51 @@ class TradeLogicRouter:
             regime: Market regime
 
         Returns:
-            Trade logic manager instance with should_trade() method
+            TradeApprover instance with should_trade() method
         """
         # Check symbol-specific
-        if symbol in self.logic_by_symbol:
-            logic = self.logic_by_symbol[symbol]
-            logger.debug(f"[{symbol}] Routed to symbol-specific logic: {logic.__class__.__name__}")
-            return logic
+        if symbol in self.approver_by_symbol:
+            approver = self.approver_by_symbol[symbol]
+            logger.debug(f"[{symbol}] Routed to symbol-specific approver: {approver.__class__.__name__}")
+            return approver
 
         # Check strategy-specific
-        if strategy and strategy in self.logic_by_strategy:
-            logic = self.logic_by_strategy[strategy]
-            logger.debug(f"[{symbol}] Routed to strategy-specific logic ({strategy}): {logic.__class__.__name__}")
-            return logic
+        if strategy and strategy in self.approver_by_strategy:
+            approver = self.approver_by_strategy[strategy]
+            logger.debug(f"[{symbol}] Routed to strategy-specific approver ({strategy}): {approver.__class__.__name__}")
+            return approver
 
         # Check regime-specific
-        if regime and regime in self.logic_by_regime:
-            logic = self.logic_by_regime[regime]
-            logger.debug(f"[{symbol}] Routed to regime-specific logic ({regime}): {logic.__class__.__name__}")
-            return logic
+        if regime and regime in self.approver_by_regime:
+            approver = self.approver_by_regime[regime]
+            logger.debug(f"[{symbol}] Routed to regime-specific approver ({regime}): {approver.__class__.__name__}")
+            return approver
 
         # Fallback to default
-        # If default_logic is a DynamicTradeLogicManager, call its .get() method
+        # If default_approver is a DynamicTradeLogicManager, call its .get() method
         if self._is_dynamic_router:
-            logic = self.default_logic.get(symbol, regime or "normal")
-            logger.debug(f"[{symbol}] Routed via DynamicTradeLogicManager ({regime}): {logic.__class__.__name__}")
-            return logic
+            approver = self.default_approver.get(symbol, regime or "normal")
+            logger.debug(f"[{symbol}] Routed via DynamicTradeLogicManager ({regime}): {approver.__class__.__name__}")
+            return approver
 
-        logger.debug(f"[{symbol}] Using default logic: {self.default_logic.__class__.__name__}")
-        return self.default_logic
+        logger.debug(f"[{symbol}] Using default approver: {self.default_approver.__class__.__name__}")
+        return self.default_approver
 
+    def clear_overrides(self) -> None:
+        """Clear all registered overrides (keep default)."""
+        self.approver_by_symbol.clear()
+        self.approver_by_strategy.clear()
+        self.approver_by_regime.clear()
+        logger.debug("Cleared all approver overrides")
+
+    def __repr__(self) -> str:
+        return (
+            f"TradeApproverRouter("
+            f"default={self.default_approver.__class__.__name__}, "
+            f"symbols={len(self.approver_by_symbol)}, "
+            f"strategies={len(self.approver_by_strategy)}, "
+            f"regimes={len(self.approver_by_regime)})"
+        )
+
+
+__all__ = ['TradeApproverRouter']

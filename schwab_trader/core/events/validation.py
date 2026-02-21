@@ -5,8 +5,13 @@ def validate_payload(payload: dict, schema: Any) -> None:
     Validate payload against a TypedDict schema.
     Raises TypeError or KeyError if invalid.
     Supports Optional[...] (Union[..., NoneType]) fields.
+    Respects total=False (all fields optional) on TypedDict.
     """
     hints = get_type_hints(schema)
+
+    # Check if TypedDict has total=False (all fields optional)
+    # TypedDict with total=False has __total__ = False
+    all_optional = getattr(schema, '__total__', True) is False
 
     for field, ftype in hints.items():
         # --- detect Optional fields ---
@@ -16,9 +21,9 @@ def validate_payload(payload: dict, schema: Any) -> None:
 
         # --- required field missing ---
         if field not in payload:
-            if is_optional:
-                # fill in missing optional fields as None
-                payload[field] = None
+            # Field is optional if: explicitly Optional[X], OR total=False on TypedDict
+            if is_optional or all_optional:
+                # Skip missing optional fields (don't mutate payload)
                 continue
             else:
                 raise KeyError(f"Missing required field '{field}' for {schema.__name__}")

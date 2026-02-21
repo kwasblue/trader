@@ -198,7 +198,11 @@ class MLPipeline:
     def preprocess_data(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.Series]:
         """Preprocess data for training."""
         df = df.sort_values(by='Date').copy()
-        df['Date'] = pd.to_datetime(df['Date'])
+        # Handle both epoch milliseconds and string date formats
+        if df['Date'].dtype in ('int64', 'float64'):
+            df['Date'] = pd.to_datetime(df['Date'], unit='ms')
+        else:
+            df['Date'] = pd.to_datetime(df['Date'])
         df.set_index('Date', inplace=True)
 
         # Drop all-NaN columns

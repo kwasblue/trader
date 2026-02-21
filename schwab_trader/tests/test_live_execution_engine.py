@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timezone
 import asyncio
 
-from core.app_types import OrderResult, PositionView
+from core.app_types import OrderResult, PositionView, SignalContext
 
 
 @pytest.fixture
@@ -67,14 +67,31 @@ def mock_trade_logger():
 
 @pytest.fixture
 def mock_trade_logic_manager():
-    """Create a mock trade logic manager."""
+    """Create a mock trade logic manager that matches the real API.
+
+    Real API:
+    - should_trade(context, state, account_positions) -> (bool, Optional[str])
+    - is_in_position(state) -> bool
+    - tp_mults, sl_mults dicts
+    """
     manager = MagicMock()
-    mock_logic = MagicMock()
-    mock_logic.should_enter.return_value = True
-    mock_logic.should_exit.return_value = False
-    mock_logic.get_stop_loss.return_value = 145.0
-    mock_logic.get_take_profit.return_value = 160.0
-    manager.get_logic.return_value = mock_logic
+
+    # Mock should_trade to return (True, None) - trade allowed
+    manager.should_trade = MagicMock(return_value=(True, None))
+
+    # Mock position helpers
+    manager.is_in_position = MagicMock(return_value=False)
+    manager.is_long = MagicMock(return_value=False)
+    manager.is_short = MagicMock(return_value=False)
+
+    # Mock multipliers (used by engine for SL/TP calculation)
+    manager.tp_mults = {"low_volatility": 1.5, "normal": 2.0, "high_volatility": 3.0}
+    manager.sl_mults = {"low_volatility": 1.0, "normal": 1.5, "high_volatility": 2.0}
+
+    # Mock cooldown tracking
+    manager.on_bar = MagicMock()
+    manager.on_trade = MagicMock()
+
     return manager
 
 
@@ -97,15 +114,9 @@ def mock_executor():
 
 @pytest.fixture
 def mock_portfolio():
-    """Create a mock portfolio state."""
-    portfolio = MagicMock()
-    portfolio.cash = 100000.0
-    portfolio.equity = 100000.0
-    portfolio.positions = {}
-    portfolio.get_position.return_value = None
-    portfolio.update_position = MagicMock()
-    portfolio.update_cash = MagicMock()
-    return portfolio
+    """Create a real PortfolioState for accurate testing."""
+    from core.logic.portfolio_state import PortfolioState
+    return PortfolioState(cash=100000.0)
 
 
 class TestLiveExecutionEngineSignals:
@@ -131,16 +142,19 @@ class TestLiveExecutionEngineSignals:
         state = SymbolState(symbol="AAPL")
         state.side = None  # No position
 
-        # Should run without exception
-        result = await engine.handle_signal(
+        # Create SignalContext for new API
+        context = SignalContext.from_kwargs(
             symbol="AAPL",
-            state=state,
             signal=1,  # Buy signal
             price=150.0,
             atr=2.0,
             regime="normal",
+            timestamp=datetime.now(timezone.utc),
             strategy_name="test_strategy",
         )
+
+        # Should run without exception
+        result = await engine.handle_signal(context, state)
 
         # Engine should handle the signal (may or may not trade depending on logic)
         assert engine is not None
@@ -166,16 +180,19 @@ class TestLiveExecutionEngineSignals:
         state.qty = 10
         state.entry_price = 145.0
 
-        # Should run without exception
-        result = await engine.handle_signal(
+        # Create SignalContext for new API
+        context = SignalContext.from_kwargs(
             symbol="AAPL",
-            state=state,
             signal=-1,  # Sell signal
             price=150.0,
             atr=2.0,
             regime="normal",
+            timestamp=datetime.now(timezone.utc),
             strategy_name="test_strategy",
         )
+
+        # Should run without exception
+        result = await engine.handle_signal(context, state)
 
         # Engine should handle the signal
         assert engine is not None
@@ -198,16 +215,19 @@ class TestLiveExecutionEngineSignals:
 
         state = SymbolState(symbol="AAPL")
 
-        # Hold signal should not trigger any trading action
-        await engine.handle_signal(
+        # Create SignalContext for new API
+        context = SignalContext.from_kwargs(
             symbol="AAPL",
-            state=state,
             signal=0,  # Hold signal
             price=150.0,
             atr=2.0,
             regime="normal",
+            timestamp=datetime.now(timezone.utc),
             strategy_name="test_strategy",
         )
+
+        # Hold signal should not trigger any trading action
+        await engine.handle_signal(context, state)
 
 
 class TestLiveExecutionEnginePositionManagement:
@@ -232,16 +252,19 @@ class TestLiveExecutionEnginePositionManagement:
         state = SymbolState(symbol="AAPL")
         state.portfolio_value = 100000.0
 
-        # Should run without exception
-        result = await engine.handle_signal(
+        # Create SignalContext for new API
+        context = SignalContext.from_kwargs(
             symbol="AAPL",
-            state=state,
             signal=1,
             price=150.0,
             atr=2.0,
             regime="normal",
+            timestamp=datetime.now(timezone.utc),
             strategy_name="test_strategy",
         )
+
+        # Should run without exception
+        result = await engine.handle_signal(context, state)
 
         # Engine should handle position sizing internally
         assert engine is not None
@@ -273,15 +296,18 @@ class TestLiveExecutionEngineRiskManagement:
 
         state = SymbolState(symbol="AAPL")
 
-        await engine.handle_signal(
+        # Create SignalContext for new API
+        context = SignalContext.from_kwargs(
             symbol="AAPL",
-            state=state,
             signal=1,
             price=150.0,
             atr=2.0,
             regime="normal",
+            timestamp=datetime.now(timezone.utc),
             strategy_name="test_strategy",
         )
+
+        await engine.handle_signal(context, state)
 
     @pytest.mark.asyncio
     async def test_drawdown_monitor_integration(self, mock_broker, mock_executor, mock_sizer, mock_trade_logger, mock_trade_logic_manager, mock_portfolio):
@@ -306,15 +332,18 @@ class TestLiveExecutionEngineRiskManagement:
 
         state = SymbolState(symbol="AAPL")
 
-        await engine.handle_signal(
+        # Create SignalContext for new API
+        context = SignalContext.from_kwargs(
             symbol="AAPL",
-            state=state,
             signal=1,
             price=150.0,
             atr=2.0,
             regime="normal",
+            timestamp=datetime.now(timezone.utc),
             strategy_name="test_strategy",
         )
+
+        await engine.handle_signal(context, state)
 
 
 class TestLiveExecutionEngineLogging:
@@ -341,15 +370,18 @@ class TestLiveExecutionEngineLogging:
 
         state = SymbolState(symbol="AAPL")
 
-        await engine.handle_signal(
+        # Create SignalContext for new API
+        context = SignalContext.from_kwargs(
             symbol="AAPL",
-            state=state,
             signal=1,
             price=150.0,
             atr=2.0,
             regime="normal",
+            timestamp=datetime.now(timezone.utc),
             strategy_name="test_strategy",
         )
+
+        await engine.handle_signal(context, state)
 
 
 class TestLiveExecutionEngineTradeLogic:
@@ -373,16 +405,19 @@ class TestLiveExecutionEngineTradeLogic:
 
         state = SymbolState(symbol="AAPL")
 
-        # Should run without exception and route based on regime
-        result = await engine.handle_signal(
+        # Create SignalContext for new API
+        context = SignalContext.from_kwargs(
             symbol="AAPL",
-            state=state,
             signal=1,
             price=150.0,
             atr=2.0,
             regime="high_volatility",
+            timestamp=datetime.now(timezone.utc),
             strategy_name="test_strategy",
         )
+
+        # Should run without exception and route based on regime
+        result = await engine.handle_signal(context, state)
 
         # Engine should handle the signal with appropriate trade logic
         assert engine is not None
@@ -412,16 +447,19 @@ class TestLiveExecutionEngineErrorHandling:
 
         state = SymbolState(symbol="AAPL")
 
-        # Should not raise exception
-        await engine.handle_signal(
+        # Create SignalContext for new API
+        context = SignalContext.from_kwargs(
             symbol="AAPL",
-            state=state,
             signal=1,
             price=150.0,
             atr=2.0,
             regime="normal",
+            timestamp=datetime.now(timezone.utc),
             strategy_name="test_strategy",
         )
+
+        # Should not raise exception
+        await engine.handle_signal(context, state)
 
     @pytest.mark.asyncio
     async def test_handles_sizer_error(self, mock_broker, mock_executor, mock_sizer, mock_trade_logger, mock_trade_logic_manager, mock_portfolio):
@@ -444,13 +482,16 @@ class TestLiveExecutionEngineErrorHandling:
 
         state = SymbolState(symbol="AAPL")
 
-        # Should not raise exception
-        await engine.handle_signal(
+        # Create SignalContext for new API
+        context = SignalContext.from_kwargs(
             symbol="AAPL",
-            state=state,
             signal=1,
             price=150.0,
             atr=2.0,
             regime="normal",
+            timestamp=datetime.now(timezone.utc),
             strategy_name="test_strategy",
         )
+
+        # Should not raise exception
+        await engine.handle_signal(context, state)

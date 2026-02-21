@@ -26,12 +26,13 @@ from core.logic.portfolio_state import PortfolioState
 from core.logic.symbol_state import SymbolState
 from core.logic.trade_gate import TradeGate
 from core.logic.strategy_routing_manager import StrategyRoutingManager
-from core.position_sizer import DynamicPositionSizer
+from core.position_sizer import KellyPositionSizer
 from core.drawdown_monitor import DrawdownMonitor
 from core.historical_loader import HistoricalBarLoader
 from core.events.eventhandler import EventHandler, get_event_handler
-from core.events.events import (EVENT_NEW_BAR, BarPayload, EVENT_STRATEGY_SIGNAL, StrategySignalPayload,
-    EVENT_PNL_UPDATE, PnLPayload)
+from core.contracts.events import (EVENT_NEW_BAR, BarPayload, EVENT_STRATEGY_SIGNAL, StrategySignalPayload,
+    EVENT_PNL_UPDATE, PnLPayload, EVENT_POSITION_UPDATE, PositionPayload)
+from core.config_loader import get_config, create_position_sizer, create_drawdown_monitor
 
 from core.simulator.simulation import compute_atr, classify_regime  # reuse your helpers
 from core.broker.alpaca_broker import AlpacaBroker
@@ -68,23 +69,31 @@ class AlpacaLiveRunner:
         self.history: dict[str, list[dict]] = defaultdict(list)
         self.atr_hist: dict[str, list[float]] = defaultdict(list)
 
-        # risk & gates
+        # Load centralized config
+        self.config = get_config()
+        risk_cfg = self.config.risk
+
+        # risk & gates (uses config with settings override)
         self.trade_gate = TradeGate(
-            max_layers=settings.get("MAX_PYRAMID_LAYERS", 2),
-            min_bars_between_layers=settings.get("MIN_BARS_BETWEEN_LAYERS", 2),
+            max_layers=settings.get("MAX_PYRAMID_LAYERS", risk_cfg.max_pyramid_layers),
+            min_bars_between_layers=settings.get("MIN_BARS_BETWEEN_LAYERS", risk_cfg.min_bars_between_layers),
             regime_min_persist_bars=settings.get("REGIME_MIN_PERSIST_BARS", 1),
             flip_cooldown_bars=settings.get("FLIP_COOLDOWN_BARS", 1),
         )
-        self.ddm = DrawdownMonitor(
-            max_symbol_drawdown=settings.get("MAX_SYMBOL_DD", 0.12),
-            max_portfolio_drawdown=settings.get("MAX_PORTFOLIO_DD", 0.15),
-            symbol_cooldown_seconds=settings.get("DDM_COOLDOWN_BARS", 5),
-        )
 
-        # sizer, router, executor, engine
-        self.sizer = DynamicPositionSizer(
-            risk_percentage=settings.get("BASE_RISK_PCT", 0.05)
-        )
+        # DrawdownMonitor from config (returns None if disabled)
+        self.ddm = create_drawdown_monitor(self.config)
+        if self.ddm is None:
+            # Create with settings fallback if config has it disabled but settings override
+            if settings.get("DDM_ENABLED", False):
+                self.ddm = DrawdownMonitor(
+                    max_symbol_drawdown=settings.get("MAX_SYMBOL_DD", 0.12),
+                    max_portfolio_drawdown=settings.get("MAX_PORTFOLIO_DD", 0.15),
+                    symbol_cooldown_seconds=settings.get("DDM_COOLDOWN_BARS", 5),
+                )
+
+        # sizer from config
+        self.sizer = create_position_sizer(self.config)
         self.router = StrategyRoutingManager(str(ROOT / "config" / "strategy_routing.json"))
         self.executor = LiveExecutor(
             broker=self.broker,
@@ -98,12 +107,12 @@ class AlpacaLiveRunner:
             trade_logic_manager=DynamicTradeLogicManager(str(ROOT / "config" / "trade_logic_routing.json")),
             portfolio=self.portfolio,
             sync_on_start=False,  # Sync is done by reconciler in run()
+            event_handler=self.event_handler,  # For GUI visibility of trade decisions
+            drawdown_monitor=self.ddm,  # Pass DrawdownMonitor for risk control
         )
         # If your engine has optional attrs (per our earlier patch), wire them:
         if hasattr(self.engine, "trade_gate"):
             self.engine.trade_gate = self.trade_gate
-        if hasattr(self.engine, "drawdown_monitor"):
-            self.engine.drawdown_monitor = self.ddm
 
         # State reconciler - ensures local state matches broker
         reconciler_config = ReconcilerConfig(
@@ -304,18 +313,19 @@ class AlpacaLiveRunner:
             self.atr_hist[symbol].append(atr)
         regime = classify_regime(atr, self.atr_hist[symbol])
 
-        # drawdown monitor (daily tick + updates)
-        if self._last_ddm_date is None or ts.date() != self._last_ddm_date:
-            self.ddm.start_new_day(portfolio_equity=self.portfolio.total_equity())
-            self._last_ddm_date = ts.date()
-        self.ddm.update_portfolio(self.portfolio.total_equity())
-        self.ddm.update_symbol(symbol, self._symbol_mv(symbol, last_px))
+        # drawdown monitor (daily tick + updates) - only if enabled
+        if self.ddm is not None:
+            if self._last_ddm_date is None or ts.date() != self._last_ddm_date:
+                self.ddm.start_new_day(portfolio_equity=self.portfolio.total_equity())
+                self._last_ddm_date = ts.date()
+            self.ddm.update_portfolio(self.portfolio.total_equity())
+            self.ddm.update_symbol(symbol, self._symbol_mv(symbol, last_px))
         await self.event_handler.emit(EVENT_PNL_UPDATE, PnLPayload(
             portfolio_value=self.portfolio.total_equity(),
             equity_curve=self.portfolio.equity_history,
             unrealized=self.portfolio.total_unrealized(),
             realized=self.portfolio.realized_pnl,
-            drawdown=self.ddm.get_portfolio_drawdown(),
+            drawdown=self.ddm.get_portfolio_drawdown() if self.ddm else 0.0,
             timestamp=ts.isoformat(),
         ))
 
@@ -399,6 +409,41 @@ class AlpacaLiveRunner:
                 f"${sync_result.broker_cash:,.2f} cash"
             )
 
+            # Get actual broker values for GUI (not calculated)
+            broker_snapshot = await self.broker.get_account_info()
+
+            # Emit initial position updates for GUI
+            for symbol, pos_view in broker_snapshot.positions.items():
+                last_price = pos_view.market_price or pos_view.avg_entry_price
+                unrealized = pos_view.unrealized_pl or 0.0
+                await self.event_handler.emit(EVENT_POSITION_UPDATE, PositionPayload(
+                    symbol=symbol,
+                    qty=pos_view.qty,
+                    avg_price=pos_view.avg_entry_price,
+                    avg=pos_view.avg_entry_price,  # GUI model uses 'avg'
+                    last=last_price,  # GUI model uses 'last'
+                    unrealized=unrealized,
+                    unreal=unrealized,  # GUI model uses 'unreal'
+                    realized=0.0,
+                    market_value=pos_view.qty * last_price,
+                    side=pos_view.side or ("long" if pos_view.qty > 0 else "short"),
+                    timestamp=datetime.now(timezone.utc).isoformat(),
+                ))
+
+            # Emit initial PnL for GUI using broker's actual values
+            await self.event_handler.emit(EVENT_PNL_UPDATE, PnLPayload(
+                portfolio_value=broker_snapshot.equity,  # Use broker's equity, not calculated
+                equity_curve=[broker_snapshot.equity],
+                unrealized=sum(p.unrealized_pl or 0.0 for p in broker_snapshot.positions.values()),
+                realized=0.0,
+                drawdown=0.0,
+                cash=broker_snapshot.cash,
+                buying_power=broker_snapshot.buying_power,
+                timestamp=datetime.now(timezone.utc).isoformat(),
+            ))
+            self.logger.info(f"[GUI] Emitted initial state: equity=${broker_snapshot.equity:,.2f}, "
+                           f"cash=${broker_snapshot.cash:,.2f}, positions={len(broker_snapshot.positions)}")
+
         for sym in self.symbols:
             self.broker.subscribe_bars(self.on_alpaca_bar, sym)
 
@@ -443,6 +488,9 @@ class AlpacaLiveRunner:
 
             # CRITICAL: Disconnect broker to release websocket connection
             self.broker.disconnect()
+
+            # Shutdown event handler (waits for pending tasks, closes thread pool)
+            await self.event_handler.shutdown()
 
             self.trade_logger.flush()
             self.logger.info("LiveRunner shut down cleanly.")

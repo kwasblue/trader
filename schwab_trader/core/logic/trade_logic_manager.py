@@ -1,10 +1,10 @@
 """
-Dynamic Trade Logic Manager - Route to different logic managers per symbol/regime
+Dynamic Trade Logic Manager - Route to different trade approvers per symbol/regime
 
-Provides dynamic routing of trade logic based on configuration:
+Provides dynamic routing of trade approval logic based on configuration:
 - JSON-based configuration
-- Per-symbol logic managers
-- Per-regime logic managers
+- Per-symbol approvers
+- Per-regime approvers
 - Fallback logic
 - Instance caching
 """
@@ -17,22 +17,23 @@ from typing import Dict, Any, Optional
 from pathlib import Path
 import logging
 
-from core.base.trade_logic_manager_base import TradeLogicManagerBase
-from core.logic.default_trade_logic import DefaultTradeLogicManager
+from core.base.trade_logic_manager_base import TradeApprover
+from core.logic.default_trade_logic import StandardTradeApprover
 from loggers.logger import Logger
 
 
-
-
-# Trade Logic Class Registry
-# Add your custom logic managers here
-TRADE_LOGIC_CLASS_REGISTRY: Dict[str, type[TradeLogicManagerBase]] = {
-    "default": DefaultTradeLogicManager,
-    # "aggressive": AggressiveTradeLogicManager,
-    # "conservative": ConservativeTradeLogicManager,
-    # "scalping": ScalpingTradeLogicManager,
-    # "pyramiding": PyramidingTradeLogicManager,
+# Trade Approver Class Registry
+# Add your custom trade approvers here
+TRADE_APPROVER_REGISTRY: Dict[str, type[TradeApprover]] = {
+    "default": StandardTradeApprover,
+    # "aggressive": AggressiveTradeApprover,
+    # "conservative": ConservativeTradeApprover,
+    # "scalping": ScalpingTradeApprover,
+    # "pyramiding": PyramidingTradeApprover,
 }
+
+# DEPRECATED: Old name kept for backwards compatibility
+TRADE_LOGIC_CLASS_REGISTRY = TRADE_APPROVER_REGISTRY
 
 
 class DynamicTradeLogicManager:
@@ -119,8 +120,10 @@ class DynamicTradeLogicManager:
         # Configuration
         self.routing_config: Dict[str, Dict[str, Dict[str, Any]]] = {}
 
-        # Instance cache: symbol -> regime -> logic instance
-        self.logic_instances: Dict[str, Dict[str, TradeLogicManagerBase]] = {}
+        # Instance cache: symbol -> regime -> approver instance
+        self.approver_instances: Dict[str, Dict[str, TradeApprover]] = {}
+        # DEPRECATED: Old name kept for backwards compatibility
+        self.logic_instances = self.approver_instances
 
         # Global settings from trading_config.json (swing_mode, etc.)
         self.global_trade_logic_params = self._load_global_trade_logic_params()
@@ -137,29 +140,29 @@ class DynamicTradeLogicManager:
         self._load_config()
 
     def _load_global_trade_logic_params(self) -> Dict[str, Any]:
-        """Load global trade logic params from trading_config.json."""
+        """Load global trade logic params from config loader (respects runtime overrides)."""
         try:
-            # Find trading_config.json relative to config_path
-            trading_config_path = self.config_path.parent / "trading_config.json"
-            if trading_config_path.exists():
-                with open(trading_config_path, 'r') as f:
-                    config = json.load(f)
-                    trade_logic = config.get("trade_logic", {})
+            # Use config loader to get runtime config (includes day_trade mode overrides)
+            from core.config_loader import get_config
+            config = get_config()
+            trade_logic = config.trade_logic
 
-                    # Extract relevant params
-                    params = {
-                        "swing_mode": trade_logic.get("swing_mode", False),
-                        "min_hold_days": trade_logic.get("min_hold_days", 1),
-                        "cooldown_mode": trade_logic.get("cooldown_mode", "bars"),
-                        "cooldown_bars": trade_logic.get("cooldown_bars", 5),
-                        "cooldown_seconds": trade_logic.get("cooldown_seconds", 300),
-                        "min_bars_to_hold": trade_logic.get("min_bars_to_hold", 3),
-                    }
+            # Extract relevant params from dataclass
+            params = {
+                "swing_mode": trade_logic.swing_mode,
+                "min_hold_days": trade_logic.min_hold_days,
+                "cooldown_mode": trade_logic.cooldown_mode,
+                "cooldown_bars": trade_logic.cooldown_bars,
+                "cooldown_seconds": trade_logic.cooldown_seconds,
+                "min_bars_to_hold": trade_logic.min_bars_to_hold,
+            }
 
-                    if params.get("swing_mode"):
-                        self.logger.info(f"SWING MODE ENABLED: min_hold_days={params['min_hold_days']}")
+            if params.get("swing_mode"):
+                self.logger.info(f"SWING MODE ENABLED: min_hold_days={params['min_hold_days']}")
+            else:
+                self.logger.info(f"DAY TRADE MODE: swing_mode=False, min_hold_days={params['min_hold_days']}")
 
-                    return params
+            return params
         except Exception as e:
             self.logger.warning(f"Failed to load global trade logic params: {e}")
 
@@ -173,45 +176,45 @@ class DynamicTradeLogicManager:
         self,
         symbol: str,
         regime: str
-    ) -> TradeLogicManagerBase:
+    ) -> TradeApprover:
         """
-        Get trade logic manager for symbol and regime.
-        
+        Get trade approver for symbol and regime.
+
         Resolution order:
         1. symbol -> regime (exact match)
         2. symbol -> default
         3. default -> regime
         4. default -> default
         5. Built-in default
-        
+
         Args:
             symbol: Trading symbol
             regime: Market regime
-            
+
         Returns:
-            TradeLogicManager instance (cached)
-            
+            TradeApprover instance (cached)
+
         Example:
-            logic = router.get("AAPL", "trending")
-            should_trade, reason = logic.should_trade(...)
+            approver = router.get("AAPL", "trending")
+            should_trade, reason = approver.should_trade(...)
         """
         # Get configuration for this symbol/regime
         config = self._resolve_config(symbol, regime)
-        
+
         # Check cache
-        if symbol in self.logic_instances:
-            if regime in self.logic_instances[symbol]:
-                return self.logic_instances[symbol][regime]
-        
+        if symbol in self.approver_instances:
+            if regime in self.approver_instances[symbol]:
+                return self.approver_instances[symbol][regime]
+
         # Create and cache new instance
-        logic = self._instantiate_logic(symbol, regime, config)
-        
+        approver = self._instantiate_approver(symbol, regime, config)
+
         # Cache instance
-        if symbol not in self.logic_instances:
-            self.logic_instances[symbol] = {}
-        self.logic_instances[symbol][regime] = logic
-        
-        return logic
+        if symbol not in self.approver_instances:
+            self.approver_instances[symbol] = {}
+        self.approver_instances[symbol][regime] = approver
+
+        return approver
     
     def _resolve_config(
         self,
@@ -271,35 +274,35 @@ class DynamicTradeLogicManager:
             "params": {}
         }
     
-    def _instantiate_logic(
+    def _instantiate_approver(
         self,
         symbol: str,
         regime: str,
         config: Dict[str, Any]
-    ) -> TradeLogicManagerBase:
+    ) -> TradeApprover:
         """
-        Instantiate trade logic manager from config.
-        
+        Instantiate trade approver from config.
+
         Args:
             symbol: Trading symbol
             regime: Market regime
             config: Configuration dict
-            
+
         Returns:
-            TradeLogicManager instance
+            TradeApprover instance
         """
-        logic_key = config.get("trade_logic_class", "default")
+        approver_key = config.get("trade_logic_class", "default")
         params = config.get("params", {})
-        
-        # Get logic class from registry
-        logic_class = TRADE_LOGIC_CLASS_REGISTRY.get(logic_key)
-        
-        if logic_class is None:
+
+        # Get approver class from registry
+        approver_class = TRADE_APPROVER_REGISTRY.get(approver_key)
+
+        if approver_class is None:
             self.logger.error(
-                f"Unknown trade logic class '{logic_key}', using default"
+                f"Unknown trade approver class '{approver_key}', using default"
             )
-            logic_class = TRADE_LOGIC_CLASS_REGISTRY["default"]
-        
+            approver_class = TRADE_APPROVER_REGISTRY["default"]
+
         # Instantiate with params, including event_handler and global settings
         try:
             # Merge global params first, then route-specific params override
@@ -309,19 +312,22 @@ class DynamicTradeLogicManager:
             if self.event_handler is not None:
                 merged_params['event_handler'] = self.event_handler
 
-            instance = logic_class(**merged_params)
+            instance = approver_class(**merged_params)
             self.logger.info(
-                f"Created {logic_key} logic for {symbol}/{regime}"
+                f"Created {approver_key} approver for {symbol}/{regime}"
             )
             return instance
 
         except Exception as e:
             self.logger.error(
-                f"Failed to instantiate {logic_key}: {e}, using default"
+                f"Failed to instantiate {approver_key}: {e}, using default"
             )
             # Also include global params in fallback
             fallback_params = {**self.global_trade_logic_params, 'event_handler': self.event_handler}
-            return TRADE_LOGIC_CLASS_REGISTRY["default"](**fallback_params)
+            return TRADE_APPROVER_REGISTRY["default"](**fallback_params)
+
+    # DEPRECATED: Old name kept for backwards compatibility
+    _instantiate_logic = _instantiate_approver
     
     # ========================================================================
     # CONFIGURATION MANAGEMENT

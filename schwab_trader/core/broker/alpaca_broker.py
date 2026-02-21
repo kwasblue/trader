@@ -23,7 +23,7 @@ from core.base.base_broker_interface import BaseBrokerInterface
 from core.app_types import OrderResult, PositionView, BrokerSnapshot
 from loggers.logger import Logger
 from core.events.eventhandler import EventHandler, get_event_handler
-from core.events.events import (
+from core.contracts.events import (
     EVENT_ORDER_STATUS, OrderStatusPayload,
     EVENT_NEW_TRADE, TradePayload,
     EVENT_POSITION_UPDATE, PositionPayload,
@@ -143,6 +143,7 @@ class AlpacaBroker(BaseBrokerInterface):
             payload: HealthPayload = {
                 "broker": "alpaca",
                 "status": "connected",
+                "details": {},
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
             asyncio.create_task(self.event_handler.emit(EVENT_HEALTH_UPDATE, payload))
@@ -165,7 +166,8 @@ class AlpacaBroker(BaseBrokerInterface):
             if self.event_handler:
                 payload: HealthPayload = {
                     "broker": "alpaca",
-                    "status": "alive",  # ✅ must be one of the allowed literals
+                    "status": "alive",
+                    "details": {},
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
                 await self.event_handler.emit(EVENT_HEALTH_UPDATE, payload)
@@ -178,6 +180,7 @@ class AlpacaBroker(BaseBrokerInterface):
                 await self.event_handler.emit(EVENT_HEALTH_UPDATE, {
                     "broker": "alpaca",
                     "status": "not_initialized",
+                    "details": {"error": "Stream not initialized"},
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 })
             return
@@ -189,6 +192,7 @@ class AlpacaBroker(BaseBrokerInterface):
             payload: HealthPayload = {
                 "broker": "alpaca",
                 "status": "stream_starting",
+                "details": {},
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
             await self.event_handler.emit(EVENT_HEALTH_UPDATE, payload)
@@ -208,6 +212,7 @@ class AlpacaBroker(BaseBrokerInterface):
                     payload: HealthPayload = {
                         "broker": "alpaca",
                         "status": "stream_exited",
+                        "details": {},
                         "timestamp": datetime.now(timezone.utc).isoformat(),
                     }
                     await self.event_handler.emit(EVENT_HEALTH_UPDATE, payload)
@@ -230,6 +235,7 @@ class AlpacaBroker(BaseBrokerInterface):
                     health_payload: HealthPayload = {
                         "broker": "alpaca",
                         "status": "reconnecting",
+                        "details": {"error": str(e)},
                         "timestamp": datetime.now(timezone.utc).isoformat(),
                     }
                     await self.event_handler.emit(EVENT_HEALTH_UPDATE, health_payload)
@@ -255,7 +261,7 @@ class AlpacaBroker(BaseBrokerInterface):
             asyncio.create_task(self.event_handler.emit(EVENT_HEALTH_UPDATE, {
                 "broker": "alpaca",
                 "status": "subscribed",
-                "symbol": symbol,
+                "details": {"symbol": symbol},
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }))
 
@@ -583,6 +589,12 @@ class AlpacaBroker(BaseBrokerInterface):
 
         def _acct():
             a = self.trading_client.get_account()
+            # Debug: Log raw Alpaca account values
+            self.logger.info(f"[ALPACA RAW] cash={getattr(a, 'cash', '?')}, "
+                           f"equity={getattr(a, 'equity', '?')}, "
+                           f"buying_power={getattr(a, 'buying_power', '?')}, "
+                           f"portfolio_value={getattr(a, 'portfolio_value', '?')}")
+
             # Also fetch all positions
             positions_list = self.trading_client.get_all_positions()
             positions = {}
@@ -590,6 +602,11 @@ class AlpacaBroker(BaseBrokerInterface):
                 symbol = getattr(p, "symbol", None)
                 if symbol:
                     positions[symbol] = self._mk_position_view(p)
+                    # Debug: Log raw position values
+                    self.logger.info(f"[ALPACA POS] {symbol}: qty={getattr(p, 'qty', '?')}, "
+                                   f"avg_entry={getattr(p, 'avg_entry_price', '?')}, "
+                                   f"current={getattr(p, 'current_price', '?')}, "
+                                   f"unrealized_pl={getattr(p, 'unrealized_pl', '?')}")
             return self._mk_broker_snapshot(a, positions)
 
         return await asyncio.to_thread(_acct)

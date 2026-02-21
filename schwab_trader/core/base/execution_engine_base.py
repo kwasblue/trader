@@ -16,8 +16,9 @@ from core.base.base_broker_interface import BaseBrokerInterface
 from core.base.executor_base import BaseExecutor
 from core.base.position_sizer_base import PositionSizerBase
 from core.base.trade_logger_base import TradeLoggerBase
-from core.base.trade_logic_manager_base import TradeLogicManagerBase
+from core.base.trade_logic_manager_base import TradeApprover, TradeLogicManagerBase
 from core.logic.portfolio_state import PortfolioState
+from core.logic.position_manager import PositionManager
 from core.app_types import OrderResult, SignalContext
 from core.enums import OrderSide
 
@@ -58,17 +59,19 @@ class ExecutionEngineBase(ABC):
                 # 1. Check if we should trade
                 if not self.trade_logic_manager.should_trade(state, signal):
                     return None
-                
+
                 # 2. Calculate position size
                 qty = self.sizer.calculate_size(symbol, price, atr)
-                
-                # 3. Execute trade
-                result = self.executor.execute(symbol, df, signal, price, atr)
-                
+
+                # 3. Execute trade via broker adapter
+                if signal == 1:
+                    self.executor.buy(symbol, qty, price=price)
+                else:
+                    self.executor.sell(symbol, qty, price=price)
+
                 # 4. Log performance
-                if result:
-                    self.performance_tracker.log_trade(result)
-                
+                self.performance_tracker.log_trade(result)
+
                 return result
     """
     
@@ -80,17 +83,20 @@ class ExecutionEngineBase(ABC):
         performance_tracker: TradeLoggerBase,
         trade_logic_manager: TradeLogicManagerBase,
         portfolio: PortfolioState,
+        position_manager: Optional[PositionManager] = None,
     ):
         """
         Initialize execution engine with all required components.
-        
+
         Args:
             broker: Broker interface for market access
             executor: Executor for signal interpretation and order placement
             sizer: Position sizer for calculating trade quantities
             performance_tracker: Trade logger for performance tracking
-            trade_logic_manager: Logic manager for trade approval
+            trade_logic_manager: Approver/router for trade approval
             portfolio: Portfolio state tracker
+            position_manager: PositionManager for exit/SL/TP logic.
+                              If not provided, a default instance is created.
         """
         self.broker = broker
         self.executor = executor
@@ -98,7 +104,8 @@ class ExecutionEngineBase(ABC):
         self.performance_tracker = performance_tracker
         self.trade_logic_manager = trade_logic_manager
         self.portfolio = portfolio
-        
+        self.position_manager = position_manager or PositionManager()
+
         logger.info("ExecutionEngine initialized")
     
     # ========================================================================
@@ -153,6 +160,39 @@ class ExecutionEngineBase(ABC):
 
     def handle_signal(
         self,
+        context: SignalContext,
+        state: Any,
+    ) -> Optional[OrderResult]:
+        """
+        Handle signal from strategy - PRIMARY ENTRY POINT.
+
+        This is the canonical entry point. Takes a unified SignalContext
+        and explicit SymbolState.
+
+        Subclasses should override this (sync for Generic, async for Live/Mock).
+
+        Args:
+            context: SignalContext containing all signal data
+            state: SymbolState for this symbol
+
+        Returns:
+            OrderResult if trade executed, None otherwise
+
+        Note:
+            This base implementation delegates to handle_signal_context()
+            for backward compatibility with async engines.
+        """
+        import asyncio
+
+        # Store state in metadata for handle_signal_context
+        context.metadata['state'] = state
+
+        # Run async method (for Live/Mock compatibility)
+        loop = asyncio.get_event_loop()
+        return loop.run_until_complete(self.handle_signal_context(context))
+
+    def handle_signal_legacy(
+        self,
         symbol: str,
         state: Any,
         signal: int,
@@ -163,34 +203,12 @@ class ExecutionEngineBase(ABC):
         **kwargs
     ) -> Optional[OrderResult]:
         """
-        DEPRECATED: Use handle_signal_context() instead.
+        DEPRECATED: Use handle_signal(context, state) instead.
 
-        Execute trade logic based on a new signal from strategy.
-
-        This method is kept for backward compatibility. It creates a
-        SignalContext and delegates to handle_signal_context().
-
-        Args:
-            symbol: Trading symbol (e.g., "AAPL")
-            state: Symbol-specific state object (SymbolState or similar)
-                   Contains position info, last trade time, P&L, etc.
-            signal: Strategy signal
-                   - +1: Buy/Long signal
-                   - -1: Sell/Short signal
-                   - 0: Hold/No action
-            price: Current market price
-            atr: Average True Range (for volatility-based sizing)
-            regime: Market regime classification (e.g., "trending", "ranging")
-            strategy_name: Optional identifier for which strategy generated signal
-            **kwargs: Additional context (indicators, metadata, etc.)
-
-        Returns:
-            OrderResult if trade was executed, None if skipped
+        Backward-compatible wrapper that creates SignalContext from loose params.
         """
-        import asyncio
         from datetime import datetime, timezone
 
-        # Create SignalContext from kwargs
         context = SignalContext.from_kwargs(
             symbol=symbol,
             signal=signal,
@@ -201,14 +219,10 @@ class ExecutionEngineBase(ABC):
             strategy_name=strategy_name,
             df=kwargs.get('df'),
             market_open=kwargs.get('market_open', True),
-            # Pass state in metadata for backward compatibility
-            state=state,
             **{k: v for k, v in kwargs.items() if k not in ('df', 'market_open')}
         )
 
-        # Run async method
-        loop = asyncio.get_event_loop()
-        return loop.run_until_complete(self.handle_signal_context(context))
+        return self.handle_signal(context, state)
 
     # ========================================================================
     # SHARED IMPLEMENTATIONS

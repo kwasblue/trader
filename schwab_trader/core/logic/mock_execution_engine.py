@@ -15,6 +15,7 @@ from typing import Optional, Dict, Any
 from datetime import datetime, timezone
 import asyncio
 import logging
+import math
 
 from core.base.execution_engine_base import ExecutionEngineBase
 from core.base.executor_base import BaseExecutor
@@ -30,13 +31,13 @@ from core.app_types import OrderResult, SignalContext
 from core.enums import OrderSide
 from loggers.logger import Logger
 from core.events.eventhandler import EventHandler
-from core.events.events import (
+from core.contracts.events import (
     EVENT_NEW_TRADE, EVENT_POSITION_UPDATE, EVENT_PNL_UPDATE, EVENT_STRATEGY_SIGNAL,
     EVENT_FLATTEN_ALL, EVENT_CANCEL_ALL, EVENT_FLATTEN_SYMBOL, EVENT_MANUAL_ORDER,
     EVENT_HALTED, EVENT_ALERT, EVENT_ORDER_STATUS,
     TradePayload, PositionPayload, PnLPayload, AlertPayload, OrderStatusPayload
 )
-from core.logic.trade_logic_router import TradeLogicRouter
+from core.logic.trade_logic_router import TradeApproverRouter
 
 
 class MockExecutionEngine(ExecutionEngineBase):
@@ -65,7 +66,7 @@ class MockExecutionEngine(ExecutionEngineBase):
         logic = DefaultTradeLogicManager()
         portfolio = PortfolioState(initial_cash=100000)
         drawdown_monitor = DrawdownMonitor(max_drawdown=0.10)
-        event_handler = AsyncEventHandler()
+        event_handler = EventHandler()  # Singleton
         
         engine = MockExecutionEngine(
             broker=broker,
@@ -94,10 +95,11 @@ class MockExecutionEngine(ExecutionEngineBase):
         portfolio: PortfolioState,
         drawdown_monitor: Optional[DrawdownMonitor] = None,
         event_handler: Optional[EventHandler] = None,
+        position_manager: Optional["PositionManager"] = None,
     ):
         """
         Initialize mock execution engine.
-        
+
         Args:
             broker: Mock broker
             executor: Executor (can be mock)
@@ -107,22 +109,27 @@ class MockExecutionEngine(ExecutionEngineBase):
             portfolio: Portfolio state
             drawdown_monitor: Optional drawdown monitor for risk control
             event_handler: Optional event bus for signal subscription
+            position_manager: Optional position manager for exit logic
         """
+        # Import here to avoid circular imports
+        from core.logic.position_manager import PositionManager as PM
+
         super().__init__(
             broker=broker,
             executor=executor,
             sizer=sizer,
             performance_tracker=performance_tracker,
             trade_logic_manager=trade_logic_manager,
-            portfolio=portfolio
+            portfolio=portfolio,
+            position_manager=position_manager or PM(),
         )
         
-        # Setup logic router
-        if isinstance(trade_logic_manager, TradeLogicRouter):
-            self.logic_router = trade_logic_manager
+        # Setup approver router (single authority for approver selection)
+        if isinstance(trade_logic_manager, TradeApproverRouter):
+            self.approver_router = trade_logic_manager
         else:
-            self.logic_router = TradeLogicRouter(trade_logic_manager)
-        
+            self.approver_router = TradeApproverRouter(trade_logic_manager)
+
         # Setup drawdown monitor
         self.drawdown_monitor = drawdown_monitor
         
@@ -227,13 +234,9 @@ class MockExecutionEngine(ExecutionEngineBase):
                 f"[{context.symbol}] Using logic: {trade_logic.__class__.__name__}"
             )
 
-            # 1. Check trade approval
-            # Filter out 'state' from metadata to avoid duplicate argument
-            extra_kwargs = {k: v for k, v in context.metadata.items() if k != 'state'}
+            # 1. Check trade approval (pass context directly)
             should_trade, reason = self._check_trade_approval(
-                trade_logic, context.symbol, state, context.signal,
-                context.price, context.atr, context.regime,
-                market_open=context.market_open, df=context.df, **extra_kwargs
+                trade_logic, context, state
             )
 
             if not should_trade:
@@ -249,11 +252,11 @@ class MockExecutionEngine(ExecutionEngineBase):
                 f"[MOCK] [{context.symbol}] Action approved: {action_type} {side.value}"
             )
 
-            # 3. Calculate quantity - PASS SIGNAL IN KWARGS
+            # 3. Calculate quantity
             qty = self._calculate_quantity(
                 context.symbol, state, action_type, context.price, context.atr,
                 context.regime, trade_logic, signal=context.signal,
-                df=context.df, **extra_kwargs
+                df=context.df
             )
 
             if qty <= 0:
@@ -290,6 +293,28 @@ class MockExecutionEngine(ExecutionEngineBase):
 
     async def handle_signal(
         self,
+        context: SignalContext,
+        state: SymbolState,
+    ) -> Optional[OrderResult]:
+        """
+        Handle signal with mock execution.
+
+        This is the primary entry point. Takes unified SignalContext
+        and explicit SymbolState.
+
+        Args:
+            context: SignalContext containing all signal data
+            state: SymbolState for this symbol
+
+        Returns:
+            OrderResult if trade executed, None otherwise
+        """
+        # Store state in metadata so handle_signal_context can use it
+        context.metadata['state'] = state
+        return await self.handle_signal_context(context)
+
+    async def handle_signal_legacy(
+        self,
         symbol: str,
         state: SymbolState,
         signal: int,
@@ -300,15 +325,10 @@ class MockExecutionEngine(ExecutionEngineBase):
         **kwargs
     ) -> Optional[OrderResult]:
         """
-        DEPRECATED: Use handle_signal_context() instead.
+        DEPRECATED: Use handle_signal(context, state) instead.
 
-        Handle signal with mock execution (backward compatible wrapper).
-
-        Simulates trade execution with instant fills.
+        Backward-compatible wrapper that creates SignalContext from loose params.
         """
-        from datetime import datetime, timezone
-
-        # Create SignalContext from parameters
         context = SignalContext.from_kwargs(
             symbol=symbol,
             signal=signal,
@@ -319,11 +339,9 @@ class MockExecutionEngine(ExecutionEngineBase):
             strategy_name=strategy_name,
             df=kwargs.get('df'),
             market_open=kwargs.get('market_open', True),
-            state=state,
             **{k: v for k, v in kwargs.items() if k not in ('df', 'market_open')}
         )
-
-        return await self.handle_signal_context(context)
+        return await self.handle_signal(context, state)
         
     # ========================================================================
     # MOCK-SPECIFIC METHODS
@@ -468,12 +486,18 @@ class MockExecutionEngine(ExecutionEngineBase):
             # Position update event
             position = self.portfolio.positions.get(symbol)
             if position:
+                side = "long" if position.qty > 0 else "short" if position.qty < 0 else "flat"
                 position_payload: PositionPayload = {
                     "symbol": symbol,
                     "qty": position.qty,
                     "avg_price": position.avg_price,
+                    "avg": position.avg_price,  # GUI model uses 'avg'
+                    "last": position.last_price,  # GUI model uses 'last'
                     "unrealized": position.unrealized_pnl,
+                    "unreal": position.unrealized_pnl,  # GUI model uses 'unreal'
                     "realized": position.realized_pnl,
+                    "side": side,
+                    "market_value": position.qty * position.last_price,
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
                 asyncio.create_task(
@@ -504,34 +528,43 @@ class MockExecutionEngine(ExecutionEngineBase):
     # DELEGATION (Reuse logic from base)
     # ========================================================================
 
-    def _check_trade_approval(self, trade_logic, symbol, state, signal, price, atr, regime, **kwargs):
-        """Check trade approval (sync, no broker call)."""
-        current_qty, avg_price = self._setup_approval_state(symbol, state)
-        market_open = kwargs.get('market_open', True)
+    def _check_trade_approval(
+        self,
+        trade_logic,
+        context: SignalContext,
+        state: SymbolState,
+    ):
+        """Check trade approval (pass context directly)."""
+        # Sync state with portfolio
+        self._setup_approval_state(context.symbol, state)
 
+        # Pass context directly to approver
         return trade_logic.should_trade(
-            symbol=symbol,
+            context=context,
             state=state,
-            signal=signal,
-            regime=regime,
-            price=price,
-            atr=atr,
-            avg_price=avg_price,
-            market_open=market_open,
             account_positions=len(self.portfolio.positions)
         )
 
     # _determine_action() is inherited from ExecutionEngineBase
 
     def _calculate_quantity(self, symbol, state, action_type, price, atr, regime, trade_logic, **kwargs):
-        """Calculate position size, use base class for exits with mock fallback."""
-        # Handle exits via base class helper
+        """Calculate position size using PositionManager for exits."""
+        # Handle exits via PositionManager (consistent with Live/Generic engines)
         if action_type in ("exit", "reversal", "partial_exit"):
-            qty = self._get_exit_quantity(symbol, action_type, trade_logic)
+            position = self.portfolio.positions.get(symbol)
+            if not position:
+                return 5  # Mock fallback for testing
+            is_partial = action_type == "partial_exit"
+            qty = self.position_manager.get_exit_quantity(position.qty, is_partial=is_partial)
             return qty if qty > 0 else 5  # Mock fallback for testing
 
         # Get signal from kwargs
         signal = kwargs.get('signal', 0)
+
+        # Guard against NaN ATR (not enough bars yet)
+        if atr is None or math.isnan(atr):
+            self.logger.debug(f"[MOCK] [{symbol}] Skipping trade - ATR not yet available")
+            return 0
 
         sl_mults = getattr(trade_logic, 'sl_mults', {"normal": 1.5})
         sl_mult = sl_mults.get(regime, 1.5)
@@ -602,16 +635,19 @@ class MockExecutionEngine(ExecutionEngineBase):
 
             state = self.symbol_states[symbol]
 
-            # Handle signal
-            await self.handle_signal(
+            # Create context from event payload
+            context = SignalContext.from_kwargs(
                 symbol=symbol,
-                state=state,
                 signal=sig_val,
                 price=payload.get("price", 0.0),
                 atr=payload.get("atr", 0.0),
                 regime=payload.get("regime", "normal"),
-                strategy_name=payload.get("strategy")
+                timestamp=datetime.now(timezone.utc),
+                strategy_name=payload.get("strategy"),
             )
+
+            # Handle signal with new clean API
+            await self.handle_signal(context, state)
 
         await self.event_handler.subscribe(EVENT_STRATEGY_SIGNAL, on_signal)
         self.logger.info("Subscribed to strategy signals")
@@ -732,21 +768,3 @@ class MockExecutionEngine(ExecutionEngineBase):
         }
         asyncio.create_task(self.event_handler.emit(EVENT_ALERT, payload))
     
-    # ========================================================================
-    # LOGIC REGISTRATION
-    # ========================================================================
-    
-    def register_symbol_logic(self, symbol: str, logic: TradeLogicManagerBase) -> None:
-        """Register symbol-specific logic."""
-        self.logic_router.register_symbol_logic(symbol, logic)
-        self.logger.info(f"[MOCK] Registered logic for {symbol}: {logic.__class__.__name__}")
-    
-    def register_strategy_logic(self, strategy: str, logic: TradeLogicManagerBase) -> None:
-        """Register strategy-specific logic."""
-        self.logic_router.register_strategy_logic(strategy, logic)
-        self.logger.info(f"[MOCK] Registered logic for strategy '{strategy}': {logic.__class__.__name__}")
-    
-    def register_regime_logic(self, regime: str, logic: TradeLogicManagerBase) -> None:
-        """Register regime-specific logic."""
-        self.logic_router.register_regime_logic(regime, logic)
-        self.logger.info(f"[MOCK] Registered logic for regime '{regime}': {logic.__class__.__name__}")

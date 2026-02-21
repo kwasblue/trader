@@ -4,7 +4,7 @@ import numpy as np
 from datetime import datetime, UTC
 import asyncio
 from core.events.eventhandler import get_event_handler
-from core.events.events import EVENT_PRICE_UPDATE, EVENT_NEW_BAR
+from core.contracts.events import EVENT_PRICE_UPDATE, EVENT_NEW_BAR
 
 class GBMSimulator:
     """

@@ -10,7 +10,7 @@ from typing import Any, Callable, Awaitable, Dict, List, Set
 import weakref
 
 from core.base.event_handler_base import Event, EventHandlerBase
-from core.events.events import EVENT_SCHEMA_MAP, GuardrailPayload, EVENT_GUARDRAIL_TRIGGERED
+from core.contracts.events import EVENT_SCHEMA_MAP, GuardrailPayload, EVENT_GUARDRAIL_TRIGGERED
 from core.events.validation import validate_payload
 
 # Optimization constants

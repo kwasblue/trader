@@ -2,16 +2,14 @@
 from __future__ import annotations
 
 import asyncio
-import inspect
-import time
 from datetime import datetime, timezone, time as dt_time
-from functools import wraps
 from typing import Optional, List, Dict, Any, Literal, Union, Callable
 
 from core.base.base_broker_interface import BaseBrokerInterface
 from core.app_types import OrderResult, PositionView, BrokerSnapshot
 from core.events.eventhandler import get_event_handler
-from core.events.events import EVENT_ORDER_STATUS, EVENT_HEALTH_UPDATE
+from core.contracts.events import EVENT_ORDER_STATUS, EVENT_HEALTH_UPDATE
+from core.utils.retry import CircuitBreaker, CircuitBreakerConfig, async_retry
 from data.streaming.schwab_client import SchwabClient
 from data.streaming.streamer import SchwabStreamingClient
 from loggers.logger import Logger
@@ -28,98 +26,6 @@ def _to_float(v: Any) -> float | None:
         return None if v is None else float(v)
     except Exception:
         return None
-
-
-def retry(max_attempts: int = 3, delay: float = 1.0, backoff: float = 2.0, exceptions: tuple = (Exception,)):
-    """
-    Retry decorator with exponential backoff.
-
-    Args:
-        max_attempts: Maximum number of retry attempts
-        delay: Initial delay between retries in seconds
-        backoff: Multiplier for delay after each retry
-        exceptions: Tuple of exception types to catch and retry
-    """
-    def decorator(func: Callable):
-        @wraps(func)
-        async def async_wrapper(*args, **kwargs):
-            current_delay = delay
-            last_exception = None
-            for attempt in range(max_attempts):
-                try:
-                    return await func(*args, **kwargs)
-                except exceptions as e:
-                    last_exception = e
-                    if attempt < max_attempts - 1:
-                        await asyncio.sleep(current_delay)
-                        current_delay *= backoff
-            raise last_exception
-
-        @wraps(func)
-        def sync_wrapper(*args, **kwargs):
-            current_delay = delay
-            last_exception = None
-            for attempt in range(max_attempts):
-                try:
-                    return func(*args, **kwargs)
-                except exceptions as e:
-                    last_exception = e
-                    if attempt < max_attempts - 1:
-                        import time
-                        time.sleep(current_delay)
-                        current_delay *= backoff
-            raise last_exception
-
-        if inspect.iscoroutinefunction(func):
-            return async_wrapper
-        return sync_wrapper
-    return decorator
-
-
-class CircuitBreaker:
-    """
-    Circuit breaker pattern for handling API failures.
-
-    States:
-    - CLOSED: Normal operation, requests pass through
-    - OPEN: Circuit is open, requests fail immediately
-    - HALF_OPEN: Testing if service recovered
-    """
-    CLOSED = "closed"
-    OPEN = "open"
-    HALF_OPEN = "half_open"
-
-    def __init__(self, failure_threshold: int = 5, recovery_timeout: float = 60.0):
-        self.failure_threshold = failure_threshold
-        self.recovery_timeout = recovery_timeout
-        self.failures = 0
-        self.state = self.CLOSED
-        self.last_failure_time: Optional[float] = None
-
-    def record_failure(self):
-        """Record a failure and potentially open the circuit."""
-        self.failures += 1
-        self.last_failure_time = time.monotonic()
-        if self.failures >= self.failure_threshold:
-            self.state = self.OPEN
-
-    def record_success(self):
-        """Record a success and reset the circuit."""
-        self.failures = 0
-        self.state = self.CLOSED
-
-    def can_execute(self) -> bool:
-        """Check if a request can be executed."""
-        if self.state == self.CLOSED:
-            return True
-        if self.state == self.OPEN:
-            if self.last_failure_time and \
-               (time.monotonic() - self.last_failure_time) > self.recovery_timeout:
-                self.state = self.HALF_OPEN
-                return True
-            return False
-        # HALF_OPEN - allow one request through
-        return True
 
 
 class SchwabBroker(BaseBrokerInterface):
@@ -161,8 +67,16 @@ class SchwabBroker(BaseBrokerInterface):
         # Quote callbacks registry
         self._quote_callbacks: Dict[str, List[Callable]] = {}
 
-        # Circuit breaker for API calls
-        self._circuit_breaker = CircuitBreaker(failure_threshold=5, recovery_timeout=60.0)
+        # Circuit breaker for API calls - configurable via config
+        from core.config_loader import get_config
+        err_config = get_config().error_recovery
+        self._circuit_breaker = CircuitBreaker(
+            name="schwab_broker",
+            config=CircuitBreakerConfig(
+                failure_threshold=err_config.circuit_breaker_failure_threshold,
+                timeout=err_config.circuit_breaker_timeout,
+            )
+        )
 
         # Health check callback
         self._health_callback: Optional[Callable] = None
@@ -274,7 +188,7 @@ class SchwabBroker(BaseBrokerInterface):
     # ---------------------------------------------------------------------
     # BaseBrokerInterface — ASYNC
     # ---------------------------------------------------------------------
-    @retry(max_attempts=3, delay=1.0, backoff=2.0)
+    @async_retry(max_attempts=3, base_delay=1.0)
     async def place_order(
         self,
         symbol: str,
@@ -287,7 +201,7 @@ class SchwabBroker(BaseBrokerInterface):
         **kwargs,
     ) -> OrderResult:
         # Circuit breaker check
-        if not self._circuit_breaker.can_execute():
+        if not self._circuit_breaker._should_allow_request():
             self.logger.warning("Circuit breaker is open, rejecting order")
             return OrderResult(
                 order_id=None,
@@ -358,14 +272,14 @@ class SchwabBroker(BaseBrokerInterface):
             return result
 
         except Exception as e:
-            self._circuit_breaker.record_failure()
+            self._circuit_breaker.record_failure(e)
             self.logger.exception(f"Failed to place order: {e}")
             raise
 
-    @retry(max_attempts=3, delay=1.0, backoff=2.0)
+    @async_retry(max_attempts=3, base_delay=1.0)
     async def cancel_order(self, order_id: str) -> OrderResult:
         """Cancel an order by ID."""
-        if not self._circuit_breaker.can_execute():
+        if not self._circuit_breaker._should_allow_request():
             self.logger.warning("Circuit breaker is open, rejecting cancel request")
             return OrderResult(
                 order_id=order_id,
@@ -386,7 +300,7 @@ class SchwabBroker(BaseBrokerInterface):
             return result
 
         except Exception as e:
-            self._circuit_breaker.record_failure()
+            self._circuit_breaker.record_failure(e)
             self.logger.exception(f"Failed to cancel order {order_id}: {e}")
             raise
 
@@ -405,6 +319,7 @@ class SchwabBroker(BaseBrokerInterface):
         }
         await self._event_handler.emit(EVENT_ORDER_STATUS, payload)
 
+    @async_retry(max_attempts=3, base_delay=1.0)
     async def get_position(self, symbol: str) -> Optional[PositionView]:
         acct = await self._to_thread(self.client.accounts_number, self.account_number)
         positions = (acct.get("securitiesAccount", {}) or {}).get("positions", []) or []
@@ -413,6 +328,7 @@ class SchwabBroker(BaseBrokerInterface):
                 return self._mk_position_view(p)
         return None
 
+    @async_retry(max_attempts=3, base_delay=1.0)
     async def get_account_info(self) -> BrokerSnapshot:
         acct = await self._to_thread(self.client.accounts_number, self.account_number)
         # Extract positions from account response
@@ -483,18 +399,21 @@ class SchwabBroker(BaseBrokerInterface):
 
                 return market_open <= current_time <= market_close
             except ImportError:
-                # If no timezone library available, assume market is open
-                self.logger.warning("No timezone library available, assuming market open")
-                return True
+                # If no timezone library available, assume market is CLOSED for safety
+                self.logger.warning("No timezone library available, assuming market CLOSED (safe default)")
+                return False
         except Exception as e:
-            self.logger.warning(f"Error checking market hours: {e}, assuming open")
-            return True
+            # SAFETY: On error, assume market is CLOSED to prevent unintended trades
+            self.logger.warning(f"Error checking market hours: {e}, assuming CLOSED (safe default)")
+            return False
 
+    @async_retry(max_attempts=3, base_delay=1.0)
     async def get_open_orders(self) -> List[OrderResult]:
         resp = await self._to_thread(self.client.all_orders, self.account_number)
         orders = resp if isinstance(resp, list) else (resp.get("orders", []) if isinstance(resp, dict) else [])
         return [self._mk_order_result(o) for o in orders]
 
+    @async_retry(max_attempts=3, base_delay=1.0)
     async def get_order_status(self, order_id: str) -> OrderResult:
         resp = await self._to_thread(self.client.get_order_by_id, self.account_number, order_id)
         return self._mk_order_result(resp)
@@ -589,20 +508,42 @@ class SchwabBroker(BaseBrokerInterface):
         data = self.client.account_number()
         return data.get("accountNumbers", [{}])[0].get("accountNumber")
 
-    def get_quote(self, symbol: str) -> float:
-        raw = self.client.quote(symbol)
-        # Normalize common shapes: {"AAPL": {...}} or {"quotes":{"AAPL": {...}}}
-        d = None
-        if isinstance(raw, dict):
-            d = raw.get(symbol)
-            if d is None and isinstance(raw.get("quotes", {}), dict):
-                d = raw["quotes"].get(symbol)
-        price = None
-        if isinstance(d, dict):
-            price = d.get("lastPrice") or d.get("last") or d.get("mark") or d.get("close")
-        if price is not None:
-            self.mark_price(symbol, float(price))
-            return float(price)
+    def get_quote(self, symbol: str, fallback_to_cache: bool = True) -> float:
+        """
+        Get quote for a symbol.
+
+        Args:
+            symbol: Trading symbol
+            fallback_to_cache: If True, return last known price if API fails
+
+        Returns:
+            Current price for the symbol
+
+        Raises:
+            RuntimeError: If no quote available and no cached price
+        """
+        try:
+            raw = self.client.quote(symbol)
+            # Normalize common shapes: {"AAPL": {...}} or {"quotes":{"AAPL": {...}}}
+            d = None
+            if isinstance(raw, dict):
+                d = raw.get(symbol)
+                if d is None and isinstance(raw.get("quotes", {}), dict):
+                    d = raw["quotes"].get(symbol)
+            price = None
+            if isinstance(d, dict):
+                price = d.get("lastPrice") or d.get("last") or d.get("mark") or d.get("close")
+            if price is not None:
+                self.mark_price(symbol, float(price))
+                return float(price)
+        except Exception as e:
+            self.logger.warning(f"Quote API failed for {symbol}: {e}")
+
+        # Fallback to cached price
+        if fallback_to_cache and symbol in self._last_price:
+            self.logger.warning(f"Using cached price for {symbol}: ${self._last_price[symbol]:.2f}")
+            return self._last_price[symbol]
+
         raise RuntimeError(f"No quote available for {symbol}")
 
     def get_available_funds(self) -> float:

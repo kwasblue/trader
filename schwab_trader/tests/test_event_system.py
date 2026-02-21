@@ -244,6 +244,8 @@ class TestEventPayloads:
             "realized": 1000.0,
             "drawdown": 0.02,
             "timestamp": "2024-01-01T10:00:00Z",
+            "cash": 50000.0,
+            "buying_power": 100000.0,
         })
 
         await asyncio.sleep(0.1)

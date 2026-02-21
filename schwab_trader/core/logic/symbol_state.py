@@ -1,19 +1,26 @@
 """
-Symbol State - Per-symbol trading state tracking
+Symbol State - Per-symbol trading state (dumb data container)
 
-Tracks all state for a single symbol including:
+Tracks state fields for a single symbol:
 - Position details (side, quantity, prices)
-- Risk management (stops, targets)
-- Performance tracking (excursions, bars held)
+- Risk levels (stops, targets) - set by PositionManager
+- Performance tracking (excursions, bars held) - updated by PositionManager
 - Trade logic state (pyramiding, partials)
+
+NOTE: SymbolState is a DUMB data container. All "smart" logic
+(checking stops, updating trailing, exit decisions) belongs in PositionManager.
+SymbolState only stores fields and provides simple property accessors.
 """
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
 from typing import Optional, List
 from datetime import datetime, timezone
 from loggers.logger import Logger
+
+from core.enums import PositionState
 
 # Module-level logger instance
 _logger_instance = Logger(
@@ -54,18 +61,18 @@ class SymbolState:
     
     Example:
         state = SymbolState(symbol="AAPL")
-        
-        # Position opened
+
+        # Position opened (fields set by PositionManager)
         state.side = "long"
         state.current_position = 100
         state.entry_price = 150.25
         state.stop_loss = 148.00
         state.take_profit = 154.50
-        
-        # Update on each bar
-        state.bars_held += 1
-        state.update_excursions(151.50, "long", 150.25)
-        
+
+        # Check simple properties
+        if state.is_long:
+            print(f"Long {state.current_position} shares")
+
         # Position closed
         state.reset()
     """
@@ -98,6 +105,14 @@ class SymbolState:
     
     # Legacy/optional fields
     portfolio_value: float = 0.0  # For reference if needed
+
+    # Concurrency control
+    position_state: PositionState = PositionState.NONE
+    pending_order_id: Optional[str] = None
+
+    def __post_init__(self):
+        """Initialize asyncio lock for thread-safe operations."""
+        self._lock = asyncio.Lock()
     
     # ========================================================================
     # PROPERTIES
@@ -124,21 +139,23 @@ class SymbolState:
         return not self.is_flat
     
     @property
-    def unrealized_pnl(self) -> Optional[float]:
+    def unrealized_pnl(self) -> float:
         """
         Calculate unrealized P&L if we have position.
-        
+
         Note: This requires current price to be meaningful.
-        Better to get from portfolio which tracks last_price.
+        For accurate P&L tracking, use PortfolioState which tracks last_price.
+
+        Returns:
+            0.0 if flat or no entry price (cannot calculate)
         """
         if self.is_flat or self.entry_price is None:
-            return None
-        
-        # Need current price - this is why portfolio tracking is better
-        logger.warning(
-            f"[{self.symbol}] unrealized_pnl called but state doesn't track current price"
-        )
-        return None
+            return 0.0
+
+        # Note: SymbolState doesn't track current price directly.
+        # For accurate P&L, portfolio should be used.
+        # Return 0.0 rather than None to avoid None propagation.
+        return 0.0
     
     @property
     def has_stop_loss(self) -> bool:
@@ -156,124 +173,9 @@ class SymbolState:
         return len(self.partial_exit_targets) > 0
     
     # ========================================================================
-    # EXCURSION TRACKING
+    # PARTIAL TARGET HELPERS
     # ========================================================================
-    
-    def update_excursions(
-        self,
-        current_price: float,
-        side: Optional[str] = None,
-        avg_price: Optional[float] = None
-    ) -> None:
-        """
-        Update max favorable and adverse excursions.
-        
-        Tracks the best and worst price moves since entry.
-        
-        Args:
-            current_price: Current market price
-            side: Position side (uses self.side if None)
-            avg_price: Entry price (uses self.entry_price if None)
-        """
-        # Use instance values if not provided
-        side = side or self.side
-        avg_price = avg_price or self.entry_price
-        
-        # Can't calculate without position and entry
-        if side is None or avg_price is None:
-            return
-        
-        # Calculate signed excursion
-        if side == "long":
-            excursion = current_price - avg_price
-        else:  # short
-            excursion = avg_price - current_price
-        
-        # Update MFE (best move)
-        if self.max_favorable_excursion is None:
-            self.max_favorable_excursion = excursion
-        else:
-            self.max_favorable_excursion = max(
-                self.max_favorable_excursion,
-                excursion
-            )
-        
-        # Update MAE (worst move)
-        if self.max_adverse_excursion is None:
-            self.max_adverse_excursion = excursion
-        else:
-            self.max_adverse_excursion = min(
-                self.max_adverse_excursion,
-                excursion
-            )
-    
-    # ========================================================================
-    # RISK LEVEL CHECKS
-    # ========================================================================
-    
-    def check_stop_loss(self, current_price: float) -> bool:
-        """
-        Check if stop loss hit.
-        
-        Args:
-            current_price: Current market price
-            
-        Returns:
-            True if stop loss hit
-        """
-        if not self.has_stop_loss:
-            return False
-        
-        if self.is_long:
-            return current_price <= self.stop_loss
-        elif self.is_short:
-            return current_price >= self.stop_loss
-        
-        return False
-    
-    def check_take_profit(self, current_price: float) -> bool:
-        """
-        Check if take profit hit.
-        
-        Args:
-            current_price: Current market price
-            
-        Returns:
-            True if take profit hit
-        """
-        if not self.has_take_profit:
-            return False
-        
-        if self.is_long:
-            return current_price >= self.take_profit
-        elif self.is_short:
-            return current_price <= self.take_profit
-        
-        return False
-    
-    def check_partial_target(self, current_price: float) -> Optional[float]:
-        """
-        Check if partial exit target hit.
-        
-        Args:
-            current_price: Current market price
-            
-        Returns:
-            Target price if hit, None otherwise
-        """
-        if not self.has_partial_targets:
-            return None
-        
-        # Check first target in list
-        target = self.partial_exit_targets[0]
-        
-        if self.is_long and current_price >= target:
-            return target
-        elif self.is_short and current_price <= target:
-            return target
-        
-        return None
-    
+
     def pop_partial_target(self) -> Optional[float]:
         """
         Remove and return first partial target.
@@ -295,7 +197,7 @@ class SymbolState:
     def reset(self) -> None:
         """
         Reset state when position closed.
-        
+
         Clears all trade-specific fields but preserves symbol.
         """
         self.side = None
@@ -308,6 +210,9 @@ class SymbolState:
         self.bars_held = 0
         self.max_favorable_excursion = None
         self.max_adverse_excursion = None
+        # Reset position lifecycle state
+        self.position_state = PositionState.NONE
+        self.pending_order_id = None
         # Note: strategy_name preserved (may use same strategy next time)
 
         logger.debug(f"[{self.symbol}] State reset")
@@ -339,48 +244,6 @@ class SymbolState:
             self.entry_price = avg_price
         elif qty == 0:
             self.entry_price = None
-    
-    # ========================================================================
-    # TRAILING STOP MANAGEMENT
-    # ========================================================================
-    
-    def update_trailing_stop(
-        self,
-        current_price: float,
-        atr: float,
-        multiplier: float = 1.5
-    ) -> None:
-        """
-        Update trailing stop loss.
-        
-        For longs: trails up as price rises
-        For shorts: trails down as price falls
-        
-        Args:
-            current_price: Current market price
-            atr: Average True Range
-            multiplier: ATR multiplier for stop distance
-        """
-        if self.is_flat:
-            return
-        
-        stop_distance = atr * multiplier
-        
-        if self.is_long:
-            # Trail stop up
-            new_stop = current_price - stop_distance
-            if self.stop_loss is None:
-                self.stop_loss = new_stop
-            else:
-                self.stop_loss = max(self.stop_loss, new_stop)
-        
-        elif self.is_short:
-            # Trail stop down
-            new_stop = current_price + stop_distance
-            if self.stop_loss is None:
-                self.stop_loss = new_stop
-            else:
-                self.stop_loss = min(self.stop_loss, new_stop)
     
     # ========================================================================
     # UTILITY METHODS

@@ -51,23 +51,29 @@
     "max_trade_pct": 0.10,
     "max_holding_pct": 0.25,
     "min_position_size": 1,
-    "max_position_size": 1000
+    "max_position_size": 1000,
+    "fee_rate": 0.001,
+    "allow_fractional": false,
+    "lot_size": 1
   },
 
   "trade_logic": {
     "cooldown_mode": "bars",
     "cooldown_bars": 5,
     "cooldown_seconds": 300,
+    "tp_mult_low": 1.5,
     "tp_mult_normal": 2.0,
-    "tp_mult_trending": 3.0,
+    "tp_mult_high": 3.0,
+    "sl_mult_low": 1.0,
     "sl_mult_normal": 1.5,
-    "sl_mult_trending": 1.0,
+    "sl_mult_high": 2.0,
     "exit_fraction": 0.25,
     "trailing_stop": true,
     "max_positions": 10,
     "min_bars_to_hold": 3,
     "swing_mode": true,
-    "min_hold_days": 1
+    "min_hold_days": 1,
+    "allow_after_hours": false
   },
 
   "indicators": {
@@ -111,5 +117,12 @@
     "post_market_delay_minutes": 5,
     "data_update_days": 5,
     "dry_run": false
+  },
+
+  "error_recovery": {
+    "retry_max_attempts": 3,
+    "retry_base_delay": 1.0,
+    "circuit_breaker_failure_threshold": 5,
+    "circuit_breaker_timeout": 60.0
   }
 }

@@ -1,5 +1,5 @@
 """
-Tests for DynamicPositionSizer
+Tests for SimplePositionSizer (formerly SimplePositionSizer)
 
 Coverage:
 - Position size calculation
@@ -15,35 +15,35 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from core.position_sizer import DynamicPositionSizer
+from core.position_sizer import SimplePositionSizer
 
 
-class TestDynamicPositionSizerInit:
-    """Tests for DynamicPositionSizer initialization."""
+class TestSimplePositionSizerInit:
+    """Tests for SimplePositionSizer initialization."""
 
     def test_init_valid_risk(self):
         """Test initialization with valid risk percentage."""
-        sizer = DynamicPositionSizer(risk_percentage=0.01)
+        sizer = SimplePositionSizer(risk_percentage=0.01)
         assert sizer.risk_per_trade == 0.01
 
     def test_init_invalid_risk_zero(self):
         """Test initialization with zero risk raises error."""
         with pytest.raises(ValueError):
-            DynamicPositionSizer(risk_percentage=0)
+            SimplePositionSizer(risk_percentage=0)
 
     def test_init_invalid_risk_negative(self):
         """Test initialization with negative risk raises error."""
         with pytest.raises(ValueError):
-            DynamicPositionSizer(risk_percentage=-0.01)
+            SimplePositionSizer(risk_percentage=-0.01)
 
     def test_init_invalid_risk_one(self):
         """Test initialization with risk=1 raises error."""
         with pytest.raises(ValueError):
-            DynamicPositionSizer(risk_percentage=1.0)
+            SimplePositionSizer(risk_percentage=1.0)
 
     def test_init_sets_min_max_risk(self):
         """Test that min and max risk are set based on base risk."""
-        sizer = DynamicPositionSizer(risk_percentage=0.02)
+        sizer = SimplePositionSizer(risk_percentage=0.02)
         assert sizer.min_risk_percentage == 0.01  # 0.02 * 0.5
         assert sizer.max_risk_percentage == 0.06  # 0.02 * 3
 
@@ -53,7 +53,7 @@ class TestAdjustRiskPercentage:
 
     @pytest.fixture
     def sizer(self):
-        return DynamicPositionSizer(risk_percentage=0.02)
+        return SimplePositionSizer(risk_percentage=0.02)
 
     def test_adjust_low_volatility(self, sizer):
         """Test risk increases in low volatility."""
@@ -78,7 +78,7 @@ class TestCalculatePositionSize:
 
     @pytest.fixture
     def sizer(self):
-        return DynamicPositionSizer(risk_percentage=0.01)
+        return SimplePositionSizer(risk_percentage=0.01)
 
     def test_basic_calculation_buy(self, sizer):
         """Test basic position size calculation for buy."""
@@ -212,7 +212,7 @@ class TestEdgeCases:
 
     def test_small_cash(self):
         """Test with very small cash returns 0 when risk < $5."""
-        sizer = DynamicPositionSizer(risk_percentage=0.01)
+        sizer = SimplePositionSizer(risk_percentage=0.01)
         size = sizer.calculate_position_size(
             price=100.0,
             stop_loss_price=95.0,
@@ -226,7 +226,7 @@ class TestEdgeCases:
 
     def test_expensive_stock(self):
         """Test with expensive stock."""
-        sizer = DynamicPositionSizer(risk_percentage=0.01)
+        sizer = SimplePositionSizer(risk_percentage=0.01)
         size = sizer.calculate_position_size(
             price=5000.0,
             stop_loss_price=4900.0,  # $100 risk per share

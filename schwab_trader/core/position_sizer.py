@@ -1,5 +1,38 @@
-# core/base/position_sizer.py (or wherever your DynamicPositionSizer lives)
+"""
+Position Sizer Module
+
+Provides risk-based position sizing for trading systems.
+
+Recommended Usage:
+    from core.position_sizer import PositionSizer  # Alias for production sizer
+
+    sizer = PositionSizer(
+        risk_percentage=0.02,
+        max_trade_pct=0.10,
+        max_holding_pct=0.20,
+    )
+
+Available Classes:
+    PositionSizer (alias)     - Recommended. Points to KellyPositionSizer.
+    KellyPositionSizer        - Production sizer with full feature set:
+                                * Requires PortfolioState in kwargs
+                                * Per-symbol reservation tracking
+                                * Per-trade and per-holding caps
+                                * Fee rate and lot size awareness
+    SimplePositionSizer       - Legacy sizer for simple use cases:
+                                * Uses account_value and current_cash directly
+                                * No portfolio awareness
+                                * Good for standalone backtests
+
+DEPRECATED NAMES (backwards compatibility):
+    DynamicPositionSizer2     - Use KellyPositionSizer instead
+    DynamicPositionSizer      - Use SimplePositionSizer instead
+    LegacyPositionSizer       - Use SimplePositionSizer instead
+
+For live trading and simulation, use PositionSizer (KellyPositionSizer).
+"""
 import logging
+import threading
 from core.base.position_sizer_base import PositionSizerBase
 from core.logic.portfolio_state import PortfolioState
 from loggers.logger import Logger
@@ -14,12 +47,19 @@ _logger_instance = Logger(
 )
 logger = _logger_instance.get_logger()
 
-class DynamicPositionSizer(PositionSizerBase):
+class SimplePositionSizer(PositionSizerBase):
     """
-    A dynamic position sizer that adjusts risk exposure based on market conditions.
+    A simple ATR-based position sizer that adjusts risk exposure based on market conditions.
 
     Supports dynamic adjustment of the risk percentage and calculates position
     size based on stop-loss and available capital.
+
+    Use this for:
+    - Standalone backtests
+    - Simple use cases without portfolio awareness
+    - When you don't need per-symbol reservation tracking
+
+    For production trading, use KellyPositionSizer instead.
     """
 
     def __init__(self, risk_percentage: float): 
@@ -165,15 +205,25 @@ class DynamicPositionSizer(PositionSizerBase):
         logger.debug(f"Risk percentage reset to: {new_risk}")
 
 
-class DynamicPositionSizer2(PositionSizerBase):
+class KellyPositionSizer(PositionSizerBase):
     """
-    Risk- and capital-aware position sizer.
+    Production position sizer with full risk management features.
 
-    - Uses PortfolioState directly.
-    - Enforces per-trade notional cap AND per-holding notional cap.
-    - Caps by buying power, risk budget, and regime adjustment.
-    - Reserves notional *per-symbol* intra-bar so parallel signals don't double-spend.
-    - Pyramiding always allowed, constrained by max_holding_pct.
+    Features:
+    - Uses PortfolioState directly for accurate capital tracking
+    - Enforces per-trade notional cap AND per-holding notional cap
+    - Caps by buying power, risk budget, and regime adjustment
+    - Reserves notional *per-symbol* intra-bar so parallel signals don't double-spend
+    - Pyramiding always allowed, constrained by max_holding_pct
+    - Thread-safe reservation tracking
+
+    This is the recommended sizer for:
+    - Live trading
+    - Simulation
+    - Any scenario requiring portfolio-aware sizing
+
+    Note: Despite the name, this sizer uses ATR-based risk sizing, not pure Kelly criterion.
+    The Kelly criterion sizer is in core/kelly_sizer.py for probability-based sizing.
     """
 
     def __init__(
@@ -199,10 +249,11 @@ class DynamicPositionSizer2(PositionSizerBase):
         self.allow_fractional = bool(allow_fractional)
         self.lot_size = max(1, int(lot_size))
 
-        # per-symbol reserved notional
+        # per-symbol reserved notional with thread-safe lock
         self._reserved_notional: dict[str, float] = {}
+        self._reservation_lock = threading.RLock()
 
-        logger.info(f"DynamicPositionSizer2 initialized: risk={risk_percentage:.1%}, max_trade={max_trade_pct}, max_holding={max_holding_pct}")
+        logger.info(f"KellyPositionSizer initialized: risk={risk_percentage:.1%}, max_trade={max_trade_pct}, max_holding={max_holding_pct}")
 
     # ---- risk adaptation ----
     def adjust_risk_percentage(self, market_conditions: str) -> float:
@@ -258,12 +309,18 @@ class DynamicPositionSizer2(PositionSizerBase):
         equity = float(portfolio.equity)
         cash = float(portfolio.cash)
 
+        # Guard against NaN/inf values (can happen when ATR not yet calculated)
+        if math.isnan(price) or math.isnan(stop_loss_price) or math.isinf(stop_loss_price):
+            logger.debug(f"[Sizer] {symbol} => No position (invalid price or stop_loss)")
+            return 0
+
         px_gross = price * (1.0 + self.fee_rate)
         if px_gross <= 0 or equity <= 0:
             return 0
 
-        reserved = self._reserved_notional.get(symbol, 0.0)
-        total_reserved = sum(self._reserved_notional.values())
+        with self._reservation_lock:
+            reserved = self._reserved_notional.get(symbol, 0.0)
+            total_reserved = sum(self._reserved_notional.values())
         avail_bp = max(0.0, cash - total_reserved)
 
         logger.debug(f"[Sizer] {symbol}: Cash=${cash:.2f}, Reserved=${total_reserved:.2f}, Available=${avail_bp:.2f}")
@@ -333,7 +390,8 @@ class DynamicPositionSizer2(PositionSizerBase):
 
         # reserve per-symbol notional (tracks this symbol's cumulative reservation)
         new_trade_notional = qty_int * px_gross
-        self._reserved_notional[symbol] = self._reserved_notional.get(symbol, 0.0) + new_trade_notional
+        with self._reservation_lock:
+            self._reserved_notional[symbol] = self._reserved_notional.get(symbol, 0.0) + new_trade_notional
 
         logger.info(f"[Sizer] {symbol} => Qty={qty_int} "
               f"(Risk={qty_risk:.2f}, BP={qty_cap_bp:.2f}, TradeCap={qty_cap_trade:.2f}, HoldCap={qty_cap_holding:.2f})")
@@ -341,14 +399,58 @@ class DynamicPositionSizer2(PositionSizerBase):
 
     def reset_reserved(self, symbol: Optional[str] = None):
         """Reset reserved notional (per symbol or all)."""
-        if symbol is None:
-            if self._reserved_notional:
-                logger.debug(f"[Sizer] Resetting all reservations: {self._reserved_notional}")
-            self._reserved_notional.clear()
-        else:
-            if symbol in self._reserved_notional:
-                logger.debug(f"[Sizer] Resetting reservation for {symbol}: ${self._reserved_notional[symbol]:.2f}")
-            self._reserved_notional.pop(symbol, None)
+        with self._reservation_lock:
+            if symbol is None:
+                if self._reserved_notional:
+                    logger.debug(f"[Sizer] Resetting all reservations: {self._reserved_notional}")
+                self._reserved_notional.clear()
+            else:
+                if symbol in self._reserved_notional:
+                    logger.debug(f"[Sizer] Resetting reservation for {symbol}: ${self._reserved_notional[symbol]:.2f}")
+                self._reserved_notional.pop(symbol, None)
 
     # 🔑 Alias for engine compatibility
     reset_bar_reservations = reset_reserved
+
+
+# ============================================================================
+# Module-level Aliases
+# ============================================================================
+
+# Canonical name - use this for new code
+PositionSizer = KellyPositionSizer
+
+# ============================================================================
+# DEPRECATED ALIASES - For backwards compatibility only
+# ============================================================================
+import warnings
+
+def _deprecated_alias(name: str, new_name: str, cls):
+    """Create a deprecated alias that warns on use."""
+    class DeprecatedAlias(cls):
+        def __init__(self, *args, **kwargs):
+            warnings.warn(
+                f"{name} is deprecated. Use {new_name} instead.",
+                DeprecationWarning,
+                stacklevel=2
+            )
+            super().__init__(*args, **kwargs)
+    DeprecatedAlias.__name__ = name
+    DeprecatedAlias.__qualname__ = name
+    return DeprecatedAlias
+
+# Deprecated names - emit warning when instantiated
+DynamicPositionSizer2 = _deprecated_alias("DynamicPositionSizer2", "KellyPositionSizer", KellyPositionSizer)
+DynamicPositionSizer = _deprecated_alias("DynamicPositionSizer", "SimplePositionSizer", SimplePositionSizer)
+LegacyPositionSizer = _deprecated_alias("LegacyPositionSizer", "SimplePositionSizer", SimplePositionSizer)
+
+__all__ = [
+    # Recommended names
+    'PositionSizer',           # Alias for KellyPositionSizer
+    'KellyPositionSizer',      # Production sizer with portfolio awareness
+    'SimplePositionSizer',     # Simple sizer for backtests
+    # Deprecated names (backwards compatibility)
+    'DynamicPositionSizer2',   # DEPRECATED: Use KellyPositionSizer
+    'DynamicPositionSizer',    # DEPRECATED: Use SimplePositionSizer
+    'LegacyPositionSizer',     # DEPRECATED: Use SimplePositionSizer
+]

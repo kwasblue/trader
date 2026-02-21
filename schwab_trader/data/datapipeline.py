@@ -1,159 +1,156 @@
-#%%
+"""
+===============================================================================
+DEPRECATED MODULE - DO NOT USE
+===============================================================================
 
-from pathlib import Path
-from dotenv import load_dotenv
-from concurrent.futures import ThreadPoolExecutor
-from data.streaming.authenticator import Authenticator
-from data.aggregate import Aggregator
-from data.processor import Processor
-from loggers.logger import Logger
-from utils.configloader import ConfigLoader
-from cache.cache import CacheManager
-import time
-import os
-import pandas as pd
+This module is DEPRECATED. Use core.unified_data_pipeline.UnifiedDataPipeline.
+
+MIGRATION GUIDE:
+----------------
+OLD (deprecated):
+    from data.datapipeline import StockDataPipeline
+    pipeline = StockDataPipeline(watch_list=['AAPL'])
+    pipeline.run()
+
+NEW (recommended):
+    from core.unified_data_pipeline import UnifiedDataPipeline
+    pipeline = UnifiedDataPipeline()
+    await pipeline.update_symbols(['AAPL'])
+
+The UnifiedDataPipeline provides:
+- Multi-source support (Alpaca, Schwab) with automatic fallback
+- Async-first design
+- Better error handling
+- Storage to both JSON and SQLite
+- Full ML pipeline processing
+
+===============================================================================
+"""
+import warnings
+import asyncio
+from typing import List, Optional, Dict, Any
+
+warnings.warn(
+    "\n"
+    "=" * 70 + "\n"
+    "DEPRECATION WARNING: data.datapipeline is deprecated!\n"
+    "=" * 70 + "\n"
+    "Use 'from core.unified_data_pipeline import UnifiedDataPipeline' instead.\n"
+    "This module will be removed in a future version.\n"
+    "=" * 70,
+    DeprecationWarning,
+    stacklevel=2
+)
 
 
 class StockDataPipeline:
-    """A class to handle the full data pipeline from fetching to storing stock data."""
+    """
+    Legacy data pipeline - DEPRECATED.
 
-    def __init__(self, watch_list=[], max_workers=os.cpu_count(), max_retries=3):
-        self.watch_list = watch_list
+    This class is a compatibility wrapper around UnifiedDataPipeline.
+    Use UnifiedDataPipeline directly for new code.
+    """
+
+    def __init__(
+        self,
+        watch_list: Optional[List[str]] = None,
+        max_workers: int = 4,
+        max_retries: int = 3
+    ):
+        """
+        Initialize the legacy pipeline.
+
+        Args:
+            watch_list: List of symbols to process
+            max_workers: Not used (kept for compatibility)
+            max_retries: Not used (kept for compatibility)
+        """
+        warnings.warn(
+            "StockDataPipeline is deprecated. Use UnifiedDataPipeline instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+
+        self.watch_list = watch_list or []
         self.max_workers = max_workers
-        self.max_retries = max_retries  # Maximum retries for failed requests
-        self.skipped_stocks = []  # List to track skipped stocks
+        self.max_retries = max_retries
+        self.skipped_stocks: List[str] = []
 
-        # Load environment variables
-        parent_directory = Path.cwd().parent
-        env_file_path = parent_directory / '.venv' / 'env' / '.env'
-        load_dotenv(env_file_path)
+        # Lazy import to avoid circular imports
+        from core.unified_data_pipeline import UnifiedDataPipeline
+        self._pipeline = UnifiedDataPipeline()
 
-        # Initialize services
-        self.config = ConfigLoader().load_config()
-        self.auth = Authenticator()
-        self.aggregator = Aggregator(apikey=self.auth.apikey, secret=self.auth.secret)
-        self.processor = Processor()
-        self.log_dir = self.config["folders"]["logs"]
-        self.logger = Logger('app.log', 'StockDataPipeline', log_dir=self.log_dir).get_logger()
-        self.cache = CacheManager()
+    def fetch_data(self) -> Dict[str, str]:
+        """
+        Fetch raw data (deprecated).
 
-    def fetch_data(self):
-        """Fetch raw data in parallel with retries and return only updated stocks."""
-        updated_stocks = {}
+        Returns:
+            Dictionary of stock -> result
+        """
+        warnings.warn(
+            "fetch_data() is deprecated. Use UnifiedDataPipeline.update_symbols() instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        # Run the async pipeline synchronously
+        asyncio.run(self._pipeline.update_symbols(self.watch_list, source='schwab'))
+        return {stock: "File Generated!" for stock in self.watch_list}
 
-        def fetch(stock):
-            attempts = 0
-            while attempts < self.max_retries:
-                try:
-                    result = self.aggregator.raw_data_store(stock)
-                    if result == "File Generated!":
-                        updated_stocks[stock] = result
-                    elif result == "No Update Needed":
-                        self.logger.info(f"{stock}: No update needed.")
-                    return
-                except Exception as e:
-                    self.logger.error(f"Error fetching data for {stock} (Attempt {attempts + 1}/{self.max_retries}): {e}")
-                    attempts += 1
-                    time.sleep(2)
-            self.logger.warning(f"Skipping {stock} after {self.max_retries} failed attempts.")
-            self.skipped_stocks.append(stock)
+    def gather_data(self) -> Dict[str, Any]:
+        """
+        Gather stock data (deprecated).
 
-        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            executor.map(fetch, self.watch_list)
+        Returns:
+            Dictionary of stock -> DataFrame
+        """
+        warnings.warn(
+            "gather_data() is deprecated. Use UnifiedDataPipeline.update_symbols() instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        return {}
 
-        return updated_stocks
+    def process_data(self, gathered_data: Dict) -> Dict[str, Any]:
+        """
+        Process stock data (deprecated).
 
+        Returns:
+            Dictionary of stock -> processed data
+        """
+        warnings.warn(
+            "process_data() is deprecated. Use UnifiedDataPipeline.update_symbols() instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        return {}
 
-    def gather_data(self):
-        """Fetch and structure stock data in parallel with retries."""
-        def fetch(stock):
-            attempts = 0
-            while attempts < self.max_retries:
-                try:
-                    dict_info = self.aggregator.get_raw_data(stock)
-                    if not dict_info or 'candles' not in dict_info or not dict_info['candles']:
-                        raise ValueError("Empty response received.")
-                    return stock, pd.DataFrame.from_dict(dict_info['candles'])
-                except Exception as e:
-                    self.logger.error(f"Error gathering data for {stock} (Attempt {attempts + 1}/{self.max_retries}): {e}")
-                    attempts += 1
-                    time.sleep(2)  # Wait before retrying
+    def store_data(self, processed_data: Dict) -> None:
+        """
+        Store processed data (deprecated).
+        """
+        warnings.warn(
+            "store_data() is deprecated. Use UnifiedDataPipeline.update_symbols() instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
 
-            self.logger.warning(f"Skipping {stock} after {self.max_retries} failed attempts.")
-            self.skipped_stocks.append(stock)
-            return stock, None
+    def run(self) -> None:
+        """
+        Run the full pipeline (deprecated).
 
-        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            results = executor.map(fetch, self.watch_list)
+        Use UnifiedDataPipeline.update_symbols() instead.
+        """
+        warnings.warn(
+            "run() is deprecated. Use UnifiedDataPipeline.update_symbols() instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
 
-        return {stock: frame for stock, frame in results if frame is not None}
-
-    def process_data(self, gathered_data):
-        """Process stock data in parallel."""
-        def process(stock, frame):
-            self.processor.update(stock, frame)
-            return stock, self.processor.ml_process(200, 50, scaling_method="standard", include_scaled=True, include_pca=False)
-
-
-        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            results = executor.map(lambda item: process(*item), gathered_data.items())
-        results_dict = dict(results)
-        self.logger.debug(f"Processed data: {results_dict}")
-
-        return results_dict
-
-    def store_data(self, processed_data: dict):
-        """Store processed data."""
-        for stock, data in processed_data.items():
-            self.aggregator.store_processed_data_files(stock, data)
-
-    def run(self):
-        start_time = time.time()
-        self.logger.info("Checking cache for outdated stocks...")
-
-        filtered_watchlist = []
-        today = pd.Timestamp.utcnow().normalize().tz_localize(None)
-
-        for stock in self.watch_list:
-            last_date = self.cache.get_last_processed_date("stock_files", stock)
-            if not last_date:
-                filtered_watchlist.append(stock)
-            else:
-                last_date_ts = pd.to_datetime(last_date, unit='ms').normalize().tz_localize(None)
-                if last_date_ts < today - pd.Timedelta(days=1):  # using yesterday logic
-                    filtered_watchlist.append(stock)
-                else:
-                    self.logger.info(f"{stock} is already up-to-date.")
-
-        if not filtered_watchlist:
-            self.logger.info("All stocks up to date. Pipeline skipped.")
+        if not self.watch_list:
             return
 
-        self.watch_list = filtered_watchlist
-        self.logger.info(f"Running pipeline for: {', '.join(self.watch_list)}")
-
-        # 🛠 Fetch only stocks that need updates
-        fetch_results = self.fetch_data()
-        updated_stocks = list(fetch_results.keys())
-
-        #if not updated_stocks:
-        #    self.logger.info("No stocks had new data. Skipping processing.")
-        #    return
-
-        # ⛏ Only gather/process/store for those
-        self.watch_list = updated_stocks
-        gathered_data = self.gather_data()
-        processed_data = self.process_data(gathered_data)
-        self.store_data(processed_data)
-
-        self.cache._save_cache()
-
-        end_time = time.time()
-        self.logger.info(f"Pipeline completed in {end_time - start_time:.2f} seconds.")
-
-        if self.skipped_stocks:
-            self.logger.warning(f"Skipped stocks: {', '.join(self.skipped_stocks)}")
-
-                
+        # Run the async pipeline synchronously
+        asyncio.run(self._pipeline.update_symbols(self.watch_list, source='schwab'))
 
 
+__all__ = ['StockDataPipeline']

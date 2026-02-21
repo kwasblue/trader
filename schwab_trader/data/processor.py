@@ -1,6 +1,13 @@
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
-from sklearn.decomposition import PCA
-from scipy.fft import fft, ifft
+"""
+Data Processor Module
+
+Provides data cleaning, feature engineering, and optional research features.
+
+Note: sklearn and scipy are imported lazily inside methods that use them
+(denoise_fft, pca_feature_selection, scale_features, feature_engineer with
+include_pca=True or scaling_method). This keeps production trading code
+from requiring these heavy ML dependencies.
+"""
 import numpy as np
 import pandas as pd
 import functools
@@ -9,6 +16,24 @@ from typing import Optional, Dict, Any, Tuple
 from loggers.logger import Logger
 from utils.configloader import ConfigLoader
 from indicators.technical_indicators import TechnicalIndicators
+
+
+def _parse_date_column(series: pd.Series) -> pd.Series:
+    """
+    Parse a date column handling both epoch milliseconds and string formats.
+
+    Args:
+        series: A pandas Series containing dates (epoch ms or strings)
+
+    Returns:
+        Series with datetime64 dtype
+    """
+    if series.dtype in ('int64', 'float64'):
+        # Epoch milliseconds (from Alpaca/Schwab)
+        return pd.to_datetime(series, unit='ms')
+    else:
+        # String or already datetime
+        return pd.to_datetime(series)
 
 # Optimization: Cache FFT frequency bins by length
 _fft_freq_cache: Dict[int, np.ndarray] = {}
@@ -141,7 +166,7 @@ class Processor:
 
         df = self.clean_stock_data().copy()  # expects ['Date','Open','High','Low','Close','Volume', ...]
         if "Date" in df.columns:
-            df["Date"] = pd.to_datetime(df["Date"])
+            df["Date"] = _parse_date_column(df["Date"])
             df.set_index("Date", inplace=True)
 
         # use adjusted close if present
@@ -235,14 +260,30 @@ class Processor:
             out["moy_cos"] = np.cos(2*np.pi*month/12.0)
             out["dow"] = idx.dayofweek.astype(float)
 
-        # tidy up
-        out = out.replace([np.inf, -np.inf], np.nan).dropna()
+        # tidy up - replace inf values with NaN
+        out = out.replace([np.inf, -np.inf], np.nan)
+
+        # Only require short-term features to be present (not 252-day lookbacks)
+        # This allows processing with less historical data
+        essential_features = ["ret_1d", "vol_21d", "ATR14", "rsi14", "sma_20"]
+        essential_existing = [f for f in essential_features if f in out.columns]
+
+        if essential_existing:
+            # Drop rows only where essential features are NaN
+            out = out.dropna(subset=essential_existing)
+        else:
+            # Fallback: drop rows where ALL values are NaN
+            out = out.dropna(how="all")
+
         return out
 
     def normalizing_scaling(self, df: pd.DataFrame, method='standard') -> pd.DataFrame:
+        # Lazy import - only load sklearn when actually needed
         if method == 'standard':
+            from sklearn.preprocessing import StandardScaler
             self.scaler = StandardScaler()
         elif method == 'minmax':
+            from sklearn.preprocessing import MinMaxScaler
             self.scaler = MinMaxScaler()
         else:
             raise ValueError("Unsupported scaling method")
@@ -267,6 +308,9 @@ class Processor:
         - Early return for invalid signals
         - In-place array modification
         """
+        # Lazy import - only load scipy when actually needed
+        from scipy.fft import fft, ifft
+
         # Validate input
         if signal is None or len(signal) == 0:
             return signal
@@ -299,6 +343,9 @@ class Processor:
         return df_copy
 
     def pca_feature_selection(self, df, n_components):
+        # Lazy import - only load sklearn when actually needed
+        from sklearn.decomposition import PCA
+
         # Ensure n_components is within the valid range
         n_components = min(n_components, df.drop(columns=['Date', 'Close']).shape[1])  # Exclude 'Date' and 'Close'
 
@@ -371,7 +418,7 @@ class Processor:
         # --- 1) load/prepare base frames with a consistent DateTimeIndex ---
         base = self.clean_stock_data().copy()           # must contain 'Date'
         if "Date" in base.columns:
-            base["Date"] = pd.to_datetime(base["Date"])
+            base["Date"] = _parse_date_column(base["Date"])
             base = base.set_index("Date", drop=True)
 
         if denoise_cols:
@@ -382,14 +429,14 @@ class Processor:
 
         inds = self.apply_indicators(sma_window=sma_window, ema_window=ema_window).copy()
         if "Date" in inds.columns:
-            inds["Date"] = pd.to_datetime(inds["Date"])
+            inds["Date"] = _parse_date_column(inds["Date"])
             inds = inds.set_index("Date", drop=True)
         # drop raw OHLCV from indicators frame to avoid duplicates
         inds = inds.drop(columns=[c for c in ("Open","High","Low","Close","Volume","Date") if c in inds.columns], errors="ignore")
 
         eng = self.feature_engineering().copy()
         if "Date" in eng.columns:
-            eng["Date"] = pd.to_datetime(eng["Date"])
+            eng["Date"] = _parse_date_column(eng["Date"])
             eng = eng.set_index("Date", drop=True)
 
         # --- 2) align & combine on index (inner join keeps common timestamps) ---
@@ -397,8 +444,38 @@ class Processor:
         # keep a tidy column order: raw base then features
         combined = combined.loc[:, ~combined.columns.duplicated()].copy()
 
+        # --- 2b) Handle empty result from join (insufficient historical data) ---
+        if len(combined) == 0:
+            # Fall back to left join with base data if inner join produced nothing
+            # This happens when feature_engineering dropna() removes all rows
+            self.logger.warning(
+                f"Inner join produced 0 rows for {self.stock}. "
+                f"Falling back to base data with available indicators."
+            )
+            # Try joining with just indicators (less strict requirements)
+            combined = base.join(inds, how="left")
+            combined = combined.loc[:, ~combined.columns.duplicated()].copy()
+            # Drop rows with NaN in essential columns only
+            essential_cols = ["Open", "High", "Low", "Close", "Volume"]
+            essential_existing = [c for c in essential_cols if c in combined.columns]
+            if essential_existing:
+                combined = combined.dropna(subset=essential_existing)
+
+            if len(combined) == 0:
+                self.logger.error(f"No valid data for {self.stock} after fallback")
+                return (pd.DataFrame(), {}) if return_artifacts else pd.DataFrame()
+
         # --- 3) build numeric matrix for transforms ---
         num = combined.select_dtypes(include=[np.number]).copy()
+
+        # --- 3b) Validate numeric data before scaling ---
+        if len(num) == 0 or num.shape[1] == 0:
+            self.logger.warning(
+                f"No numeric columns for scaling in {self.stock}. Returning combined data without scaling."
+            )
+            out = combined.reset_index().rename(columns={"index": "Date"})
+            return (out, {"feature_cols": []}) if return_artifacts else out
+
         # bound PCA components by numeric dimensionality and samples
         max_pca = max(1, min(pca_components, num.shape[1], max(1, num.shape[0]-1)))
 

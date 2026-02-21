@@ -55,9 +55,11 @@ class KellyPositionSizer(PositionSizerBase):
         risk_per_trade = current_cash * kelly_fraction
 
         if signal > 0:
+            # Long position: risk is distance from entry to stop below
             risk_per_share = price - stop_loss_price
         else:
-            risk_per_share = stop_loss_price + price
+            # Short position: risk is distance from stop above to entry
+            risk_per_share = stop_loss_price - price
 
         if risk_per_share <= 0:
             raise ValueError("Invalid stop-loss relative to price")

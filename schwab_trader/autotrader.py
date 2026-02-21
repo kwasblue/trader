@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 """
 AutoTrader - Autonomous Trading Daemon
+=======================================
 
 Runs the trading system automatically:
 1. Waits for market open
@@ -10,21 +11,16 @@ Runs the trading system automatically:
 5. Updates historical data
 6. Sleeps until next trading day
 
-Usage:
-    # Run in foreground
-    python autotrader.py
+Usage (via CLI - recommended):
+    trader start                           # Start with defaults
+    trader start -s AAPL,MSFT              # Specific symbols
+    trader start --broker schwab           # Use Schwab
+    trader start --dry-run                 # No real trades
+    trader start --daemon                  # Background mode
 
-    # Run with specific symbols
+Usage (direct - for debugging):
     python autotrader.py --symbols AAPL MSFT TSLA
-
-    # Run with specific broker
-    python autotrader.py --broker alpaca
-
-    # Dry run (no actual trading)
-    python autotrader.py --dry-run
-
-    # Run as background daemon
-    nohup python autotrader.py > logs/autotrader_stdout.log 2>&1 &
+    python autotrader.py --broker alpaca --dry-run
 """
 
 from __future__ import annotations
@@ -36,11 +32,15 @@ import signal
 import argparse
 import atexit
 import fcntl
+import warnings
 from pathlib import Path
 from datetime import datetime, time, timedelta
 from typing import List, Optional, Dict, Any
 from enum import Enum
 from zoneinfo import ZoneInfo
+
+# Suppress sklearn warnings for small sample sizes
+warnings.filterwarnings("ignore", category=RuntimeWarning, module="sklearn")
 
 # Add project root to path
 ROOT = Path(__file__).resolve().parent

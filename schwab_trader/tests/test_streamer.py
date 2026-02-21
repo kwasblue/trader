@@ -29,14 +29,17 @@ class TestStreamerConnection(unittest.TestCase):
         self.assertIn('symbols', config)
 
     @patch('websockets.connect')
-    async def test_websocket_connect(self, mock_connect):
+    def test_websocket_connect(self, mock_connect):
         """Should establish WebSocket connection."""
-        mock_ws = AsyncMock()
-        mock_connect.return_value.__aenter__.return_value = mock_ws
+        async def run_test():
+            mock_ws = AsyncMock()
+            mock_connect.return_value.__aenter__.return_value = mock_ws
 
-        # Simulate connection
-        async with mock_connect('wss://test.example.com') as ws:
-            self.assertIsNotNone(ws)
+            # Simulate connection
+            async with mock_connect('wss://test.example.com') as ws:
+                self.assertIsNotNone(ws)
+
+        asyncio.run(run_test())
 
     def test_streamer_reconnect_config(self):
         """Streamer should support auto-reconnect configuration."""

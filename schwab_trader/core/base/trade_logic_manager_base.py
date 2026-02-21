@@ -1,5 +1,5 @@
 """
-Trade Logic Manager - Business rules for trade approval and execution
+Trade Approver - Business rules for trade approval
 
 Manages the decision logic of WHEN and IF to execute trades based on:
 - Market conditions
@@ -7,62 +7,72 @@ Manages the decision logic of WHEN and IF to execute trades based on:
 - Timing rules (cooldowns, hours)
 - Risk limits
 - Custom business rules
+
+NAMING HISTORY:
+- Previously called "TradeLogicManagerBase" (deprecated)
+- Renamed to "TradeApprover" for clarity - it APPROVES trades, doesn't manage them
+
+DEPRECATED NAMES (backwards compatibility):
+- TradeLogicManagerBase → Use TradeApprover instead
 """
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Optional, Dict, Any, Tuple
+from typing import Optional, Dict, Any, Tuple, TYPE_CHECKING
 from datetime import datetime, timedelta, timezone
 import logging
 
 from core.enums import OrderSide
 
+if TYPE_CHECKING:
+    from core.contracts.types import SignalContext
+    from core.logic.symbol_state import SymbolState
+
 logger = logging.getLogger(__name__)
 
 
-class TradeLogicManagerBase(ABC):
+class TradeApprover(ABC):
     """
     Abstract base class for trade approval logic.
-    
-    Trade Logic Manager decides WHETHER trades should be executed based on
+
+    TradeApprover decides WHETHER trades should be executed based on
     business rules and constraints. It acts as a gatekeeper before execution.
-    
+
     Key Distinction:
-    - TradeLogicManager: Approves/rejects trades (business rules)
+    - TradeApprover: Approves/rejects trades (business rules)
     - Executor: Executes approved trades (mechanics)
     - RiskManager: Enforces risk limits (safety)
-    
+
     Responsibilities:
     - Check cooldown periods
     - Verify market hours
     - Enforce position limits per symbol
     - Implement entry/exit rules
     - Apply custom business logic
-    
+
     Does NOT:
     - Calculate position size (that's PositionSizer)
     - Execute trades (that's Executor)
     - Enforce global risk (that's RiskManager)
-    
+
     Example:
-        logic = TradeLogicManager(
+        approver = StandardTradeApprover(
             cooldown_seconds=300,
             max_positions=5,
             allow_after_hours=False
         )
-        
+
         # Check if trade should execute
-        should_trade, reason = logic.should_trade(
-            symbol="AAPL",
+        should_trade, reason = approver.should_trade(
+            context=signal_context,
             state=symbol_state,
-            signal=1,
-            regime="trending"
+            account_positions=3
         )
-        
+
         if should_trade:
-            # Execute trade
-            executor.execute(...)
+            # Execute trade via executor
+            executor.buy(symbol="AAPL", qty=10, price=150.0)
         else:
             logger.info(f"Trade blocked: {reason}")
     """
@@ -97,51 +107,46 @@ class TradeLogicManagerBase(ABC):
     @abstractmethod
     def should_trade(
         self,
-        symbol: str,
-        state: Any,
-        signal: int,
-        regime: str,
-        **kwargs
+        context: "SignalContext",
+        state: "SymbolState",
+        account_positions: int = 0,
     ) -> Tuple[bool, Optional[str]]:
         """
         Determine if trade should be executed.
-        
-        This is the main decision method. It should check all relevant
-        conditions and return whether the trade is approved.
-        
+
+        This is the main decision method. It checks all relevant conditions
+        and returns whether the trade is approved.
+
         Args:
-            symbol: Trading symbol
-            state: Symbol-specific state object containing:
-                - last_trade_time: When last trade occurred
+            context: SignalContext containing all signal data:
+                - symbol: Trading symbol
+                - signal: Trading signal (1, -1, or 0)
+                - price: Current market price
+                - atr: Average True Range
+                - regime: Market regime ("trending", "ranging", etc.)
+                - market_open: Whether market is open
+                - confidence: Signal strength (0-1)
+                - strategy_name: Strategy identifier
+            state: SymbolState containing position info:
+                - side: "long", "short", or None
                 - current_position: Current position size
                 - entry_price: Average entry price (if in position)
-                - pnl: Current P&L
-                - trade_count: Number of trades today
-                - etc.
-            signal: Trading signal (1, -1, or 0)
-            regime: Market regime ("trending", "ranging", "volatile", etc.)
-            **kwargs: Additional context:
-                - price: Current price
-                - market_open: Whether market is open
-                - account_positions: Total number of positions
-                - etc.
-        
+                - last_trade_time: When last trade occurred
+                - bars_held: Bars since entry
+            account_positions: Total number of open positions in account
+
         Returns:
             Tuple of (should_trade, reason):
             - should_trade: True if trade approved, False if blocked
             - reason: Explanation if blocked (None if approved)
-            
+
         Example:
-            should_trade, reason = logic.should_trade(
-                symbol="AAPL",
-                state=state,
-                signal=1,
-                regime="trending",
-                price=150.25,
-                market_open=True,
+            should_trade, reason = approver.should_trade(
+                context=signal_context,
+                state=symbol_state,
                 account_positions=3
             )
-            
+
             if not should_trade:
                 logger.info(f"Trade blocked: {reason}")
         """
@@ -418,3 +423,27 @@ class TradeLogicManagerBase(ABC):
             f"cooldown={self.cooldown_seconds}s, "
             f"max_positions={self.max_positions})"
         )
+
+
+# ============================================================================
+# DEPRECATED ALIAS - For backwards compatibility only
+# ============================================================================
+import warnings
+
+class TradeLogicManagerBase(TradeApprover):
+    """
+    DEPRECATED: Use TradeApprover instead.
+
+    This is a backwards-compatibility alias that will be removed in a future version.
+    """
+
+    def __init__(self, *args, **kwargs):
+        warnings.warn(
+            "TradeLogicManagerBase is deprecated. Use TradeApprover instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        super().__init__(*args, **kwargs)
+
+
+__all__ = ['TradeApprover', 'TradeLogicManagerBase']

@@ -1,7 +1,7 @@
 import asyncio
 from PySide6 import QtCore
 from core.events.eventhandler import EventHandler
-from core.events.events import (
+from core.contracts.events import (
     EVENT_HALTED,
     EVENT_FLATTEN_ALL,
     EVENT_CANCEL_ALL,

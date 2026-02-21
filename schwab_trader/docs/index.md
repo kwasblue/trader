@@ -4,20 +4,32 @@ A comprehensive algorithmic trading platform with strategy backtesting, live tra
 
 ## Table of Contents
 
+### Getting Started
 1. [Quick Reference](quick-reference.md) - Command cheatsheet
-2. [Operations Guide](operations.md) - Complete command reference and daily operations
+2. [Commands Reference](commands.md) - Complete command reference
 3. [Getting Started](getting-started.md) - Installation and quick start guide
-4. [System Overview](system-overview.md) - End-to-end system walkthrough
-5. [Architecture](architecture.md) - System design and component overview
-6. [Configuration](configuration.md) - Configuration files and settings
-7. [Strategies](strategies.md) - Available strategies and creating custom ones
-8. [Backtesting](backtesting.md) - Backtesting framework and analysis tools
-9. [Monitoring](monitoring.md) - Real-time GUI monitoring dashboard
-10. [AutoTrader](autotrader.md) - Autonomous trading daemon
-11. [Pre-Flight Checks](preflight.md) - System validation before trading
-12. [Data Pipeline](data-pipeline.md) - Historical data management
-13. [API Reference](api-reference.md) - Detailed API documentation
-14. [Examples](examples.md) - Code examples and tutorials
+4. [Configuration](configuration.md) - Configuration files and settings
+
+### Architecture & Design
+5. [System Overview](system-overview.md) - End-to-end system walkthrough
+6. [Architecture](architecture.md) - System design and component overview
+7. [Event System](event-system.md) - Event bus and messaging architecture
+8. [Data Flow](data-flow.md) - Visual data flow architecture
+9. [Data Pipeline](data-pipeline.md) - Historical data management API
+
+### Trading
+10. [Strategies](strategies.md) - Available strategies and creating custom ones
+11. [Backtesting](backtesting.md) - Backtesting framework and analysis tools
+12. [AutoTrader](autotrader.md) - Autonomous trading daemon
+
+### Operations
+13. [Operations Guide](operations.md) - Daily operations and procedures
+14. [Pre-Flight Checks](preflight.md) - System validation before trading
+15. [Monitoring](monitoring.md) - Real-time GUI monitoring dashboard
+
+### Reference
+16. [API Reference](api-reference.md) - Detailed API documentation
+17. [Examples](examples.md) - Code examples and tutorials
 
 ---
 
@@ -57,7 +69,8 @@ print(bt.evaluate_performance(results))
 "
 
 # Run monitoring GUI
-python run_live.py
+trader gui
+# Or: python run_trading.py
 ```
 
 ## Project Structure
