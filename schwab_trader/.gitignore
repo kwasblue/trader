@@ -43,6 +43,7 @@ venv/
 .db-wal
 .claude
 .plist
+com.schwabtrader.autotrader.plist
 
 # === Data storage (large files) ===
 data/data_storage/raw_data/
