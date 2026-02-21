@@ -76,6 +76,15 @@ from core.contracts.events import (
     FlattenSymbolPayload,
     PlaceOrderPayload,
     SetStrategyPayload,
+    # Additional command payloads
+    FlattenAllPayload,
+    CancelAllPayload,
+    TogglePanicPayload,
+    HaltedPayload,
+    HaltStatePayload,
+    CooldownStatePayload,
+    OrderQueueUpdatePayload,
+    ManualOrderPayload,
     # Schema map
     EVENT_SCHEMA_MAP,
 )
@@ -103,6 +112,10 @@ __all__ = [
     'HealthPayload', 'GuardrailPayload', 'SessionPayload',
     'ConfigSnapshotPayload', 'StrategySignalPayload', 'FlattenSymbolPayload',
     'PlaceOrderPayload', 'SetStrategyPayload',
+    # Additional command payloads
+    'FlattenAllPayload', 'CancelAllPayload', 'TogglePanicPayload',
+    'HaltedPayload', 'HaltStatePayload', 'CooldownStatePayload',
+    'OrderQueueUpdatePayload', 'ManualOrderPayload',
     # Schema map
     'EVENT_SCHEMA_MAP',
 ]

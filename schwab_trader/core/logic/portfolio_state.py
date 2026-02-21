@@ -266,30 +266,32 @@ class PortfolioState:
         symbol: str,
         side: str,
         qty: int,
-        price: float
+        price: float,
+        validate: bool = True
     ) -> None:
         """
         Apply a trade fill to the portfolio.
-        
+
         Updates:
         - Position quantity and average price
         - Cash balance
         - Realized P&L (if closing/reducing)
         - Equity history
-        
+
         Args:
             symbol: Trading symbol
             side: Order side ("buy", "sell", "long", "short", etc.)
             qty: Quantity traded
             price: Fill price
-            
+            validate: If True, validate cash won't go negative and position exists for sells
+
         Raises:
-            ValueError: If side is invalid or qty is non-positive
+            ValueError: If side is invalid, qty is non-positive, or validation fails
         """
         qty = int(qty)
         if qty <= 0:
             raise ValueError(f"Quantity must be positive, got {qty}")
-        
+
         # Normalize side
         side = side.lower().strip()
         if side in ("long", "buy", "cover"):
@@ -298,27 +300,52 @@ class PortfolioState:
             trade_qty = -qty
         else:
             raise ValueError(f"Unknown side: {side}")
-        
+
         # Get or create position
         pos = self.positions.setdefault(symbol, SymbolPosition())
         px = float(price)
-        
+
         old_qty = pos.qty
         new_qty = old_qty + trade_qty
-        
+
+        # Validation checks
+        if validate:
+            # Check: selling more shares than held (for longs)
+            if old_qty > 0 and trade_qty < 0 and abs(trade_qty) > old_qty:
+                raise ValueError(
+                    f"Cannot sell {abs(trade_qty)} shares of {symbol}: "
+                    f"only holding {old_qty} shares"
+                )
+
+            # Check: covering more shares than shorted
+            if old_qty < 0 and trade_qty > 0 and trade_qty > abs(old_qty):
+                raise ValueError(
+                    f"Cannot cover {trade_qty} shares of {symbol}: "
+                    f"only short {abs(old_qty)} shares"
+                )
+
+            # Check: buying would result in negative cash
+            if trade_qty > 0:
+                cost = trade_qty * px
+                if cost > self.cash:
+                    raise ValueError(
+                        f"Insufficient cash to buy {qty} shares of {symbol} at ${px:.2f}: "
+                        f"need ${cost:,.2f}, have ${self.cash:,.2f}"
+                    )
+
         # Calculate realized P&L for closing/reducing trades
         realized_from_trade = self._calculate_realized_pnl(
             old_qty, trade_qty, pos.avg_price, px
         )
         self.realized_pnl += realized_from_trade
         pos.realized_pnl += realized_from_trade
-        
+
         # Update cash
         self.cash -= trade_qty * px
-        
+
         # Update position
         self._update_position(pos, old_qty, new_qty, trade_qty, px)
-        
+
         # Track equity
         self.total_value = self.total_equity()
         self.equity_history.append(self.total_value)
@@ -352,9 +379,24 @@ class PortfolioState:
     # THREAD-SAFE ASYNC METHODS
     # ========================================================================
 
+    async def get_position_state_safe(self, symbol: str) -> PositionState:
+        """
+        Get the current position state for a symbol (thread-safe).
+
+        Args:
+            symbol: Trading symbol
+
+        Returns:
+            PositionState for the symbol (NONE if not tracked)
+        """
+        async with self._lock:
+            return self._position_states.get(symbol, PositionState.NONE)
+
     def get_position_state(self, symbol: str) -> PositionState:
         """
         Get the current position state for a symbol.
+
+        Note: For thread-safe access in async contexts, use get_position_state_safe().
 
         Args:
             symbol: Trading symbol

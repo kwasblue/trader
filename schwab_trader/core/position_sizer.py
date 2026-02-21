@@ -28,6 +28,7 @@ Available Classes:
 For live trading and simulation, use PositionSizer (DynamicPositionSizer2).
 """
 import logging
+import threading
 from core.base.position_sizer_base import PositionSizerBase
 from core.logic.portfolio_state import PortfolioState
 from loggers.logger import Logger
@@ -202,6 +203,7 @@ class DynamicPositionSizer2(PositionSizerBase):
     - Caps by buying power, risk budget, and regime adjustment.
     - Reserves notional *per-symbol* intra-bar so parallel signals don't double-spend.
     - Pyramiding always allowed, constrained by max_holding_pct.
+    - Thread-safe reservation tracking.
     """
 
     def __init__(
@@ -227,8 +229,9 @@ class DynamicPositionSizer2(PositionSizerBase):
         self.allow_fractional = bool(allow_fractional)
         self.lot_size = max(1, int(lot_size))
 
-        # per-symbol reserved notional
+        # per-symbol reserved notional with thread-safe lock
         self._reserved_notional: dict[str, float] = {}
+        self._reservation_lock = threading.RLock()
 
         logger.info(f"DynamicPositionSizer2 initialized: risk={risk_percentage:.1%}, max_trade={max_trade_pct}, max_holding={max_holding_pct}")
 
@@ -290,8 +293,9 @@ class DynamicPositionSizer2(PositionSizerBase):
         if px_gross <= 0 or equity <= 0:
             return 0
 
-        reserved = self._reserved_notional.get(symbol, 0.0)
-        total_reserved = sum(self._reserved_notional.values())
+        with self._reservation_lock:
+            reserved = self._reserved_notional.get(symbol, 0.0)
+            total_reserved = sum(self._reserved_notional.values())
         avail_bp = max(0.0, cash - total_reserved)
 
         logger.debug(f"[Sizer] {symbol}: Cash=${cash:.2f}, Reserved=${total_reserved:.2f}, Available=${avail_bp:.2f}")
@@ -361,7 +365,8 @@ class DynamicPositionSizer2(PositionSizerBase):
 
         # reserve per-symbol notional (tracks this symbol's cumulative reservation)
         new_trade_notional = qty_int * px_gross
-        self._reserved_notional[symbol] = self._reserved_notional.get(symbol, 0.0) + new_trade_notional
+        with self._reservation_lock:
+            self._reserved_notional[symbol] = self._reserved_notional.get(symbol, 0.0) + new_trade_notional
 
         logger.info(f"[Sizer] {symbol} => Qty={qty_int} "
               f"(Risk={qty_risk:.2f}, BP={qty_cap_bp:.2f}, TradeCap={qty_cap_trade:.2f}, HoldCap={qty_cap_holding:.2f})")
@@ -369,14 +374,15 @@ class DynamicPositionSizer2(PositionSizerBase):
 
     def reset_reserved(self, symbol: Optional[str] = None):
         """Reset reserved notional (per symbol or all)."""
-        if symbol is None:
-            if self._reserved_notional:
-                logger.debug(f"[Sizer] Resetting all reservations: {self._reserved_notional}")
-            self._reserved_notional.clear()
-        else:
-            if symbol in self._reserved_notional:
-                logger.debug(f"[Sizer] Resetting reservation for {symbol}: ${self._reserved_notional[symbol]:.2f}")
-            self._reserved_notional.pop(symbol, None)
+        with self._reservation_lock:
+            if symbol is None:
+                if self._reserved_notional:
+                    logger.debug(f"[Sizer] Resetting all reservations: {self._reserved_notional}")
+                self._reserved_notional.clear()
+            else:
+                if symbol in self._reserved_notional:
+                    logger.debug(f"[Sizer] Resetting reservation for {symbol}: ${self._reserved_notional[symbol]:.2f}")
+                self._reserved_notional.pop(symbol, None)
 
     # 🔑 Alias for engine compatibility
     reset_bar_reservations = reset_reserved

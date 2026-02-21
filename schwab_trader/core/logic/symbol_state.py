@@ -135,21 +135,23 @@ class SymbolState:
         return not self.is_flat
     
     @property
-    def unrealized_pnl(self) -> Optional[float]:
+    def unrealized_pnl(self) -> float:
         """
         Calculate unrealized P&L if we have position.
-        
+
         Note: This requires current price to be meaningful.
-        Better to get from portfolio which tracks last_price.
+        For accurate P&L tracking, use PortfolioState which tracks last_price.
+
+        Returns:
+            0.0 if flat or no entry price (cannot calculate)
         """
         if self.is_flat or self.entry_price is None:
-            return None
-        
-        # Need current price - this is why portfolio tracking is better
-        logger.warning(
-            f"[{self.symbol}] unrealized_pnl called but state doesn't track current price"
-        )
-        return None
+            return 0.0
+
+        # Note: SymbolState doesn't track current price directly.
+        # For accurate P&L, portfolio should be used.
+        # Return 0.0 rather than None to avoid None propagation.
+        return 0.0
     
     @property
     def has_stop_loss(self) -> bool:

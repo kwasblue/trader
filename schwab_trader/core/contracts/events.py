@@ -304,6 +304,60 @@ class SetStrategyPayload(TypedDict):
     strategy_name: str
 
 
+# --- Additional command payloads ---
+class FlattenAllPayload(TypedDict):
+    """Flatten all positions command."""
+    confirm: bool
+
+
+class CancelAllPayload(TypedDict):
+    """Cancel all orders command."""
+    confirm: bool
+
+
+class TogglePanicPayload(TypedDict):
+    """Toggle panic mode command."""
+    halted: bool
+
+
+class HaltedPayload(TypedDict):
+    """System halted state."""
+    halted: bool
+    reason: Optional[str]
+
+
+class HaltStatePayload(TypedDict):
+    """Halt state update."""
+    halted: bool
+    reason: Optional[str]
+    timestamp: str
+
+
+class CooldownStatePayload(TypedDict):
+    """Cooldown state update."""
+    symbol: str
+    in_cooldown: bool
+    remaining_seconds: float
+    timestamp: str
+
+
+class OrderQueueUpdatePayload(TypedDict):
+    """Order queue update."""
+    pending_count: int
+    orders: List[Dict]
+    timestamp: str
+
+
+class ManualOrderPayload(TypedDict, total=False):
+    """Manual order command."""
+    symbol: str
+    side: Literal["BUY", "SELL", "SHORT", "COVER"]
+    qty: int
+    order_type: Literal["market", "limit"]
+    limit_price: Optional[float]
+    tif: Literal["DAY", "IOC", "FOK", "GTC"]
+
+
 # =============================================================================
 # Event Schema Map
 # =============================================================================
@@ -339,6 +393,19 @@ EVENT_SCHEMA_MAP: Dict[str, Type[Any]] = {
     EVENT_CONFIG_SNAPSHOT: ConfigSnapshotPayload,
     # Strategy
     EVENT_STRATEGY_SIGNAL: StrategySignalPayload,
+    # GUI -> Backend commands
+    EVENT_FLATTEN_ALL: FlattenAllPayload,
+    EVENT_CANCEL_ALL: CancelAllPayload,
+    EVENT_FLATTEN_SYMBOL: FlattenSymbolPayload,
+    EVENT_PLACE_ORDER: PlaceOrderPayload,
+    EVENT_SET_STRATEGY: SetStrategyPayload,
+    EVENT_TOGGLE_PANIC: TogglePanicPayload,
+    EVENT_HALTED: HaltedPayload,
+    EVENT_MANUAL_ORDER: ManualOrderPayload,
+    # State updates
+    EVENT_ORDER_QUEUE_UPDATE: OrderQueueUpdatePayload,
+    EVENT_HALT_STATE: HaltStatePayload,
+    EVENT_COOLDOWN_STATE: CooldownStatePayload,
 }
 
 
@@ -369,6 +436,10 @@ __all__ = [
     'HealthPayload', 'GuardrailPayload', 'SessionPayload',
     'ConfigSnapshotPayload', 'StrategySignalPayload', 'FlattenSymbolPayload',
     'PlaceOrderPayload', 'SetStrategyPayload',
+    # Additional command payloads
+    'FlattenAllPayload', 'CancelAllPayload', 'TogglePanicPayload',
+    'HaltedPayload', 'HaltStatePayload', 'CooldownStatePayload',
+    'OrderQueueUpdatePayload', 'ManualOrderPayload',
     # Schema map
     'EVENT_SCHEMA_MAP',
 ]

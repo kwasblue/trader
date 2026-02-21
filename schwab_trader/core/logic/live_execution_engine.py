@@ -35,6 +35,7 @@ from core.logging_config import (
 )
 from loggers.logger import Logger
 from core.events.events import EVENT_ALERT, AlertPayload, EVENT_NEW_TRADE, TradePayload
+from core.exceptions import DailyLossLimitExceededError
 
 # Import the router we created
 from core.logic.trade_logic_router import TradeLogicRouter
@@ -97,7 +98,8 @@ class LiveExecutionEngine(ExecutionEngineBase):
         portfolio: PortfolioState,
         sync_on_start: bool = True,
         reconciler: Optional["StateReconciler"] = None,
-        event_handler: Optional[Any] = None
+        event_handler: Optional[Any] = None,
+        daily_loss_limit: Optional[float] = None,
     ):
         """
         Initialize live execution engine.
@@ -112,6 +114,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
             sync_on_start: Whether to sync portfolio with broker on start
             reconciler: State reconciler for halt checking
             event_handler: Event handler for emitting trade decision events
+            daily_loss_limit: Maximum allowed daily loss (absolute $). None = no limit.
         """
         super().__init__(
             broker=broker,
@@ -148,7 +151,16 @@ class LiveExecutionEngine(ExecutionEngineBase):
         # Setup logging with structured support
         self.logger = Logger("execution_engine.log", "LiveExecutionEngine", propagate=True).get_logger()
 
-        self.logger.info("LiveExecutionEngine initialized with order registry and validator")
+        # Daily loss limit tracking
+        self.daily_loss_limit = daily_loss_limit
+        self._daily_realized_pnl: float = 0.0
+        self._daily_loss_limit_breached: bool = False
+        self._trading_day_start: Optional[datetime] = None
+
+        self.logger.info(
+            f"LiveExecutionEngine initialized with order registry and validator"
+            f"{f', daily_loss_limit=${daily_loss_limit:,.2f}' if daily_loss_limit else ''}"
+        )
 
         # Sync portfolio with broker if requested
         # NOTE: sync_on_start should be False for live trading -
@@ -199,7 +211,86 @@ class LiveExecutionEngine(ExecutionEngineBase):
         except Exception as e:
             self.logger.error(f"Failed to sync portfolio: {e}")
             self.logger.warning("Starting with unsynced portfolio - positions may be inaccurate!")
-    
+
+    # ========================================================================
+    # DAILY LOSS LIMIT MANAGEMENT
+    # ========================================================================
+
+    def start_new_trading_day(self) -> None:
+        """
+        Reset daily P&L tracking for a new trading day.
+
+        Call this at market open or session start.
+        """
+        self._daily_realized_pnl = 0.0
+        self._daily_loss_limit_breached = False
+        self._trading_day_start = datetime.now(timezone.utc)
+        self.logger.info("New trading day started - daily P&L reset")
+
+    def record_trade_pnl(self, realized_pnl: float) -> None:
+        """
+        Record realized P&L from a completed trade.
+
+        Args:
+            realized_pnl: Realized profit/loss from the trade (positive = profit)
+        """
+        self._daily_realized_pnl += realized_pnl
+        self.logger.debug(
+            f"Trade P&L recorded: ${realized_pnl:+,.2f}, "
+            f"daily total: ${self._daily_realized_pnl:+,.2f}"
+        )
+
+        # Check if limit breached
+        if self._check_daily_loss_limit_breached():
+            self.logger.warning(
+                f"DAILY LOSS LIMIT BREACHED: ${abs(self._daily_realized_pnl):,.2f} lost, "
+                f"limit ${self.daily_loss_limit:,.2f}"
+            )
+            # Emit alert
+            if self.event_handler:
+                asyncio.create_task(
+                    self.event_handler.emit(EVENT_ALERT, AlertPayload(
+                        level="critical",
+                        message=f"Daily loss limit breached! Lost ${abs(self._daily_realized_pnl):,.2f}",
+                        symbol=None,
+                        timestamp=datetime.now(timezone.utc).isoformat(),
+                    ))
+                )
+
+    def _check_daily_loss_limit_breached(self) -> bool:
+        """
+        Check if daily loss limit has been breached.
+
+        Returns:
+            True if limit breached, False otherwise
+        """
+        if self._daily_loss_limit_breached:
+            return True
+
+        if self.daily_loss_limit is None:
+            return False
+
+        if self._daily_realized_pnl < -abs(self.daily_loss_limit):
+            self._daily_loss_limit_breached = True
+            return True
+
+        return False
+
+    def get_daily_pnl(self) -> float:
+        """Get current daily realized P&L."""
+        return self._daily_realized_pnl
+
+    def get_daily_loss_remaining(self) -> Optional[float]:
+        """
+        Get remaining loss budget before hitting daily limit.
+
+        Returns:
+            Remaining budget in dollars, or None if no limit set
+        """
+        if self.daily_loss_limit is None:
+            return None
+        return abs(self.daily_loss_limit) + self._daily_realized_pnl
+
     # ========================================================================
     # MAIN SIGNAL HANDLING
     # ========================================================================
@@ -241,6 +332,18 @@ class LiveExecutionEngine(ExecutionEngineBase):
             self.logger.warning(
                 format_log_message(
                     "Trading halted by reconciler - skipping signal",
+                    correlation_id=correlation_id,
+                    symbol=context.symbol
+                )
+            )
+            return None
+
+        # 2. DAILY LOSS LIMIT CHECK (enforced!)
+        if self._check_daily_loss_limit_breached():
+            self.logger.warning(
+                format_log_message(
+                    f"Daily loss limit breached (${abs(self._daily_realized_pnl):,.2f} lost, "
+                    f"limit ${self.daily_loss_limit:,.2f}) - trading halted",
                     correlation_id=correlation_id,
                     symbol=context.symbol
                 )
@@ -419,6 +522,10 @@ class LiveExecutionEngine(ExecutionEngineBase):
             result = await self._execute_live_trade(
                 context.symbol, state, side, qty, context.price, context.atr, action_type,
                 correlation_id=correlation_id,
+                order_type=context.order_type,
+                time_in_force=context.time_in_force,
+                limit_price=context.limit_price,
+                stop_price=context.stop_price,
                 df=context.df, **extra_kwargs
             )
 
@@ -745,6 +852,10 @@ class LiveExecutionEngine(ExecutionEngineBase):
         atr: float,
         action_type: str,
         correlation_id: Optional[str] = None,
+        order_type: str = "market",
+        time_in_force: str = "day",
+        limit_price: Optional[float] = None,
+        stop_price: Optional[float] = None,
         **kwargs
     ) -> Optional[OrderResult]:
         """
@@ -752,6 +863,20 @@ class LiveExecutionEngine(ExecutionEngineBase):
 
         This places actual orders in the market!
         All logic (sizing, validation) already done upstream.
+
+        Args:
+            symbol: Trading symbol
+            state: Symbol state
+            side: Order side (BUY/SELL)
+            qty: Quantity to trade
+            price: Expected price (for position sizing reference)
+            atr: ATR value
+            action_type: Type of action (entry, exit, etc.)
+            correlation_id: Correlation ID for tracing
+            order_type: Order type (market, limit, stop, stop_limit)
+            time_in_force: Time in force (day, gtc, ioc, fok)
+            limit_price: Limit price for limit orders
+            stop_price: Stop price for stop orders
 
         After order placement:
         1. Registers order in local OrderRegistry
@@ -764,7 +889,8 @@ class LiveExecutionEngine(ExecutionEngineBase):
         try:
             self.logger.info(
                 format_log_message(
-                    f"Placing {side.value} order: {qty} shares @ ~${price:.2f}",
+                    f"Placing {order_type} {side.value} order: {qty} shares @ ~${price:.2f} "
+                    f"(TIF={time_in_force})",
                     correlation_id=correlation_id,
                     symbol=symbol
                 )
@@ -774,14 +900,23 @@ class LiveExecutionEngine(ExecutionEngineBase):
             # This prevents wash trade rejections from Alpaca
             await self._cancel_conflicting_orders(symbol, side)
 
+            # Build order kwargs based on order type
+            order_kwargs = {
+                "symbol": symbol,
+                "qty": qty,
+                "side": side_str,
+                "order_type": order_type,
+                "time_in_force": time_in_force,
+            }
+
+            # Add price parameters based on order type
+            if order_type in ("limit", "stop_limit") and limit_price is not None:
+                order_kwargs["limit_price"] = limit_price
+            if order_type in ("stop", "stop_limit") and stop_price is not None:
+                order_kwargs["stop_price"] = stop_price
+
             # Place order directly via broker (qty already calculated)
-            order_response = await self.broker.place_order(
-                symbol=symbol,
-                qty=qty,
-                side=side_str,
-                order_type="market",
-                time_in_force="day"
-            )
+            order_response = await self.broker.place_order(**order_kwargs)
 
             # Extract order ID from response if available
             order_id = (
@@ -978,6 +1113,17 @@ class LiveExecutionEngine(ExecutionEngineBase):
         """Post-execution logging and state updates with Live-specific logging."""
         # Use base class implementation for common logic
         super()._post_execution(symbol, state, result, action_type, regime, strategy_name)
+
+        # Record realized P&L for daily loss tracking (on exits/closes)
+        if action_type in ("exit", "partial_exit", "reversal"):
+            # Get realized P&L from the trade
+            position = self.portfolio.positions.get(symbol)
+            if position:
+                realized_pnl = position.realized_pnl
+                if realized_pnl != 0:
+                    self.record_trade_pnl(realized_pnl)
+                    # Reset position's realized_pnl after recording
+                    position.realized_pnl = 0.0
 
         # Live-specific logging
         self.logger.info(

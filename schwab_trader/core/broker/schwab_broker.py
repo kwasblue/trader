@@ -498,20 +498,42 @@ class SchwabBroker(BaseBrokerInterface):
         data = self.client.account_number()
         return data.get("accountNumbers", [{}])[0].get("accountNumber")
 
-    def get_quote(self, symbol: str) -> float:
-        raw = self.client.quote(symbol)
-        # Normalize common shapes: {"AAPL": {...}} or {"quotes":{"AAPL": {...}}}
-        d = None
-        if isinstance(raw, dict):
-            d = raw.get(symbol)
-            if d is None and isinstance(raw.get("quotes", {}), dict):
-                d = raw["quotes"].get(symbol)
-        price = None
-        if isinstance(d, dict):
-            price = d.get("lastPrice") or d.get("last") or d.get("mark") or d.get("close")
-        if price is not None:
-            self.mark_price(symbol, float(price))
-            return float(price)
+    def get_quote(self, symbol: str, fallback_to_cache: bool = True) -> float:
+        """
+        Get quote for a symbol.
+
+        Args:
+            symbol: Trading symbol
+            fallback_to_cache: If True, return last known price if API fails
+
+        Returns:
+            Current price for the symbol
+
+        Raises:
+            RuntimeError: If no quote available and no cached price
+        """
+        try:
+            raw = self.client.quote(symbol)
+            # Normalize common shapes: {"AAPL": {...}} or {"quotes":{"AAPL": {...}}}
+            d = None
+            if isinstance(raw, dict):
+                d = raw.get(symbol)
+                if d is None and isinstance(raw.get("quotes", {}), dict):
+                    d = raw["quotes"].get(symbol)
+            price = None
+            if isinstance(d, dict):
+                price = d.get("lastPrice") or d.get("last") or d.get("mark") or d.get("close")
+            if price is not None:
+                self.mark_price(symbol, float(price))
+                return float(price)
+        except Exception as e:
+            self.logger.warning(f"Quote API failed for {symbol}: {e}")
+
+        # Fallback to cached price
+        if fallback_to_cache and symbol in self._last_price:
+            self.logger.warning(f"Using cached price for {symbol}: ${self._last_price[symbol]:.2f}")
+            return self._last_price[symbol]
+
         raise RuntimeError(f"No quote available for {symbol}")
 
     def get_available_funds(self) -> float:

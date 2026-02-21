@@ -86,6 +86,12 @@ class SignalContext:
     df: Optional[Any] = None  # DataFrame with price history
     market_open: bool = True
 
+    # Order parameters (configurable per signal)
+    order_type: str = "market"  # market, limit, stop, stop_limit
+    time_in_force: str = "day"  # day, gtc, ioc, fok
+    limit_price: Optional[float] = None  # For limit orders
+    stop_price: Optional[float] = None  # For stop orders
+
     # Extensible metadata
     metadata: Dict[str, Any] = field(default_factory=dict)
 
@@ -102,6 +108,10 @@ class SignalContext:
         confidence: float = 1.0,
         df: Optional[Any] = None,
         market_open: bool = True,
+        order_type: str = "market",
+        time_in_force: str = "day",
+        limit_price: Optional[float] = None,
+        stop_price: Optional[float] = None,
         **kwargs
     ) -> "SignalContext":
         """
@@ -120,6 +130,10 @@ class SignalContext:
             confidence=confidence,
             df=df,
             market_open=market_open,
+            order_type=order_type,
+            time_in_force=time_in_force,
+            limit_price=limit_price,
+            stop_price=stop_price,
             metadata=kwargs
         )
 

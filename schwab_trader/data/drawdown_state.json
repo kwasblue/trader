@@ -1,0 +1,21 @@
+{
+  "timestamp": "2026-02-20T23:42:51.227896+00:00",
+  "portfolio": {
+    "peak": 100000.0,
+    "daily_start": 100000.0,
+    "locked": false,
+    "last_unlock_time": null,
+    "current_dd": 0.0,
+    "current_daily_dd": 0.0
+  },
+  "symbols": {
+    "AAPL": {
+      "peak": 100.0,
+      "daily_start": 100.0,
+      "locked": true,
+      "last_unlock_time": null,
+      "current_dd": -0.25,
+      "current_daily_dd": -0.25
+    }
+  }
+}
