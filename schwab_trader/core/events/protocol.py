@@ -8,7 +8,7 @@ at runtime using isinstance() checks.
 """
 
 from typing import Protocol, Any, Dict
-from core.events.events import EVENT_SCHEMA_MAP
+from core.contracts.events import EVENT_SCHEMA_MAP
 
 
 def _make_protocol() -> type[Any]:

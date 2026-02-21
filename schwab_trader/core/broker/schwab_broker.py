@@ -8,7 +8,7 @@ from typing import Optional, List, Dict, Any, Literal, Union, Callable
 from core.base.base_broker_interface import BaseBrokerInterface
 from core.app_types import OrderResult, PositionView, BrokerSnapshot
 from core.events.eventhandler import get_event_handler
-from core.events.events import EVENT_ORDER_STATUS, EVENT_HEALTH_UPDATE
+from core.contracts.events import EVENT_ORDER_STATUS, EVENT_HEALTH_UPDATE
 from core.utils.retry import CircuitBreaker, CircuitBreakerConfig, async_retry
 from data.streaming.schwab_client import SchwabClient
 from data.streaming.streamer import SchwabStreamingClient
@@ -67,10 +67,15 @@ class SchwabBroker(BaseBrokerInterface):
         # Quote callbacks registry
         self._quote_callbacks: Dict[str, List[Callable]] = {}
 
-        # Circuit breaker for API calls
+        # Circuit breaker for API calls - configurable via config
+        from core.config_loader import get_config
+        err_config = get_config().error_recovery
         self._circuit_breaker = CircuitBreaker(
             name="schwab_broker",
-            config=CircuitBreakerConfig(failure_threshold=5, timeout=60.0)
+            config=CircuitBreakerConfig(
+                failure_threshold=err_config.circuit_breaker_failure_threshold,
+                timeout=err_config.circuit_breaker_timeout,
+            )
         )
 
         # Health check callback
@@ -314,6 +319,7 @@ class SchwabBroker(BaseBrokerInterface):
         }
         await self._event_handler.emit(EVENT_ORDER_STATUS, payload)
 
+    @async_retry(max_attempts=3, base_delay=1.0)
     async def get_position(self, symbol: str) -> Optional[PositionView]:
         acct = await self._to_thread(self.client.accounts_number, self.account_number)
         positions = (acct.get("securitiesAccount", {}) or {}).get("positions", []) or []
@@ -322,6 +328,7 @@ class SchwabBroker(BaseBrokerInterface):
                 return self._mk_position_view(p)
         return None
 
+    @async_retry(max_attempts=3, base_delay=1.0)
     async def get_account_info(self) -> BrokerSnapshot:
         acct = await self._to_thread(self.client.accounts_number, self.account_number)
         # Extract positions from account response
@@ -392,18 +399,21 @@ class SchwabBroker(BaseBrokerInterface):
 
                 return market_open <= current_time <= market_close
             except ImportError:
-                # If no timezone library available, assume market is open
-                self.logger.warning("No timezone library available, assuming market open")
-                return True
+                # If no timezone library available, assume market is CLOSED for safety
+                self.logger.warning("No timezone library available, assuming market CLOSED (safe default)")
+                return False
         except Exception as e:
-            self.logger.warning(f"Error checking market hours: {e}, assuming open")
-            return True
+            # SAFETY: On error, assume market is CLOSED to prevent unintended trades
+            self.logger.warning(f"Error checking market hours: {e}, assuming CLOSED (safe default)")
+            return False
 
+    @async_retry(max_attempts=3, base_delay=1.0)
     async def get_open_orders(self) -> List[OrderResult]:
         resp = await self._to_thread(self.client.all_orders, self.account_number)
         orders = resp if isinstance(resp, list) else (resp.get("orders", []) if isinstance(resp, dict) else [])
         return [self._mk_order_result(o) for o in orders]
 
+    @async_retry(max_attempts=3, base_delay=1.0)
     async def get_order_status(self, order_id: str) -> OrderResult:
         resp = await self._to_thread(self.client.get_order_by_id, self.account_number, order_id)
         return self._mk_order_result(resp)

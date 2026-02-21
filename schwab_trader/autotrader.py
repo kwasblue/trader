@@ -1,6 +1,24 @@
 #!/usr/bin/env python
 """
-AutoTrader - Autonomous Trading Daemon
+===============================================================================
+DEPRECATED ENTRY POINT
+===============================================================================
+
+This entry point is deprecated. Use the CLI instead:
+
+    # Preferred way to run the trading system:
+    schwab-trader run --mode alpaca --symbols AAPL MSFT
+    schwab-trader run --mode schwab --symbols AAPL MSFT
+    schwab-trader run --mode simulation --symbols AAPL MSFT
+
+    # Or via Python module:
+    python -m cli.main run --mode alpaca --symbols AAPL
+
+See: python -m cli.main --help
+
+===============================================================================
+AutoTrader - Autonomous Trading Daemon (Legacy)
+===============================================================================
 
 Runs the trading system automatically:
 1. Waits for market open
@@ -10,7 +28,7 @@ Runs the trading system automatically:
 5. Updates historical data
 6. Sleeps until next trading day
 
-Usage:
+Usage (deprecated):
     # Run in foreground
     python autotrader.py
 
@@ -42,6 +60,19 @@ from datetime import datetime, time, timedelta
 from typing import List, Optional, Dict, Any
 from enum import Enum
 from zoneinfo import ZoneInfo
+
+# Emit deprecation warning
+warnings.warn(
+    "\n"
+    "=" * 70 + "\n"
+    "DEPRECATION WARNING: autotrader.py is deprecated!\n"
+    "=" * 70 + "\n"
+    "Use the CLI instead: schwab-trader run --mode alpaca --symbols AAPL\n"
+    "Or: python -m cli.main run --mode alpaca --symbols AAPL\n"
+    "=" * 70,
+    DeprecationWarning,
+    stacklevel=2
+)
 
 # Suppress sklearn warnings for small sample sizes
 warnings.filterwarnings("ignore", category=RuntimeWarning, module="sklearn")

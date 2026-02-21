@@ -411,8 +411,8 @@ class TestHandleSignalContextIntegration:
 
         state = SymbolState(symbol="AAPL")
 
-        # Call old handle_signal method
-        result = await engine.handle_signal(
+        # Call deprecated handle_signal_legacy method for backward compatibility
+        result = await engine.handle_signal_legacy(
             symbol="AAPL",
             state=state,
             signal=1,
@@ -517,10 +517,13 @@ class TestHandleSignalContextIntegration:
 
         await engine.handle_signal_context(context)
 
-        # Check that should_trade was called with market_open=False
+        # Check that should_trade was called with context containing market_open=False
         trade_logic = mock_engine_components['trade_logic']
         call_kwargs = trade_logic.should_trade.call_args.kwargs
-        assert call_kwargs.get('market_open') is False
+        # New API passes context object, check market_open from context
+        passed_context = call_kwargs.get('context')
+        assert passed_context is not None
+        assert passed_context.market_open is False
 
 
 class TestSignalContextAbstractMethod:

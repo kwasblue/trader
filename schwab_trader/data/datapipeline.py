@@ -1,32 +1,43 @@
 """
-Stock Data Pipeline - Deprecated
+===============================================================================
+DEPRECATED MODULE - DO NOT USE
+===============================================================================
 
-This module is deprecated. Use core.unified_data_pipeline.UnifiedDataPipeline instead.
+This module is DEPRECATED. Use core.unified_data_pipeline.UnifiedDataPipeline.
 
-The UnifiedDataPipeline provides:
-- Multi-source support (Alpaca, Schwab)
-- Async-first design
-- Better error handling
-- Storage to both JSON and SQLite
-
-Example:
-    # Old (deprecated):
+MIGRATION GUIDE:
+----------------
+OLD (deprecated):
     from data.datapipeline import StockDataPipeline
     pipeline = StockDataPipeline(watch_list=['AAPL'])
     pipeline.run()
 
-    # New (recommended):
+NEW (recommended):
     from core.unified_data_pipeline import UnifiedDataPipeline
     pipeline = UnifiedDataPipeline()
     await pipeline.update_symbols(['AAPL'])
+
+The UnifiedDataPipeline provides:
+- Multi-source support (Alpaca, Schwab) with automatic fallback
+- Async-first design
+- Better error handling
+- Storage to both JSON and SQLite
+- Full ML pipeline processing
+
+===============================================================================
 """
 import warnings
 import asyncio
 from typing import List, Optional, Dict, Any
 
 warnings.warn(
-    "data.datapipeline.StockDataPipeline is deprecated. "
-    "Use core.unified_data_pipeline.UnifiedDataPipeline instead.",
+    "\n"
+    "=" * 70 + "\n"
+    "DEPRECATION WARNING: data.datapipeline is deprecated!\n"
+    "=" * 70 + "\n"
+    "Use 'from core.unified_data_pipeline import UnifiedDataPipeline' instead.\n"
+    "This module will be removed in a future version.\n"
+    "=" * 70,
     DeprecationWarning,
     stacklevel=2
 )

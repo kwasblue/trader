@@ -208,3 +208,177 @@ class TestPositionStateUseCases:
         # Order fills
         state = PositionState.OPEN
         assert state.allows_new_orders is True
+
+
+# ============================================================================
+# State Synchronizer Tests
+# ============================================================================
+
+import pytest
+import asyncio
+from core.logic.portfolio_state import PortfolioState
+from core.logic.symbol_state import SymbolState
+from core.state_sync import StateSynchronizer
+
+
+class TestStateSynchronizer:
+    """Test StateSynchronizer for Portfolio <-> Symbol state consistency."""
+
+    @pytest.fixture
+    def portfolio(self):
+        """Create a test portfolio."""
+        return PortfolioState(cash=100_000.0)
+
+    @pytest.fixture
+    def symbol_states(self):
+        """Create symbol states dict."""
+        return {
+            "AAPL": SymbolState(symbol="AAPL"),
+            "MSFT": SymbolState(symbol="MSFT"),
+        }
+
+    @pytest.fixture
+    def synchronizer(self, portfolio, symbol_states):
+        """Create a StateSynchronizer."""
+        return StateSynchronizer(portfolio, symbol_states)
+
+    @pytest.mark.asyncio
+    async def test_apply_fill_syncs_symbol_state(self, synchronizer, portfolio, symbol_states):
+        """Test that apply_fill_and_sync updates both portfolio and symbol state."""
+        # Apply a buy fill
+        await synchronizer.apply_fill_and_sync("AAPL", "buy", 100, 150.0)
+
+        # Check portfolio
+        position = portfolio.get_position("AAPL")
+        assert position is not None
+        assert position.qty == 100
+        assert position.avg_price == 150.0
+
+        # Check symbol state was synced
+        state = symbol_states["AAPL"]
+        assert state.current_position == 100
+        assert state.side == "long"
+        assert state.entry_price == 150.0
+
+    @pytest.mark.asyncio
+    async def test_position_state_synced_after_fill(self, synchronizer, portfolio, symbol_states):
+        """Test that position state is synced after multiple fills."""
+        # Buy 100 shares
+        await synchronizer.apply_fill_and_sync("AAPL", "buy", 100, 150.0)
+
+        # Check initial sync
+        assert symbol_states["AAPL"].current_position == 100
+
+        # Buy 50 more (add to position)
+        await synchronizer.apply_fill_and_sync("AAPL", "buy", 50, 152.0)
+
+        # Check position updated in both
+        position = portfolio.get_position("AAPL")
+        assert position.qty == 150
+
+        state = symbol_states["AAPL"]
+        assert state.current_position == 150
+        assert state.side == "long"
+
+    @pytest.mark.asyncio
+    async def test_concurrent_fills_maintain_consistency(self, synchronizer, portfolio, symbol_states):
+        """Test that concurrent fills maintain state consistency."""
+        # Run multiple fills concurrently
+        async def do_fills():
+            tasks = [
+                synchronizer.apply_fill_and_sync("AAPL", "buy", 10, 150.0),
+                synchronizer.apply_fill_and_sync("MSFT", "buy", 20, 300.0),
+            ]
+            await asyncio.gather(*tasks)
+
+        await do_fills()
+
+        # Check both symbols are consistent
+        assert portfolio.get_position("AAPL").qty == 10
+        assert portfolio.get_position("MSFT").qty == 20
+
+        assert symbol_states["AAPL"].current_position == 10
+        assert symbol_states["MSFT"].current_position == 20
+
+    @pytest.mark.asyncio
+    async def test_sync_all_from_portfolio(self, synchronizer, portfolio, symbol_states):
+        """Test syncing all symbol states from portfolio."""
+        # Directly update portfolio (simulating broker sync)
+        portfolio.apply_fill("AAPL", "buy", 100, 150.0)
+        portfolio.apply_fill("MSFT", "buy", 50, 300.0)
+
+        # Symbol states are out of sync
+        assert symbol_states["AAPL"].current_position == 0
+        assert symbol_states["MSFT"].current_position == 0
+
+        # Sync all
+        count = await synchronizer.sync_all_from_portfolio()
+        assert count == 2
+
+        # Now they should be synced
+        assert symbol_states["AAPL"].current_position == 100
+        assert symbol_states["MSFT"].current_position == 50
+
+    @pytest.mark.asyncio
+    async def test_verify_consistency_detects_mismatch(self, synchronizer, portfolio, symbol_states):
+        """Test that verify_consistency detects mismatches."""
+        # Create a mismatch
+        portfolio.apply_fill("AAPL", "buy", 100, 150.0)
+        # Don't sync symbol state - it's still at 0
+
+        # Verify should find the inconsistency
+        inconsistencies = await synchronizer.verify_consistency()
+
+        assert "AAPL" in inconsistencies
+        assert inconsistencies["AAPL"]["portfolio_qty"] == 100
+        assert inconsistencies["AAPL"]["symbol_qty"] == 0
+
+    @pytest.mark.asyncio
+    async def test_fix_inconsistencies(self, synchronizer, portfolio, symbol_states):
+        """Test that fix_inconsistencies corrects mismatches."""
+        # Create a mismatch
+        portfolio.apply_fill("AAPL", "buy", 100, 150.0)
+
+        # Verify inconsistency exists
+        inconsistencies = await synchronizer.verify_consistency()
+        assert len(inconsistencies) > 0
+
+        # Fix it
+        fixed_count = await synchronizer.fix_inconsistencies()
+        assert fixed_count == 1
+
+        # Verify consistency now passes
+        inconsistencies = await synchronizer.verify_consistency()
+        assert len(inconsistencies) == 0
+
+    @pytest.mark.asyncio
+    async def test_register_unregister_symbol(self, synchronizer):
+        """Test registering and unregistering symbols."""
+        new_state = SymbolState(symbol="GOOGL")
+
+        # Register new symbol
+        synchronizer.register_symbol("GOOGL", new_state)
+        assert "GOOGL" in synchronizer.symbol_states
+
+        # Unregister
+        synchronizer.unregister_symbol("GOOGL")
+        assert "GOOGL" not in synchronizer.symbol_states
+
+    @pytest.mark.asyncio
+    async def test_close_position_resets_symbol_state(self, synchronizer, portfolio, symbol_states):
+        """Test that closing a position resets the symbol state."""
+        # Open position
+        await synchronizer.apply_fill_and_sync("AAPL", "buy", 100, 150.0)
+        assert symbol_states["AAPL"].current_position == 100
+
+        # Close position
+        await synchronizer.apply_fill_and_sync("AAPL", "sell", 100, 155.0)
+
+        # Position should be flat
+        position = portfolio.get_position("AAPL")
+        assert position.qty == 0
+
+        # Symbol state should reflect this
+        state = symbol_states["AAPL"]
+        assert state.current_position == 0
+        assert state.side is None

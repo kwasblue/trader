@@ -34,7 +34,7 @@ from loggers.file_trade_logger import FileTradeLogger
 from indicators.technical_indicators import TechnicalIndicators
 from core.broker.mock_broker import MockBroker
 from core.mock_executor import MockExecutor
-from core.position_sizer import DynamicPositionSizer2
+from core.position_sizer import KellyPositionSizer
 from core.events.eventhandler import EventHandler
 from core.simulator.gbm_simulator import GBMSimulator
 from core.logic.strategy_routing_manager import StrategyRoutingManager
@@ -44,8 +44,9 @@ from core.logic.symbol_state import SymbolState
 from core.logic.portfolio_state import PortfolioState
 from core.drawdown_monitor import DrawdownMonitor
 from core.enums import OrderSide
+from core.contracts.types import SignalContext
 
-from core.events.events import (
+from core.contracts.events import (
     EVENT_NEW_BAR,
     EVENT_STRATEGY_SIGNAL,
     EVENT_PNL_UPDATE,
@@ -298,7 +299,7 @@ class SimulationRunner:
         self.executor = MockExecutor(self.broker)
         
         # Position sizer - use config values
-        self.sizer = DynamicPositionSizer2(
+        self.sizer = KellyPositionSizer(
             risk_percentage=self.cfg.risk_per_trade,
             max_trade_pct=self.cfg.max_trade_pct,
             max_holding_pct=self.cfg.max_holding_pct
@@ -468,17 +469,18 @@ class SimulationRunner:
             # Get state
             state = self.symbol_states[symbol]
 
-            # Handle signal via engine
-            await self.engine.handle_signal(
+            # Create context and handle signal via engine
+            context = SignalContext.from_kwargs(
                 symbol=symbol,
-                state=state,
                 signal=signal,
                 price=price,
                 atr=atr or 0.0,
                 regime=regime,
+                timestamp=datetime.now(timezone.utc),
                 strategy_name=strategy_name,
-                df=df
+                df=df,
             )
+            await self.engine.handle_signal(context, state)
 
             # Emit PNL update after each bar (for continuous equity curve in monitor)
             equity = self.portfolio.total_equity()

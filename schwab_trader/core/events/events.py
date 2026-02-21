@@ -1,16 +1,40 @@
 """
-Events Module - Backward Compatibility Facade
+===============================================================================
+DEPRECATED MODULE - DO NOT USE
+===============================================================================
 
-This module re-exports event definitions from core.contracts.events for
-backward compatibility. New code should import directly from core.contracts.
+This module is DEPRECATED and exists only for backwards compatibility.
+It will be removed in a future version.
 
-Usage (legacy):
+MIGRATION GUIDE:
+----------------
+OLD (deprecated):
     from core.events.events import EVENT_NEW_BAR, BarPayload
 
-Preferred (new code):
+NEW (recommended):
+    from core.contracts.events import EVENT_NEW_BAR, BarPayload
+    # Or use the contracts __init__ for common imports:
     from core.contracts import EVENT_NEW_BAR, BarPayload
-    from core.contracts.events import EVENT_SCHEMA_MAP
+
+All event definitions have been moved to core.contracts.events.
+
+===============================================================================
 """
+
+import warnings
+
+# Emit deprecation warning when module is imported
+warnings.warn(
+    "\n"
+    "=" * 70 + "\n"
+    "DEPRECATION WARNING: core.events.events is deprecated!\n"
+    "=" * 70 + "\n"
+    "Use 'from core.contracts.events import ...' instead.\n"
+    "This module will be removed in a future version.\n"
+    "=" * 70,
+    DeprecationWarning,
+    stacklevel=2
+)
 
 # Re-export all event names and payloads from contracts
 from core.contracts.events import (

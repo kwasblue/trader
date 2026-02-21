@@ -111,5 +111,12 @@
     "post_market_delay_minutes": 5,
     "data_update_days": 5,
     "dry_run": false
+  },
+
+  "error_recovery": {
+    "retry_max_attempts": 3,
+    "retry_base_delay": 1.0,
+    "circuit_breaker_failure_threshold": 5,
+    "circuit_breaker_timeout": 60.0
   }
 }

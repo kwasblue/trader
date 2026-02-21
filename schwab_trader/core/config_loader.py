@@ -155,6 +155,15 @@ class AutoTraderConfig:
 
 
 @dataclass
+class ErrorRecoveryConfig:
+    """Configuration for error recovery and retry behavior."""
+    retry_max_attempts: int = 3
+    retry_base_delay: float = 1.0
+    circuit_breaker_failure_threshold: int = 5
+    circuit_breaker_timeout: float = 60.0
+
+
+@dataclass
 class TradingConfig:
     """Master configuration container."""
     general: GeneralConfig = field(default_factory=GeneralConfig)
@@ -170,6 +179,7 @@ class TradingConfig:
     gui: GUIConfig = field(default_factory=GUIConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     autotrader: AutoTraderConfig = field(default_factory=AutoTraderConfig)
+    error_recovery: ErrorRecoveryConfig = field(default_factory=ErrorRecoveryConfig)
 
     # Raw dict for any custom/unknown fields
     _raw: Dict[str, Any] = field(default_factory=dict)
@@ -233,6 +243,7 @@ def load_config(config_path: Optional[str] = None) -> TradingConfig:
             gui=_dict_to_dataclass(GUIConfig, raw.get("gui")),
             logging=_dict_to_dataclass(LoggingConfig, raw.get("logging")),
             autotrader=_dict_to_dataclass(AutoTraderConfig, raw.get("autotrader")),
+            error_recovery=_dict_to_dataclass(ErrorRecoveryConfig, raw.get("error_recovery")),
             _raw=raw
         )
 
@@ -311,6 +322,77 @@ def enable_day_trade_mode() -> TradingConfig:
 def reload_config() -> TradingConfig:
     """Reload config from disk."""
     return get_config(reload=True)
+
+
+def validate_config(config: TradingConfig) -> tuple[bool, list[str]]:
+    """
+    Validate configuration values for safety and consistency.
+
+    Checks:
+    - Risk parameters are within safe bounds
+    - Holding limits are greater than trade limits
+    - Retry/circuit breaker values are sensible
+
+    Args:
+        config: TradingConfig to validate
+
+    Returns:
+        Tuple of (is_valid, list_of_errors)
+    """
+    errors = []
+
+    # Risk config validation
+    if not (0.001 <= config.risk.risk_per_trade <= 0.10):
+        errors.append(
+            f"risk_per_trade ({config.risk.risk_per_trade}) must be between 0.1% and 10%"
+        )
+
+    if config.risk.max_holding_pct < config.risk.max_trade_pct:
+        errors.append(
+            f"max_holding_pct ({config.risk.max_holding_pct}) must be >= "
+            f"max_trade_pct ({config.risk.max_trade_pct})"
+        )
+
+    if config.risk.max_trade_pct > 0.25:
+        errors.append(
+            f"max_trade_pct ({config.risk.max_trade_pct}) exceeds 25% safety limit"
+        )
+
+    # Position sizer validation
+    if config.position_sizer.max_holding_pct < config.position_sizer.max_trade_pct:
+        errors.append(
+            f"position_sizer.max_holding_pct ({config.position_sizer.max_holding_pct}) "
+            f"must be >= max_trade_pct ({config.position_sizer.max_trade_pct})"
+        )
+
+    # Drawdown monitor validation
+    if config.drawdown_monitor.enabled:
+        if config.drawdown_monitor.max_portfolio_drawdown > 0.50:
+            errors.append(
+                f"max_portfolio_drawdown ({config.drawdown_monitor.max_portfolio_drawdown}) "
+                f"exceeds 50% safety limit"
+            )
+        if config.drawdown_monitor.max_symbol_drawdown > 0.50:
+            errors.append(
+                f"max_symbol_drawdown ({config.drawdown_monitor.max_symbol_drawdown}) "
+                f"exceeds 50% safety limit"
+            )
+
+    # Error recovery validation
+    if config.error_recovery.retry_max_attempts < 1:
+        errors.append("retry_max_attempts must be at least 1")
+    if config.error_recovery.retry_max_attempts > 10:
+        errors.append("retry_max_attempts exceeds recommended maximum of 10")
+    if config.error_recovery.circuit_breaker_failure_threshold < 2:
+        errors.append("circuit_breaker_failure_threshold must be at least 2")
+    if config.error_recovery.circuit_breaker_timeout < 10.0:
+        errors.append("circuit_breaker_timeout must be at least 10 seconds")
+
+    # Trade logic validation
+    if config.trade_logic.min_bars_to_hold < 0:
+        errors.append("min_bars_to_hold cannot be negative")
+
+    return len(errors) == 0, errors
 
 
 # Convenience alias

@@ -1,11 +1,27 @@
 #!/usr/bin/env python3
 """
-Consolidated Live Trading Entry Point
---------------------------------------
+===============================================================================
+DEPRECATED ENTRY POINT
+===============================================================================
+
+This entry point is deprecated. Use the CLI instead:
+
+    # Preferred way to run the trading system:
+    schwab-trader run --mode alpaca --symbols AAPL,MSFT
+    python -m cli.main run --mode alpaca --symbols AAPL,MSFT
+
+    # For Schwab:
+    schwab-trader run --mode schwab --symbols AAPL,MSFT
+
+See: python -m cli.main --help
+
+===============================================================================
+Consolidated Live Trading Entry Point (Legacy)
+===============================================================================
 Runs the AlpacaLiveRunner alongside the monitoring GUI.
 Both share the same EventHandler for real-time data flow.
 
-Usage:
+Usage (deprecated):
     python run_live.py
     python run_live.py --symbols AAPL,MSFT,GOOGL
     python run_live.py --no-gui  # headless mode
@@ -14,7 +30,21 @@ import sys
 import asyncio
 import argparse
 import logging
+import warnings
 from pathlib import Path
+
+# Emit deprecation warning
+warnings.warn(
+    "\n"
+    "=" * 70 + "\n"
+    "DEPRECATION WARNING: run_live.py is deprecated!\n"
+    "=" * 70 + "\n"
+    "Use the CLI instead: schwab-trader run --mode alpaca --symbols AAPL\n"
+    "Or: python -m cli.main run --mode alpaca --symbols AAPL\n"
+    "=" * 70,
+    DeprecationWarning,
+    stacklevel=2
+)
 
 # Project root setup
 ROOT = Path(__file__).resolve().parent

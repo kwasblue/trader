@@ -314,10 +314,10 @@ class TestTradeLogicAndRisk:
 
     def test_position_sizer(self):
         """Test position sizing calculation."""
-        from core.position_sizer import DynamicPositionSizer2
+        from core.position_sizer import KellyPositionSizer
         from core.logic.portfolio_state import PortfolioState
 
-        sizer = DynamicPositionSizer2(
+        sizer = KellyPositionSizer(
             risk_percentage=0.01,
             max_trade_pct=0.10,
             max_holding_pct=0.20

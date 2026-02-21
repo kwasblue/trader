@@ -7,11 +7,26 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 from core.events.eventhandler import EventHandler, get_event_handler
-from core.events.events import EVENT_GUARDRAIL_TRIGGERED, GuardrailPayload
+from core.contracts.events import EVENT_GUARDRAIL_TRIGGERED, GuardrailPayload
 
 from loggers.logger import Logger
 
 import asyncio
+
+
+def _try_create_task(coro) -> None:
+    """
+    Try to create an async task for event emission.
+
+    If no event loop is running (e.g., when called from asyncio.to_thread),
+    close the coroutine properly and skip the event emission gracefully.
+    """
+    try:
+        asyncio.create_task(coro)
+    except RuntimeError:
+        # No running event loop - this happens when called via asyncio.to_thread
+        # Close the coroutine to prevent "coroutine was never awaited" warning
+        coro.close()
 
 
 class DrawdownMonitor:
@@ -152,7 +167,7 @@ class DrawdownMonitor:
                     self.portfolio_locked = True
                     self._persist_state()
                     self.logger.warning(f"[PORTFOLIO DAILY LOCK] Daily DD {daily_dd:.2%} breached.")
-                    asyncio.create_task(
+                    _try_create_task(
                         self.event_handler.emit_guardrail(
                             "portfolio.daily",         # guard_name (namespaced style is nice)
                             True,                      # triggered
@@ -169,7 +184,7 @@ class DrawdownMonitor:
                     self.portfolio_locked = True
                     self._persist_state()
                     self.logger.warning(f"[PORTFOLIO LOCK] Intraday DD {intraday_dd:.2%} breached.")
-                    asyncio.create_task(
+                    _try_create_task(
                         self.event_handler.emit_guardrail(
                             "portfolio.intraday",
                             True,
@@ -185,7 +200,7 @@ class DrawdownMonitor:
                 elapsed = (now - self.portfolio_last_unlock_time).total_seconds()
                 if elapsed < self.portfolio_cooldown_seconds:
                     self.logger.warning(f"[PORTFOLIO COOLDOWN] {elapsed:.1f}s elapsed — trading disabled.")
-                    asyncio.create_task(
+                    _try_create_task(
                         self.event_handler.emit_guardrail(
                             "portfolio.cooldown",
                             True,
@@ -233,7 +248,7 @@ class DrawdownMonitor:
                         self.symbol_locked[symbol] = True
                         self._persist_state()
                         self.logger.warning(f"[{symbol}] DAILY LOCK | DD {daily_dd:.2%}")
-                        asyncio.create_task(self._emit_guardrail(f"{symbol}_daily", True, f"{symbol} daily drawdown breached {daily_dd:.2%}"))
+                        _try_create_task(self._emit_guardrail(f"{symbol}_daily", True, f"{symbol} daily drawdown breached {daily_dd:.2%}"))
                     return False
 
             # intraday drawdown vs peak
@@ -315,7 +330,7 @@ class DrawdownMonitor:
                 self.symbol_last_unlock_time[symbol] = datetime.now(timezone.utc)
                 self._persist_state()
                 self.logger.info(f"[{symbol}] UNLOCKED (cooldown started)")
-                asyncio.create_task(self._emit_guardrail(f"{symbol}", False,
+                _try_create_task(self._emit_guardrail(f"{symbol}", False,
                 f"{symbol} unlocked from guardrail (cooldown active)"))
 
     def reset_symbol(self, symbol: str) -> None:
@@ -459,3 +474,45 @@ class DrawdownMonitor:
 
             if sym_state.get("last_unlock_time"):
                 self.symbol_last_unlock_time[sym] = datetime.fromisoformat(sym_state["last_unlock_time"])
+
+    # ----------------------------- Async Wrappers -----------------------------
+    # These resolve the threading.RLock vs asyncio.Lock mismatch for use in async contexts
+
+    async def can_trade_async(self, symbol: str) -> bool:
+        """
+        Async wrapper for can_trade() to avoid blocking the event loop.
+
+        Use this in async contexts (e.g., LiveExecutionEngine.handle_signal_context).
+
+        Args:
+            symbol: Trading symbol to check
+
+        Returns:
+            True if trading is allowed, False if blocked by drawdown/cooldown
+        """
+        return await asyncio.to_thread(self.can_trade, symbol)
+
+    async def update_portfolio_async(self, portfolio_equity: float) -> bool:
+        """
+        Async wrapper for update_portfolio() to avoid blocking the event loop.
+
+        Args:
+            portfolio_equity: Current portfolio equity value
+
+        Returns:
+            True if portfolio trading is allowed, False if locked/cooling
+        """
+        return await asyncio.to_thread(self.update_portfolio, portfolio_equity)
+
+    async def update_symbol_async(self, symbol: str, symbol_equity: float) -> bool:
+        """
+        Async wrapper for update_symbol() to avoid blocking the event loop.
+
+        Args:
+            symbol: Trading symbol
+            symbol_equity: Current equity value for this symbol
+
+        Returns:
+            True if symbol trading is allowed, False if locked/cooling
+        """
+        return await asyncio.to_thread(self.update_symbol, symbol, symbol_equity)

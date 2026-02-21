@@ -14,7 +14,7 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
 
 from core.app_types import OrderResult, PositionView, BrokerSnapshot
-from core.events.events import EVENT_ORDER_STATUS, EVENT_NEW_TRADE, EVENT_PNL_UPDATE
+from core.contracts.events import EVENT_ORDER_STATUS, EVENT_NEW_TRADE, EVENT_PNL_UPDATE
 from core.events.eventhandler import EventHandler
 from core.enums import OrderSide, OrderType, OrderStatus, TimeInForce
 from core.exceptions import (

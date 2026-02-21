@@ -1,406 +1,241 @@
 # Architecture Overview
 
-This document describes the system architecture of Schwab Trader.
+This document describes the canonical architecture of the trading system.
 
-## High-Level Architecture
+## Design Principles
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              Schwab Trader                                   │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐  │
-│  │   Data      │    │  Strategy   │    │  Execution  │    │  Monitoring │  │
-│  │   Layer     │───▶│   Layer     │───▶│   Layer     │───▶│   Layer     │  │
-│  └─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘  │
-│        │                  │                  │                  │           │
-│        ▼                  ▼                  ▼                  ▼           │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │                         Event Bus (Async)                            │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
+1. **Single Responsibility**: Each component has ONE job with ONE clear name
+2. **Clear Layers**: Event system → Trade logic → Execution → Broker
+3. **No Duplication**: State lives in one place, not duplicated across layers
 
 ---
 
-## Component Layers
+## Core Components
 
-### 1. Data Layer
+### Event System
 
-Handles all data acquisition, storage, and preprocessing.
+**Canonical Module**: `core/events/eventhandler.py`
 
 ```
-data/
-├── streaming/
-│   ├── schwab_client.py      # Schwab API client
-│   ├── authenticator.py      # OAuth authentication
-│   └── streamer.py           # WebSocket streaming
-├── datastorage.py            # SQLite database
-├── aggregate.py              # Data aggregation
-└── datautils.py              # Utility functions
+EventHandler (Singleton)
+└── Single event bus for all pub/sub communication
 ```
 
-**Key Classes:**
+The event system provides async pub/sub for decoupled component communication.
+All events flow through this single bus.
 
-| Class | Purpose |
-|-------|---------|
-| `SchwabClient` | REST API for quotes, orders, account info |
-| `Authenticator` | OAuth 2.0 token management |
-| `DataStore` | Thread-safe SQLite operations |
-| `Aggregator` | Real-time bar aggregation |
+### Trade Logic
 
-**Data Flow:**
 ```
-External API → Streamer → Aggregator → DataStore
-                  │
-                  └─────→ Event Bus (EVENT_NEW_BAR)
+TradeApprover (base)           # Gates: should we trade?
+├── StandardTradeApprover      # Concrete gating with cooldowns, position limits
+└── TradeApproverRouter        # Routes to symbol/strategy/regime-specific approvers
+
+PositionManager                # Manages: SL/TP/trailing/exits
+└── Handles position lifecycle after trade approval
 ```
+
+**Responsibilities**:
+- `TradeApprover`: Decides IF we should trade (cooldowns, limits, conditions)
+- `PositionManager`: Decides HOW to manage open positions (stops, targets, exits)
+
+**Exit Timing Rules** (owned by PositionManager):
+- `min_bars_to_hold`: Minimum bars before TP/reversal exits
+- `swing_mode`: Enforce multi-day holds
+- `min_hold_days`: Days to hold in swing mode before exit
+
+### Execution Stack
+
+```
+ExecutionEngineBase                        # Abstract base with canonical API
+├── handle_signal(context, state)          # Primary entry point
+├── handle_signal_context(context)         # Abstract (async engines implement)
+└── handle_signal_legacy(...)              # Deprecated backward compat
+
+GenericExecutionEngine (sync)              # For backtesting/simulation
+├── Synchronous signal handling
+└── Direct order execution
+
+MockExecutionEngine (async)                # For paper trading
+├── Async signal handling
+└── Simulated order fills
+
+LiveExecutionEngine (async)                # For live trading
+├── Handles signals from strategies
+├── Coordinates trade approval, sizing, validation
+├── Emits events for GUI/monitoring
+└── Manages GUI commands (manual orders, flatten, cancel)
+
+LiveExecutor                               # Thin broker adapter
+├── Places orders via broker
+├── Cancels orders
+└── Queries order status
+```
+
+**Key Insight**: The Engine is the orchestrator; the Executor is just an adapter.
+All engines share the same `handle_signal(context, state)` signature.
 
 ---
 
-### 2. Strategy Layer
+## API Contract: SignalContext-First
 
-Contains all trading strategies and signal generation logic.
-
-```
-strategies/
-└── strategy_registry/
-    ├── __init__.py           # Strategy loader
-    ├── strategy_registry.py  # Auto-discovery
-    ├── sma_strategy.py       # SMA crossover
-    ├── ema_strategy.py       # EMA crossover
-    ├── macd_strategy.py      # MACD
-    ├── rsi_strategy.py       # RSI oscillator
-    ├── bollinger_strategy.py # Bollinger Bands
-    ├── momentum_strategy.py  # Price momentum
-    ├── mean_reversion_strategy.py
-    ├── breakout_strategy.py
-    ├── adx_strategy.py
-    ├── stochastic_strategy.py
-    ├── ichimoku_strategy.py
-    ├── psar_strategy.py
-    ├── vwap_strategy.py
-    ├── donchian_strategy.py
-    ├── combined_strategy.py
-    └── logistic_regression_strategy.py
-```
-
-**Base Strategy Interface:**
+All engines use a unified API:
 
 ```python
-class BaseStrategy(ABC):
-    @abstractmethod
-    def generate_signal(self, data: pd.DataFrame) -> int:
-        """Generate trading signal.
+# Primary entry point (all engines)
+engine.handle_signal(context: SignalContext, state: SymbolState) -> Optional[OrderResult]
 
-        Returns:
-            1: Buy signal
-           -1: Sell signal
-            0: Hold/No signal
-        """
-        pass
+# SignalContext contains all signal data
+SignalContext(
+    symbol="AAPL",
+    signal=1,           # -1, 0, 1
+    price=150.0,
+    atr=2.5,
+    regime="normal",
+    timestamp=datetime.now(timezone.utc),
+    strategy_name="momentum",
+    confidence=0.8,
+    market_open=True,
+    metadata={}         # Additional context
+)
 
-    def generate_signals_vectorized(self, data: pd.DataFrame) -> Optional[List[int]]:
-        """Vectorized signal generation for backtesting (optional)."""
-        return None
+# SymbolState contains per-symbol trading state
+SymbolState(
+    symbol="AAPL",
+    side="long",        # "long", "short", None
+    entry_price=148.0,
+    stop_loss=145.0,
+    take_profit=155.0,
+    bars_held=5,
+    ...
+)
 ```
 
-**Strategy Loading:**
-```python
-from strategies.strategy_registry import load_strategy, list_strategies
-
-# List available strategies
-strategies = list_strategies()  # ['sma', 'ema', 'macd', ...]
-
-# Load with parameters
-strategy = load_strategy('rsi', params={'window': 14, 'oversold': 30})
-signal = strategy.generate_signal(data)
-```
+**Deprecated**: `handle_signal_legacy()` accepts loose parameters for backward compatibility.
 
 ---
 
-### 3. Execution Layer
+## Data Flow
 
-Handles order execution, position management, and risk control.
-
-```
-core/
-├── executor.py              # Main trade executor
-├── position_sizer.py        # Position sizing algorithms
-├── drawdown_monitor.py      # Drawdown tracking
-├── logic/
-│   ├── trade_logic_manager.py
-│   ├── default_trade_logic.py
-│   ├── portfolio_state.py   # Portfolio tracking
-│   ├── symbol_state.py      # Per-symbol state
-│   └── mock_execution_engine.py
-└── broker/
-    ├── base_broker.py       # Broker interface
-    ├── schwab_broker.py     # Schwab implementation
-    ├── alpaca_broker.py     # Alpaca implementation
-    └── mock_broker.py       # Paper trading
-```
-
-**Execution Flow:**
 ```
 Strategy Signal
-      │
-      ▼
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│  Trade      │────▶│  Position   │────▶│  Drawdown   │
-│  Logic      │     │  Sizer      │     │  Monitor    │
-└─────────────┘     └─────────────┘     └─────────────┘
-      │                   │                   │
-      │                   │                   │
-      ▼                   ▼                   ▼
-┌─────────────────────────────────────────────────────┐
-│                     Executor                         │
-├─────────────────────────────────────────────────────┤
-│  • Validate signal                                   │
-│  • Calculate position size                           │
-│  • Check risk limits                                 │
-│  • Submit order to broker                            │
-│  • Track fills and P&L                               │
-└─────────────────────────────────────────────────────┘
-      │
-      ▼
-   Broker API
-```
-
-**Position Sizing:**
-
-```python
-class DynamicPositionSizer:
-    """Risk-based position sizing with volatility adjustment."""
-
-    def calculate_position_size(
-        self,
-        stock_price: float,
-        stop_loss_price: float,
-        current_cash: float,
-        market_conditions: str,  # 'low_volatility', 'normal', 'high_volatility'
-        signal: int
-    ) -> int:
-        # Risk per share
-        risk_per_share = abs(stock_price - stop_loss_price)
-
-        # Adjust risk based on market conditions
-        risk_multiplier = {
-            'low_volatility': 1.2,
-            'normal': 1.0,
-            'high_volatility': 0.7
-        }.get(market_conditions, 1.0)
-
-        # Calculate position size
-        risk_amount = current_cash * self.risk_per_trade * risk_multiplier
-        position_size = int(risk_amount / risk_per_share)
-
-        # Apply position limits
-        max_shares = int(current_cash * self.max_position_pct / stock_price)
-        return min(position_size, max_shares)
+    ↓
+SignalContext.from_kwargs(...)  →  Immutable context object
+    ↓
+Engine.handle_signal(context, state)
+    ↓
+TradeApprover.should_trade(context, state)  →  Pure gating (allowed?)
+    ↓
+╔══════════════════════════════════════════════════╗
+║ IF NOT IN POSITION (entry):                      ║
+║   → PositionSizer.calculate_position_size()      ║
+║   → TradeValidator.validate()                    ║
+║   → LiveExecutor.buy/sell()  →  Broker           ║
+║   → PositionManager.calculate_levels() (SL/TP)   ║
+╠══════════════════════════════════════════════════╣
+║ IF IN POSITION:                                  ║
+║   → PositionManager.check_exit_conditions()      ║
+║   → IF should_exit:                              ║
+║       → LiveExecutor.buy/sell() → Broker         ║
+║   → ELSE:                                        ║
+║       → PositionManager.update_trailing_stop()   ║
+║       → PositionManager.update_excursions()      ║
+╚══════════════════════════════════════════════════╝
+    ↓
+Event emission (NEW_TRADE, POSITION_UPDATE, etc.)
 ```
 
 ---
 
-### 4. Monitoring Layer
-
-Real-time GUI for monitoring trades, positions, and performance.
-
-```
-monitoring/
-├── app.py                   # Application entry
-├── theme.py                 # Dark theme styling
-├── bus.py                   # Control bridge
-├── models.py                # Table models
-├── views/
-│   └── main_window.py       # Main GUI window
-├── feeds/
-│   ├── feeder.py            # Event → Qt bridge
-│   └── state_aggregator.py  # State compilation
-├── dialogs/
-│   └── manual_order.py      # Order dialog
-└── widgets/
-    └── candles.py           # Candlestick chart
-```
-
-**GUI Architecture:**
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                          MainWindow                                  │
-├─────────────────────────────────────────────────────────────────────┤
-│  Tabs:                                                               │
-│  ┌─────────┬─────────┬───────────┬───────────┬────────┬──────────┐ │
-│  │Dashboard│ Market  │Performance│ Execution │ Alerts │Strategies│ │
-│  └─────────┴─────────┴───────────┴───────────┴────────┴──────────┘ │
-│                                                                      │
-│  ┌──────────────────────────────────────────────────────────────┐  │
-│  │                    DataFeeder (Async)                         │  │
-│  │  Subscribes to EventBus events, emits Qt signals              │  │
-│  └──────────────────────────────────────────────────────────────┘  │
-│                              │                                       │
-│                              ▼                                       │
-│  ┌──────────────────────────────────────────────────────────────┐  │
-│  │                   StateAggregator                             │  │
-│  │  Compiles state from multiple sources, emits unified snapshot │  │
-│  └──────────────────────────────────────────────────────────────┘  │
-│                              │                                       │
-│                              ▼                                       │
-│  ┌──────────────────────────────────────────────────────────────┐  │
-│  │                    GUI Update Slots                           │  │
-│  │  _update_from_snapshot(), _update_price_chart(), etc.         │  │
-│  └──────────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## Event System
-
-The system uses an async event bus for inter-component communication.
-
-**Event Types:**
-
-| Event | Description | Payload |
-|-------|-------------|---------|
-| `EVENT_NEW_BAR` | New OHLCV bar | symbol, ohlcv data |
-| `EVENT_STRATEGY_SIGNAL` | Strategy generated signal | symbol, signal, timestamp |
-| `EVENT_ORDER_SUBMITTED` | Order sent to broker | order details |
-| `EVENT_ORDER_FILLED` | Order executed | fill details |
-| `EVENT_POSITION_UPDATE` | Position changed | position data |
-| `EVENT_PNL_UPDATE` | P&L changed | portfolio value, unrealized, realized |
-| `EVENT_DRAWDOWN_ALERT` | Drawdown threshold hit | symbol, drawdown % |
-| `EVENT_REGIME_UPDATE` | Market regime changed | volatility, trend |
-| `EVENT_HALT_STATE` | Trading halted/resumed | halted boolean |
-
-**Event Flow Example:**
-```
-1. Streamer receives new price data
-2. Aggregator builds new bar → EVENT_NEW_BAR
-3. Strategy processes bar → EVENT_STRATEGY_SIGNAL (if signal)
-4. Executor validates and sizes → EVENT_ORDER_SUBMITTED
-5. Broker fills order → EVENT_ORDER_FILLED
-6. Portfolio updates → EVENT_POSITION_UPDATE, EVENT_PNL_UPDATE
-7. Drawdown monitor checks → EVENT_DRAWDOWN_ALERT (if threshold)
-8. GUI updates all displays
-```
-
----
-
-## Backtesting Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        Backtester                                    │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  ┌─────────────┐     ┌─────────────┐     ┌─────────────────────┐   │
-│  │   Data      │────▶│   Strategy  │────▶│   Position Sizer    │   │
-│  │ Validation  │     │   Signals   │     │   (Risk-based)      │   │
-│  └─────────────┘     └─────────────┘     └─────────────────────┘   │
-│                                                 │                    │
-│                                                 ▼                    │
-│  ┌─────────────────────────────────────────────────────────────┐   │
-│  │                    Trade Simulation                          │   │
-│  │  • Slippage modeling (Fixed, Volume, Volatility)             │   │
-│  │  • Transaction costs                                          │   │
-│  │  • Stop-loss enforcement                                      │   │
-│  │  • Position tracking                                          │   │
-│  └─────────────────────────────────────────────────────────────┘   │
-│                              │                                       │
-│                              ▼                                       │
-│  ┌─────────────────────────────────────────────────────────────┐   │
-│  │                  Performance Metrics                         │   │
-│  │  Sharpe, Sortino, Max Drawdown, Win Rate, Profit Factor     │   │
-│  └─────────────────────────────────────────────────────────────┘   │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
-
-                    Advanced Analysis Tools
-                    ─────────────────────────
-┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐
-│ Grid Search │  │Walk-Forward │  │Monte Carlo  │  │ Benchmark   │
-│Optimization │  │  Analysis   │  │ Simulation  │  │ Comparison  │
-└─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘
-```
-
----
-
-## Database Schema
-
-SQLite database for persistent storage:
-
-```sql
--- Price data
-CREATE TABLE ohlcv (
-    id INTEGER PRIMARY KEY,
-    symbol TEXT NOT NULL,
-    timestamp INTEGER NOT NULL,
-    open REAL,
-    high REAL,
-    low REAL,
-    close REAL,
-    volume INTEGER,
-    UNIQUE(symbol, timestamp)
-);
-
--- Trade log
-CREATE TABLE trades (
-    id INTEGER PRIMARY KEY,
-    timestamp INTEGER,
-    symbol TEXT,
-    side TEXT,
-    quantity INTEGER,
-    price REAL,
-    fees REAL,
-    pnl REAL
-);
-
--- Positions
-CREATE TABLE positions (
-    symbol TEXT PRIMARY KEY,
-    quantity INTEGER,
-    avg_price REAL,
-    unrealized REAL,
-    realized REAL
-);
-```
-
----
-
-## Configuration Files
+## Configuration
 
 | File | Purpose |
 |------|---------|
-| `.env` | API credentials, secrets |
-| `config/strategy_routing.json` | Symbol → Strategy mapping |
-| `config/trade_logic_routing.json` | Trade logic rules |
-| `config/ml_config.json` | ML model settings |
+| `core/config_loader.py` | Trading configuration (strategies, risk params) |
+| `utils/settings.py` | Infrastructure configuration (API keys, paths) |
 
 ---
 
-## Thread Safety
+## Key Files
 
-- **Database**: Uses `RLock` for thread-safe writes
-- **Event Bus**: Async with proper awaiting
-- **GUI**: Qt signals bridge async to main thread
-- **State**: Immutable snapshots for thread-safe reads
-
----
-
-## Extension Points
-
-1. **New Strategies**: Inherit from `BaseStrategy`, place in `strategy_registry/`
-2. **New Brokers**: Inherit from `BaseBroker`, implement required methods
-3. **New Indicators**: Add to `indicators/` directory
-4. **Custom Slippage**: Inherit from `SlippageModel`
-5. **Custom Position Sizing**: Inherit from `DynamicPositionSizer`
+| File | Responsibility |
+|------|----------------|
+| `core/events/eventhandler.py` | Single canonical event bus |
+| `core/logic/position_manager.py` | Position lifecycle (SL/TP/trailing) |
+| `core/logic/default_trade_logic.py` | Trade approval (gating) |
+| `core/logic/live_execution_engine.py` | Orchestrator (signals → orders) |
+| `core/executor.py` | Thin broker adapter |
+| `core/logic/portfolio_state.py` | Portfolio state (positions, cash) |
+| `core/logic/symbol_state.py` | Per-symbol trading state |
 
 ---
 
-## Related Documentation
+## Anti-Patterns Avoided
 
-- [Event System](event-system.md) - Detailed event bus architecture and usage
-- [Data Flow](data-flow.md) - Visual diagram of complete data flow
-- [Data Pipeline](data-pipeline.md) - Historical data management API
-- [Monitoring](monitoring.md) - GUI architecture and event bridging
+1. **No duplicate position tracking**: Portfolio is authoritative, not Executor
+2. **No event emission in Executor**: Events belong in Engine layer
+3. **No signal handling in Executor**: Engine handles signals, Executor places orders
+4. **No dead code**: Unused classes/methods have been removed
+5. **Single event bus**: EventHandler is the ONLY event emitter (no duplicate buses)
+6. **Clear separation**: TradeApprover gates, PositionManager manages positions
+7. **Engines don't register logic**: Use TradeApproverRouter directly, engines just consume it
+8. **SymbolState is dumb**: Just fields + properties, PositionManager does all "smart" checks
+9. **Executors don't size**: Engines compute qty, executors just place orders with given qty
+10. **No method duplication**: Shared helpers stay in base, subclasses inherit (not copy)
+
+---
+
+## Inheritance Pattern
+
+```
+ExecutionEngineBase (owns shared methods)
+├── handle_signal(context, state)       # Base default (calls handle_signal_context)
+├── handle_signal_legacy(...)           # Sync shim for backward compat
+├── _determine_action(...)              # Shared by all engines
+├── _setup_approval_state(...)          # Shared by all engines
+├── _get_exit_quantity(...)             # Shared by all engines
+└── _post_execution(...)                # Default, can be overridden
+
+GenericExecutionEngine (sync)
+├── handle_signal(context, state)       # OVERRIDE: sync implementation
+├── handle_signal_legacy                # INHERITED from base (sync)
+├── _determine_action                   # INHERITED from base
+├── _check_trade_approval(...)          # Own: uses approver_router
+└── _post_execution(...)                # OVERRIDE: sync version
+
+MockExecutionEngine (async)
+├── handle_signal(context, state)       # OVERRIDE: async implementation
+├── handle_signal_legacy                # OVERRIDE: async (calls await handle_signal)
+├── _determine_action                   # INHERITED from base
+└── _execute_mock_trade(...)            # Own: mock fill logic
+
+LiveExecutionEngine (async)
+├── handle_signal(context, state)       # OVERRIDE: async implementation
+├── handle_signal_legacy                # OVERRIDE: async (calls await handle_signal)
+├── _determine_action                   # INHERITED from base
+├── _check_daily_loss_limit_breached()  # Own: live-specific guardrail
+└── _reconcile_positions()              # Own: live-specific sync
+```
+
+**Rule**: If a method is identical to base, DELETE IT and inherit. Only override when behavior differs.
+
+---
+
+## Testing
+
+Run verification:
+
+\`\`\`bash
+# All tests pass
+pytest tests/ -v
+
+# Verify no duplicate position tracking
+grep -r "self.positions\s*=" --include="*.py" core/
+
+# Verify no event emission in Executor
+grep -r "_emit_" core/executor.py  # Should return nothing
+
+# Verify imports work
+python -c "from core.logic.live_execution_engine import LiveExecutionEngine; print('OK')"
+python -c "from core.logic.position_manager import PositionManager; print('OK')"
+\`\`\`

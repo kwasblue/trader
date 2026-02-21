@@ -213,13 +213,9 @@ Total Files: 189
       ├── def __init__(self, name, payload)
       └── def __repr__(self)
    🧱 class EventHandlerBase
-      ├── def __init__(self, max_bar_window)
+      ├── def __init__(self)
       ├── def unsubscribe(self, event_name, callback)
       ├── def get_event_names(self)
-      ├── def add_bar(self, symbol, bar)
-      ├── def get_bar_window(self, symbol, lookback)
-      ├── def get_current_bar(self, symbol)
-      ├── def clear_bar_window(self, symbol)
       ├── def subscriber_count(self, event_name)
       ├── def has_subscribers(self, event_name)
       ├── def clear_all_subscribers(self)
@@ -322,10 +318,6 @@ Total Files: 189
       ├── def __repr__(self)
       ├── def __enter__(self)
       └── def __exit__(self, exc_type, exc_val, exc_tb)
-
-📄 core/base/trade_logic_base.py
-   🧱 class TradeLogic
-      └── def execute(self, symbol, state, signal, price, atr, regime, broker, sizer, performance_tracker)
 
 📄 core/base/trade_logic_manager_base.py
    🧱 class TradeLogicManagerBase
@@ -555,13 +547,6 @@ Total Files: 189
    ⚙️  def parse_order_side(self, value)
    ⚙️  def parse_order_type(self, value)
    ⚙️  def parse_time_in_force(self, value)
-
-📄 core/events/emitter.py
-   🧱 class EventEmitterMixin
-      ├── def __init__(self, bus)
-      ├── def _stamp(self)
-      ├── def _with_timestamp(self, payload)
-      └── def __getattr__(self, name)
 
 📄 core/events/event_models.py
    🧱 class OrderStatusEvent

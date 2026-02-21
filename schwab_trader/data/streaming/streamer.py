@@ -6,7 +6,7 @@ from loggers.logger import Logger
 from utils.configloader import ConfigLoader
 from data.streaming.schwab_client import SchwabClient
 from core.events.eventhandler import EventHandler, get_event_handler
-from core.events.events import EVENT_PRICE_UPDATE
+from core.contracts.events import EVENT_PRICE_UPDATE
 import asyncio
 from typing import Callable, Dict, Optional, Any
 from datetime import datetime, timezone

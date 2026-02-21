@@ -26,11 +26,11 @@ from core.logic.portfolio_state import PortfolioState
 from core.logic.symbol_state import SymbolState
 from core.logic.trade_gate import TradeGate
 from core.logic.strategy_routing_manager import StrategyRoutingManager
-from core.position_sizer import DynamicPositionSizer2
+from core.position_sizer import KellyPositionSizer
 from core.drawdown_monitor import DrawdownMonitor
 from core.historical_loader import HistoricalBarLoader
 from core.events.eventhandler import EventHandler, get_event_handler
-from core.events.events import (EVENT_NEW_BAR, BarPayload, EVENT_STRATEGY_SIGNAL, StrategySignalPayload,
+from core.contracts.events import (EVENT_NEW_BAR, BarPayload, EVENT_STRATEGY_SIGNAL, StrategySignalPayload,
     EVENT_PNL_UPDATE, PnLPayload, EVENT_POSITION_UPDATE, PositionPayload)
 
 from core.simulator.simulation import compute_atr, classify_regime  # reuse your helpers
@@ -82,7 +82,7 @@ class AlpacaLiveRunner:
         )
 
         # sizer, router, executor, engine
-        self.sizer = DynamicPositionSizer2(
+        self.sizer = KellyPositionSizer(
             risk_percentage=settings.get("BASE_RISK_PCT", 0.05),
             max_trade_pct=settings.get("MAX_TRADE_PCT", 0.10),
             max_holding_pct=settings.get("MAX_HOLDING_PCT", 0.20),
@@ -101,12 +101,11 @@ class AlpacaLiveRunner:
             portfolio=self.portfolio,
             sync_on_start=False,  # Sync is done by reconciler in run()
             event_handler=self.event_handler,  # For GUI visibility of trade decisions
+            drawdown_monitor=self.ddm,  # Pass DrawdownMonitor for risk control
         )
         # If your engine has optional attrs (per our earlier patch), wire them:
         if hasattr(self.engine, "trade_gate"):
             self.engine.trade_gate = self.trade_gate
-        if hasattr(self.engine, "drawdown_monitor"):
-            self.engine.drawdown_monitor = self.ddm
 
         # State reconciler - ensures local state matches broker
         reconciler_config = ReconcilerConfig(

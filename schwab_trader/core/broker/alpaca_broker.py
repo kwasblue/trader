@@ -23,7 +23,7 @@ from core.base.base_broker_interface import BaseBrokerInterface
 from core.app_types import OrderResult, PositionView, BrokerSnapshot
 from loggers.logger import Logger
 from core.events.eventhandler import EventHandler, get_event_handler
-from core.events.events import (
+from core.contracts.events import (
     EVENT_ORDER_STATUS, OrderStatusPayload,
     EVENT_NEW_TRADE, TradePayload,
     EVENT_POSITION_UPDATE, PositionPayload,

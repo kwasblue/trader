@@ -10,7 +10,7 @@ Executes real trades using:
 
 from __future__ import annotations
 
-from typing import Optional, Dict, Any, TYPE_CHECKING
+from typing import Optional, Dict, Any, TYPE_CHECKING, Union
 import asyncio
 from datetime import datetime, timezone
 import logging
@@ -23,6 +23,7 @@ from core.base.trade_logger_base import TradeLoggerBase
 from core.base.trade_logic_manager_base import TradeLogicManagerBase
 from core.logic.portfolio_state import PortfolioState
 from core.logic.symbol_state import SymbolState
+from core.logic.position_manager import PositionManager
 from core.app_types import OrderResult, SignalContext
 from core.enums import OrderSide, PositionState
 from core.order_registry import OrderRegistry
@@ -34,14 +35,30 @@ from core.logging_config import (
     format_log_message,
 )
 from loggers.logger import Logger
-from core.events.events import EVENT_ALERT, AlertPayload, EVENT_NEW_TRADE, TradePayload
+from core.contracts.events import (
+    EVENT_ALERT, AlertPayload, EVENT_NEW_TRADE, TradePayload,
+    EVENT_MANUAL_ORDER, EVENT_FLATTEN_ALL, EVENT_FLATTEN_SYMBOL, EVENT_CANCEL_ALL,
+)
 from core.exceptions import DailyLossLimitExceededError
 
 # Import the router we created
-from core.logic.trade_logic_router import TradeLogicRouter
+from core.logic.trade_logic_router import TradeApproverRouter
 
 if TYPE_CHECKING:
     from core.state_reconciler import StateReconciler
+    from core.drawdown_monitor import DrawdownMonitor
+    from core.state_sync import StateSynchronizer
+
+# Default PositionManager instance
+_default_position_manager: Optional[PositionManager] = None
+
+
+def get_default_position_manager() -> PositionManager:
+    """Get or create the default PositionManager instance."""
+    global _default_position_manager
+    if _default_position_manager is None:
+        _default_position_manager = PositionManager()
+    return _default_position_manager
 
 class LiveExecutionEngine(ExecutionEngineBase):
     """
@@ -63,20 +80,21 @@ class LiveExecutionEngine(ExecutionEngineBase):
         logic = DefaultTradeLogicManager()
         portfolio = PortfolioState(initial_cash=100000)
         
+        # Create router with default logic and register overrides
+        router = TradeApproverRouter(logic)
+        router.register_symbol_approver("BTC-USD", crypto_approver)
+        router.register_strategy_approver("scalping", scalp_approver)
+
         engine = LiveExecutionEngine(
             broker=broker,
             executor=executor,
             sizer=sizer,
             performance_tracker=tracker,
-            trade_logic_manager=logic,
+            trade_logic_manager=router,  # Pass router, not raw logic
             portfolio=portfolio
         )
-        
-        # Register specific logics
-        engine.register_symbol_logic("BTC-USD", crypto_logic)
-        engine.register_strategy_logic("scalping", scalp_logic)
-        
-        # Handle signals
+
+        # Handle signals (router resolves approver automatically)
         result = engine.handle_signal(
             symbol="AAPL",
             state=state,
@@ -100,6 +118,8 @@ class LiveExecutionEngine(ExecutionEngineBase):
         reconciler: Optional["StateReconciler"] = None,
         event_handler: Optional[Any] = None,
         daily_loss_limit: Optional[float] = None,
+        drawdown_monitor: Optional["DrawdownMonitor"] = None,
+        position_manager: Optional[PositionManager] = None,
     ):
         """
         Initialize live execution engine.
@@ -115,6 +135,10 @@ class LiveExecutionEngine(ExecutionEngineBase):
             reconciler: State reconciler for halt checking
             event_handler: Event handler for emitting trade decision events
             daily_loss_limit: Maximum allowed daily loss (absolute $). None = no limit.
+            drawdown_monitor: DrawdownMonitor for per-symbol and portfolio drawdown control.
+                              If provided, trades are blocked when drawdown limits are breached.
+            position_manager: PositionManager for position lifecycle (SL/TP/exits).
+                              If not provided, a default instance is created.
         """
         super().__init__(
             broker=broker,
@@ -122,20 +146,24 @@ class LiveExecutionEngine(ExecutionEngineBase):
             sizer=sizer,
             performance_tracker=performance_tracker,
             trade_logic_manager=trade_logic_manager,
-            portfolio=portfolio
+            portfolio=portfolio,
+            position_manager=position_manager or get_default_position_manager(),
         )
 
         # Store reconciler reference for halt checking
         self.reconciler = reconciler
 
+        # DrawdownMonitor for per-symbol and portfolio-level risk control
+        self.drawdown_monitor = drawdown_monitor
+
         # Event handler for GUI notifications
         self.event_handler = event_handler
 
-        # Setup logic router
-        if isinstance(trade_logic_manager, TradeLogicRouter):
-            self.logic_router = trade_logic_manager
+        # Setup approver router (single authority for approver selection)
+        if isinstance(trade_logic_manager, TradeApproverRouter):
+            self.approver_router = trade_logic_manager
         else:
-            self.logic_router = TradeLogicRouter(trade_logic_manager)
+            self.approver_router = TradeApproverRouter(trade_logic_manager)
 
         # Initialize order registry for local order tracking
         self.order_registry = OrderRegistry()
@@ -157,9 +185,21 @@ class LiveExecutionEngine(ExecutionEngineBase):
         self._daily_loss_limit_breached: bool = False
         self._trading_day_start: Optional[datetime] = None
 
+        # Initialize symbol states dict for state synchronization
+        if not hasattr(self, 'symbol_states'):
+            self.symbol_states: Dict[str, SymbolState] = {}
+
+        # State synchronizer for Portfolio <-> Symbol consistency
+        from core.state_sync import StateSynchronizer
+        self._state_sync = StateSynchronizer(
+            portfolio=self.portfolio,
+            symbol_states=self.symbol_states,
+        )
+
         self.logger.info(
             f"LiveExecutionEngine initialized with order registry and validator"
             f"{f', daily_loss_limit=${daily_loss_limit:,.2f}' if daily_loss_limit else ''}"
+            f"{', drawdown_monitor=enabled' if drawdown_monitor else ''}"
         )
 
         # Sync portfolio with broker if requested
@@ -361,6 +401,26 @@ class LiveExecutionEngine(ExecutionEngineBase):
             )
             return None
 
+        # 3. DRAWDOWN CHECK (enforced!)
+        if self.drawdown_monitor:
+            can_trade = await self.drawdown_monitor.can_trade_async(context.symbol)
+            if not can_trade:
+                self.logger.warning(
+                    format_log_message(
+                        f"Drawdown limit blocking trade for {context.symbol}",
+                        correlation_id=correlation_id,
+                        symbol=context.symbol
+                    )
+                )
+                return None
+            self.logger.debug(
+                format_log_message(
+                    f"Drawdown check passed for {context.symbol}",
+                    correlation_id=correlation_id,
+                    symbol=context.symbol
+                )
+            )
+
         # Skip hold signals
         if context.is_hold():
             self.logger.debug(
@@ -371,10 +431,11 @@ class LiveExecutionEngine(ExecutionEngineBase):
         # Get or create state from metadata or create new
         state = context.metadata.get('state')
         if state is None:
-            if context.symbol not in getattr(self, 'symbol_states', {}):
-                if not hasattr(self, 'symbol_states'):
-                    self.symbol_states: Dict[str, SymbolState] = {}
-                self.symbol_states[context.symbol] = SymbolState(symbol=context.symbol)
+            if context.symbol not in self.symbol_states:
+                new_state = SymbolState(symbol=context.symbol)
+                self.symbol_states[context.symbol] = new_state
+                # Register with state synchronizer
+                self._state_sync.register_symbol(context.symbol, new_state)
             state = self.symbol_states[context.symbol]
 
         # Set strategy name
@@ -390,16 +451,18 @@ class LiveExecutionEngine(ExecutionEngineBase):
         )
 
         try:
-            # Get appropriate trade logic
-            trade_logic = self.logic_router.get_logic(
+            # Get appropriate trade approver
+            trade_approver = self.approver_router.get_approver(
                 symbol=context.symbol,
                 strategy=context.strategy_name,
                 regime=context.regime
             )
+            # Alias for backwards compatibility in this method
+            trade_logic = trade_approver
 
             self.logger.debug(
                 format_log_message(
-                    f"Using logic: {trade_logic.__class__.__name__}",
+                    f"Using approver: {trade_approver.__class__.__name__}",
                     correlation_id=correlation_id,
                     symbol=context.symbol
                 )
@@ -409,13 +472,11 @@ class LiveExecutionEngine(ExecutionEngineBase):
             await self._refresh_position(context.symbol)
 
             # Filter out 'state' from metadata to avoid duplicate argument
-            extra_kwargs = {k: v for k, v in context.metadata.items() if k != 'state'}
-
-            # 2. Check trade approval
+            # 2. Check trade approval (pure gating - pass context directly)
+            # Approver answers: "Are we ALLOWED to trade?"
+            # PositionManager answers: "SHOULD we exit?" (for in-position)
             should_trade, reason = await self._check_trade_approval(
-                trade_logic, context.symbol, state, context.signal,
-                context.price, context.atr, context.regime,
-                market_open=context.market_open, df=context.df, **extra_kwargs
+                trade_logic, context, state
             )
 
             if not should_trade:
@@ -437,10 +498,52 @@ class LiveExecutionEngine(ExecutionEngineBase):
                     ))
                 return None
 
-            # 3. Determine action
-            action_type, side = self._determine_action(
-                context.symbol, state, context.signal, reason
-            )
+            # 3. Determine action using PositionManager for exit decisions
+            in_position = state.side is not None
+
+            if not in_position:
+                # Entry - approver already gated it
+                action_type = "entry"
+                side = OrderSide.BUY if context.signal == 1 else OrderSide.SELL
+            else:
+                # In position - use PositionManager for exit logic
+                # Exit timing (min_bars_to_hold, swing_mode) owned by PositionManager
+                should_exit, exit_reason = self.position_manager.check_exit_conditions(
+                    state=state,
+                    price=context.price,
+                    signal=context.signal,
+                )
+
+                if not should_exit:
+                    # Update trailing stop and excursions even if not exiting
+                    self.position_manager.update_trailing_stop(
+                        state, context.price, context.atr, context.regime
+                    )
+                    position = self.portfolio.positions.get(context.symbol)
+                    if position:
+                        self.position_manager.update_excursions(
+                            state, context.price, position.avg_price
+                        )
+                    state.bars_held = getattr(state, 'bars_held', 0) + 1
+                    self.logger.debug(
+                        format_log_message(
+                            f"Holding position (bars_held={state.bars_held})",
+                            correlation_id=correlation_id,
+                            symbol=context.symbol
+                        )
+                    )
+                    return None
+
+                # Determine exit type from reason
+                reason = exit_reason
+                if "partial" in exit_reason.lower():
+                    action_type = "partial_exit"
+                elif "reversal" in exit_reason.lower():
+                    action_type = "reversal"
+                else:
+                    action_type = "exit"
+
+                side = OrderSide.SELL if state.side == "long" else OrderSide.BUY
 
             # 4. Calculate quantity
             qty = self._calculate_quantity(
@@ -536,7 +639,24 @@ class LiveExecutionEngine(ExecutionEngineBase):
                 await self.portfolio.set_position_state(context.symbol, new_state)
                 state.position_state = new_state
 
-                # 9. Post-execution tasks
+                # 9. For entries, calculate SL/TP levels via PositionManager
+                if action_type == "entry":
+                    self.position_manager.calculate_levels(
+                        state=state,
+                        price=result.avg_price,
+                        atr=context.atr,
+                        condition=context.regime,
+                        side=side
+                    )
+                    self.logger.debug(
+                        format_log_message(
+                            f"Entry levels set: SL=${state.stop_loss:.2f}, TP=${state.take_profit:.2f}",
+                            correlation_id=correlation_id,
+                            symbol=context.symbol
+                        )
+                    )
+
+                # 10. Post-execution tasks
                 self._post_execution(
                     context.symbol, state, result, action_type, context.regime, context.strategy_name
                 )
@@ -591,6 +711,28 @@ class LiveExecutionEngine(ExecutionEngineBase):
 
     async def handle_signal(
         self,
+        context: SignalContext,
+        state: SymbolState,
+    ) -> Optional[OrderResult]:
+        """
+        Handle live trading signal.
+
+        This is the primary entry point. Takes unified SignalContext
+        and explicit SymbolState.
+
+        Args:
+            context: SignalContext containing all signal data
+            state: SymbolState for this symbol
+
+        Returns:
+            OrderResult if executed, None if skipped
+        """
+        # Store state in metadata so handle_signal_context can use it
+        context.metadata['state'] = state
+        return await self.handle_signal_context(context)
+
+    async def handle_signal_legacy(
+        self,
         symbol: str,
         state: SymbolState,
         signal: int,
@@ -601,26 +743,10 @@ class LiveExecutionEngine(ExecutionEngineBase):
         **kwargs
     ) -> Optional[OrderResult]:
         """
-        DEPRECATED: Use handle_signal_context() instead.
+        DEPRECATED: Use handle_signal(context, state) instead.
 
-        Handle live trading signal (backward compatible wrapper).
-
-        Args:
-            symbol: Trading symbol
-            state: Symbol state
-            signal: Strategy signal (1, -1, 0)
-            price: Current market price
-            atr: Average True Range
-            regime: Market regime
-            strategy_name: Strategy identifier
-            **kwargs: Additional context (df, market_open, etc.)
-
-        Returns:
-            OrderResult if executed, None if skipped
+        Backward-compatible wrapper that creates SignalContext from loose params.
         """
-        from datetime import datetime, timezone
-
-        # Create SignalContext from parameters
         context = SignalContext.from_kwargs(
             symbol=symbol,
             signal=signal,
@@ -631,11 +757,9 @@ class LiveExecutionEngine(ExecutionEngineBase):
             strategy_name=strategy_name,
             df=kwargs.get('df'),
             market_open=kwargs.get('market_open', True),
-            state=state,
             **{k: v for k, v in kwargs.items() if k not in ('df', 'market_open')}
         )
-
-        return await self.handle_signal_context(context)
+        return await self.handle_signal(context, state)
     
     # ========================================================================
     # LIVE-SPECIFIC METHODS
@@ -956,10 +1080,11 @@ class LiveExecutionEngine(ExecutionEngineBase):
                 avg_price=price,
             )
 
-            # Optimistic portfolio update
+            # Optimistic portfolio update with state sync
             # Apply expected fill immediately so UI/logic sees updated state
             # The reconciler will correct if actual fill differs
-            await self.portfolio.apply_fill_safe(symbol, side_str, qty, price)
+            # Use StateSynchronizer to keep Portfolio and Symbol states in sync
+            await self._state_sync.apply_fill_and_sync(symbol, side_str, qty, price)
             self.portfolio.mark_updated()
 
             # Update order status to filled (optimistic)
@@ -1015,34 +1140,32 @@ class LiveExecutionEngine(ExecutionEngineBase):
     # DELEGATION TO GENERIC ENGINE LOGIC
     # ========================================================================
     
-    async def _check_trade_approval(self, trade_logic, symbol, state, signal, price, atr, regime, **kwargs):
-        """Check trade approval with async market status."""
-        current_qty, avg_price = self._setup_approval_state(symbol, state)
+    async def _check_trade_approval(
+        self,
+        trade_logic,
+        context: SignalContext,
+        state: SymbolState,
+    ):
+        """Check trade approval (pass context directly)."""
+        # Sync state with portfolio
+        self._setup_approval_state(context.symbol, state)
 
-        # Get market_open from kwargs or fetch from broker (async)
-        market_open = kwargs.get('market_open')
-        if market_open is None:
-            market_open = await self.broker.is_market_open()
-
+        # Pass context directly to approver
         return trade_logic.should_trade(
-            symbol=symbol,
+            context=context,
             state=state,
-            signal=signal,
-            regime=regime,
-            price=price,
-            atr=atr,
-            avg_price=avg_price,
-            market_open=market_open,
             account_positions=len(self.portfolio.positions)
         )
-    
-    # _determine_action() is inherited from ExecutionEngineBase
 
     def _calculate_quantity(self, symbol, state, action_type, price, atr, regime, trade_logic, **kwargs):
-        """Calculate position size for entries, use base class for exits."""
-        # Handle exits via base class helper
+        """Calculate position size for entries, use PositionManager for exits."""
+        # Handle exits via PositionManager
         if action_type in ("exit", "reversal", "partial_exit"):
-            return self._get_exit_quantity(symbol, action_type, trade_logic)
+            position = self.portfolio.positions.get(symbol)
+            if not position:
+                return 0
+            is_partial = action_type == "partial_exit"
+            return self.position_manager.get_exit_quantity(position.qty, is_partial=is_partial)
 
         # Get signal from kwargs (passed from handle_signal)
         signal = kwargs.get('signal', 1)
@@ -1125,27 +1248,174 @@ class LiveExecutionEngine(ExecutionEngineBase):
                     # Reset position's realized_pnl after recording
                     position.realized_pnl = 0.0
 
+        # Update drawdown monitor with new portfolio equity after trade
+        if self.drawdown_monitor:
+            equity = self.portfolio.total_equity()
+            # Use sync version since _post_execution is synchronous
+            self.drawdown_monitor.update_portfolio(equity)
+            self.logger.debug(
+                f"[{symbol}] Drawdown monitor updated: equity=${equity:,.2f}"
+            )
+
         # Live-specific logging
         self.logger.info(
             f"[LIVE] [{symbol}] Trade logged: {action_type} "
             f"{result.side.value} {result.filled_qty}@${result.avg_price:.2f}"
         )
     
+
     # ========================================================================
-    # LOGIC REGISTRATION
+    # GUI EVENT HANDLERS
     # ========================================================================
-    
-    def register_symbol_logic(self, symbol: str, logic: TradeLogicManagerBase) -> None:
-        """Register symbol-specific logic."""
-        self.logic_router.register_symbol_logic(symbol, logic)
-        self.logger.info(f"[LIVE] Registered logic for {symbol}: {logic.__class__.__name__}")
-    
-    def register_strategy_logic(self, strategy: str, logic: TradeLogicManagerBase) -> None:
-        """Register strategy-specific logic."""
-        self.logic_router.register_strategy_logic(strategy, logic)
-        self.logger.info(f"[LIVE] Registered logic for strategy '{strategy}': {logic.__class__.__name__}")
-    
-    def register_regime_logic(self, regime: str, logic: TradeLogicManagerBase) -> None:
-        """Register regime-specific logic."""
-        self.logic_router.register_regime_logic(regime, logic)
-        self.logger.info(f"[LIVE] Registered logic for regime '{regime}': {logic.__class__.__name__}")
+
+    async def subscribe_to_gui_events(self) -> None:
+        """Subscribe to GUI command events (manual orders, flatten, cancel)."""
+        if not self.event_handler:
+            self.logger.warning("No event handler - GUI events disabled")
+            return
+
+        await self.event_handler.subscribe(EVENT_MANUAL_ORDER, self._handle_manual_order)
+        await self.event_handler.subscribe(EVENT_FLATTEN_ALL, self._handle_flatten_all)
+        await self.event_handler.subscribe(EVENT_FLATTEN_SYMBOL, self._handle_flatten_symbol)
+        await self.event_handler.subscribe(EVENT_CANCEL_ALL, self._handle_cancel_all)
+
+        self.logger.info("Subscribed to GUI events")
+
+    async def _handle_manual_order(self, event) -> None:
+        """Handle manual order from GUI."""
+        payload = event.payload
+        symbol = payload["symbol"]
+        qty = int(payload["qty"])
+        side_str = payload["side"].upper()
+        price = float(payload.get("price", 0.0))
+        order_type = payload.get("type", "market").lower()
+
+        self.logger.info(f"[MANUAL ORDER] {side_str} {qty} {symbol} ({order_type})")
+
+        try:
+            side = OrderSide.BUY if side_str == "BUY" else OrderSide.SELL
+
+            if order_type == "limit":
+                await self.broker.place_order(
+                    symbol=symbol,
+                    qty=qty,
+                    side=side_str.lower(),
+                    order_type="limit",
+                    limit_price=price,
+                    time_in_force=payload.get("tif", "day")
+                )
+            else:
+                await self.broker.place_market_order(
+                    symbol=symbol,
+                    qty=qty,
+                    side=side_str.lower()
+                )
+
+            # Update portfolio optimistically
+            await self._state_sync.apply_fill_and_sync(symbol, side_str.lower(), qty, price)
+            self.portfolio.mark_updated()
+
+            # Emit trade event
+            if self.event_handler:
+                trade_payload: TradePayload = {
+                    "symbol": symbol,
+                    "side": side_str.lower(),
+                    "qty": qty,
+                    "price": price,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "pnl": None,
+                }
+                await self.event_handler.emit(EVENT_NEW_TRADE, trade_payload)
+
+        except Exception as e:
+            self.logger.error(f"Manual order failed: {e}")
+            if self.event_handler:
+                await self.event_handler.emit(EVENT_ALERT, AlertPayload(
+                    level="error",
+                    message=f"Manual order failed for {symbol}: {str(e)}",
+                    symbol=symbol,
+                    timestamp=datetime.now(timezone.utc).isoformat(),
+                ))
+
+    async def _handle_flatten_all(self, event) -> None:
+        """Flatten all positions."""
+        self.logger.info("[GUI] Flatten ALL positions")
+
+        for symbol, position in list(self.portfolio.positions.items()):
+            if position.qty != 0:
+                try:
+                    qty = abs(position.qty)
+                    side = "sell" if position.qty > 0 else "buy"
+                    await self.broker.place_market_order(
+                        symbol=symbol,
+                        qty=qty,
+                        side=side
+                    )
+                    self.logger.info(f"Flattened {symbol}: {side} {qty}")
+                except Exception as e:
+                    self.logger.error(f"Failed to flatten {symbol}: {e}")
+                    if self.event_handler:
+                        await self.event_handler.emit(EVENT_ALERT, AlertPayload(
+                            level="error",
+                            message=f"Flatten failed for {symbol}: {str(e)}",
+                            symbol=symbol,
+                            timestamp=datetime.now(timezone.utc).isoformat(),
+                        ))
+
+    async def _handle_flatten_symbol(self, event) -> None:
+        """Flatten specific symbol."""
+        symbol = event.payload["symbol"]
+        position = self.portfolio.positions.get(symbol)
+
+        if not position or position.qty == 0:
+            self.logger.info(f"[GUI] No position to flatten for {symbol}")
+            return
+
+        qty = abs(position.qty)
+        side = "sell" if position.qty > 0 else "buy"
+
+        self.logger.info(f"[GUI] Flatten {symbol} ({side} {qty})")
+
+        try:
+            await self.broker.place_market_order(
+                symbol=symbol,
+                qty=qty,
+                side=side
+            )
+            self.logger.info(f"Flattened {symbol}: {side} {qty}")
+        except Exception as e:
+            self.logger.error(f"Failed to flatten {symbol}: {e}")
+            if self.event_handler:
+                await self.event_handler.emit(EVENT_ALERT, AlertPayload(
+                    level="error",
+                    message=f"Flatten failed for {symbol}: {str(e)}",
+                    symbol=symbol,
+                    timestamp=datetime.now(timezone.utc).isoformat(),
+                ))
+
+    async def _handle_cancel_all(self, event) -> None:
+        """Cancel all open orders."""
+        self.logger.info("[GUI] Cancel all open orders")
+
+        try:
+            open_orders = await self.broker.get_open_orders()
+
+            for order in open_orders:
+                order_id = getattr(order, 'order_id', None) or getattr(order, 'id', None)
+                if order_id:
+                    try:
+                        await self.broker.cancel_order(str(order_id))
+                        await self.order_registry.update_status(str(order_id), "cancelled")
+                        self.logger.info(f"Cancelled order: {order_id}")
+                    except Exception as e:
+                        self.logger.warning(f"Failed to cancel order {order_id}: {e}")
+
+        except Exception as e:
+            self.logger.error(f"Failed to cancel all orders: {e}")
+            if self.event_handler:
+                await self.event_handler.emit(EVENT_ALERT, AlertPayload(
+                    level="error",
+                    message=f"Cancel all failed: {str(e)}",
+                    symbol=None,
+                    timestamp=datetime.now(timezone.utc).isoformat(),
+                ))

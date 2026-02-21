@@ -18,13 +18,13 @@ from core.base.executor_base import BaseExecutor
 from core.base.base_broker_interface import BaseBrokerInterface
 from core.base.position_sizer_base import PositionSizerBase
 from core.base.trade_logger_base import TradeLoggerBase
-from core.base.trade_logic_manager_base import TradeLogicManagerBase
+from core.base.trade_logic_manager_base import TradeApprover, TradeLogicManagerBase
 from core.logic.portfolio_state import PortfolioState
 from core.logic.symbol_state import SymbolState
-from core.app_types import OrderResult
+from core.app_types import OrderResult, SignalContext
 from core.enums import OrderSide
 from loggers.logger import Logger
-from core.logic.trade_logic_router import TradeLogicRouter
+from core.logic.trade_logic_router import TradeApproverRouter
 
 
 class GenericExecutionEngine(ExecutionEngineBase):
@@ -43,12 +43,13 @@ class GenericExecutionEngine(ExecutionEngineBase):
         executor: BaseExecutor,
         sizer: PositionSizerBase,
         performance_tracker: TradeLoggerBase,
-        trade_logic_manager: Union[TradeLogicManagerBase, TradeLogicRouter],
+        trade_logic_manager: Union[TradeApprover, TradeLogicManagerBase, TradeApproverRouter],
         portfolio: PortfolioState,
+        position_manager: Optional["PositionManager"] = None,
     ):
         """
         Initialize execution engine.
-        
+
         Args:
             broker: Broker interface
             executor: Trade executor
@@ -56,22 +57,27 @@ class GenericExecutionEngine(ExecutionEngineBase):
             performance_tracker: Trade logger
             trade_logic_manager: Single manager OR router
             portfolio: Portfolio state
+            position_manager: PositionManager for exit/SL/TP logic
         """
+        # Import here to avoid circular imports
+        from core.logic.position_manager import PositionManager as PM
+
         super().__init__(
             broker=broker,
             executor=executor,
             sizer=sizer,
             performance_tracker=performance_tracker,
             trade_logic_manager=trade_logic_manager,
-            portfolio=portfolio
+            portfolio=portfolio,
+            position_manager=position_manager or PM(),
         )
-        
-        # Wrap single manager in router if needed
-        if isinstance(trade_logic_manager, TradeLogicRouter):
-            self.logic_router = trade_logic_manager
+
+        # Wrap single approver in router if needed
+        if isinstance(trade_logic_manager, TradeApproverRouter):
+            self.approver_router = trade_logic_manager
         else:
-            self.logic_router = TradeLogicRouter(trade_logic_manager)
-        
+            self.approver_router = TradeApproverRouter(trade_logic_manager)
+
         # Logger - own file with propagation to app.log
         self.logger = Logger(
             log_file="execution_engine.log",
@@ -84,159 +90,121 @@ class GenericExecutionEngine(ExecutionEngineBase):
     # ========================================================================
     # MAIN SIGNAL HANDLING
     # ========================================================================
-    
+
     def handle_signal(
         self,
-        symbol: str,
+        context: SignalContext,
         state: SymbolState,
-        signal: int,
-        price: float,
-        atr: float,
-        regime: str,
-        strategy_name: Optional[str] = None,
-        **kwargs
     ) -> Optional[OrderResult]:
         """
         Handle signal from strategy.
-        
-        Routes to appropriate trade logic and orchestrates execution.
+
+        This is the primary entry point. Takes a unified SignalContext
+        instead of scattered parameters.
+
+        Args:
+            context: SignalContext containing all signal data
+            state: SymbolState for this symbol
+
+        Returns:
+            OrderResult if trade executed, None otherwise
         """
         # Skip hold signals
-        if signal == 0:
-            self.logger.debug(f"[{symbol}] HOLD signal - no action")
+        if context.is_hold():
+            self.logger.debug(f"[{context.symbol}] HOLD signal - no action")
             return None
-        
+
         # Set strategy name on state
-        state.strategy_name = strategy_name
-        
+        state.strategy_name = context.strategy_name
+
         self.logger.info(
-            f"[{symbol}] Processing signal: {signal} @ ${price:.2f} "
-            f"(regime={regime}, strategy={strategy_name})"
+            f"[{context.symbol}] Processing signal: {context.signal} @ ${context.price:.2f} "
+            f"(regime={context.regime}, strategy={context.strategy_name})"
         )
-        
+
         try:
-            # Get appropriate trade logic for this context
-            trade_logic = self.logic_router.get_logic(
-                symbol=symbol,
-                strategy=strategy_name,
-                regime=regime
+            # Get appropriate approver for this context
+            trade_approver = self.approver_router.get_approver(
+                symbol=context.symbol,
+                strategy=context.strategy_name,
+                regime=context.regime
             )
-            
+
             self.logger.debug(
-                f"[{symbol}] Using logic: {trade_logic.__class__.__name__}"
+                f"[{context.symbol}] Using approver: {trade_approver.__class__.__name__}"
             )
-            
-            # 1. Check trade logic approval
+
+            # 1. Check trade approval
             should_trade, reason = self._check_trade_approval(
-                trade_logic, symbol, state, signal, price, atr, regime, **kwargs
+                trade_approver, context, state
             )
-            
+
             if not should_trade:
-                self.logger.info(f"[{symbol}] Trade blocked: {reason}")
+                self.logger.info(f"[{context.symbol}] Trade blocked: {reason}")
                 return None
-            
+
             # 2. Determine action type
-            action_type, side = self._determine_action(symbol, state, signal, reason)
-            
-            self.logger.info(f"[{symbol}] Action approved: {action_type} {side.value}")
-            
+            action_type, side = self._determine_action(
+                context.symbol, state, context.signal, reason
+            )
+
+            self.logger.info(
+                f"[{context.symbol}] Action approved: {action_type} {side.value}"
+            )
+
             # 3. Calculate quantity
             qty = self._calculate_quantity(
-                symbol, state, action_type, price, atr, regime, trade_logic, **kwargs
+                context.symbol, state, action_type, context.price, context.atr,
+                context.regime, trade_approver, signal=context.signal
             )
-            
+
             if qty <= 0:
-                self.logger.warning(f"[{symbol}] Position size too small: {qty}")
+                self.logger.warning(f"[{context.symbol}] Position size too small: {qty}")
                 return None
-            
+
             # 4. Execute trade
             result = self._execute_trade(
-                symbol, state, side, qty, price, atr, action_type, **kwargs
+                context.symbol, state, side, qty, context.price, context.atr, action_type
             )
-            
+
             if result:
                 # 5. Post-execution tasks
                 self._post_execution(
-                    symbol, state, result, action_type, regime, strategy_name
+                    context.symbol, state, result, action_type,
+                    context.regime, context.strategy_name
                 )
-            
+
             return result
-            
+
         except Exception as e:
-            self.logger.exception(f"[{symbol}] Error in execution: {e}")
+            self.logger.exception(f"[{context.symbol}] Error in execution: {e}")
             return None
-    
+
+    # handle_signal_legacy inherited from ExecutionEngineBase
+
     # ========================================================================
     # ORCHESTRATION STEPS
     # ========================================================================
-    
+
     def _check_trade_approval(
         self,
-        trade_logic: TradeLogicManagerBase,
-        symbol: str,
+        trade_approver: TradeApprover,
+        context: SignalContext,
         state: SymbolState,
-        signal: int,
-        price: float,
-        atr: float,
-        regime: str,
-        **kwargs
     ) -> tuple[bool, Optional[str]]:
-        """Check if trade should be executed using appropriate logic."""
-        # Get current position from portfolio
-        position = self.portfolio.positions.get(symbol)
-        current_qty = 0 if not position else position.qty
-        avg_price = None if not position else position.avg_price
-        
-        # Update state with current position
-        state.current_position = current_qty
-        if current_qty != 0:
-            state.side = "long" if current_qty > 0 else "short"
-        else:
-            state.side = None
-        
-        # Get market status
-        market_open = kwargs.get('market_open', True)
-        
-        # Check with the routed trade logic
-        should_trade, reason = trade_logic.should_trade(
-            symbol=symbol,
+        """Check if trade should be executed using approver."""
+        # Use base class helper to sync state with portfolio
+        self._setup_approval_state(context.symbol, state)
+
+        # Check with the approver (pass context directly)
+        return trade_approver.should_trade(
+            context=context,
             state=state,
-            signal=signal,
-            regime=regime,
-            price=price,
-            atr=atr,
-            avg_price=avg_price,
-            market_open=market_open,
             account_positions=len(self.portfolio.positions)
         )
-        
-        return should_trade, reason
-    
-    def _determine_action(
-        self,
-        symbol: str,
-        state: SymbolState,
-        signal: int,
-        reason: Optional[str]
-    ) -> tuple[str, OrderSide]:
-        """Determine what type of action to take."""
-        in_position = state.side is not None
-        
-        if not in_position:
-            action_type = "entry"
-            side = OrderSide.BUY if signal == 1 else OrderSide.SELL
-        elif reason and "partial" in reason.lower():
-            action_type = "partial_exit"
-            side = OrderSide.SELL if state.side == "long" else OrderSide.BUY
-        elif reason and "reversal" in reason.lower():
-            action_type = "reversal"
-            side = OrderSide.SELL if state.side == "long" else OrderSide.BUY
-        else:
-            action_type = "exit"
-            side = OrderSide.SELL if state.side == "long" else OrderSide.BUY
-        
-        return action_type, side
-    
+
+    # _determine_action inherited from ExecutionEngineBase
+
     def _calculate_quantity(
         self,
         symbol: str,
@@ -245,38 +213,26 @@ class GenericExecutionEngine(ExecutionEngineBase):
         price: float,
         atr: float,
         regime: str,
-        trade_logic: TradeLogicManagerBase,
+        trade_approver: TradeApprover,
         **kwargs
     ) -> int:
-        """Calculate position size."""
-        # For exits, use current position size
-        if action_type in ("exit", "reversal"):
+        """Calculate position size using PositionManager for exits."""
+        # Handle exits via PositionManager (consistent with LiveExecutionEngine)
+        if action_type in ("exit", "reversal", "partial_exit"):
             position = self.portfolio.positions.get(symbol)
             if not position:
                 return 0
-            return abs(position.qty)
-        
-        # For partial exits, get fraction from logic
-        if action_type == "partial_exit":
-            position = self.portfolio.positions.get(symbol)
-            if not position:
-                return 0
-            
-            # Use logic's exit quantity method if available
-            if hasattr(trade_logic, 'get_exit_quantity'):
-                return trade_logic.get_exit_quantity(position.qty, is_partial=True)
-            else:
-                exit_fraction = trade_logic.get_param('exit_fraction', 0.25)
-                return max(int(abs(position.qty) * exit_fraction), 1)
-        
+            is_partial = action_type == "partial_exit"
+            return self.position_manager.get_exit_quantity(position.qty, is_partial=is_partial)
+
         # For entries, use position sizer
-        sl_mults = getattr(trade_logic, 'sl_mults', {"normal": 1.5})
+        sl_mults = getattr(trade_approver, 'sl_mults', {"normal": 1.5})
         sl_mult = sl_mults.get(regime, 1.5)
-        
+
         stop_loss_price = (price - (atr * sl_mult) if state.side != "short"
                           else price + (atr * sl_mult))
-        
-        qty = self.sizer.calculate_position_size(
+
+        return self.sizer.calculate_position_size(
             symbol=symbol,
             price=price,
             account_value=self.portfolio.total_value,
@@ -284,8 +240,6 @@ class GenericExecutionEngine(ExecutionEngineBase):
             atr=atr,
             stop_loss_price=stop_loss_price
         )
-        
-        return qty
     
     def _execute_trade(
         self,
@@ -298,19 +252,14 @@ class GenericExecutionEngine(ExecutionEngineBase):
         action_type: str,
         **kwargs
     ) -> Optional[OrderResult]:
-        """Execute trade via executor."""
-        df = kwargs.get('df')
-        signal = 1 if side == OrderSide.BUY else -1
-        
+        """Execute trade via executor buy/sell methods."""
         try:
-            self.executor.execute(
-                symbol=symbol,
-                df=df,
-                signal=signal,
-                price=price,
-                atr_value=atr
-            )
-            
+            # Use buy/sell methods directly (executor is a thin adapter)
+            if side == OrderSide.BUY:
+                self.executor.buy(symbol=symbol, qty=qty, price=price)
+            else:
+                self.executor.sell(symbol=symbol, qty=qty, price=price)
+
             result = OrderResult(
                 order_id=f"{symbol}_{datetime.now(timezone.utc).timestamp()}",
                 symbol=symbol,
@@ -319,9 +268,9 @@ class GenericExecutionEngine(ExecutionEngineBase):
                 avg_price=price,
                 timestamp=datetime.now(timezone.utc)
             )
-            
+
             return result
-            
+
         except Exception as e:
             self.logger.error(f"[{symbol}] Execution failed: {e}")
             return None
@@ -360,21 +309,3 @@ class GenericExecutionEngine(ExecutionEngineBase):
             f"{result.side.value} {result.filled_qty}@${result.avg_price:.2f}"
         )
     
-    # ========================================================================
-    # LOGIC REGISTRATION (Convenience methods)
-    # ========================================================================
-    
-    def register_symbol_logic(self, symbol: str, logic: TradeLogicManagerBase) -> None:
-        """Register symbol-specific logic."""
-        self.logic_router.register_symbol_logic(symbol, logic)
-        self.logger.info(f"Registered logic for {symbol}: {logic.__class__.__name__}")
-    
-    def register_strategy_logic(self, strategy: str, logic: TradeLogicManagerBase) -> None:
-        """Register strategy-specific logic."""
-        self.logic_router.register_strategy_logic(strategy, logic)
-        self.logger.info(f"Registered logic for strategy '{strategy}': {logic.__class__.__name__}")
-    
-    def register_regime_logic(self, regime: str, logic: TradeLogicManagerBase) -> None:
-        """Register regime-specific logic."""
-        self.logic_router.register_regime_logic(regime, logic)
-        self.logger.info(f"Registered logic for regime '{regime}': {logic.__class__.__name__}")

@@ -1,24 +1,41 @@
 """
-Legacy Backtester Module (DEPRECATED)
+===============================================================================
+DEPRECATED MODULE - DO NOT USE
+===============================================================================
 
-This module is deprecated. Use core.backtest instead:
+This module is DEPRECATED. Use core.backtest instead.
 
+MIGRATION GUIDE:
+----------------
+OLD (deprecated):
+    from core.backtester import Backtester
+    bt = Backtester(data, initial_capital=10000)
+    bt.run_backtest("sma_strategy")
+
+NEW (recommended):
     from core.backtest import VectorizedBacktester, grid_search, walk_forward_analysis
+    bt = VectorizedBacktester(data, initial_capital=10000)
+    results = bt.run(strategy)
 
 The VectorizedBacktester provides:
 - Faster vectorized execution
 - Built-in slippage models
 - Integration with optimization and walk-forward analysis
 
-This legacy Backtester is kept for backward compatibility but will be
-removed in a future version.
+===============================================================================
 """
 import warnings
 import os
 import pandas as pd
 
 warnings.warn(
-    "core.backtester.Backtester is deprecated. Use core.backtest.VectorizedBacktester instead.",
+    "\n"
+    "=" * 70 + "\n"
+    "DEPRECATION WARNING: core.backtester.Backtester is deprecated!\n"
+    "=" * 70 + "\n"
+    "Use 'from core.backtest import VectorizedBacktester' instead.\n"
+    "This module will be removed in a future version.\n"
+    "=" * 70,
     DeprecationWarning,
     stacklevel=2
 )
@@ -29,7 +46,7 @@ from fpdf import FPDF
 from strategies.strategy_registry import load_strategy, list_strategies
 from utils.risk_metrics import RiskQuantifier
 from loggers.logger import Logger
-from core.position_sizer import DynamicPositionSizer
+from core.position_sizer import SimplePositionSizer
 from data.datautils import epoch_to_date
 
 
@@ -62,7 +79,7 @@ class Backtester:
             self.data['Date'] = pd.to_datetime(self.data['Date'])
         self.data.sort_values(by='Date', inplace=True)
 
-    def run_backtest(self, strategy_name: str, strategy_params: dict = None, sizer: DynamicPositionSizer = None) -> pd.DataFrame:
+    def run_backtest(self, strategy_name: str, strategy_params: dict = None, sizer: SimplePositionSizer = None) -> pd.DataFrame:
         """
         Runs the backtest with:
         - Partial trade execution when capital is insufficient
