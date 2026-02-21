@@ -38,6 +38,8 @@ from core.logic.strategy_routing_manager import StrategyRoutingManager
 from core.position_sizer import KellyPositionSizer
 from core.drawdown_monitor import DrawdownMonitor
 from core.historical_loader import HistoricalBarLoader
+from core.historical_data_updater import HistoricalDataUpdater
+from core.unified_data_pipeline import UnifiedDataPipeline
 from core.events.eventhandler import EventHandler, get_event_handler
 from core.contracts.events import (
     EVENT_NEW_BAR, BarPayload,
@@ -181,6 +183,28 @@ class SchwabLiveRunner:
         # Quote callback registry
         self._quote_callbacks: Dict[str, Any] = {}
 
+        # Bar aggregation state (for building OHLCV bars from quotes)
+        # Structure: {symbol: {"open": float, "high": float, "low": float, "close": float, "volume": int, "bar_id": int}}
+        self._bar_aggregation: Dict[str, Dict[str, Any]] = defaultdict(
+            lambda: {"open": None, "high": None, "low": None, "close": None, "volume": 0, "bar_id": None}
+        )
+
+        # Unified data pipeline (supports Alpaca and Schwab with fallback)
+        self.data_pipeline = UnifiedDataPipeline(
+            data_path=str(ROOT / "data" / "data_storage" / "proc_data"),
+            raw_data_path=str(ROOT / "data" / "data_storage" / "raw_data"),
+        )
+
+        # Also keep the simple updater for quick freshness checks
+        self.data_updater = HistoricalDataUpdater(
+            api_key=settings.get("ALPACA_API_KEY") or os.getenv("ALPACA_API_KEY"),
+            api_secret=settings.get("ALPACA_SECRET_KEY") or os.getenv("ALPACA_SECRET_KEY"),
+            data_path=str(ROOT / "data" / "data_storage" / "proc_data"),
+        )
+
+        # Background update task reference
+        self._update_task: Optional[asyncio.Task] = None
+
     # ---------- Reconciler Callback ----------
     def _on_reconciler_halt(self, message: str):
         """Called when reconciler detects critical state mismatch."""
@@ -194,36 +218,160 @@ class SchwabLiveRunner:
         """
         Normalize Schwab quote format to canonical bar format.
 
-        Schwab streaming quotes have different field names than Alpaca bars.
+        Schwab LEVELONE_EQUITIES streaming field numbers (from API docs):
+        - 1: Bid Price
+        - 2: Ask Price
+        - 3: Last Price (price at which the last trade was matched)
+        - 8: Total Volume (aggregated shares traded throughout the day)
+        - 10: High Price (day's high)
+        - 11: Low Price (day's low)
+        - 12: Close Price (previous day's closing price)
+        - 17: Open Price (day's open)
+        - 35: Trade Time in Long (milliseconds since Epoch)
         """
-        ts = datetime.now(timezone.utc)
+        # Parse timestamp from trade time field, fallback to now
+        trade_time_ms = quote.get('35') or quote.get('trade_time')
+        if trade_time_ms:
+            ts = datetime.fromtimestamp(int(trade_time_ms) / 1000, tz=timezone.utc)
+        else:
+            ts = datetime.now(timezone.utc)
 
-        # Schwab streaming fields:
-        # key=symbol, 1=last_price, 2=bid, 3=ask, 29=close
-        last_price = quote.get('last_price') or quote.get('1') or quote.get('lastPrice', 0)
-        bid_price = quote.get('bid_price') or quote.get('2') or quote.get('bidPrice', 0)
-        ask_price = quote.get('ask_price') or quote.get('3') or quote.get('askPrice', 0)
-        close_price = quote.get('close_price') or quote.get('29') or quote.get('closePrice', last_price)
-        volume = quote.get('volume') or quote.get('v', 0)
+        # Extract prices using correct Schwab field numbers
+        bid_price = quote.get('1') or quote.get('bid_price') or quote.get('bidPrice', 0)
+        ask_price = quote.get('2') or quote.get('ask_price') or quote.get('askPrice', 0)
+        last_price = quote.get('3') or quote.get('last_price') or quote.get('lastPrice', 0)
+        volume = quote.get('8') or quote.get('volume') or quote.get('totalVolume', 0)
+        high_price = quote.get('10') or quote.get('high_price') or quote.get('highPrice', 0)
+        low_price = quote.get('11') or quote.get('low_price') or quote.get('lowPrice', 0)
+        prev_close = quote.get('12') or quote.get('close_price') or quote.get('closePrice', 0)
+        open_price = quote.get('17') or quote.get('open_price') or quote.get('openPrice', 0)
 
-        # Create a synthetic bar from quote data
-        mid = (float(bid_price or 0) + float(ask_price or 0)) / 2 if bid_price and ask_price else float(last_price or 0)
-        price = float(last_price) if last_price else mid
+        # Use last price as the primary price, fallback to mid if not available
+        if last_price:
+            price = float(last_price)
+        elif bid_price and ask_price:
+            price = (float(bid_price) + float(ask_price)) / 2
+        else:
+            price = float(bid_price or ask_price or 0)
+
+        # For intraday bars, use day's OHLC if available, otherwise use last price
+        return {
+            "symbol": symbol,
+            "timestamp": ts,
+            "Open": float(open_price) if open_price else price,
+            "High": float(high_price) if high_price else price,
+            "Low": float(low_price) if low_price else price,
+            "Close": price,
+            "Volume": int(volume) if volume else 0,
+            "prev_close": float(prev_close) if prev_close else None,
+        }
+
+    @staticmethod
+    def _canonicalize_schwab_chart_bar(data: Dict, symbol: str) -> Dict:
+        """
+        Normalize Schwab CHART_EQUITY candle data to canonical bar format.
+
+        Schwab CHART_EQUITY streaming field numbers (from API docs):
+        - 1: Open Price
+        - 2: High Price
+        - 3: Low Price
+        - 4: Close Price
+        - 5: Volume
+        - 6: Sequence (candle minute identifier)
+        - 7: Chart Time (milliseconds since Epoch)
+
+        Use this for actual candle bars from CHART_EQUITY service.
+        """
+        # Parse timestamp from chart time field
+        chart_time_ms = data.get('7') or data.get('chart_time')
+        if chart_time_ms:
+            ts = datetime.fromtimestamp(int(chart_time_ms) / 1000, tz=timezone.utc)
+        else:
+            ts = datetime.now(timezone.utc)
 
         return {
             "symbol": symbol,
             "timestamp": ts,
-            "Open": price,
-            "High": price,
-            "Low": price,
-            "Close": price,
-            "Volume": int(volume) if volume else 0,
+            "Open": float(data.get('1') or data.get('open', 0)),
+            "High": float(data.get('2') or data.get('high', 0)),
+            "Low": float(data.get('3') or data.get('low', 0)),
+            "Close": float(data.get('4') or data.get('close', 0)),
+            "Volume": int(data.get('5') or data.get('volume', 0)),
+            "sequence": int(data.get('6') or data.get('sequence', 0)),
         }
 
     @staticmethod
     def _bar_bucket(ts: datetime, timeframe_sec: int = 60) -> int:
         """Calculate bar bucket ID for deduplication."""
         return int(ts.timestamp() // timeframe_sec)
+
+    def _aggregate_quote_to_bar(self, symbol: str, price: float, volume: int, bar_id: int) -> Dict:
+        """
+        Aggregate quote data into OHLCV bar.
+
+        Collects multiple quotes within the same time bucket into a proper bar
+        with Open, High, Low, Close, and cumulative Volume.
+
+        Args:
+            symbol: Trading symbol
+            price: Current quote price
+            volume: Volume from this quote
+            bar_id: Current bar bucket ID
+
+        Returns:
+            Dict with aggregated OHLCV data and bar_closed flag
+        """
+        agg = self._bar_aggregation[symbol]
+
+        # Check if we're starting a new bar
+        if agg["bar_id"] is None or agg["bar_id"] != bar_id:
+            # Finalize previous bar data before starting new one
+            prev_bar = None
+            if agg["bar_id"] is not None and agg["close"] is not None:
+                prev_bar = {
+                    "Open": agg["open"],
+                    "High": agg["high"],
+                    "Low": agg["low"],
+                    "Close": agg["close"],
+                    "Volume": agg["volume"],
+                    "bar_closed": True,
+                }
+
+            # Start new bar
+            agg["open"] = price
+            agg["high"] = price
+            agg["low"] = price
+            agg["close"] = price
+            agg["volume"] = volume
+            agg["bar_id"] = bar_id
+
+            if prev_bar:
+                return prev_bar
+            else:
+                # First bar, return current state
+                return {
+                    "Open": price,
+                    "High": price,
+                    "Low": price,
+                    "Close": price,
+                    "Volume": volume,
+                    "bar_closed": False,
+                }
+
+        # Update existing bar
+        agg["high"] = max(agg["high"], price)
+        agg["low"] = min(agg["low"], price)
+        agg["close"] = price
+        agg["volume"] += volume
+
+        return {
+            "Open": agg["open"],
+            "High": agg["high"],
+            "Low": agg["low"],
+            "Close": agg["close"],
+            "Volume": agg["volume"],
+            "bar_closed": False,
+        }
 
     def _df_from_history(self, symbol: str) -> pd.DataFrame:
         """Create DataFrame from recent history."""
@@ -247,30 +395,79 @@ class SchwabLiveRunner:
             pass
 
     # ---------- Seeding ----------
-    async def seed(self, lookback_bars: int = 200):
+    async def seed(self, lookback_bars: int = 200, max_stale_minutes: int = 60):
         """
-        Seed historical data for warmup indicators.
+        Seed historical data for all symbols.
+
+        Uses the unified data pipeline which:
+        - Automatically selects best data source (Alpaca or Schwab)
+        - Falls back if one source is unavailable
+        - Processes data through the full ML pipeline
 
         Args:
-            lookback_bars: Number of historical bars to load per symbol
+            lookback_bars: Number of bars to load for each symbol
+            max_stale_minutes: If data is older than this, fetch fresh data
         """
+        # Check available data sources
+        self.logger.info("Checking data source availability...")
+        sources = await self.data_pipeline.check_sources()
+        self.logger.info(f"Recommended data source: {sources['recommended']}")
+
+        if sources['recommended'] == 'none':
+            self.logger.error("No data sources available! Check credentials.")
+            # Try to continue with existing data
+
+        # Check data freshness and update if needed
+        symbols_to_update = []
+        for sym in self.symbols:
+            freshness = self.data_updater.get_data_freshness(sym)
+            if freshness is None:
+                self.logger.warning(f"[{sym}] No historical data found - will fetch")
+                symbols_to_update.append(sym)
+            elif freshness['age_minutes'] > max_stale_minutes:
+                self.logger.info(
+                    f"[{sym}] Data is stale ({freshness['age_minutes']} min old) - will update"
+                )
+                symbols_to_update.append(sym)
+            else:
+                self.logger.info(
+                    f"[{sym}] Data is fresh ({freshness['age_minutes']} min old, "
+                    f"{freshness['bar_count']} bars)"
+                )
+
+        # Fetch fresh data for stale symbols using unified pipeline
+        # This handles source selection and full data processing
+        if symbols_to_update:
+            self.logger.info(f"Updating historical data for: {symbols_to_update}")
+            await self.data_pipeline.update_symbols(
+                symbols_to_update,
+                days=30,  # Fetch more days for proper processing
+                source=None,  # Auto-select best source
+                process_data=True,  # Run through ML pipeline
+            )
+
+        # Load data from files
         loader = HistoricalBarLoader(str(ROOT / "data" / "data_storage" / "proc_data"))
         for sym in self.symbols:
-            try:
-                for b in loader.load_last_n_bars(sym, n=lookback_bars):
-                    self.history[sym].append({
-                        "timestamp": b["timestamp"],
-                        "symbol": b["symbol"],
-                        "Open": b["Open"], "High": b["High"], "Low": b["Low"],
-                        "Close": b["Close"], "Volume": b.get("Volume", 0),
-                    })
-                df = self._df_from_history(sym)
-                atr = compute_atr(df, period=14)
-                if atr is not None:
-                    self.atr_hist[sym].append(atr)
-                self.logger.info(f"Seeded {sym} with {len(self.history[sym])} bars")
-            except Exception as e:
-                self.logger.warning(f"Failed to seed {sym}: {e}")
+            bars = loader.load_last_n_bars(sym, n=lookback_bars)
+            if not bars:
+                self.logger.warning(f"[{sym}] No bars loaded after update attempt")
+                continue
+
+            for b in bars:
+                self.history[sym].append({
+                    "timestamp": b["timestamp"],
+                    "symbol": b["symbol"],
+                    "Open": b["Open"], "High": b["High"], "Low": b["Low"],
+                    "Close": b["Close"], "Volume": b.get("Volume", 0),
+                })
+            df = self._df_from_history(sym)
+            atr = compute_atr(df, period=14)
+            if atr is not None:
+                self.atr_hist[sym].append(atr)
+
+            self.logger.info(f"[{sym}] Seeded with {len(bars)} bars")
+
         self.logger.info(f"Seeded {len(self.symbols)} symbols with up to {lookback_bars} bars.")
 
     # ---------- Quote/Bar Callback ----------
@@ -278,16 +475,37 @@ class SchwabLiveRunner:
         """
         Handle incoming Schwab quote data.
 
-        Converts quotes to bar format and processes through the strategy engine.
+        Aggregates quotes into OHLCV bars within time buckets and processes
+        through the strategy engine when bars close.
 
         Args:
             symbol: The symbol for this quote
             quote: Raw quote data from Schwab streaming
         """
-        bar = self._canonicalize_schwab_quote(quote, symbol)
-        self.logger.debug(f"[RAW QUOTE] {symbol} c={bar['Close']}")
+        raw_bar = self._canonicalize_schwab_quote(quote, symbol)
+        price = float(raw_bar["Close"])
+        volume = int(raw_bar.get("Volume", 0))
+        ts: datetime = raw_bar["timestamp"]
 
-        ts: datetime = bar["timestamp"]
+        self.logger.debug(f"[RAW QUOTE] {symbol} price={price}")
+
+        bar_id = self._bar_bucket(ts)
+        prev_bar_id = self._last_bar_id.get(symbol)
+
+        # Aggregate quotes into proper OHLCV bars
+        aggregated = self._aggregate_quote_to_bar(symbol, price, volume, bar_id)
+        bar_closed = aggregated.get("bar_closed", False)
+
+        # Build bar with aggregated OHLCV data
+        bar = {
+            "symbol": symbol,
+            "timestamp": ts,
+            "Open": aggregated["Open"],
+            "High": aggregated["High"],
+            "Low": aggregated["Low"],
+            "Close": aggregated["Close"],
+            "Volume": aggregated["Volume"],
+        }
 
         # Emit raw bar event
         await self.event_handler.emit("BAR", {
@@ -300,13 +518,11 @@ class SchwabLiveRunner:
             "volume": int(bar.get("Volume", 0)),
         })
 
-        bar_id = self._bar_bucket(ts)
-        prev_bar_id = self._last_bar_id.get(symbol)
-        bar_closed = (prev_bar_id is None) or (bar_id != prev_bar_id)
         self._last_bar_id[symbol] = bar_id
 
-        # Track history + MTM
-        self.history[symbol].append(bar)
+        # Track history + MTM (only add completed bars to history)
+        if bar_closed:
+            self.history[symbol].append(bar)
         last_px = float(bar["Close"])
         self.portfolio.update_price(symbol, last_px)
 
@@ -403,6 +619,38 @@ class SchwabLiveRunner:
         async def callback(quote: Dict):
             await self.on_schwab_quote(symbol, quote)
         return callback
+
+    # ---------- Periodic Data Update ----------
+    async def _periodic_data_update(self, interval_minutes: int = 60):
+        """
+        Background task to periodically update historical data.
+
+        Uses the unified pipeline which:
+        - Auto-selects best data source (Alpaca or Schwab)
+        - Processes data through ML pipeline
+        - Handles source failover
+
+        This ensures historical data files stay fresh for strategy warmup
+        and indicator calculations.
+        """
+        while True:
+            await asyncio.sleep(interval_minutes * 60)
+
+            try:
+                self.logger.info("Running periodic historical data update...")
+
+                # Use unified pipeline for full processing
+                results = await self.data_pipeline.update_symbols(
+                    self.symbols,
+                    days=5,  # Fetch enough for processing
+                    source=None,  # Auto-select
+                    process_data=True,  # Full ML pipeline
+                )
+                total_bars = sum(results.values())
+                self.logger.info(f"Periodic update complete: {total_bars} total bars fetched")
+
+            except Exception as e:
+                self.logger.exception(f"Periodic data update failed: {e}")
 
     # ---------- Health Check ----------
     async def _emit_health_status(self, status: str, details: Dict = None):
@@ -518,8 +766,9 @@ class SchwabLiveRunner:
         # Preflight: Check Schwab token status and alert if renewal needed
         await self._preflight_credential_check()
 
-        # Seed historical data
-        await self.seed(self.settings.get("SEED_BARS", 200))
+        # Seed historical data (fetches fresh if stale)
+        max_stale = self.settings.get("MAX_STALE_MINUTES", 60)
+        await self.seed(self.settings.get("SEED_BARS", 200), max_stale_minutes=max_stale)
 
         # Subscribe to bar debug logging
         await self.event_handler.subscribe("BAR", self._bar_debug_logger)
@@ -585,6 +834,14 @@ class SchwabLiveRunner:
             await self.reconciler.start_periodic(interval_seconds=reconcile_interval)
             self.logger.info(f"State reconciliation enabled (every {reconcile_interval}s)")
 
+        # Start periodic historical data updates (runs in background)
+        update_interval = self.settings.get("HISTORICAL_UPDATE_INTERVAL_MINUTES", 60)
+        if update_interval > 0:
+            self._update_task = asyncio.create_task(
+                self._periodic_data_update(interval_minutes=update_interval)
+            )
+            self.logger.info(f"Periodic data updates enabled (every {update_interval} min)")
+
         try:
             while self._running:
                 # Check if stream is still running
@@ -609,6 +866,12 @@ class SchwabLiveRunner:
             # Stop reconciler
             await self.reconciler.stop_periodic()
             self.logger.info("State reconciler stopped")
+
+            # Cancel background update task
+            if self._update_task:
+                self._update_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await self._update_task
 
             stream_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):

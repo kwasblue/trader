@@ -81,11 +81,16 @@ class SchwabStreamingClient():
 
         # Emit to event bus
         try:
+            # Use last_price (field 3) as primary price
+            last_price = quote.get("last_price") or quote.get("3") or 0
+            bid_price = quote.get("bid_price") or quote.get("1") or 0
+            ask_price = quote.get("ask_price") or quote.get("2") or 0
+
             await self._event_handler.emit(EVENT_PRICE_UPDATE, {
                 "symbol": symbol,
-                "price": quote.get("last_price", 0),
-                "bid": quote.get("bid_price", 0),
-                "ask": quote.get("ask_price", 0),
+                "price": last_price,
+                "bid": bid_price,
+                "ask": ask_price,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             })
         except Exception as e:
@@ -188,20 +193,40 @@ class SchwabStreamingClient():
                                 if not symbol:
                                     continue
 
-                                # Extract quote fields
-                                # Field mapping: 1=last, 2=bid, 3=ask, 4=bid_size, 5=ask_size,
-                                # 8=volume, 29=close, 30=open, 31=high, 32=low
+                                # Extract quote fields per Schwab LEVELONE_EQUITIES API:
+                                # Field 1 = Bid Price
+                                # Field 2 = Ask Price
+                                # Field 3 = Last Price (price at which last trade was matched)
+                                # Field 4 = Bid Size (in lots, typically 100 shares)
+                                # Field 5 = Ask Size
+                                # Field 8 = Total Volume (aggregated shares traded)
+                                # Field 10 = High Price (day's high)
+                                # Field 11 = Low Price (day's low)
+                                # Field 12 = Close Price (previous day's close)
+                                # Field 17 = Open Price (day's open)
+                                # Field 35 = Trade Time in Long (ms since epoch)
                                 quote = {
-                                    'last_price': item.get('1'),
-                                    'bid_price': item.get('2'),
-                                    'ask_price': item.get('3'),
+                                    'bid_price': item.get('1'),
+                                    'ask_price': item.get('2'),
+                                    'last_price': item.get('3'),
                                     'bid_size': item.get('4'),
                                     'ask_size': item.get('5'),
                                     'volume': item.get('8'),
-                                    'close_price': item.get('29'),
-                                    'open_price': item.get('30'),
-                                    'high_price': item.get('31'),
-                                    'low_price': item.get('32'),
+                                    'high_price': item.get('10'),
+                                    'low_price': item.get('11'),
+                                    'close_price': item.get('12'),
+                                    'open_price': item.get('17'),
+                                    'trade_time': item.get('35'),
+                                    # Also include raw numeric fields for direct access
+                                    '1': item.get('1'),
+                                    '2': item.get('2'),
+                                    '3': item.get('3'),
+                                    '8': item.get('8'),
+                                    '10': item.get('10'),
+                                    '11': item.get('11'),
+                                    '12': item.get('12'),
+                                    '17': item.get('17'),
+                                    '35': item.get('35'),
                                 }
 
                                 # Update local price dict
