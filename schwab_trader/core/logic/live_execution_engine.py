@@ -1049,6 +1049,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
                 side=side,
                 filled_qty=qty,
                 avg_price=price,
+                status="filled",  # Mark as filled for bool check in handle_signal_context
             )
 
             # Optimistic portfolio update with state sync

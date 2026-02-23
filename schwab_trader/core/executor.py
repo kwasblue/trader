@@ -105,6 +105,7 @@ class LiveExecutor(BaseExecutor):
                 side=side,
                 filled_qty=qty,
                 avg_price=price,
+                status="filled",  # Mark as filled for bool check
             )
 
         try:
@@ -154,6 +155,7 @@ class LiveExecutor(BaseExecutor):
                 side=side,
                 filled_qty=qty,
                 avg_price=avg_price,
+                status="filled",  # Mark as filled for bool check
             )
 
         except Exception as e:
