@@ -14,8 +14,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from datetime import datetime, timezone
-from collections import defaultdict
-from typing import Optional, Dict, Any
+from typing import Optional, Any
 import pandas as pd
 
 from core.base.executor_base import BaseExecutor
@@ -73,18 +72,14 @@ class MockExecutor(BaseExecutor):
 
         # Event bus
         self.bus = event_handler or get_event_handler()
-        
-        # Position tracking (local cache)
-        self.positions: Dict[str, int] = defaultdict(int)
-        self.entry_prices: Dict[str, float] = {}
-        
+
         # Setup logging - own file with propagation to app.log
         self.logger = Logger(
             log_file="mock_executor.log",
             logger_name="MockExecutor",
             propagate=True
         ).get_logger()
-        
+
         self.logger.info("MockExecutor initialized")
     
     # ========================================================================
@@ -192,12 +187,10 @@ class MockExecutor(BaseExecutor):
             self.logger.info(
                 f"[MOCK] Order filled: {side.value} {qty}@${price:.2f}"
             )
-            
-            # Update local position tracking
-            self._update_position(symbol, side, qty, price)
-            
-            # Events are emitted by broker, but we can emit additional ones if needed
-            
+
+            # Position tracking is handled by the portfolio/execution engine
+            # Events are emitted by broker
+
             return True
             
         except Exception as e:
@@ -208,43 +201,6 @@ class MockExecutor(BaseExecutor):
                 symbol
             )
             return False
-    
-    # ========================================================================
-    # POSITION MANAGEMENT
-    # ========================================================================
-    
-    def _update_position(
-        self,
-        symbol: str,
-        side: OrderSide,
-        qty: int,
-        price: float
-    ) -> None:
-        """Update local position tracking."""
-        if side == OrderSide.BUY:
-            old_qty = self.positions[symbol]
-            new_qty = old_qty + qty
-            
-            # Update average entry price
-            if old_qty > 0:
-                total_cost = (self.entry_prices[symbol] * old_qty) + (price * qty)
-                self.entry_prices[symbol] = total_cost / new_qty
-            else:
-                self.entry_prices[symbol] = price
-            
-            self.positions[symbol] = new_qty
-            
-        elif side == OrderSide.SELL:
-            self.positions[symbol] -= qty
-            
-            if self.positions[symbol] <= 0:
-                self.positions[symbol] = 0
-                self.entry_prices[symbol] = 0.0
-        
-        self.logger.debug(
-            f"[{symbol}] Position updated: {self.positions[symbol]} "
-            f"@ ${self.entry_prices.get(symbol, 0.0):.2f}"
-        )
     
     # ========================================================================
     # EVENT EMISSION

@@ -160,24 +160,6 @@ class TestBrokerInterfaceContract:
         assert callable(broker.mark_price)
 
 
-class TestDeprecatedSyncMethods:
-    """Tests for deprecated sync wrapper methods."""
-
-    def test_place_market_order_sync_warns(self):
-        """Test that place_market_order_sync raises deprecation warning."""
-        from core.base.base_broker_interface import BaseBrokerInterface
-
-        # Check the method exists
-        assert hasattr(BaseBrokerInterface, 'place_market_order_sync')
-
-    def test_place_oco_order_sync_warns(self):
-        """Test that place_oco_order_sync raises deprecation warning."""
-        from core.base.base_broker_interface import BaseBrokerInterface
-
-        # Check the method exists
-        assert hasattr(BaseBrokerInterface, 'place_oco_order_sync')
-
-
 class TestOrderResultFromBroker:
     """Tests for OrderResult consistency from brokers."""
 

@@ -609,9 +609,8 @@ if __name__ == "__main__":
         print("\nTrying to load from raw data files...")
 
         # Fallback to raw data
-        from utils.configloader import ConfigLoader
-        config = ConfigLoader().load_config()
-        data_dir = Path(project_root) / config["folders"]["data"] / "data_storage" / "raw_data"
+        from core.config_loader import get_raw_data_path
+        data_dir = get_raw_data_path()
 
         data_file = data_dir / f"{args.symbol}.csv"
         if data_file.exists():

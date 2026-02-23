@@ -19,6 +19,7 @@ from core.base.trade_logger_base import TradeLoggerBase
 from core.base.trade_logic_manager_base import TradeApprover, TradeLogicManagerBase
 from core.logic.portfolio_state import PortfolioState
 from core.logic.position_manager import PositionManager
+from core.logic.symbol_state import SymbolState
 from core.app_types import OrderResult, SignalContext
 from core.enums import OrderSide
 
@@ -106,6 +107,9 @@ class ExecutionEngineBase(ABC):
         self.portfolio = portfolio
         self.position_manager = position_manager or PositionManager()
 
+        # Symbol state tracking - shared by all engine implementations
+        self.symbol_states: Dict[str, SymbolState] = {}
+
         logger.info("ExecutionEngine initialized")
     
     # ========================================================================
@@ -191,38 +195,6 @@ class ExecutionEngineBase(ABC):
         loop = asyncio.get_event_loop()
         return loop.run_until_complete(self.handle_signal_context(context))
 
-    def handle_signal_legacy(
-        self,
-        symbol: str,
-        state: Any,
-        signal: int,
-        price: float,
-        atr: float,
-        regime: str,
-        strategy_name: Optional[str] = None,
-        **kwargs
-    ) -> Optional[OrderResult]:
-        """
-        DEPRECATED: Use handle_signal(context, state) instead.
-
-        Backward-compatible wrapper that creates SignalContext from loose params.
-        """
-        from datetime import datetime, timezone
-
-        context = SignalContext.from_kwargs(
-            symbol=symbol,
-            signal=signal,
-            price=price,
-            atr=atr,
-            regime=regime,
-            timestamp=datetime.now(timezone.utc),
-            strategy_name=strategy_name,
-            df=kwargs.get('df'),
-            market_open=kwargs.get('market_open', True),
-            **{k: v for k, v in kwargs.items() if k not in ('df', 'market_open')}
-        )
-
-        return self.handle_signal(context, state)
 
     # ========================================================================
     # SHARED IMPLEMENTATIONS
@@ -291,6 +263,53 @@ class ExecutionEngineBase(ABC):
                      "short" if current_qty < 0 else None)
 
         return current_qty, avg_price
+
+    def _get_or_create_state(self, symbol: str) -> SymbolState:
+        """
+        Get or create symbol state for a symbol.
+
+        This is a shared implementation used by all engine types.
+
+        Args:
+            symbol: Trading symbol
+
+        Returns:
+            SymbolState for the symbol
+        """
+        if symbol not in self.symbol_states:
+            self.symbol_states[symbol] = SymbolState(symbol=symbol)
+        return self.symbol_states[symbol]
+
+    def _check_trade_approval(
+        self,
+        trade_approver: TradeApprover,
+        context: SignalContext,
+        state: Any,
+    ) -> Tuple[bool, Optional[str]]:
+        """
+        Check if trade should be executed using approver.
+
+        Shared implementation that:
+        1. Syncs state with portfolio position
+        2. Delegates approval decision to trade_approver
+
+        Args:
+            trade_approver: TradeApprover instance for gating decisions
+            context: SignalContext containing all signal data
+            state: SymbolState for this symbol
+
+        Returns:
+            Tuple of (should_trade, reason)
+        """
+        # Sync state with portfolio
+        self._setup_approval_state(context.symbol, state)
+
+        # Delegate to approver (pass context directly)
+        return trade_approver.should_trade(
+            context=context,
+            state=state,
+            account_positions=len(self.portfolio.positions)
+        )
 
     def _get_exit_quantity(
         self,
@@ -433,12 +452,12 @@ class ExecutionEngineBase(ABC):
     def emergency_stop(self) -> None:
         """
         Emergency stop - cancel all orders and close all positions.
-        
+
         Override to implement custom emergency shutdown logic.
         Default implementation closes everything immediately.
         """
         logger.critical("EMERGENCY STOP TRIGGERED")
-        
+
         try:
             # Cancel all open orders
             open_orders = self.broker.get_open_orders()
@@ -447,17 +466,25 @@ class ExecutionEngineBase(ABC):
                     self.broker.cancel_order(order.order_id)
                 except Exception as e:
                     logger.error(f"Failed to cancel order {order.order_id}: {e}")
-            
-            # Close all positions
+
+            # Close all positions via market orders
             for symbol, position in self.portfolio.positions.items():
                 if position.qty != 0:
                     try:
-                        self.executor.close_position(symbol)
+                        # Determine side: sell to close long, buy to close short
+                        qty = abs(position.qty)
+                        side = "sell" if position.qty > 0 else "buy"
+                        self.broker.place_market_order(
+                            symbol=symbol,
+                            qty=qty,
+                            side=side
+                        )
+                        logger.info(f"Emergency close: {side} {qty} {symbol}")
                     except Exception as e:
                         logger.error(f"Failed to close position {symbol}: {e}")
-            
+
             logger.info("Emergency stop completed")
-            
+
         except Exception as e:
             logger.critical(f"Emergency stop failed: {e}")
     

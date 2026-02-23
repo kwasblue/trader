@@ -1147,22 +1147,22 @@ class MainWindow(QtWidgets.QMainWindow):
 
     async def _run_alpaca_backend(self, symbols: list):
         """Run Alpaca live/paper trading."""
-        from utils.settings import Settings
         from core.alpaca_runner import AlpacaLiveRunner
+        from core.config_loader import get_config
 
-        settings = Settings(root="config", include_root=True)
-        self._alpaca_runner = AlpacaLiveRunner(settings, symbols)
+        config = get_config()
+        self._alpaca_runner = AlpacaLiveRunner(symbols=symbols, config=config)
         self._append_log("[ALPACA] Connecting to Alpaca...")
         await self._alpaca_runner.run()
 
     async def _run_schwab_backend(self, symbols: list):
         """Run Schwab live trading using SchwabLiveRunner."""
-        from utils.settings import Settings
         from core.schwab_runner import SchwabLiveRunner
+        from core.config_loader import get_config
 
         try:
-            settings = Settings(root="config", include_root=True)
-            self._schwab_runner = SchwabLiveRunner(settings, symbols)
+            config = get_config()
+            self._schwab_runner = SchwabLiveRunner(symbols=symbols, config=config)
             self._append_log("[SCHWAB] Connecting to Schwab...")
             await self._schwab_runner.run()
         except ValueError as e:

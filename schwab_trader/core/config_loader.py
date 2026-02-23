@@ -22,8 +22,9 @@ Usage:
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from typing import List, Optional, Dict, Any
 
 
@@ -207,6 +208,127 @@ def _dict_to_dataclass(cls, data: dict):
     return cls(**filtered)
 
 
+def _apply_env_overrides(config: TradingConfig) -> TradingConfig:
+    """
+    Apply environment variable overrides to config.
+
+    Environment variables follow the pattern:
+        TRADING__SECTION__FIELD=value
+
+    Examples:
+        TRADING__RISK__RISK_PER_TRADE=0.02 → config.risk.risk_per_trade = 0.02
+        TRADING__SIMULATION__ENABLED=true → config.simulation.enabled = True
+        TRADING__GENERAL__LOG_LEVEL=DEBUG → config.general.log_level = "DEBUG"
+
+    Args:
+        config: TradingConfig instance to apply overrides to
+
+    Returns:
+        Updated TradingConfig instance (dataclasses are replaced, not mutated)
+    """
+    from dataclasses import replace
+
+    prefix = "TRADING__"
+
+    # Map section names to config attributes
+    section_map = {
+        "GENERAL": "general",
+        "SIMULATION": "simulation",
+        "ALPACA": "alpaca",
+        "SCHWAB": "schwab",
+        "RISK": "risk",
+        "DRAWDOWN_MONITOR": "drawdown_monitor",
+        "POSITION_SIZER": "position_sizer",
+        "TRADE_LOGIC": "trade_logic",
+        "INDICATORS": "indicators",
+        "DATA": "data",
+        "GUI": "gui",
+        "LOGGING": "logging",
+        "AUTOTRADER": "autotrader",
+        "ERROR_RECOVERY": "error_recovery",
+    }
+
+    # Collect overrides by section
+    section_overrides: Dict[str, Dict[str, Any]] = {}
+
+    for env_key, env_value in os.environ.items():
+        if not env_key.startswith(prefix):
+            continue
+
+        # Parse: TRADING__SECTION__FIELD → ["SECTION", "FIELD"]
+        parts = env_key[len(prefix):].split("__")
+        if len(parts) != 2:
+            continue
+
+        section_upper, field_upper = parts
+        section_name = section_map.get(section_upper)
+        if section_name is None:
+            continue
+
+        field_name = field_upper.lower()
+
+        # Parse value (handle booleans, numbers, etc.)
+        parsed_value = _parse_env_value(env_value)
+
+        if section_name not in section_overrides:
+            section_overrides[section_name] = {}
+        section_overrides[section_name][field_name] = parsed_value
+
+    # Apply overrides using dataclass replace
+    for section_name, field_overrides in section_overrides.items():
+        section_obj = getattr(config, section_name, None)
+        if section_obj is None:
+            continue
+
+        # Get valid field names for this section
+        valid_fields = {f.name for f in fields(section_obj)}
+
+        # Filter to only valid fields
+        valid_overrides = {k: v for k, v in field_overrides.items() if k in valid_fields}
+
+        if valid_overrides:
+            # Replace section with updated values
+            updated_section = replace(section_obj, **valid_overrides)
+            config = replace(config, **{section_name: updated_section})
+
+            for field_name, value in valid_overrides.items():
+                print(f"[CONFIG] ENV override: {section_name}.{field_name} = {value}")
+
+    return config
+
+
+def _parse_env_value(value: str) -> Any:
+    """
+    Parse environment variable value to appropriate Python type.
+
+    Handles:
+    - Booleans: "true", "false", "1", "0", "yes", "no"
+    - Integers: "42"
+    - Floats: "3.14"
+    - Strings: everything else
+    """
+    # Boolean detection
+    if value.lower() in ("true", "yes", "1", "on"):
+        return True
+    if value.lower() in ("false", "no", "0", "off"):
+        return False
+
+    # Try integer
+    try:
+        return int(value)
+    except ValueError:
+        pass
+
+    # Try float
+    try:
+        return float(value)
+    except ValueError:
+        pass
+
+    # Return as string
+    return value
+
+
 def load_config(config_path: Optional[str] = None) -> TradingConfig:
     """
     Load configuration from JSON file.
@@ -257,6 +379,9 @@ def load_config(config_path: Optional[str] = None) -> TradingConfig:
 
         print(f"[CONFIG] Loaded from {config_path}")
         print(f"[CONFIG] Drawdown monitor: {'ENABLED' if config.drawdown_monitor.enabled else 'DISABLED'}")
+
+        # Apply environment variable overrides
+        config = _apply_env_overrides(config)
 
         return config
 
@@ -330,6 +455,80 @@ def enable_day_trade_mode() -> TradingConfig:
 def reload_config() -> TradingConfig:
     """Reload config from disk."""
     return get_config(reload=True)
+
+
+# =============================================================================
+# Path Helpers - Provide resolved paths for legacy compatibility
+# =============================================================================
+
+def get_app_path() -> Path:
+    """
+    Get the absolute path to the application root directory.
+
+    Returns:
+        Path to the schwab_trader directory
+    """
+    return Path(__file__).resolve().parent.parent
+
+
+def get_logs_path() -> Path:
+    """
+    Get the absolute path to the logs directory.
+
+    Returns:
+        Resolved path to logs directory
+    """
+    cfg = get_config()
+    return get_app_path() / cfg.data.logs_path
+
+
+def get_data_path() -> Path:
+    """
+    Get the absolute path to processed data directory.
+
+    Returns:
+        Resolved path to processed data directory
+    """
+    cfg = get_config()
+    return get_app_path() / cfg.data.historical_data_path
+
+
+def get_raw_data_path() -> Path:
+    """
+    Get the absolute path to raw data directory.
+
+    Returns:
+        Resolved path to raw data directory
+    """
+    cfg = get_config()
+    return get_app_path() / cfg.data.raw_data_path
+
+
+def get_tokens_path() -> Path:
+    """
+    Get the absolute path to tokens directory.
+
+    Returns:
+        Resolved path to tokens directory
+    """
+    return get_app_path() / "tokens" / "token_file"
+
+
+def get_env_path() -> Path:
+    """
+    Get the absolute path to the .env file.
+
+    Returns:
+        Resolved path to .env file
+    """
+    return get_app_path() / ".venv" / "env" / ".env"
+
+
+# Schwab API constants
+SCHWAB_TOKEN_ENDPOINT = "https://api.schwabapi.com/v1/oauth/token"
+SCHWAB_AUTH_URL = "https://api.schwabapi.com/v1/oauth/authorize?"
+SCHWAB_BASE_URL = "https://api.schwabapi.com/trader/v1"
+SCHWAB_MARKET_URL = "https://api.schwabapi.com/marketdata/v1"
 
 
 def validate_config(config: TradingConfig) -> tuple[bool, list[str]]:

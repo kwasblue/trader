@@ -38,17 +38,16 @@ class DataStore:
         self.write_lock = RLock()  # Reentrant lock to avoid deadlocks
         self._owns_connection = False
 
-        # Try to use ConfigLoader for backward compatibility, but don't require it
+        # Try to use config_loader, but don't require it
         self.logger = logger
         if use_config:
             try:
-                from utils.configloader import ConfigLoader
+                from core.config_loader import get_logs_path
                 from loggers.logger import Logger
-                self.config = ConfigLoader().load_config()
-                log_dir = self.config["folders"]["logs"]
+                log_dir = str(get_logs_path())
                 self.logger = Logger('app.log', 'datastore', log_dir=log_dir).get_logger()
             except Exception:
-                # Fall back to standard logging if ConfigLoader fails
+                # Fall back to standard logging if config fails
                 pass
 
     def __enter__(self):

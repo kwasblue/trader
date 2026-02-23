@@ -16,14 +16,10 @@ class TestSchwabClientAuthentication(unittest.TestCase):
     """Test Schwab client authentication."""
 
     @patch('data.streaming.schwab_client.Authenticator')
-    @patch('data.streaming.schwab_client.ConfigLoader')
+    @patch('data.streaming.schwab_client.get_logs_path', return_value='/tmp/logs')
     @patch('data.streaming.schwab_client.Logger')
-    def test_client_requires_credentials(self, mock_logger, mock_config, mock_auth):
+    def test_client_requires_credentials(self, mock_logger, mock_logs_path, mock_auth):
         """Client should require API credentials."""
-        mock_config.return_value.load_config.return_value = {
-            'folders': {'logs': '/tmp'},
-            'api': {'base_url': 'https://api.example.com', 'market_url': 'https://market.example.com'}
-        }
         mock_logger.return_value.get_logger.return_value = MagicMock()
 
         from data.streaming.schwab_client import SchwabClient
@@ -83,14 +79,10 @@ class TestSchwabClientPriceHistory(unittest.TestCase):
             self.assertIn('volume', candle)
 
     @patch('data.streaming.schwab_client.Authenticator')
-    @patch('data.streaming.schwab_client.ConfigLoader')
+    @patch('data.streaming.schwab_client.get_logs_path', return_value='/tmp/logs')
     @patch('data.streaming.schwab_client.Logger')
-    def test_daily_price_history_integration(self, mock_logger, mock_config, mock_auth):
+    def test_daily_price_history_integration(self, mock_logger, mock_logs_path, mock_auth):
         """Test daily_price_history method on client."""
-        mock_config.return_value.load_config.return_value = {
-            'folders': {'logs': '/tmp'},
-            'api': {'base_url': 'https://api.example.com', 'market_url': 'https://market.example.com'}
-        }
         mock_logger.return_value.get_logger.return_value = MagicMock()
         mock_auth.return_value.access_token.return_value = 'mock_token'
 
@@ -195,14 +187,10 @@ class TestSchwabClientOrders(unittest.TestCase):
         self.assertEqual(mock_response.status_code, 200)
 
     @patch('data.streaming.schwab_client.Authenticator')
-    @patch('data.streaming.schwab_client.ConfigLoader')
+    @patch('data.streaming.schwab_client.get_logs_path', return_value='/tmp/logs')
     @patch('data.streaming.schwab_client.Logger')
-    def test_generate_order(self, mock_logger, mock_config, mock_auth):
+    def test_generate_order(self, mock_logger, mock_logs_path, mock_auth):
         """Test order generation."""
-        mock_config.return_value.load_config.return_value = {
-            'folders': {'logs': '/tmp'},
-            'api': {'base_url': 'https://api.example.com', 'market_url': 'https://market.example.com'}
-        }
         mock_logger.return_value.get_logger.return_value = MagicMock()
 
         from data.streaming.schwab_client import SchwabClient
@@ -296,14 +284,10 @@ class TestSchwabClientErrorHandling(unittest.TestCase):
         self.assertEqual(mock_response.status_code, 401)
 
     @patch('data.streaming.schwab_client.Authenticator')
-    @patch('data.streaming.schwab_client.ConfigLoader')
+    @patch('data.streaming.schwab_client.get_logs_path', return_value='/tmp/logs')
     @patch('data.streaming.schwab_client.Logger')
-    def test_rate_limiter_integration(self, mock_logger, mock_config, mock_auth):
+    def test_rate_limiter_integration(self, mock_logger, mock_logs_path, mock_auth):
         """Test rate limiter is properly configured."""
-        mock_config.return_value.load_config.return_value = {
-            'folders': {'logs': '/tmp'},
-            'api': {'base_url': 'https://api.example.com', 'market_url': 'https://market.example.com'}
-        }
         mock_logger.return_value.get_logger.return_value = MagicMock()
 
         from data.streaming.schwab_client import SchwabClient
@@ -313,14 +297,10 @@ class TestSchwabClientErrorHandling(unittest.TestCase):
         self.assertIsNotNone(client._rate_limiter)
 
     @patch('data.streaming.schwab_client.Authenticator')
-    @patch('data.streaming.schwab_client.ConfigLoader')
+    @patch('data.streaming.schwab_client.get_logs_path', return_value='/tmp/logs')
     @patch('data.streaming.schwab_client.Logger')
-    def test_session_close(self, mock_logger, mock_config, mock_auth):
+    def test_session_close(self, mock_logger, mock_logs_path, mock_auth):
         """Test session can be closed."""
-        mock_config.return_value.load_config.return_value = {
-            'folders': {'logs': '/tmp'},
-            'api': {'base_url': 'https://api.example.com', 'market_url': 'https://market.example.com'}
-        }
         mock_logger.return_value.get_logger.return_value = MagicMock()
 
         from data.streaming.schwab_client import SchwabClient

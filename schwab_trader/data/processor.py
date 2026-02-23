@@ -14,7 +14,7 @@ import functools
 from typing import Optional, Dict, Any, Tuple
 
 from loggers.logger import Logger
-from utils.configloader import ConfigLoader
+from core.config_loader import get_logs_path
 from indicators.technical_indicators import TechnicalIndicators
 
 
@@ -61,8 +61,7 @@ class Processor:
     def __init__(self, stock: Optional[str] = None, frame: Optional[pd.DataFrame] = None):
         self.stock = stock
         self.frame = frame
-        self.config = ConfigLoader().load_config()
-        self.logs_dir = self.config["folders"]["logs"]
+        self.logs_dir = str(get_logs_path())
         self.logger = Logger('app.log', 'Processor', log_dir=self.logs_dir).get_logger()
         self.scaler = None
 

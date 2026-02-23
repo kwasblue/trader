@@ -3,7 +3,7 @@ import requests
 import websockets
 from data.streaming.authenticator import Authenticator
 from loggers.logger import Logger
-from utils.configloader import ConfigLoader
+from core.config_loader import get_logs_path
 from data.streaming.schwab_client import SchwabClient
 from core.events.eventhandler import EventHandler, get_event_handler
 from core.contracts.events import EVENT_PRICE_UPDATE
@@ -25,12 +25,11 @@ class SchwabStreamingClient():
 
     def __init__(self, apikey, secretkey):
         self.authenticator = Authenticator()
-        self.config = ConfigLoader().load_config()
         self.apikey = apikey
         self.secretkey = secretkey
         self.streamer_info = None
         self.connection = None
-        self.streaming_logger = Logger('app.log', 'SchwabStreamingClient', log_dir=f'{self.config["folders"]["logs"]}').get_logger()
+        self.streaming_logger = Logger('app.log', 'SchwabStreamingClient', log_dir=str(get_logs_path())).get_logger()
         self.price_dict = {}
         self.client = SchwabClient(apikey=self.apikey, secretkey=self.secretkey)
 

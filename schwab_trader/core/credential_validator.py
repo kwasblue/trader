@@ -85,12 +85,10 @@ class CredentialValidator:
 
         # Load config for paths
         try:
-            from utils.configloader import ConfigLoader
-            self.config = ConfigLoader().load_config()
-            self.program_path = self.config.get("folders", {}).get("app_path", str(self.root))
+            from core.config_loader import get_app_path
+            self.program_path = str(get_app_path())
             self.logger.debug(f"Config loaded. Program path: {self.program_path}")
         except Exception as e:
-            self.config = {}
             self.program_path = str(self.root)
             self.logger.warning(f"Config load failed, using defaults: {e}")
 
@@ -402,14 +400,17 @@ class CredentialValidator:
 
     def _get_schwab_token_paths(self) -> list:
         """Get possible paths for Schwab token file."""
+        from core.config_loader import get_tokens_path
         paths = []
 
         # First, check config-specified path (e.g., "tokens/token_file")
-        config_token_path = self.config.get("folders", {}).get("tokens")
-        if config_token_path:
-            paths.append(self.root / config_token_path)
+        try:
+            config_token_path = get_tokens_path()
+            paths.append(config_token_path)
             # Also check with .json extension
-            paths.append(self.root / f"{config_token_path}.json")
+            paths.append(Path(str(config_token_path) + ".json"))
+        except Exception:
+            pass
 
         # Standard locations (with and without .json extension)
         for base in [Path(self.program_path), self.root]:

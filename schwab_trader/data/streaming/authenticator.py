@@ -8,7 +8,10 @@ import json
 from dotenv import load_dotenv
 from data.output.writer import FileWriter
 from loggers.logger import Logger
-from utils.configloader import ConfigLoader
+from core.config_loader import (
+    get_app_path, get_logs_path, get_env_path, get_tokens_path,
+    SCHWAB_AUTH_URL, SCHWAB_TOKEN_ENDPOINT
+)
 from urllib.parse import urlencode
 
 class Authenticator:
@@ -19,23 +22,21 @@ class Authenticator:
             cls._instance = super().__new__(cls)
             cls._instance._initialize(*args, **kwargs)
         return cls._instance
-    
+
 
     def _initialize(self, apikey=None, secretkey=None):
-       
-        self.config =  ConfigLoader().load_config()
-        env_path = self.config["folders"]["env"]
-        load_dotenv(dotenv_path=env_path)
+        env_path = get_env_path()
+        load_dotenv(dotenv_path=str(env_path))
         self.apikey = os.getenv('SCHWAB_API_KEY')
         self.secret = os.getenv('SCHWAB_SECRET')
         self.redirect_url = os.getenv('SCHWAB_REDIRECT_URL')
-        self.auth_url = self.config["auth"]["authentication_url"]
-        self.logs_dir = self.config["folders"]["logs"]
-        self.token_endpoint = self.config["auth"]["token_endpoint"]
-        self.program_path = self.config['folders']['app_path']
+        self.auth_url = SCHWAB_AUTH_URL
+        self.logs_dir = str(get_logs_path())
+        self.token_endpoint = SCHWAB_TOKEN_ENDPOINT
+        self.program_path = str(get_app_path())
         self.logger = Logger('app.log', 'Authenticator', log_dir=self.logs_dir).get_logger()
         self.writer = FileWriter(log_file='app.log',logger_name='FileWriter',log_dir=self.logs_dir)
-        self.token_path = self.config["folders"]["tokens"]
+        self.token_path = str(get_tokens_path())
         self.rate_lim = 0.5 # seconds between requests  
     
     async def _throttle_requests(self):
@@ -133,7 +134,7 @@ class Authenticator:
             'client_id': self.apikey,
             'redirect_uri': self.redirect_url
         }
-        auth_url = f'{self.config["auth"]["authentication_url"]}{urlencode(params)}'
+        auth_url = f'{self.auth_url}{urlencode(params)}'
         self.logger.info(f"Use this URL to log in and authenticate: {auth_url}")
 
         returned_link = None

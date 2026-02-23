@@ -731,35 +731,6 @@ class LiveExecutionEngine(ExecutionEngineBase):
         context.metadata['state'] = state
         return await self.handle_signal_context(context)
 
-    async def handle_signal_legacy(
-        self,
-        symbol: str,
-        state: SymbolState,
-        signal: int,
-        price: float,
-        atr: float,
-        regime: str,
-        strategy_name: Optional[str] = None,
-        **kwargs
-    ) -> Optional[OrderResult]:
-        """
-        DEPRECATED: Use handle_signal(context, state) instead.
-
-        Backward-compatible wrapper that creates SignalContext from loose params.
-        """
-        context = SignalContext.from_kwargs(
-            symbol=symbol,
-            signal=signal,
-            price=price,
-            atr=atr,
-            regime=regime,
-            timestamp=datetime.now(timezone.utc),
-            strategy_name=strategy_name,
-            df=kwargs.get('df'),
-            market_open=kwargs.get('market_open', True),
-            **{k: v for k, v in kwargs.items() if k not in ('df', 'market_open')}
-        )
-        return await self.handle_signal(context, state)
     
     # ========================================================================
     # LIVE-SPECIFIC METHODS
@@ -1139,23 +1110,16 @@ class LiveExecutionEngine(ExecutionEngineBase):
     # ========================================================================
     # DELEGATION TO GENERIC ENGINE LOGIC
     # ========================================================================
-    
+
     async def _check_trade_approval(
         self,
         trade_logic,
         context: SignalContext,
         state: SymbolState,
     ):
-        """Check trade approval (pass context directly)."""
-        # Sync state with portfolio
-        self._setup_approval_state(context.symbol, state)
-
-        # Pass context directly to approver
-        return trade_logic.should_trade(
-            context=context,
-            state=state,
-            account_positions=len(self.portfolio.positions)
-        )
+        """Async wrapper for base class _check_trade_approval."""
+        # Delegate to synchronous base implementation
+        return super()._check_trade_approval(trade_logic, context, state)
 
     def _calculate_quantity(self, symbol, state, action_type, price, atr, regime, trade_logic, **kwargs):
         """Calculate position size for entries, use PositionManager for exits."""

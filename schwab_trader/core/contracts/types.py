@@ -16,17 +16,6 @@ from dataclasses import dataclass, asdict, field
 # TypedDict Payloads (lightweight, no validation overhead)
 # =============================================================================
 
-class BarPayload(TypedDict):
-    """Bar data payload for events."""
-    symbol: str
-    timestamp: datetime
-    open: float
-    high: float
-    low: float
-    close: float
-    volume: int
-
-
 class SignalPayload(TypedDict):
     """Signal payload for events."""
     symbol: str
@@ -277,7 +266,6 @@ class BrokerSnapshot:
 
 __all__ = [
     # TypedDicts
-    'BarPayload',
     'SignalPayload',
     # Dataclasses
     'SignalContext',

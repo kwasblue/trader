@@ -240,10 +240,6 @@ class TestBarAggregation:
              patch('core.schwab_runner.DynamicTradeLogicManager'):
 
             from core.schwab_runner import SchwabLiveRunner
-            from utils.settings import Settings
-
-            settings = MagicMock(spec=Settings)
-            settings.get.return_value = None
 
             # Create runner with mocked dependencies
             runner = SchwabLiveRunner.__new__(SchwabLiveRunner)

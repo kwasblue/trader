@@ -13,13 +13,13 @@ Preferred (new code):
 
 # Re-export everything from contracts for backward compatibility
 from core.contracts.types import (
-    BarPayload,
     SignalPayload,
     SignalContext,
     OrderResult,
     PositionView,
     BrokerSnapshot,
 )
+from core.contracts.events import BarPayload
 
 # Legacy type aliases that were defined here
 from typing import Literal

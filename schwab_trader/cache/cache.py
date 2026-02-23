@@ -2,7 +2,7 @@ from pathlib import Path
 import json
 from datetime import datetime
 from typing import Optional, Dict, Any
-from utils.configloader import ConfigLoader
+from core.config_loader import get_app_path
 
 
 class CacheManager:
@@ -17,8 +17,7 @@ class CacheManager:
     def __init__(self, cache_file: str = "cache/system_cache.json"):
         if self._initialized:
             return
-        config = ConfigLoader().load_config()
-        app_path = Path(config["app_path"])
+        app_path = get_app_path()
 
         self.cache_path = (app_path / cache_file).resolve()
         self.cache_path.parent.mkdir(parents=True, exist_ok=True)

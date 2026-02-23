@@ -1,5 +1,27 @@
+"""
+Aggregator - DEPRECATED
+
+This module is deprecated. Use UnifiedDataPipeline instead:
+
+    from core.unified_data_pipeline import UnifiedDataPipeline
+
+    pipeline = UnifiedDataPipeline()
+    results = await pipeline.update_symbols(
+        symbols=["AAPL", "MSFT"],
+        days=5,
+        process_data=True,
+    )
+
+UnifiedDataPipeline provides:
+- Automatic source selection (Alpaca or Schwab)
+- Failover between sources
+- Full ML pipeline processing
+- Async operation
+"""
+
 import os
 import json
+import warnings
 import pandas as pd
 from pandas import Timestamp, to_datetime
 from data.output.writer import FileWriter
@@ -8,16 +30,28 @@ from data.streaming.schwab_client import SchwabClient
 from data.streaming.authenticator import Authenticator
 from loggers.logger import Logger
 from data.processor import Processor
-from utils.configloader import ConfigLoader
+from core.config_loader import get_logs_path
 from utils.framemanager import DataFrameManager
 from cache.cache import CacheManager
 
+
 class Aggregator:
+    """
+    DEPRECATED: Use UnifiedDataPipeline instead.
+
+    This class is maintained for backward compatibility only.
+    """
+
     def __init__(self, apikey: str, secret: str, database='stock_base.db'):
+        warnings.warn(
+            "Aggregator is deprecated. Use 'from core.unified_data_pipeline import UnifiedDataPipeline' instead. "
+            "This class will be removed in a future version.",
+            DeprecationWarning,
+            stacklevel=2
+        )
         self.session = SchwabClient(apikey, secret)
-        self.config = ConfigLoader().load_config()
         self.database = database
-        self.log_dir = self.config["folders"]["logs"]
+        self.log_dir = str(get_logs_path())
         self.authenticator = Authenticator()
         self.datastore = DataStore(self.database)
         self.logger = Logger('app.log', 'Aggregator', log_dir=self.log_dir).get_logger()

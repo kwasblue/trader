@@ -170,16 +170,18 @@ class TradingBackend:
 
     async def _run_alpaca(self):
         """Run Alpaca live/paper trading."""
-        from utils.settings import Settings
+        from dataclasses import replace
+        from core.config_loader import get_config
         from core.alpaca_runner import AlpacaLiveRunner
 
         paper = self.kwargs.get('paper', True)
 
-        settings = Settings(root="config", include_root=True)
-        # Override paper mode
-        settings._data['ALPACA_PAPER'] = paper
+        # Get config and override paper mode if specified
+        config = get_config()
+        if paper != config.alpaca.paper:
+            config = replace(config, alpaca=replace(config.alpaca, paper=paper))
 
-        runner = AlpacaLiveRunner(settings, self.symbols)
+        runner = AlpacaLiveRunner(symbols=self.symbols, config=config)
 
         try:
             await runner.run()
@@ -190,26 +192,22 @@ class TradingBackend:
 
     async def _run_schwab(self):
         """Run Schwab live trading using SchwabLiveRunner."""
-        from utils.settings import Settings
         from core.schwab_runner import SchwabLiveRunner
         import os
 
         logger.info("[SCHWAB] Initializing Schwab connection...")
 
         try:
-            # Load settings
-            settings = Settings(root="config", include_root=True)
-
-            # Get credentials from environment or settings
-            api_key = os.getenv("SCHWAB_API_KEY") or settings.get("SCHWAB_API_KEY")
-            secret_key = os.getenv("SCHWAB_SECRET") or settings.get("SCHWAB_SECRET")
+            # Get credentials from environment variables
+            api_key = os.getenv("SCHWAB_API_KEY")
+            secret_key = os.getenv("SCHWAB_SECRET")
 
             if not api_key or not secret_key:
-                logger.error("[SCHWAB] Missing credentials. Set SCHWAB_API_KEY and SCHWAB_SECRET in .env or config")
+                logger.error("[SCHWAB] Missing credentials. Set SCHWAB_API_KEY and SCHWAB_SECRET in .env")
                 return
 
-            # Create and run the Schwab runner
-            self._schwab_runner = SchwabLiveRunner(settings, self.symbols)
+            # Create and run the Schwab runner (uses get_config() internally)
+            self._schwab_runner = SchwabLiveRunner(symbols=self.symbols)
             await self._schwab_runner.run()
 
         except asyncio.CancelledError:

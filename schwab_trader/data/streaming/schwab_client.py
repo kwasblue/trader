@@ -6,7 +6,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from data.streaming.authenticator import Authenticator
 from loggers.logger import Logger
-from utils.configloader import ConfigLoader
+from core.config_loader import get_logs_path, SCHWAB_BASE_URL, SCHWAB_MARKET_URL
 
 # Optimization constants
 REQUEST_TIMEOUT = 10  # seconds
@@ -61,13 +61,14 @@ class SchwabClient:
 
     def __init__(self, apikey: str, secretkey: str):
         self.authenticator = Authenticator()
-        self.config = ConfigLoader().load_config()
         self.apikey = apikey
         self.secretkey = secretkey
+        self._base_url = SCHWAB_BASE_URL
+        self._market_url = SCHWAB_MARKET_URL
         self.logger = Logger(
             log_file='app.log',
             logger_name='SchwabClient',
-            log_dir=self.config['folders']['logs']
+            log_dir=str(get_logs_path())
         ).get_logger()
 
         # Optimization: Connection pooling with session
@@ -177,7 +178,7 @@ class SchwabClient:
         Returns:
             dict: API response containing the account number.
         """
-        endpoint = f"{self.config['api']['base_url']}/accounts/accountNumbers"
+        endpoint = f"{self._base_url}/accounts/accountNumbers"
         headers = {'Authorization': f'Bearer {self.authenticator.access_token()}'}
         return self._get(endpoint, headers, {})
 
@@ -188,7 +189,7 @@ class SchwabClient:
         Returns:
             dict: API response containing account details.
         """
-        endpoint = f"{self.config['api']['base_url']}/accounts"
+        endpoint = f"{self._base_url}/accounts"
         headers = {'Authorization': f'Bearer {self.authenticator.access_token()}'}
         self.logger.info('Retrieving all accounts information')
         return self._get(endpoint, headers, {})
@@ -203,7 +204,7 @@ class SchwabClient:
         Returns:
             dict: API response containing account details.
         """
-        endpoint = f"{self.config['api']['base_url']}/accounts/{account_number}"
+        endpoint = f"{self._base_url}/accounts/{account_number}"
         headers = {'Authorization': f'Bearer {self.authenticator.access_token()}'}
         self.logger.info(f'Retrieving information for account number {account_number}')
         return self._get(endpoint, headers, {})
@@ -218,7 +219,7 @@ class SchwabClient:
         Returns:
             dict: API response containing order details.
         """
-        endpoint = f"{self.config['api']['base_url']}/accounts/{account_number}/orders"
+        endpoint = f"{self._base_url}/accounts/{account_number}/orders"
         headers = {'Authorization': f'Bearer {self.authenticator.access_token()}'}
         self.logger.info(f'Retrieving all orders for account number {account_number}')
         return self._get(endpoint, headers, {})
@@ -246,19 +247,19 @@ class SchwabClient:
 
     def place_orders(self, account_number: str, order_data: dict) -> dict:
         """Places an order for a specified account."""
-        endpoint = f"{self.config['api']['base_url']}/accounts/{account_number}/orders"
+        endpoint = f"{self._base_url}/accounts/{account_number}/orders"
         headers = {'Authorization': f'Bearer {self.authenticator.access_token()}'}
         self.logger.info(f'Placing order for account number {account_number} with data {order_data}')
         return self._post(endpoint, headers, order_data)
 
     def quote(self, symbol: str) -> dict:
-        endpoint = f"{self.config['api']['market_url']}/quotes"
+        endpoint = f"{self._market_url}/quotes"
         endpoint, headers, params = self._set_headers_params(endpoint=endpoint, symbol=symbol)
         self.logger.info(f'Retrieving quote for {symbol}')
         return self._get(endpoint, headers, params)
 
     def daily_price_history(self, symbol: str, start: int = '', end: int = '') -> dict:
-        endpoint = f"{self.config['api']['market_url']}/pricehistory"
+        endpoint = f"{self._market_url}/pricehistory"
         headers = {'Authorization': f'Bearer {self.authenticator.access_token()}'}
         endpoint, header, params = self._set_headers_params(
             endpoint=endpoint,
@@ -276,7 +277,7 @@ class SchwabClient:
     def custom_price_history(self, symbol: str, start: int = '', end: int = '',
                              periodType: int = '', frequencyType: str = '',
                              period: int = '', frequency: int = '') -> dict:
-        endpoint = f"{self.config['api']['market_url']}/pricehistory"
+        endpoint = f"{self._market_url}/pricehistory"
         endpoint, headers, params = self._set_headers_params(
             endpoint=endpoint,
             periodType=periodType,
@@ -291,37 +292,37 @@ class SchwabClient:
         return self._get(endpoint, headers, params)
 
     def get_order_by_id(self, account_number: str, order_id: str) -> dict:
-        endpoint = f"{self.config['api']['base_url']}/accounts/{account_number}/orders/{order_id}"
+        endpoint = f"{self._base_url}/accounts/{account_number}/orders/{order_id}"
         headers = {'Authorization': f'Bearer {self.authenticator.access_token()}'}
         return self._get(endpoint, headers, {})
 
     def cancel_order(self, account_number: str, order_id: str) -> dict:
-        endpoint = f"{self.config['api']['base_url']}/accounts/{account_number}/orders/{order_id}"
+        endpoint = f"{self._base_url}/accounts/{account_number}/orders/{order_id}"
         headers = {'Authorization': f'Bearer {self.authenticator.access_token()}'}
         return self._request("DELETE", endpoint, headers)
 
     def replace_order(self, account_number: str, order_id: str, new_order_data: dict) -> dict:
-        endpoint = f"{self.config['api']['base_url']}/accounts/{account_number}/orders/{order_id}"
+        endpoint = f"{self._base_url}/accounts/{account_number}/orders/{order_id}"
         headers = {'Authorization': f'Bearer {self.authenticator.access_token()}'}
         return self._request("PUT", endpoint, headers, data=new_order_data)
 
     def all_orders_all_accounts(self) -> dict:
-        endpoint = f"{self.config['api']['base_url']}/orders"
+        endpoint = f"{self._base_url}/orders"
         headers = {'Authorization': f'Bearer {self.authenticator.access_token()}'}
         return self._get(endpoint, headers, {})
 
     def transactions(self, account_number: str) -> dict:
-        endpoint = f"{self.config['api']['base_url']}/accounts/{account_number}/transactions"
+        endpoint = f"{self._base_url}/accounts/{account_number}/transactions"
         headers = {'Authorization': f'Bearer {self.authenticator.access_token()}'}
         return self._get(endpoint, headers, {})
 
     def transaction_by_id(self, account_number: str, transaction_id: str) -> dict:
-        endpoint = f"{self.config['api']['base_url']}/accounts/{account_number}/transactions/{transaction_id}"
+        endpoint = f"{self._base_url}/accounts/{account_number}/transactions/{transaction_id}"
         headers = {'Authorization': f'Bearer {self.authenticator.access_token()}'}
         return self._get(endpoint, headers, {})
 
     def user_preferences(self) -> dict:
-        endpoint = f"{self.config['api']['base_url']}/userPreference"
+        endpoint = f"{self._base_url}/userPreference"
         headers = {'Authorization': f'Bearer {self.authenticator.access_token()}'}
         return self._get(endpoint, headers, {})
     

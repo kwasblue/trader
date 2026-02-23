@@ -15,10 +15,10 @@ import asyncio
 import contextlib
 from collections import defaultdict
 from datetime import datetime, timezone
+from typing import Optional
 
 import pandas as pd
 
-from utils.settings import Settings
 from loggers.factory import get_module_logger
 from loggers.file_trade_logger import FileTradeLogger
 
@@ -32,7 +32,7 @@ from core.historical_loader import HistoricalBarLoader
 from core.events.eventhandler import EventHandler, get_event_handler
 from core.contracts.events import (EVENT_NEW_BAR, BarPayload, EVENT_STRATEGY_SIGNAL, StrategySignalPayload,
     EVENT_PNL_UPDATE, PnLPayload, EVENT_POSITION_UPDATE, PositionPayload)
-from core.config_loader import get_config, create_position_sizer, create_drawdown_monitor
+from core.config_loader import get_config, create_position_sizer, create_drawdown_monitor, TradingConfig
 
 from core.simulator.simulation import compute_atr, classify_regime  # reuse your helpers
 from core.broker.alpaca_broker import AlpacaBroker
@@ -47,10 +47,19 @@ from core.state_reconciler import StateReconciler, ReconcilerConfig
 load_dotenv(ROOT / ".venv" / ".env")
 
 class AlpacaLiveRunner:
-    def __init__(self, settings: Settings, symbols: list[str]):
-        self.settings = settings
+    def __init__(self, symbols: list[str], config: Optional[TradingConfig] = None):
+        """
+        Initialize the Alpaca live runner.
+
+        Args:
+            symbols: List of symbols to trade
+            config: Optional TradingConfig instance (uses global config if not provided)
+        """
         self.symbols = symbols
         self.event_handler = get_event_handler()
+
+        # Load centralized config
+        self.config = config or get_config()
 
         # logging + trade log
         self.logger = get_module_logger(module_name='AlpacaLiveRunner', file_key='AlpacaLive')
@@ -58,9 +67,9 @@ class AlpacaLiveRunner:
 
         # broker (Alpaca)
         self.broker = AlpacaBroker(
-            api_key=settings.get("ALPACA_API_KEY") or os.getenv("ALPACA_API_KEY"),
-            api_secret=settings.get("ALPACA_SECRET_KEY") or os.getenv("ALPACA_SECRET_KEY"),
-            paper=bool(settings.get("ALPACA_PAPER", True)),
+            api_key=os.getenv("ALPACA_API_KEY"),
+            api_secret=os.getenv("ALPACA_SECRET_KEY"),
+            paper=self.config.alpaca.paper,
         )
 
         # state
@@ -69,28 +78,18 @@ class AlpacaLiveRunner:
         self.history: dict[str, list[dict]] = defaultdict(list)
         self.atr_hist: dict[str, list[float]] = defaultdict(list)
 
-        # Load centralized config
-        self.config = get_config()
         risk_cfg = self.config.risk
 
-        # risk & gates (uses config with settings override)
+        # risk & gates (uses config values)
         self.trade_gate = TradeGate(
-            max_layers=settings.get("MAX_PYRAMID_LAYERS", risk_cfg.max_pyramid_layers),
-            min_bars_between_layers=settings.get("MIN_BARS_BETWEEN_LAYERS", risk_cfg.min_bars_between_layers),
-            regime_min_persist_bars=settings.get("REGIME_MIN_PERSIST_BARS", 1),
-            flip_cooldown_bars=settings.get("FLIP_COOLDOWN_BARS", 1),
+            max_layers=risk_cfg.max_pyramid_layers,
+            min_bars_between_layers=risk_cfg.min_bars_between_layers,
+            regime_min_persist_bars=1,
+            flip_cooldown_bars=1,
         )
 
         # DrawdownMonitor from config (returns None if disabled)
         self.ddm = create_drawdown_monitor(self.config)
-        if self.ddm is None:
-            # Create with settings fallback if config has it disabled but settings override
-            if settings.get("DDM_ENABLED", False):
-                self.ddm = DrawdownMonitor(
-                    max_symbol_drawdown=settings.get("MAX_SYMBOL_DD", 0.12),
-                    max_portfolio_drawdown=settings.get("MAX_PORTFOLIO_DD", 0.15),
-                    symbol_cooldown_seconds=settings.get("DDM_COOLDOWN_BARS", 5),
-                )
 
         # sizer from config
         self.sizer = create_position_sizer(self.config)
@@ -116,9 +115,9 @@ class AlpacaLiveRunner:
 
         # State reconciler - ensures local state matches broker
         reconciler_config = ReconcilerConfig(
-            reconcile_interval=settings.get("RECONCILE_INTERVAL", 60),
-            halt_on_critical=settings.get("HALT_ON_MISMATCH", True),
-            auto_correct_minor=settings.get("AUTO_CORRECT_MINOR", True),
+            reconcile_interval=60,
+            halt_on_critical=True,
+            auto_correct_minor=True,
         )
         self.reconciler = StateReconciler(
             broker=self.broker,
@@ -141,8 +140,8 @@ class AlpacaLiveRunner:
 
         # Also keep the simple updater for quick freshness checks
         self.data_updater = HistoricalDataUpdater(
-            api_key=settings.get("ALPACA_API_KEY") or os.getenv("ALPACA_API_KEY"),
-            api_secret=settings.get("ALPACA_SECRET_KEY") or os.getenv("ALPACA_SECRET_KEY"),
+            api_key=os.getenv("ALPACA_API_KEY"),
+            api_secret=os.getenv("ALPACA_SECRET_KEY"),
             data_path=str(ROOT / "data" / "data_storage" / "proc_data"),
         )
 
@@ -389,8 +388,8 @@ class AlpacaLiveRunner:
         self._running = True
 
         # Seed historical data (fetches fresh if stale)
-        max_stale = self.settings.get("MAX_STALE_MINUTES", 60)
-        await self.seed(self.settings.get("SEED_BARS", 200), max_stale_minutes=max_stale)
+        max_stale = self.config.data.max_stale_minutes
+        await self.seed(self.config.data.seed_bars, max_stale_minutes=max_stale)
         await self.event_handler.subscribe("BAR", self._bar_debug_logger)
 
         # connect + subscribe
@@ -451,13 +450,12 @@ class AlpacaLiveRunner:
         self.logger.info(f"LiveRunner (Alpaca) started for: {', '.join(self.symbols)}")
 
         # Start periodic state reconciliation
-        reconcile_interval = self.settings.get("RECONCILE_INTERVAL", 60)
-        if reconcile_interval > 0:
-            await self.reconciler.start_periodic(interval_seconds=reconcile_interval)
-            self.logger.info(f"State reconciliation enabled (every {reconcile_interval}s)")
+        reconcile_interval = 60
+        await self.reconciler.start_periodic(interval_seconds=reconcile_interval)
+        self.logger.info(f"State reconciliation enabled (every {reconcile_interval}s)")
 
         # Start periodic historical data updates (runs in background)
-        update_interval = self.settings.get("HISTORICAL_UPDATE_INTERVAL_MINUTES", 60)
+        update_interval = self.config.data.historical_update_interval_minutes
         if update_interval > 0:
             self._update_task = asyncio.create_task(
                 self._periodic_data_update(interval_minutes=update_interval)
@@ -591,26 +589,16 @@ def _ensure_live_config(dir_path: str = "config"):
     return sr_path, sp_path, tl_path
 
 async def main():
-    # 1) ensure config JSONs exist (flat under ./config)
-    sr_path, sp_path, tl_path = _ensure_live_config("config")
+    # Ensure config JSONs exist (flat under ./config)
+    _ensure_live_config("config")
 
-    # 2) load settings; merge ALL *.json/*.yml directly in ./config
-    settings = Settings(
-        root="config",
-        include_root=True,  # <- important for your flat layout
-        # optional: env="dev",
-        runtime_overrides={
-            # expose your three files as first-class keys
-            "strategy_routing_path": sr_path,
-            "strategy_params_path": sp_path,
-            "trade_logic_routing_path": tl_path,
-        },
-    )
+    # Load config
+    config = get_config()
 
-    # 3) symbols – keep your existing key, with a sane default
-    symbols = settings.get_list("symbols") or settings.get_list("SYMBOLS") or ["AAPL", "MSFT"]
+    # Get symbols from config or default
+    symbols = config.general.default_symbols or ["AAPL", "MSFT"]
 
-    runner = AlpacaLiveRunner(settings, symbols)
+    runner = AlpacaLiveRunner(symbols=symbols, config=config)
     await runner.run()
 
 if __name__ == "__main__":

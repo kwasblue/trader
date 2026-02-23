@@ -565,17 +565,9 @@ class AutoTrader:
 
     async def _run_alpaca_session(self) -> None:
         """Run Alpaca trading session."""
-        from utils.settings import Settings
         from core.alpaca_runner import AlpacaLiveRunner
 
-        # Create settings from config directory
-        settings = Settings(root=str(ROOT / "config"), include_root=True)
-
-        # Override paper mode for safety in auto mode
-        if hasattr(settings, '_cfg'):
-            settings._cfg['ALPACA_PAPER'] = True
-
-        runner = AlpacaLiveRunner(settings, self.symbols)
+        runner = AlpacaLiveRunner(symbols=self.symbols, config=self.config)
 
         # Create task for the runner
         self.trading_task = asyncio.create_task(runner.run())
@@ -602,13 +594,9 @@ class AutoTrader:
 
     async def _run_schwab_session(self) -> None:
         """Run Schwab trading session."""
-        from utils.settings import Settings
         from core.schwab_runner import SchwabLiveRunner
 
-        # Create settings from config directory
-        settings = Settings(root=str(ROOT / "config"), include_root=True)
-
-        runner = SchwabLiveRunner(settings, self.symbols)
+        runner = SchwabLiveRunner(symbols=self.symbols, config=self.config)
 
         # Create task for the runner
         self.trading_task = asyncio.create_task(runner.run())

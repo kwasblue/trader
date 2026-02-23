@@ -7,8 +7,6 @@ must implement to ensure consistent behavior across different execution environm
 
 from __future__ import annotations
 
-import asyncio
-import warnings
 from abc import ABC, abstractmethod
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
@@ -193,50 +191,6 @@ class BaseBrokerInterface(ABC):
         """
         pass
 
-    # ========================================================================
-    # DEPRECATED SYNC WRAPPERS
-    # ========================================================================
-
-    def place_market_order_sync(
-        self,
-        symbol: str,
-        qty: int,
-        side: OrderSide,
-        price: Optional[float] = None
-    ) -> OrderResult:
-        """
-        DEPRECATED: Sync wrapper for place_market_order.
-
-        Use `await place_market_order()` instead.
-        """
-        warnings.warn(
-            "place_market_order_sync is deprecated. Use 'await place_market_order()' instead.",
-            DeprecationWarning,
-            stacklevel=2
-        )
-        loop = asyncio.get_event_loop()
-        return loop.run_until_complete(self.place_market_order(symbol, qty, side, price))
-
-    def place_oco_order_sync(
-        self,
-        symbol: str,
-        qty: int,
-        stop_price: float,
-        limit_price: float
-    ) -> OrderResult:
-        """
-        DEPRECATED: Sync wrapper for place_oco_order.
-
-        Use `await place_oco_order()` instead.
-        """
-        warnings.warn(
-            "place_oco_order_sync is deprecated. Use 'await place_oco_order()' instead.",
-            DeprecationWarning,
-            stacklevel=2
-        )
-        loop = asyncio.get_event_loop()
-        return loop.run_until_complete(self.place_oco_order(symbol, qty, stop_price, limit_price))
-    
     # ========================================================================
     # ABSTRACT METHODS - ACCOUNT & POSITION QUERIES
     # ========================================================================

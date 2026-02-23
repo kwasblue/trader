@@ -394,11 +394,12 @@ class TestHandleSignalContextIntegration:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_handle_signal_backward_compatible(self, mock_engine_components):
-        """Test that old handle_signal still works and delegates to handle_signal_context."""
-        from unittest.mock import AsyncMock
+    async def test_handle_signal_with_context_and_state(self, mock_engine_components):
+        """Test that handle_signal works with context and state arguments."""
         from core.logic.mock_execution_engine import MockExecutionEngine
         from core.logic.symbol_state import SymbolState
+        from core.app_types import SignalContext
+        from datetime import datetime, timezone
 
         engine = MockExecutionEngine(
             broker=mock_engine_components['broker'],
@@ -411,16 +412,17 @@ class TestHandleSignalContextIntegration:
 
         state = SymbolState(symbol="AAPL")
 
-        # Call deprecated handle_signal_legacy method for backward compatibility
-        result = await engine.handle_signal_legacy(
+        # Create context and call handle_signal directly
+        context = SignalContext(
             symbol="AAPL",
-            state=state,
             signal=1,
             price=150.0,
             atr=2.0,
             regime="normal",
+            timestamp=datetime.now(timezone.utc),
             strategy_name="test_strategy"
         )
+        result = await engine.handle_signal(context, state)
 
         # Should work and return result
         assert result is not None

@@ -20,19 +20,15 @@ class TestAggregatorInit(unittest.TestCase):
     """Test Aggregator initialization."""
 
     @patch('data.aggregate.SchwabClient')
-    @patch('data.aggregate.ConfigLoader')
+    @patch('data.aggregate.get_logs_path', return_value='/tmp/logs')
     @patch('data.aggregate.Authenticator')
     @patch('data.aggregate.DataStore')
     @patch('data.aggregate.Logger')
     @patch('data.aggregate.FileWriter')
     @patch('data.aggregate.CacheManager')
     def test_init(self, mock_cache, mock_writer, mock_logger, mock_store,
-                  mock_auth, mock_config, mock_client):
+                  mock_auth, mock_logs_path, mock_client):
         """Aggregator should initialize with required dependencies."""
-        mock_config.return_value.load_config.return_value = {
-            'folders': {'logs': '/tmp/logs'}
-        }
-
         from data.aggregate import Aggregator
         agg = Aggregator(apikey='test_key', secret='test_secret')
 
@@ -44,17 +40,14 @@ class TestIsStockOutdated(unittest.TestCase):
     """Test stock outdated detection."""
 
     @patch('data.aggregate.SchwabClient')
-    @patch('data.aggregate.ConfigLoader')
+    @patch('data.aggregate.get_logs_path', return_value='/tmp/logs')
     @patch('data.aggregate.Authenticator')
     @patch('data.aggregate.DataStore')
     @patch('data.aggregate.Logger')
     @patch('data.aggregate.FileWriter')
     @patch('data.aggregate.CacheManager')
     def setUp(self, mock_cache, mock_writer, mock_logger, mock_store,
-              mock_auth, mock_config, mock_client):
-        mock_config.return_value.load_config.return_value = {
-            'folders': {'logs': '/tmp/logs'}
-        }
+              mock_auth, mock_logs_path, mock_client):
         mock_logger.return_value.get_logger.return_value = MagicMock()
 
         from data.aggregate import Aggregator
@@ -85,17 +78,14 @@ class TestRawDataStore(unittest.TestCase):
     """Test raw data storage operations."""
 
     @patch('data.aggregate.SchwabClient')
-    @patch('data.aggregate.ConfigLoader')
+    @patch('data.aggregate.get_logs_path', return_value='/tmp/logs')
     @patch('data.aggregate.Authenticator')
     @patch('data.aggregate.DataStore')
     @patch('data.aggregate.Logger')
     @patch('data.aggregate.FileWriter')
     @patch('data.aggregate.CacheManager')
     def setUp(self, mock_cache, mock_writer, mock_logger, mock_store,
-              mock_auth, mock_config, mock_client):
-        mock_config.return_value.load_config.return_value = {
-            'folders': {'logs': '/tmp/logs'}
-        }
+              mock_auth, mock_logs_path, mock_client):
         mock_logger.return_value.get_logger.return_value = MagicMock()
         mock_auth.return_value.program_path = '/tmp'
 
@@ -142,17 +132,14 @@ class TestStoreProcessedData(unittest.TestCase):
     """Test processed data storage."""
 
     @patch('data.aggregate.SchwabClient')
-    @patch('data.aggregate.ConfigLoader')
+    @patch('data.aggregate.get_logs_path', return_value='/tmp/logs')
     @patch('data.aggregate.Authenticator')
     @patch('data.aggregate.DataStore')
     @patch('data.aggregate.Logger')
     @patch('data.aggregate.FileWriter')
     @patch('data.aggregate.CacheManager')
     def setUp(self, mock_cache, mock_writer, mock_logger, mock_store,
-              mock_auth, mock_config, mock_client):
-        mock_config.return_value.load_config.return_value = {
-            'folders': {'logs': '/tmp/logs'}
-        }
+              mock_auth, mock_logs_path, mock_client):
         mock_logger.return_value.get_logger.return_value = MagicMock()
 
         from data.aggregate import Aggregator
@@ -187,17 +174,14 @@ class TestFetchData(unittest.TestCase):
     """Test data fetching from database."""
 
     @patch('data.aggregate.SchwabClient')
-    @patch('data.aggregate.ConfigLoader')
+    @patch('data.aggregate.get_logs_path', return_value='/tmp/logs')
     @patch('data.aggregate.Authenticator')
     @patch('data.aggregate.DataStore')
     @patch('data.aggregate.Logger')
     @patch('data.aggregate.FileWriter')
     @patch('data.aggregate.CacheManager')
     def setUp(self, mock_cache, mock_writer, mock_logger, mock_store,
-              mock_auth, mock_config, mock_client):
-        mock_config.return_value.load_config.return_value = {
-            'folders': {'logs': '/tmp/logs'}
-        }
+              mock_auth, mock_logs_path, mock_client):
         mock_logger.return_value.get_logger.return_value = MagicMock()
 
         from data.aggregate import Aggregator

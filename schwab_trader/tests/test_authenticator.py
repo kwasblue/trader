@@ -26,7 +26,10 @@ class TestAuthenticatorInit(unittest.TestCase):
     def setUp(self):
         reset_authenticator_singleton()
 
-    @patch('data.streaming.authenticator.ConfigLoader')
+    @patch('data.streaming.authenticator.get_tokens_path', return_value='/tmp/tokens')
+    @patch('data.streaming.authenticator.get_app_path', return_value='/tmp')
+    @patch('data.streaming.authenticator.get_logs_path', return_value='/tmp/logs')
+    @patch('data.streaming.authenticator.get_env_path', return_value='.env')
     @patch('data.streaming.authenticator.Logger')
     @patch('data.streaming.authenticator.FileWriter')
     @patch('data.streaming.authenticator.load_dotenv')
@@ -35,12 +38,9 @@ class TestAuthenticatorInit(unittest.TestCase):
         'SCHWAB_SECRET': 'test_secret',
         'SCHWAB_REDIRECT_URL': 'https://localhost'
     })
-    def test_singleton_pattern(self, mock_dotenv, mock_writer, mock_logger, mock_config):
+    def test_singleton_pattern(self, mock_dotenv, mock_writer, mock_logger,
+                               mock_env_path, mock_logs_path, mock_app_path, mock_tokens_path):
         """Authenticator should be a singleton."""
-        mock_config.return_value.load_config.return_value = {
-            'folders': {'env': '.env', 'logs': '/tmp', 'app_path': '/tmp', 'tokens': '/tmp/tokens'},
-            'auth': {'authentication_url': 'https://auth.example.com', 'token_endpoint': 'https://token.example.com'}
-        }
         mock_logger.return_value.get_logger.return_value = MagicMock()
 
         from data.streaming.authenticator import Authenticator
@@ -49,7 +49,10 @@ class TestAuthenticatorInit(unittest.TestCase):
 
         self.assertIs(auth1, auth2)
 
-    @patch('data.streaming.authenticator.ConfigLoader')
+    @patch('data.streaming.authenticator.get_tokens_path', return_value='/tmp/tokens')
+    @patch('data.streaming.authenticator.get_app_path', return_value='/tmp')
+    @patch('data.streaming.authenticator.get_logs_path', return_value='/tmp/logs')
+    @patch('data.streaming.authenticator.get_env_path', return_value='.env')
     @patch('data.streaming.authenticator.Logger')
     @patch('data.streaming.authenticator.FileWriter')
     @patch('data.streaming.authenticator.load_dotenv')
@@ -58,12 +61,9 @@ class TestAuthenticatorInit(unittest.TestCase):
         'SCHWAB_SECRET': 'test_secret',
         'SCHWAB_REDIRECT_URL': 'https://localhost'
     })
-    def test_loads_credentials_from_env(self, mock_dotenv, mock_writer, mock_logger, mock_config):
+    def test_loads_credentials_from_env(self, mock_dotenv, mock_writer, mock_logger,
+                                        mock_env_path, mock_logs_path, mock_app_path, mock_tokens_path):
         """Should load API credentials from environment."""
-        mock_config.return_value.load_config.return_value = {
-            'folders': {'env': '.env', 'logs': '/tmp', 'app_path': '/tmp', 'tokens': '/tmp/tokens'},
-            'auth': {'authentication_url': 'https://auth.example.com', 'token_endpoint': 'https://token.example.com'}
-        }
         mock_logger.return_value.get_logger.return_value = MagicMock()
 
         from data.streaming.authenticator import Authenticator
@@ -79,7 +79,10 @@ class TestTokenOperations(unittest.TestCase):
     def setUp(self):
         reset_authenticator_singleton()
 
-    @patch('data.streaming.authenticator.ConfigLoader')
+    @patch('data.streaming.authenticator.get_tokens_path', return_value='/tmp/tokens')
+    @patch('data.streaming.authenticator.get_app_path', return_value='/tmp')
+    @patch('data.streaming.authenticator.get_logs_path', return_value='/tmp/logs')
+    @patch('data.streaming.authenticator.get_env_path', return_value='.env')
     @patch('data.streaming.authenticator.Logger')
     @patch('data.streaming.authenticator.FileWriter')
     @patch('data.streaming.authenticator.load_dotenv')
@@ -88,11 +91,8 @@ class TestTokenOperations(unittest.TestCase):
         'SCHWAB_SECRET': 'test_secret',
         'SCHWAB_REDIRECT_URL': 'https://localhost'
     })
-    def _create_authenticator(self, mock_dotenv, mock_writer, mock_logger, mock_config):
-        mock_config.return_value.load_config.return_value = {
-            'folders': {'env': '.env', 'logs': '/tmp', 'app_path': '/tmp', 'tokens': '/tmp/tokens'},
-            'auth': {'authentication_url': 'https://auth.example.com', 'token_endpoint': 'https://token.example.com'}
-        }
+    def _create_authenticator(self, mock_dotenv, mock_writer, mock_logger,
+                              mock_env_path, mock_logs_path, mock_app_path, mock_tokens_path):
         mock_logger.return_value.get_logger.return_value = MagicMock()
 
         from data.streaming.authenticator import Authenticator
@@ -156,7 +156,10 @@ class TestTokenExpiration(unittest.TestCase):
     def setUp(self):
         reset_authenticator_singleton()
 
-    @patch('data.streaming.authenticator.ConfigLoader')
+    @patch('data.streaming.authenticator.get_tokens_path', return_value='/tmp/tokens')
+    @patch('data.streaming.authenticator.get_app_path', return_value='/tmp')
+    @patch('data.streaming.authenticator.get_logs_path', return_value='/tmp/logs')
+    @patch('data.streaming.authenticator.get_env_path', return_value='.env')
     @patch('data.streaming.authenticator.Logger')
     @patch('data.streaming.authenticator.FileWriter')
     @patch('data.streaming.authenticator.load_dotenv')
@@ -165,11 +168,8 @@ class TestTokenExpiration(unittest.TestCase):
         'SCHWAB_SECRET': 'test_secret',
         'SCHWAB_REDIRECT_URL': 'https://localhost'
     })
-    def _create_authenticator(self, mock_dotenv, mock_writer, mock_logger, mock_config):
-        mock_config.return_value.load_config.return_value = {
-            'folders': {'env': '.env', 'logs': '/tmp', 'app_path': '/tmp', 'tokens': '/tmp/tokens'},
-            'auth': {'authentication_url': 'https://auth.example.com', 'token_endpoint': 'https://token.example.com'}
-        }
+    def _create_authenticator(self, mock_dotenv, mock_writer, mock_logger,
+                              mock_env_path, mock_logs_path, mock_app_path, mock_tokens_path):
         mock_logger.return_value.get_logger.return_value = MagicMock()
 
         from data.streaming.authenticator import Authenticator
@@ -248,7 +248,10 @@ class TestTokenRenewal(unittest.TestCase):
     def setUp(self):
         reset_authenticator_singleton()
 
-    @patch('data.streaming.authenticator.ConfigLoader')
+    @patch('data.streaming.authenticator.get_tokens_path', return_value='/tmp/tokens')
+    @patch('data.streaming.authenticator.get_app_path', return_value='/tmp')
+    @patch('data.streaming.authenticator.get_logs_path', return_value='/tmp/logs')
+    @patch('data.streaming.authenticator.get_env_path', return_value='.env')
     @patch('data.streaming.authenticator.Logger')
     @patch('data.streaming.authenticator.FileWriter')
     @patch('data.streaming.authenticator.load_dotenv')
@@ -257,11 +260,8 @@ class TestTokenRenewal(unittest.TestCase):
         'SCHWAB_SECRET': 'test_secret',
         'SCHWAB_REDIRECT_URL': 'https://localhost'
     })
-    def _create_authenticator(self, mock_dotenv, mock_writer, mock_logger, mock_config):
-        mock_config.return_value.load_config.return_value = {
-            'folders': {'env': '.env', 'logs': '/tmp', 'app_path': '/tmp', 'tokens': '/tmp/tokens'},
-            'auth': {'authentication_url': 'https://auth.example.com', 'token_endpoint': 'https://token.example.com'}
-        }
+    def _create_authenticator(self, mock_dotenv, mock_writer, mock_logger,
+                              mock_env_path, mock_logs_path, mock_app_path, mock_tokens_path):
         mock_logger.return_value.get_logger.return_value = MagicMock()
 
         from data.streaming.authenticator import Authenticator

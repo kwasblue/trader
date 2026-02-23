@@ -1,7 +1,7 @@
 ================================================================================
 📂 PROJECT STRUCTURE
-Generated: 2026-02-21 10:01:16
-Total Files: 192
+Generated: 2026-02-22 22:44:31
+Total Files: 194
 ================================================================================
 
 📄 autotrader.py
@@ -88,7 +88,7 @@ Total Files: 192
 
 📄 core/alpaca_runner.py
    🧱 class AlpacaLiveRunner
-      ├── def __init__(self, settings, symbols)
+      ├── def __init__(self, symbols, config)
       ├── def _on_reconciler_halt(self, message)
       ├── def _canonicalize_alpaca_bar(self, bar)
       ├── def _bar_bucket(self, ts, timeframe_sec)
@@ -170,20 +170,9 @@ Total Files: 192
    ⚙️  def walk_forward_analysis(self, data, strategy_name, param_grid, train_size, test_size, step_size, metric, initial_capital, verbose)
    ⚙️  def anchored_walk_forward(self, data, strategy_name, param_grid, initial_train_size, test_size, metric, initial_capital, verbose)
 
-📄 core/backtester.py
-   🧱 class Backtester
-      ├── def __init__(self, data, initial_capital, transaction_cost, risk_free_rate)
-      ├── def run_backtest(self, strategy_name, strategy_params, sizer)
-      ├── def evaluate_performance(self, portfolio_df, market_data)
-      ├── def plot_results(self, data, strategy, save_path)
-      ├── def generate_report(self, portfolio_df, strategy_name, performance, file_name)
-      └── def _apply_strategy(self, data, strategy_name)
-
 📄 core/base/base_broker_interface.py
    🧱 class BaseBrokerInterface
       ├── def __init__(self)
-      ├── def place_market_order_sync(self, symbol, qty, side, price)
-      ├── def place_oco_order_sync(self, symbol, qty, stop_price, limit_price)
       ├── def get_available_funds(self)
       ├── def get_default_account(self)
       ├── def get_quote(self, symbol)
@@ -229,9 +218,10 @@ Total Files: 192
    🧱 class ExecutionEngineBase
       ├── def __init__(self, broker, executor, sizer, performance_tracker, trade_logic_manager, portfolio, position_manager)
       ├── def handle_signal(self, context, state)
-      ├── def handle_signal_legacy(self, symbol, state, signal, price, atr, regime, strategy_name)
       ├── def _determine_action(self, symbol, state, signal, reason)
       ├── def _setup_approval_state(self, symbol, state)
+      ├── def _get_or_create_state(self, symbol)
+      ├── def _check_trade_approval(self, trade_approver, context, state)
       ├── def _get_exit_quantity(self, symbol, action_type, trade_logic)
       ├── def _post_execution(self, symbol, state, result, action_type, regime, strategy_name)
       ├── def _update_portfolio_after_execution(self, symbol, result)
@@ -392,7 +382,7 @@ Total Files: 192
 
 📄 core/broker/mock_broker.py
    🧱 class MockBroker
-      ├── def __init__(self, starting_cash, slippage, commission, event_handler)
+      ├── def __init__(self, starting_cash, slippage, commission, event_handler, respect_market_hours)
       ├── def get_quote(self, symbol)
       ├── def get_available_funds(self)
       ├── def get_buying_power(self)
@@ -456,14 +446,26 @@ Total Files: 192
    🧱 class TradingConfig
       (no methods)
    ⚙️  def _dict_to_dataclass(self, cls, data)
+   ⚙️  def _apply_env_overrides(self, config)
+   ⚙️  def _parse_env_value(self, value)
    ⚙️  def load_config(self, config_path)
    ⚙️  def get_config(self, reload)
    ⚙️  def set_config(self, config)
    ⚙️  def enable_day_trade_mode()
    ⚙️  def reload_config()
+   ⚙️  def get_app_path()
+   ⚙️  def get_logs_path()
+   ⚙️  def get_data_path()
+   ⚙️  def get_raw_data_path()
+   ⚙️  def get_tokens_path()
+   ⚙️  def get_env_path()
    ⚙️  def validate_config(self, config)
    🧱 class _ConfigProxy
       └── def __getattr__(self, name)
+   ⚙️  def create_position_sizer(self, config)
+   ⚙️  def create_drawdown_monitor(self, config)
+   ⚙️  def create_trade_approver(self, config, event_handler)
+   ⚙️  def create_position_manager(self, config)
 
 📄 core/contracts/events.py
    🧱 class BarPayload
@@ -536,8 +538,6 @@ Total Files: 192
       (no methods)
 
 📄 core/contracts/types.py
-   🧱 class BarPayload
-      (no methods)
    🧱 class SignalPayload
       (no methods)
    🧱 class SignalContext
@@ -814,11 +814,6 @@ Total Files: 192
       └── def _normalize_row(self, row, fallback_symbol)
    ⚙️  def _num(self, x)
 
-📄 core/kelly_sizer.py
-   🧱 class KellyPositionSizer
-      ├── def __init__(self, kelly_fraction)
-      └── def calculate_position_size(self, price, stop_loss_price, current_cash, market_conditions, signal, win_probability, reward_to_risk)
-
 📄 core/logging_config.py
    ⚙️  def get_component_logger(self, name, structured, context)
    ⚙️  def get_trading_logger(self, symbol, strategy, correlation_id)
@@ -835,15 +830,6 @@ Total Files: 192
       └── def normalize_regime(self, regime)
    🧱 class DefaultTradeLogicManager
       └── def __init__(self)
-
-📄 core/logic/execution_engine.py
-   🧱 class GenericExecutionEngine
-      ├── def __init__(self, broker, executor, sizer, performance_tracker, trade_logic_manager, portfolio, position_manager)
-      ├── def handle_signal(self, context, state)
-      ├── def _check_trade_approval(self, trade_approver, context, state)
-      ├── def _calculate_quantity(self, symbol, state, action_type, price, atr, regime, trade_approver)
-      ├── def _execute_trade(self, symbol, state, side, qty, price, atr, action_type)
-      └── def _post_execution(self, symbol, state, result, action_type, regime, strategy_name)
 
 📄 core/logic/live_execution_engine.py
    ⚙️  def get_default_position_manager()
@@ -863,7 +849,6 @@ Total Files: 192
       ├── def __init__(self, broker, executor, sizer, performance_tracker, trade_logic_manager, portfolio, drawdown_monitor, event_handler, position_manager)
       ├── def _execute_mock_trade(self, symbol, state, side, qty, price, action_type)
       ├── def _update_mock_portfolio(self, symbol, side, qty, price)
-      ├── def _check_trade_approval(self, trade_logic, context, state)
       ├── def _calculate_quantity(self, symbol, state, action_type, price, atr, regime, trade_logic)
       ├── def _update_portfolio_after_execution(self, symbol, result)
       ├── def _post_execution(self, symbol, state, result, action_type, regime, strategy_name)
@@ -1019,7 +1004,6 @@ Total Files: 192
       ├── def log_order_response(self, response)
       ├── def retry_failed_order(self, symbol, side, qty)
       ├── def _place_order(self, symbol, qty, side, price)
-      ├── def _update_position(self, symbol, side, qty, price)
       └── def _emit_alert(self, level, message, symbol)
 
 📄 core/order_registry.py
@@ -1072,10 +1056,12 @@ Total Files: 192
 
 📄 core/schwab_runner.py
    🧱 class SchwabLiveRunner
-      ├── def __init__(self, settings, symbols, client)
+      ├── def __init__(self, symbols, client, config)
       ├── def _on_reconciler_halt(self, message)
       ├── def _canonicalize_schwab_quote(self, quote, symbol)
+      ├── def _canonicalize_schwab_chart_bar(self, data, symbol)
       ├── def _bar_bucket(self, ts, timeframe_sec)
+      ├── def _aggregate_quote_to_bar(self, symbol, price, volume, bar_id)
       ├── def _df_from_history(self, symbol)
       ├── def _symbol_mv(self, symbol, last_px)
       └── def _create_quote_callback(self, symbol)
@@ -1310,15 +1296,6 @@ Total Files: 192
    🧱 class BarValidator
       ├── def __init__(self, max_age_sec, max_move_pct)
       └── def is_valid(self, prev_close, bar)
-
-📄 data/datapipeline.py
-   🧱 class StockDataPipeline
-      ├── def __init__(self, watch_list, max_workers, max_retries)
-      ├── def fetch_data(self)
-      ├── def gather_data(self)
-      ├── def process_data(self, gathered_data)
-      ├── def store_data(self, processed_data)
-      └── def run(self)
 
 📄 data/datastorage.py
    🧱 class DataStore
@@ -1693,6 +1670,7 @@ Total Files: 192
       ├── def _update_price_chart(self, price)
       ├── def _append_log(self, msg)
       ├── def _calculate_and_update_performance(self)
+      ├── def _periodic_perf_update(self)
       ├── def _update_performance_tab(self, metrics)
       ├── def _on_cooldown_state(self, cooldown)
       ├── def _update_from_snapshot(self, snap)
@@ -1769,10 +1747,6 @@ Total Files: 192
       ├── def _is_token_keeper_running(self)
       ├── def _start_token_keeper(self)
       └── def _print_summary(self)
-
-   ⚙️  def parse_args()
-   ⚙️  def run_with_gui(self, symbols)
-   ⚙️  def main()
 
 📄 run_tests.py
    ⚙️  def run_tests(self, args)
@@ -1936,23 +1910,23 @@ Total Files: 192
 
 📄 tests/test_aggregator.py
    🧱 class TestAggregatorInit
-      └── def test_init(self, mock_cache, mock_writer, mock_logger, mock_store, mock_auth, mock_config, mock_client)
+      └── def test_init(self, mock_cache, mock_writer, mock_logger, mock_store, mock_auth, mock_logs_path, mock_client)
    🧱 class TestIsStockOutdated
-      ├── def setUp(self, mock_cache, mock_writer, mock_logger, mock_store, mock_auth, mock_config, mock_client)
+      ├── def setUp(self, mock_cache, mock_writer, mock_logger, mock_store, mock_auth, mock_logs_path, mock_client)
       ├── def test_no_timestamp_is_outdated(self)
       ├── def test_old_timestamp_is_outdated(self)
       └── def test_recent_timestamp_not_outdated(self)
    🧱 class TestRawDataStore
-      ├── def setUp(self, mock_cache, mock_writer, mock_logger, mock_store, mock_auth, mock_config, mock_client)
+      ├── def setUp(self, mock_cache, mock_writer, mock_logger, mock_store, mock_auth, mock_logs_path, mock_client)
       ├── def test_up_to_date_returns_no_update(self)
       ├── def test_no_candles_returns_no_update(self)
       └── def test_new_file_created(self, mock_exists)
    🧱 class TestStoreProcessedData
-      ├── def setUp(self, mock_cache, mock_writer, mock_logger, mock_store, mock_auth, mock_config, mock_client)
+      ├── def setUp(self, mock_cache, mock_writer, mock_logger, mock_store, mock_auth, mock_logs_path, mock_client)
       ├── def test_store_processed_data_success(self)
       └── def test_store_empty_dataframe(self)
    🧱 class TestFetchData
-      ├── def setUp(self, mock_cache, mock_writer, mock_logger, mock_store, mock_auth, mock_config, mock_client)
+      ├── def setUp(self, mock_cache, mock_writer, mock_logger, mock_store, mock_auth, mock_logs_path, mock_client)
       ├── def test_fetch_data_returns_dataframe(self)
       └── def test_fetch_data_error_returns_empty(self)
 
@@ -1985,18 +1959,18 @@ Total Files: 192
    ⚙️  def reset_authenticator_singleton()
    🧱 class TestAuthenticatorInit
       ├── def setUp(self)
-      ├── def test_singleton_pattern(self, mock_dotenv, mock_writer, mock_logger, mock_config)
-      └── def test_loads_credentials_from_env(self, mock_dotenv, mock_writer, mock_logger, mock_config)
+      ├── def test_singleton_pattern(self, mock_dotenv, mock_writer, mock_logger, mock_env_path, mock_logs_path, mock_app_path, mock_tokens_path)
+      └── def test_loads_credentials_from_env(self, mock_dotenv, mock_writer, mock_logger, mock_env_path, mock_logs_path, mock_app_path, mock_tokens_path)
    🧱 class TestTokenOperations
       ├── def setUp(self)
-      ├── def _create_authenticator(self, mock_dotenv, mock_writer, mock_logger, mock_config)
+      ├── def _create_authenticator(self, mock_dotenv, mock_writer, mock_logger, mock_env_path, mock_logs_path, mock_app_path, mock_tokens_path)
       ├── def test_read_token_file_success(self)
       ├── def test_read_token_file_not_found(self)
       ├── def test_access_token_retrieval(self)
       └── def test_refresh_token_retrieval(self)
    🧱 class TestTokenExpiration
       ├── def setUp(self)
-      ├── def _create_authenticator(self, mock_dotenv, mock_writer, mock_logger, mock_config)
+      ├── def _create_authenticator(self, mock_dotenv, mock_writer, mock_logger, mock_env_path, mock_logs_path, mock_app_path, mock_tokens_path)
       ├── def test_access_token_expired(self)
       ├── def test_access_token_valid(self)
       ├── def test_refresh_token_expired(self)
@@ -2005,7 +1979,7 @@ Total Files: 192
       └── def test_no_error(self)
    🧱 class TestTokenRenewal
       ├── def setUp(self)
-      ├── def _create_authenticator(self, mock_dotenv, mock_writer, mock_logger, mock_config)
+      ├── def _create_authenticator(self, mock_dotenv, mock_writer, mock_logger, mock_env_path, mock_logs_path, mock_app_path, mock_tokens_path)
       ├── def test_renew_access_success(self)
       └── def test_set_headers_params(self)
 
@@ -2082,9 +2056,6 @@ Total Files: 192
    🧱 class TestBrokerInterfaceContract
       ├── def test_mock_broker_has_required_async_methods(self)
       └── def test_mock_broker_has_sync_helpers(self)
-   🧱 class TestDeprecatedSyncMethods
-      ├── def test_place_market_order_sync_warns(self)
-      └── def test_place_oco_order_sync_warns(self)
    🧱 class TestOrderResultFromBroker
       └── def mock_broker(self)
    🧱 class TestAlpacaBrokerInterface
@@ -2098,6 +2069,25 @@ Total Files: 192
       ├── def test_schwab_broker_has_is_connected_property(self)
       ├── def test_schwab_broker_place_market_order_is_async(self)
       └── def test_schwab_broker_place_oco_order_is_async(self)
+   🧱 class TestMockBrokerOpenOrderTracking
+      └── def mock_broker(self)
+   🧱 class TestMockBrokerLimitOrders
+      └── def mock_broker(self)
+   🧱 class TestMockBrokerStopOrders
+      └── def mock_broker(self)
+   🧱 class TestMockBrokerStopLimitOrders
+      └── def mock_broker(self)
+   🧱 class TestMockBrokerOCOOrders
+      └── def mock_broker(self)
+   🧱 class TestMockBrokerMarketHours
+      (no methods)
+   🧱 class TestSchwabStreamerFieldMapping
+      ├── def test_quote_field_mapping_correctness(self)
+      ├── def test_chart_equity_field_mapping(self)
+      ├── def test_bid_ask_spread_calculation(self)
+      └── def test_incomplete_quote_handling(self)
+   🧱 class TestMockBrokerReset
+      (no methods)
 
 📄 tests/test_config_loader.py
    🧱 class TestDataclasses
@@ -2190,6 +2180,81 @@ Total Files: 192
    🧱 class TestConvenienceFunctions
       (no methods)
 
+📄 tests/test_data_processor.py
+   🧱 class TestParseDateColumn
+      ├── def test_parse_epoch_milliseconds(self)
+      ├── def test_parse_string_dates(self)
+      └── def test_parse_already_datetime(self)
+   🧱 class TestGetFFTFreqs
+      ├── def test_get_fft_freqs_returns_array(self)
+      ├── def test_get_fft_freqs_caching(self)
+      └── def test_get_fft_freqs_different_lengths(self)
+   🧱 class TestProcessorInit
+      ├── def sample_df(self)
+      ├── def test_processor_init_default(self)
+      ├── def test_processor_init_with_data(self, sample_df)
+      └── def test_processor_update(self, sample_df)
+   🧱 class TestProcessorDataframe
+      ├── def sample_df(self)
+      ├── def test_dataframe_copy(self, sample_df)
+      └── def test_dataframe_no_copy(self, sample_df)
+   🧱 class TestFrameHash
+      ├── def test_frame_hash_empty(self)
+      ├── def test_frame_hash_none(self)
+      ├── def test_frame_hash_with_data(self)
+      └── def test_frame_hash_changes_on_update(self)
+   🧱 class TestCleanStockData
+      ├── def sample_df(self)
+      ├── def test_clean_stock_data_renames_columns(self, sample_df)
+      ├── def test_clean_stock_data_removes_duplicates(self, sample_df)
+      ├── def test_clean_stock_data_caching(self, sample_df)
+      └── def test_clean_stock_data_missing_column(self)
+   🧱 class TestDenoiseFFT
+      ├── def processor(self)
+      ├── def test_denoise_fft_basic(self, processor)
+      ├── def test_denoise_fft_empty_signal(self, processor)
+      ├── def test_denoise_fft_none_signal(self, processor)
+      ├── def test_denoise_fft_with_nan(self, processor)
+      └── def test_denoise_fft_with_inf(self, processor)
+   🧱 class TestApplySignalProcessing
+      ├── def processor(self)
+      └── def test_apply_signal_processing(self, processor)
+   🧱 class TestNormalizingScaling
+      ├── def sample_df(self)
+      ├── def test_standard_scaling(self, sample_df)
+      ├── def test_minmax_scaling(self, sample_df)
+      └── def test_invalid_scaling_method(self, sample_df)
+   🧱 class TestFeatureEngineering
+      ├── def sample_df(self)
+      ├── def test_feature_engineering_basic(self, sample_df)
+      ├── def test_feature_engineering_returns(self, sample_df)
+      ├── def test_feature_engineering_volatility(self, sample_df)
+      ├── def test_feature_engineering_trend(self, sample_df)
+      └── def test_feature_engineering_removes_inf(self, sample_df)
+   🧱 class TestPCAFeatureSelection
+      ├── def sample_df(self)
+      ├── def test_pca_basic(self, sample_df)
+      └── def test_pca_components_capped(self, sample_df)
+   🧱 class TestApplyIndicators
+      ├── def sample_df(self)
+      ├── def test_apply_indicators_basic(self, sample_df)
+      └── def test_apply_indicators_error_handling(self)
+   🧱 class TestMLProcess
+      ├── def sample_df(self)
+      ├── def test_ml_process_basic(self, sample_df)
+      ├── def test_ml_process_with_scaling(self, sample_df)
+      ├── def test_ml_process_with_pca(self, sample_df)
+      ├── def test_ml_process_return_artifacts(self, sample_df)
+      └── def test_ml_process_with_denoise(self, sample_df)
+   🧱 class TestProcess
+      ├── def sample_df(self)
+      ├── def test_process_basic(self, sample_df)
+      └── def test_process_error_handling(self)
+   🧱 class TestEdgeCases
+      ├── def test_processor_with_nan_values(self)
+      ├── def test_processor_with_empty_frame(self)
+      └── def test_feature_engineering_insufficient_data(self)
+
 📄 tests/test_datastore.py
    🧱 class TestDataStore
       ├── def test_datastore_create_database(self)
@@ -2264,6 +2329,49 @@ Total Files: 192
       ├── def monitor(self)
       ├── def test_symbols_tracked_independently(self, monitor)
       └── def test_blocked_symbol_doesnt_affect_others(self, monitor)
+   🧱 class TestStartNewDay
+      ├── def monitor(self)
+      ├── def test_start_new_day_sets_portfolio(self, monitor)
+      ├── def test_start_new_day_sets_symbols(self, monitor)
+      └── def test_start_new_day_both(self, monitor)
+   🧱 class TestDrawdownValues
+      ├── def monitor(self)
+      ├── def test_get_portfolio_drawdown(self, monitor)
+      ├── def test_get_portfolio_daily_drawdown(self, monitor)
+      ├── def test_get_symbol_drawdown(self, monitor)
+      ├── def test_get_symbol_daily_drawdown(self, monitor)
+      └── def test_get_symbol_drawdown_unknown(self, monitor)
+   🧱 class TestAdminControls
+      ├── def monitor(self)
+      ├── def test_unlock_symbol(self, monitor)
+      ├── def test_reset_symbol(self, monitor)
+      ├── def test_unlock_portfolio(self, monitor)
+      └── def test_reset_portfolio(self, monitor)
+   🧱 class TestCooldown
+      ├── def monitor(self)
+      ├── def test_is_symbol_in_cooldown_true(self, monitor)
+      ├── def test_is_symbol_in_cooldown_false(self, monitor)
+      ├── def test_is_symbol_in_cooldown_no_unlock(self, monitor)
+      ├── def test_is_portfolio_in_cooldown_true(self, monitor)
+      ├── def test_is_portfolio_in_cooldown_false(self, monitor)
+      └── def test_is_portfolio_in_cooldown_no_unlock(self, monitor)
+   🧱 class TestPersistence
+      ├── def monitor(self)
+      ├── def test_serialize_state(self, monitor)
+      ├── def test_deserialize_state(self, monitor)
+      ├── def test_set_persistence_path(self, monitor)
+      └── def test_save_state(self, monitor)
+   🧱 class TestAsyncWrappers
+      └── def monitor(self)
+   🧱 class TestPeakTracking
+      ├── def monitor(self)
+      ├── def test_portfolio_peak_updates_on_new_high(self, monitor)
+      ├── def test_symbol_peak_updates_on_new_high(self, monitor)
+      └── def test_peak_does_not_decrease(self, monitor)
+   🧱 class TestDailyDrawdownBreaches
+      ├── def monitor(self)
+      ├── def test_portfolio_daily_breach_locks(self, monitor)
+      └── def test_symbol_daily_breach_locks(self, monitor)
 
 📄 tests/test_e2e_trading_pipeline.py
    ⚙️  def sample_ohlcv_data()
@@ -2529,6 +2637,65 @@ Total Files: 192
       ├── def test_all_monitoring_events_exist(self)
       └── def test_control_events_exist(self)
 
+📄 tests/test_monte_carlo.py
+   🧱 class TestMonteCarloResult
+      ├── def test_dataclass_creation(self)
+      └── def test_dataclass_fields(self)
+   🧱 class TestMonteCarloSimulation
+      ├── def sample_trades(self)
+      ├── def test_monte_carlo_basic(self, sample_trades)
+      ├── def test_monte_carlo_reproducibility(self, sample_trades)
+      ├── def test_monte_carlo_statistics(self, sample_trades)
+      ├── def test_monte_carlo_percentiles(self, sample_trades)
+      ├── def test_monte_carlo_empty_trades_raises(self)
+      ├── def test_monte_carlo_no_pnl_raises(self)
+      ├── def test_monte_carlo_infers_pnl_from_actions(self)
+      └── def test_monte_carlo_max_drawdowns(self, sample_trades)
+   🧱 class TestBootstrapReturns
+      ├── def sample_returns(self)
+      ├── def test_bootstrap_basic(self, sample_returns)
+      ├── def test_bootstrap_reproducibility(self, sample_returns)
+      ├── def test_bootstrap_statistics(self, sample_returns)
+      ├── def test_bootstrap_different_block_sizes(self, sample_returns)
+      ├── def test_bootstrap_sharpe_ratios(self, sample_returns)
+      └── def test_bootstrap_confidence_interval(self, sample_returns)
+   🧱 class TestEdgeCases
+      ├── def test_single_trade(self)
+      ├── def test_all_winning_trades(self)
+      ├── def test_all_losing_trades(self)
+      ├── def test_bootstrap_short_returns(self)
+      └── def test_monte_carlo_large_trades(self)
+
+📄 tests/test_optimization.py
+   ⚙️  def create_mock_backtester(self, sharpe, total_return, sortino, max_dd)
+   🧱 class TestOptimizationResult
+      ├── def test_dataclass_creation(self)
+      └── def test_dataclass_all_fields(self)
+   🧱 class TestGridSearch
+      ├── def sample_data(self)
+      ├── def test_grid_search_basic(self, sample_data)
+      ├── def test_grid_search_returns_all_results(self, sample_data)
+      ├── def test_grid_search_different_metrics(self, sample_data)
+      ├── def test_grid_search_best_is_maximum(self, sample_data)
+      └── def test_grid_search_no_valid_results_raises(self, sample_data)
+   🧱 class TestRandomSearch
+      ├── def sample_data(self)
+      ├── def test_random_search_basic(self, sample_data)
+      ├── def test_random_search_with_tuple_range(self, sample_data)
+      ├── def test_random_search_reproducibility(self, sample_data)
+      └── def test_random_search_n_iter(self, sample_data)
+   🧱 class TestOptimizationMetrics
+      ├── def sample_data(self)
+      ├── def test_sharpe_ratio_metric(self, sample_data)
+      ├── def test_total_return_metric(self, sample_data)
+      ├── def test_sortino_ratio_metric(self, sample_data)
+      └── def test_max_drawdown_metric(self, sample_data)
+   🧱 class TestEdgeCases
+      ├── def sample_data(self)
+      ├── def test_single_param_combination(self, sample_data)
+      ├── def test_multiple_params(self, sample_data)
+      └── def test_grid_search_with_transaction_cost(self, sample_data)
+
 📄 tests/test_order_registry.py
    🧱 class TestTrackedOrder
       ├── def test_tracked_order_creation(self)
@@ -2577,6 +2744,49 @@ Total Files: 192
    ⚙️  def tracking_apply_fill()
    🧱 class TestPortfolioStateIntegration
       └── def portfolio(self)
+
+📄 tests/test_position_manager.py
+   🧱 class TestPositionManagerInit
+      ├── def test_default_initialization(self)
+      ├── def test_custom_initialization(self)
+      └── def test_multipliers_stored(self)
+   🧱 class TestCalculateLevels
+      ├── def pm(self)
+      ├── def test_long_entry_levels(self, pm)
+      ├── def test_short_entry_levels(self, pm)
+      ├── def test_high_volatility_uses_different_multipliers(self, pm)
+      └── def test_resets_tracking_fields(self, pm)
+   🧱 class TestTrailingStop
+      ├── def pm(self)
+      ├── def test_long_trailing_stop_moves_up(self, pm)
+      ├── def test_long_trailing_stop_doesnt_move_down(self, pm)
+      ├── def test_short_trailing_stop_moves_down(self, pm)
+      └── def test_short_trailing_stop_doesnt_move_up(self, pm)
+   🧱 class TestCheckExitConditions
+      ├── def pm(self)
+      ├── def test_not_in_position_returns_false(self, pm)
+      ├── def test_stop_loss_hit_long(self, pm)
+      ├── def test_stop_loss_hit_short(self, pm)
+      ├── def test_take_profit_hit_after_min_hold(self, pm)
+      ├── def test_take_profit_blocked_before_min_hold(self, pm)
+      ├── def test_signal_reversal_triggers_exit(self, pm)
+      └── def test_signal_reversal_blocked_before_min_hold(self, pm)
+   🧱 class TestSwingMode
+      ├── def test_swing_mode_blocks_same_day_exit(self)
+      ├── def test_swing_mode_allows_stop_loss_same_day(self)
+      └── def test_swing_mode_allows_exit_after_hold_days(self)
+   🧱 class TestPartialExit
+      ├── def test_partial_exit_target_hit_long(self)
+      ├── def test_partial_exit_target_hit_short(self)
+      └── def test_no_partial_exit_if_target_not_hit(self)
+   🧱 class TestGetExitQuantity
+      ├── def test_full_exit_returns_full_position(self)
+      ├── def test_partial_exit_returns_fraction(self)
+      ├── def test_partial_exit_minimum_one(self)
+      └── def test_handles_negative_position(self)
+   🧱 class TestExcursionTracking
+      ├── def test_update_excursions_long(self)
+      └── def test_update_excursions_short(self)
 
 📄 tests/test_position_sizer.py
    🧱 class TestSimplePositionSizerInit
@@ -2688,6 +2898,66 @@ Total Files: 192
       ├── def test_volume_ma_feature(self)
       └── def test_volatility_feature(self)
 
+📄 tests/test_risk_metrics.py
+   🧱 class TestStandardRiskModelInit
+      ├── def test_default_init(self)
+      └── def test_custom_init(self)
+   🧱 class TestComputeMetrics
+      ├── def model(self)
+      ├── def sample_returns(self)
+      ├── def test_compute_metrics_returns_dict(self, model, sample_returns)
+      ├── def test_compute_metrics_all_keys(self, model, sample_returns)
+      ├── def test_compute_metrics_with_benchmark(self, model, sample_returns)
+      └── def test_compute_metrics_empty_returns(self, model)
+   🧱 class TestComputeMetric
+      ├── def model(self)
+      ├── def sample_returns(self)
+      ├── def test_compute_single_metric(self, model, sample_returns)
+      ├── def test_compute_metric_var(self, model, sample_returns)
+      ├── def test_compute_metric_cvar(self, model, sample_returns)
+      └── def test_compute_metric_unknown(self, model, sample_returns)
+   🧱 class TestIndividualMetrics
+      ├── def model(self)
+      ├── def test_compute_total_return(self, model)
+      ├── def test_compute_annualized_return(self, model)
+      ├── def test_compute_volatility(self, model)
+      ├── def test_compute_volatility_annualized(self, model)
+      ├── def test_compute_sharpe_ratio_positive(self, model)
+      ├── def test_compute_sharpe_ratio_negative(self, model)
+      ├── def test_compute_sortino_ratio(self, model)
+      ├── def test_compute_max_drawdown(self, model)
+      ├── def test_compute_current_drawdown(self, model)
+      ├── def test_compute_var(self, model)
+      ├── def test_compute_cvar(self, model)
+      ├── def test_compute_win_rate(self, model)
+      ├── def test_compute_profit_factor(self, model)
+      └── def test_compute_calmar_ratio(self, model)
+   🧱 class TestBetaAlpha
+      ├── def model(self)
+      ├── def test_beta_alpha_calculation(self, model)
+      └── def test_beta_alpha_insufficient_data(self, model)
+   🧱 class TestEmptyMetrics
+      └── def test_empty_metrics(self)
+   🧱 class TestRiskQuantifier
+      ├── def quantifier(self)
+      ├── def returns_df(self)
+      ├── def test_set_returns(self, quantifier, returns_df)
+      ├── def test_set_returns_invalid_column(self, quantifier, returns_df)
+      ├── def test_set_returns_not_dataframe(self, quantifier)
+      ├── def test_set_risk_free_rate(self, quantifier)
+      ├── def test_calculate_standard_deviation(self, quantifier, returns_df)
+      ├── def test_calculate_standard_deviation_no_data(self, quantifier)
+      ├── def test_calculate_sharpe_ratio(self, quantifier, returns_df)
+      ├── def test_calculate_sortino_ratio(self, quantifier, returns_df)
+      ├── def test_calculate_max_drawdown(self, quantifier, returns_df)
+      ├── def test_calculate_kelly_criterion(self, quantifier, returns_df)
+      ├── def test_calculate_var(self, quantifier, returns_df)
+      ├── def test_calculate_beta(self, quantifier, returns_df)
+      ├── def test_calculate_alpha(self, quantifier, returns_df)
+      ├── def test_calculate_treynor_ratio(self, quantifier, returns_df)
+      ├── def test_risk_profile(self, quantifier)
+      └── def test_risk_profile_missing_column(self, quantifier)
+
 📄 tests/test_schwab_broker.py
    ⚙️  def mock_client()
    ⚙️  def broker(self, mock_client)
@@ -2713,13 +2983,13 @@ Total Files: 192
 
 📄 tests/test_schwab_client.py
    🧱 class TestSchwabClientAuthentication
-      ├── def test_client_requires_credentials(self, mock_logger, mock_config, mock_auth)
+      ├── def test_client_requires_credentials(self, mock_logger, mock_logs_path, mock_auth)
       └── def test_client_loads_env_credentials(self)
    🧱 class TestSchwabClientPriceHistory
       ├── def setUp(self)
       ├── def test_daily_price_history(self, mock_get)
       ├── def test_candle_data_format(self)
-      └── def test_daily_price_history_integration(self, mock_logger, mock_config, mock_auth)
+      └── def test_daily_price_history_integration(self, mock_logger, mock_logs_path, mock_auth)
    🧱 class TestSchwabClientQuotes
       ├── def setUp(self)
       ├── def test_get_quote(self, mock_get)
@@ -2729,7 +2999,7 @@ Total Files: 192
       ├── def test_place_market_order(self, mock_post)
       ├── def test_get_order_status(self, mock_get)
       ├── def test_cancel_order(self, mock_delete)
-      └── def test_generate_order(self, mock_logger, mock_config, mock_auth)
+      └── def test_generate_order(self, mock_logger, mock_logs_path, mock_auth)
    🧱 class TestSchwabClientAccountInfo
       ├── def setUp(self)
       ├── def test_get_account_info(self, mock_get)
@@ -2738,8 +3008,8 @@ Total Files: 192
    🧱 class TestSchwabClientErrorHandling
       ├── def test_handles_rate_limit(self, mock_get)
       ├── def test_handles_unauthorized(self, mock_get)
-      ├── def test_rate_limiter_integration(self, mock_logger, mock_config, mock_auth)
-      └── def test_session_close(self, mock_logger, mock_config, mock_auth)
+      ├── def test_rate_limiter_integration(self, mock_logger, mock_logs_path, mock_auth)
+      └── def test_session_close(self, mock_logger, mock_logs_path, mock_auth)
 
 📄 tests/test_schwab_error_recovery.py
    ⚙️  def mock_client()
@@ -2762,6 +3032,34 @@ Total Files: 192
    🧱 class TestGetOrderStatusRetry
       (no methods)
    ⚙️  def failing_then_success()
+
+📄 tests/test_schwab_runner.py
+   🧱 class TestCanonicalizeSchwabQuote
+      ├── def test_canonicalize_with_numeric_fields(self)
+      ├── def test_canonicalize_with_named_fields(self)
+      ├── def test_canonicalize_uses_mid_price_when_no_last(self)
+      ├── def test_canonicalize_partial_quote(self)
+      └── def test_canonicalize_timestamp_from_trade_time(self)
+   🧱 class TestCanonicalizeSchwabChartBar
+      ├── def test_canonicalize_chart_bar(self)
+      └── def test_chart_vs_levelone_field_difference(self)
+   🧱 class TestBarBucket
+      ├── def test_bar_bucket_60_second_default(self)
+      ├── def test_bar_bucket_different_minutes(self)
+      └── def test_bar_bucket_custom_timeframe(self)
+   🧱 class TestBarAggregation
+      ├── def mock_runner(self)
+      ├── def test_aggregation_first_quote_starts_bar(self, mock_runner)
+      ├── def test_aggregation_updates_ohlc(self, mock_runner)
+      ├── def test_aggregation_accumulates_volume(self, mock_runner)
+      ├── def test_aggregation_new_bar_closes_previous(self, mock_runner)
+      ├── def test_aggregation_after_bar_close(self, mock_runner)
+      └── def test_aggregation_multiple_symbols_independent(self, mock_runner)
+   🧱 class TestPeriodicDataUpdate
+      (no methods)
+   🧱 class TestSchwabRunnerFieldMappingIntegration
+      ├── def test_field_1_is_bid_not_last(self)
+      └── def test_field_3_is_last_not_low(self)
 
 📄 tests/test_signal_context.py
    🧱 class TestSignalContext
@@ -2790,9 +3088,116 @@ Total Files: 192
       ├── def test_live_engine_implements_handle_signal_context(self)
       └── def test_mock_engine_implements_handle_signal_context(self)
 
+📄 tests/test_simulation.py
+   🧱 class TestComputeATR
+      ├── def test_compute_atr_basic(self)
+      ├── def test_compute_atr_empty_df(self)
+      ├── def test_compute_atr_insufficient_data(self)
+      ├── def test_compute_atr_exact_period(self)
+      ├── def test_compute_atr_lowercase_columns(self)
+      └── def test_compute_atr_custom_period(self)
+   🧱 class TestClassifyRegime
+      ├── def test_classify_regime_high_volatility(self)
+      ├── def test_classify_regime_low_volatility(self)
+      ├── def test_classify_regime_normal(self)
+      ├── def test_classify_regime_none_atr(self)
+      ├── def test_classify_regime_insufficient_history(self)
+      └── def test_classify_regime_empty_history(self)
+   🧱 class TestSimConfig
+      ├── def test_simconfig_defaults(self)
+      ├── def test_simconfig_custom_values(self)
+      ├── def test_simconfig_empty_symbols_raises(self)
+      ├── def test_simconfig_trade_log_path(self)
+      └── def test_simconfig_from_config_file(self)
+   🧱 class TestSimulationRunnerInit
+      ├── def sim_config(self)
+      └── def test_simulation_runner_init(self, sim_config)
+   🧱 class TestSimulationHelpers
+      ├── def test_df_from_history_empty(self)
+      └── def test_df_from_history_with_data(self)
+   🧱 class TestClassifyRegimeMethod
+      ├── def test_classify_regime_unknown_missing_data(self)
+      └── def test_classify_regime_high_volatility_method(self)
+   🧱 class TestSimulationStop
+      └── def test_stop_sets_flag(self)
+
 📄 tests/test_simulation_to_feeder.py
    🧱 class MockFeeder
       └── def __init__(self)
+
+📄 tests/test_standard_trade_approver.py
+   🧱 class TestStandardTradeApproverInit
+      ├── def test_default_initialization(self)
+      ├── def test_custom_initialization(self)
+      └── def test_multipliers_stored(self)
+   🧱 class TestShouldTrade
+      ├── def approver(self)
+      ├── def flat_state(self)
+      ├── def long_state(self)
+      ├── def test_hold_signal_blocked(self, approver, flat_state)
+      ├── def test_invalid_price_blocked(self, approver, flat_state)
+      ├── def test_invalid_atr_blocked(self, approver, flat_state)
+      ├── def test_buy_signal_allowed_when_flat(self, approver, flat_state)
+      ├── def test_sell_signal_allowed_when_flat(self, approver, flat_state)
+      └── def test_in_position_always_allowed(self, approver, long_state)
+   🧱 class TestCooldown
+      ├── def test_bar_cooldown_blocks(self)
+      ├── def test_bar_cooldown_allows_after_elapsed(self)
+      ├── def test_time_cooldown_blocks(self)
+      ├── def test_time_cooldown_allows_after_elapsed(self)
+      ├── def test_on_bar_increments_counter(self)
+      └── def test_on_trade_resets_counter(self)
+   🧱 class TestPositionLimit
+      ├── def test_position_limit_blocks(self)
+      └── def test_position_limit_allows_below(self)
+   🧱 class TestMarketHours
+      ├── def test_market_closed_blocks_by_default(self)
+      └── def test_market_closed_allows_with_after_hours(self)
+   🧱 class TestCanEnterPosition
+      └── def test_cannot_enter_when_in_position(self)
+   🧱 class TestCanExitPosition
+      ├── def test_cannot_exit_when_flat(self)
+      ├── def test_can_exit_long_with_sell(self)
+      └── def test_cannot_exit_long_with_buy(self)
+   🧱 class TestHelperMethods
+      ├── def test_is_in_position(self)
+      ├── def test_is_long(self)
+      ├── def test_is_short(self)
+      └── def test_get_position_side(self)
+
+📄 tests/test_state_reconciler.py
+   ⚙️  def mock_broker()
+   ⚙️  def mock_portfolio()
+   ⚙️  def reconciler(self, mock_broker, mock_portfolio)
+   🧱 class TestReconcilerConfig
+      ├── def test_default_config(self)
+      └── def test_custom_config(self)
+   🧱 class TestPositionMismatch
+      ├── def test_mismatch_creation(self)
+      └── def test_mismatch_to_dict(self)
+   🧱 class TestReconcileResult
+      ├── def test_result_creation(self)
+      └── def test_result_to_dict(self)
+   🧱 class TestFullSync
+      (no methods)
+   🧱 class TestCheckPositions
+      (no methods)
+   🧱 class TestReconcile
+      (no methods)
+   🧱 class TestOrderVerification
+      (no methods)
+   🧱 class TestPeriodicReconciliation
+      (no methods)
+   🧱 class TestHaltManagement
+      (no methods)
+   🧱 class TestCashSync
+      (no methods)
+   🧱 class TestSeverityClassification
+      ├── def test_minor_severity(self, reconciler)
+      ├── def test_major_severity(self, reconciler)
+      └── def test_critical_severity(self, reconciler)
+   🧱 class TestReconcilerStats
+      └── def test_last_result_property(self, reconciler)
 
 📄 tests/test_strategy.py
    🧱 class TestStrategySignalTypes
@@ -2851,6 +3256,18 @@ Total Files: 192
    🧱 class TestStreamerDataTransformation
       ├── def test_transform_quote_to_dict(self)
       └── def test_transform_bar_to_dataframe_format(self)
+   🧱 class TestSchwabStreamerFieldMapping
+      ├── def setUp(self)
+      ├── def test_quote_extraction_matches_schwab_spec(self)
+      ├── def test_bid_ask_field_order(self)
+      ├── def test_last_price_is_field_3(self)
+      ├── def test_ohlc_fields_correct(self)
+      ├── def test_volume_is_field_8(self)
+      └── def test_partial_quote_handling(self)
+   🧱 class TestSchwabChartEquityFieldMapping
+      ├── def setUp(self)
+      ├── def test_chart_bar_extraction(self)
+      └── def test_chart_vs_levelone_field_differences(self)
 
 📄 tests/test_trade_gate.py
    🧱 class TestTradeGateInit
@@ -3004,10 +3421,6 @@ Total Files: 192
    ⚙️  def main()
    ⚙️  def signal_handler(self, sig, frame)
 
-📄 utils/configloader.py
-   🧱 class ConfigLoader
-      └── def load_config(self, config_filename)
-
 📄 utils/framemanager.py
    🧱 class DataFrameManager
       ├── def __new__(self, cls)
@@ -3031,56 +3444,10 @@ Total Files: 192
    ⚙️  def buy(self, sym, qty, px)
    ⚙️  def sell(self, sym, qty, px)
 
-📄 utils/settings.py
-   🧱 class SettingsError
-      (no methods)
-   🧱 class RequiredKeyError
-      (no methods)
-   🧱 class ValidationError
-      (no methods)
-   🧱 class SettingsConfig
-      (no methods)
-   ⚙️  def _load_file(self, path)
-   ⚙️  def _iter_config_files(self, dirpath, recursive)
-   ⚙️  def _deep_merge(self, dst, src, list_policy)
-   ⚙️  def _interpolate(self, value, getter)
-   ⚙️  def env_repl(self, match)
-   ⚙️  def cfg_repl(self, match)
-   ⚙️  def _apply_env_overrides(self, cfg, prefix)
-   ⚙️  def _normalize_keys_lower(self, data)
-   🧱 class _ConfigFileHandler
-      ├── def __init__(self, settings, debounce)
-      ├── def on_any_event(self, event)
-      └── def _reload_settings(self)
-   🧱 class Settings
-      ├── def __init__(self, root, env)
-      ├── def get(self, path, default)
-      ├── def require(self, path)
-      ├── def get_str(self, path, default)
-      ├── def get_int(self, path, default)
-      ├── def get_float(self, path, default)
-      ├── def get_bool(self, path, default)
-      ├── def get_list(self, path, default)
-      ├── def get_dict(self, path, default)
-      ├── def resolve_path(self, path_key, must_exist)
-      ├── def as_dict(self, deep_copy)
-      ├── def reload(self)
-      ├── def stop_watching(self)
-      ├── def __del__(self)
-      ├── def _load_all(self)
-      ├── def _merge_directory(self, merged, subdir)
-      ├── def _getter_for_interpolation(self, cfg)
-      ├── def _validate(self, cfg)
-      ├── def _pluck(self, cfg, path)
-      └── def _start_watch(self)
-   ⚙️  def getter(self, path, default)
-   ⚙️  def initialize_settings()
-   ⚙️  def get_settings()
-
 ================================================================================
 📊 STATISTICS
 ================================================================================
-Total Classes:    535
-Total Functions:  286
-Total Methods:    1730
+Total Classes:    612
+Total Functions:  288
+Total Methods:    2008
 ================================================================================

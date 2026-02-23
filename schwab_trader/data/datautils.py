@@ -2,18 +2,13 @@ import time
 import os
 from datetime import datetime
 import pandas as pd
-from data.aggregate import Aggregator 
+from data.aggregate import Aggregator
 from dotenv import load_dotenv
 from pathlib import Path
 from data.streaming.authenticator import Authenticator
-from utils.configloader import ConfigLoader
-import os
 
 apikey = os.getenv("API_KEY")
 secret = os.getenv("API_SECRET")
-config = ConfigLoader.load_config()
-env_file_path = config["folders"]["env"]  # Already resolved to absolute path
-# Load the .env file
 auth = Authenticator()
 
 

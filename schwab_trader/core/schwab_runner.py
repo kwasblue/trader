@@ -27,7 +27,6 @@ from typing import Optional, List, Dict, Any
 
 import pandas as pd
 
-from utils.settings import Settings
 from loggers.factory import get_module_logger
 from loggers.file_trade_logger import FileTradeLogger
 
@@ -48,7 +47,7 @@ from core.contracts.events import (
     EVENT_HEALTH_UPDATE,
     EVENT_POSITION_UPDATE, PositionPayload
 )
-from core.config_loader import get_config, create_position_sizer, create_drawdown_monitor
+from core.config_loader import get_config, create_position_sizer, create_drawdown_monitor, TradingConfig
 
 from core.simulator.simulation import compute_atr, classify_regime
 from core.credential_validator import CredentialValidator, CredentialStatus
@@ -75,18 +74,20 @@ class SchwabLiveRunner:
     - Drawdown monitoring and trade gates
     """
 
-    def __init__(self, settings: Settings, symbols: List[str], client: Optional[SchwabClient] = None):
+    def __init__(self, symbols: List[str], client: Optional[SchwabClient] = None, config: Optional[TradingConfig] = None):
         """
         Initialize the Schwab live runner.
 
         Args:
-            settings: Application settings containing credentials and config
             symbols: List of symbols to trade
             client: Optional pre-configured SchwabClient instance
+            config: Optional TradingConfig instance (uses global config if not provided)
         """
-        self.settings = settings
         self.symbols = symbols
         self.event_handler = get_event_handler()
+
+        # Load centralized config
+        self.config = config or get_config()
 
         # Logging + trade log
         self.logger = get_module_logger(module_name='SchwabLiveRunner', file_key='SchwabLive')
@@ -94,10 +95,10 @@ class SchwabLiveRunner:
 
         # Initialize Schwab client if not provided
         if client is None:
-            api_key = settings.get("SCHWAB_API_KEY") or os.getenv("SCHWAB_API_KEY")
-            secret_key = settings.get("SCHWAB_SECRET") or os.getenv("SCHWAB_SECRET")
+            api_key = os.getenv("SCHWAB_API_KEY")
+            secret_key = os.getenv("SCHWAB_SECRET")
             if not api_key or not secret_key:
-                raise ValueError("SCHWAB_API_KEY and SCHWAB_SECRET must be set in settings or environment")
+                raise ValueError("SCHWAB_API_KEY and SCHWAB_SECRET must be set in environment")
             client = SchwabClient(apikey=api_key, secretkey=secret_key)
 
         self._client = client
@@ -105,7 +106,7 @@ class SchwabLiveRunner:
         # Broker (Schwab)
         self.broker = SchwabBroker(
             client=client,
-            session=settings.get("SCHWAB_SESSION", "NORMAL"),
+            session=self.config.schwab.session,
         )
 
         # State tracking
@@ -114,28 +115,18 @@ class SchwabLiveRunner:
         self.history: Dict[str, List[Dict]] = defaultdict(list)
         self.atr_hist: Dict[str, List[float]] = defaultdict(list)
 
-        # Load centralized config
-        self.config = get_config()
         risk_cfg = self.config.risk
 
-        # Risk & gates (uses config with settings override)
+        # Risk & gates (uses config values)
         self.trade_gate = TradeGate(
-            max_layers=settings.get("MAX_PYRAMID_LAYERS", risk_cfg.max_pyramid_layers),
-            min_bars_between_layers=settings.get("MIN_BARS_BETWEEN_LAYERS", risk_cfg.min_bars_between_layers),
-            regime_min_persist_bars=settings.get("REGIME_MIN_PERSIST_BARS", 1),
-            flip_cooldown_bars=settings.get("FLIP_COOLDOWN_BARS", 1),
+            max_layers=risk_cfg.max_pyramid_layers,
+            min_bars_between_layers=risk_cfg.min_bars_between_layers,
+            regime_min_persist_bars=1,
+            flip_cooldown_bars=1,
         )
 
         # DrawdownMonitor from config (returns None if disabled)
         self.ddm = create_drawdown_monitor(self.config)
-        if self.ddm is None:
-            # Create with settings fallback if config has it disabled but settings override
-            if settings.get("DDM_ENABLED", False):
-                self.ddm = DrawdownMonitor(
-                    max_symbol_drawdown=settings.get("MAX_SYMBOL_DD", 0.12),
-                    max_portfolio_drawdown=settings.get("MAX_PORTFOLIO_DD", 0.15),
-                    symbol_cooldown_seconds=settings.get("DDM_COOLDOWN_BARS", 5),
-                )
 
         # Sizer from config
         self.sizer = create_position_sizer(self.config)
@@ -161,9 +152,9 @@ class SchwabLiveRunner:
 
         # State reconciler - ensures local state matches broker
         reconciler_config = ReconcilerConfig(
-            reconcile_interval=settings.get("RECONCILE_INTERVAL", 60),
-            halt_on_critical=settings.get("HALT_ON_MISMATCH", True),
-            auto_correct_minor=settings.get("AUTO_CORRECT_MINOR", True),
+            reconcile_interval=60,
+            halt_on_critical=True,
+            auto_correct_minor=True,
         )
         self.reconciler = StateReconciler(
             broker=self.broker,
@@ -197,8 +188,8 @@ class SchwabLiveRunner:
 
         # Also keep the simple updater for quick freshness checks
         self.data_updater = HistoricalDataUpdater(
-            api_key=settings.get("ALPACA_API_KEY") or os.getenv("ALPACA_API_KEY"),
-            api_secret=settings.get("ALPACA_SECRET_KEY") or os.getenv("ALPACA_SECRET_KEY"),
+            api_key=os.getenv("ALPACA_API_KEY"),
+            api_secret=os.getenv("ALPACA_SECRET_KEY"),
             data_path=str(ROOT / "data" / "data_storage" / "proc_data"),
         )
 
@@ -707,8 +698,8 @@ class SchwabLiveRunner:
             True if connection successful, False otherwise
         """
         try:
-            api_key = self.settings.get("SCHWAB_API_KEY") or os.getenv("SCHWAB_API_KEY")
-            secret_key = self.settings.get("SCHWAB_SECRET") or os.getenv("SCHWAB_SECRET")
+            api_key = os.getenv("SCHWAB_API_KEY")
+            secret_key = os.getenv("SCHWAB_SECRET")
 
             if not api_key or not secret_key:
                 self.logger.error("Missing Schwab credentials")
@@ -767,8 +758,8 @@ class SchwabLiveRunner:
         await self._preflight_credential_check()
 
         # Seed historical data (fetches fresh if stale)
-        max_stale = self.settings.get("MAX_STALE_MINUTES", 60)
-        await self.seed(self.settings.get("SEED_BARS", 200), max_stale_minutes=max_stale)
+        max_stale = self.config.data.max_stale_minutes
+        await self.seed(self.config.data.seed_bars, max_stale_minutes=max_stale)
 
         # Subscribe to bar debug logging
         await self.event_handler.subscribe("BAR", self._bar_debug_logger)
@@ -829,13 +820,12 @@ class SchwabLiveRunner:
         self.logger.info(f"SchwabLiveRunner started for: {', '.join(self.symbols)}")
 
         # Start periodic state reconciliation
-        reconcile_interval = self.settings.get("RECONCILE_INTERVAL", 60)
-        if reconcile_interval > 0:
-            await self.reconciler.start_periodic(interval_seconds=reconcile_interval)
-            self.logger.info(f"State reconciliation enabled (every {reconcile_interval}s)")
+        reconcile_interval = 60
+        await self.reconciler.start_periodic(interval_seconds=reconcile_interval)
+        self.logger.info(f"State reconciliation enabled (every {reconcile_interval}s)")
 
         # Start periodic historical data updates (runs in background)
-        update_interval = self.settings.get("HISTORICAL_UPDATE_INTERVAL_MINUTES", 60)
+        update_interval = self.config.data.historical_update_interval_minutes
         if update_interval > 0:
             self._update_task = asyncio.create_task(
                 self._periodic_data_update(interval_minutes=update_interval)
@@ -955,23 +945,15 @@ def _ensure_live_config(dir_path: str = "config"):
 async def main():
     """Main entry point for running SchwabLiveRunner standalone."""
     # Ensure config files exist
-    sr_path, sp_path, tl_path = _ensure_live_config("config")
+    _ensure_live_config("config")
 
-    # Load settings
-    settings = Settings(
-        root="config",
-        include_root=True,
-        runtime_overrides={
-            "strategy_routing_path": sr_path,
-            "strategy_params_path": sp_path,
-            "trade_logic_routing_path": tl_path,
-        },
-    )
+    # Load config
+    config = get_config()
 
-    # Get symbols from settings or default
-    symbols = settings.get_list("symbols") or settings.get_list("SYMBOLS") or ["AAPL", "MSFT"]
+    # Get symbols from config or default
+    symbols = config.general.default_symbols or ["AAPL", "MSFT"]
 
-    runner = SchwabLiveRunner(settings, symbols)
+    runner = SchwabLiveRunner(symbols=symbols, config=config)
     await runner.run()
 
 
