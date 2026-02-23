@@ -2,16 +2,14 @@
 """
 Trading Monitor Application
 ---------------------------
-Main entry point for the trading GUI.
+INTERNAL MODULE - Use 'trader gui' instead.
 
-Supports three modes:
-- Simulation: GBM price simulation for testing
-- Alpaca: Paper/live trading via Alpaca API
-- Schwab: Live trading via Schwab API
+This module is called by the CLI. Do not run directly.
 
 Usage:
-    python -m monitoring.app
-    python monitoring/app.py
+    trader gui                    # Simulation mode
+    trader gui --mode alpaca      # Alpaca trading
+    trader gui --mode schwab      # Schwab trading
 """
 import sys
 import warnings
@@ -74,4 +72,14 @@ def main():
 
 
 if __name__ == "__main__":
+    import warnings
+    warnings.warn(
+        "\n"
+        "  Direct execution is deprecated. Use the CLI instead:\n"
+        "    trader gui                    # Simulation mode\n"
+        "    trader gui --mode alpaca      # Alpaca trading\n"
+        "    trader gui --mode schwab      # Schwab trading\n",
+        DeprecationWarning,
+        stacklevel=1
+    )
     main()

@@ -88,51 +88,6 @@ class EventHandler(EventHandlerBase):
         """
         self.subscribe_sync(event_name, callback)
 
-    # async def emit(self, event_name: str, payload: Any) -> None:
-    #     """
-    #     Emit an event and await all callbacks.
-    #     Sync callbacks are offloaded to the executor.
-    #     """
-    #     # Schema validation (if defined)
-    #     schema = EVENT_SCHEMA_MAP.get(event_name)
-    #     if schema:
-    #         try:
-    #             validate_payload(payload, schema)
-    #         except Exception as e:
-    #             self.logger.error(f"[EventHandler] Invalid payload for {event_name}: {e}")
-    #             return  # or raise if you want hard failure
-
-    #     event = Event(event_name, payload)
-    #     callbacks = list(self.listeners.get(event_name, []))  # copy
-    #     if not callbacks:
-    #         self.logger.debug(f"[EventHandler] Emit '{event_name}' (no listeners)")
-    #         return
-
-    #     self.logger.debug(
-    #         f"[EventHandler] Emit '{event_name}' to {len(callbacks)} listener(s) | Payload: {payload}"
-    #     )
-    #     loop = asyncio.get_running_loop()
-    #     tasks: List[Awaitable[Any]] = []
-
-    #     for cb in callbacks:
-    #         try:
-    #             if inspect.iscoroutinefunction(cb):
-    #                 tasks.append(asyncio.create_task(cb(event)))
-    #             else:
-    #                 tasks.append(loop.run_in_executor(None, cb, event))
-    #         except Exception as e:
-    #             self.logger.exception(
-    #                 f"[EventHandler] Failed scheduling callback {getattr(cb, '__name__', repr(cb))}: {e}"
-    #             )
-
-    #     if tasks:
-    #         results = await asyncio.gather(*tasks, return_exceptions=True)
-    #         for cb, res in zip(callbacks, results):
-    #             if isinstance(res, Exception):
-    #                 self.logger.exception(
-    #                     f"[EventHandler] Error in callback {getattr(cb, '__name__', repr(cb))} for '{event_name}': {res}"
-    #             )
-    
     def has_subscribers(self, event_name: str) -> bool:
         """Check if event has any subscribers (optimization for early exit)."""
         return bool(self.listeners.get(event_name))

@@ -25,7 +25,15 @@ import json
 import os
 from pathlib import Path
 from dataclasses import dataclass, field, fields
-from typing import List, Optional, Dict, Any
+from typing import TYPE_CHECKING, List, Optional, Dict, Any, Type, TypeVar
+
+if TYPE_CHECKING:
+    from core.position_sizer import KellyPositionSizer
+    from core.drawdown_monitor import DrawdownMonitor
+    from core.logic.default_trade_logic import StandardTradeApprover
+    from core.logic.position_manager import PositionManager
+
+T = TypeVar("T")
 
 
 @dataclass
@@ -194,7 +202,7 @@ class TradingConfig:
     _raw: Dict[str, Any] = field(default_factory=dict)
 
 
-def _dict_to_dataclass(cls, data: dict):
+def _dict_to_dataclass(cls: Type[T], data: dict) -> T:
     """Convert a dict to a dataclass, ignoring unknown fields."""
     if data is None:
         return cls()
@@ -619,32 +627,26 @@ config = _ConfigProxy()
 # Factory Functions - Create component instances from config
 # ============================================================================
 
-def create_position_sizer(config: Optional[TradingConfig] = None):
+def create_position_sizer(config: Optional[TradingConfig] = None) -> "KellyPositionSizer":
     """
-    Create a KellyPositionSizer instance from config.
+    Create a position sizer instance from config.
+
+    Uses PositionSizerFactory to create the appropriate sizer type
+    based on config.position_sizer.type setting.
 
     Args:
         config: TradingConfig instance. Uses global config if not provided.
 
     Returns:
-        KellyPositionSizer instance configured from config.
+        PositionSizer instance configured from config.
     """
-    from core.position_sizer import KellyPositionSizer
+    from core.position_sizer_factory import PositionSizerFactory
 
     cfg = config or get_config()
-    ps = cfg.position_sizer
-
-    return KellyPositionSizer(
-        risk_percentage=ps.risk_percentage,
-        max_trade_pct=ps.max_trade_pct,
-        max_holding_pct=ps.max_holding_pct,
-        fee_rate=ps.fee_rate,
-        allow_fractional=ps.allow_fractional,
-        lot_size=ps.lot_size,
-    )
+    return PositionSizerFactory.create_from_config(cfg)
 
 
-def create_drawdown_monitor(config: Optional[TradingConfig] = None):
+def create_drawdown_monitor(config: Optional[TradingConfig] = None) -> Optional["DrawdownMonitor"]:
     """
     Create a DrawdownMonitor instance from config.
 
@@ -675,7 +677,7 @@ def create_drawdown_monitor(config: Optional[TradingConfig] = None):
 def create_trade_approver(
     config: Optional[TradingConfig] = None,
     event_handler=None
-):
+) -> "StandardTradeApprover":
     """
     Create a StandardTradeApprover instance from config.
 
@@ -716,7 +718,7 @@ def create_trade_approver(
     )
 
 
-def create_position_manager(config: Optional[TradingConfig] = None):
+def create_position_manager(config: Optional[TradingConfig] = None) -> "PositionManager":
     """
     Create a PositionManager instance from config.
 

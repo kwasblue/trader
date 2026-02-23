@@ -14,7 +14,13 @@ from alpaca.trading.requests import (
     LimitOrderRequest,
     GetOrdersRequest,
 )
-from alpaca.trading.enums import OrderSide, TimeInForce, QueryOrderStatus, OrderClass
+from alpaca.trading.enums import (
+    OrderSide as AlpacaOrderSide,
+    TimeInForce,
+    QueryOrderStatus,
+    OrderClass,
+)
+from core.enums import OrderSide  # Our canonical enum
 
 from alpaca.data.historical.stock import StockHistoricalDataClient
 from alpaca.data.requests import StockLatestQuoteRequest, StockBarsRequest
@@ -36,8 +42,13 @@ from core.utils.retry import retry, async_retry, get_circuit_breaker, CircuitOpe
 from core.utils.health import get_health_checker
 
 
-def _map_side(side: str) -> OrderSide:
-    return OrderSide.BUY if side.lower() == "buy" else OrderSide.SELL
+def _map_side(side: OrderSide | str) -> AlpacaOrderSide:
+    """Convert our OrderSide enum or string to Alpaca's OrderSide enum."""
+    if isinstance(side, OrderSide):
+        side_str = side.value
+    else:
+        side_str = str(side).lower()
+    return AlpacaOrderSide.BUY if side_str == "buy" else AlpacaOrderSide.SELL
 
 
 def _map_tif(tif: str) -> TimeInForce:
@@ -759,7 +770,7 @@ class AlpacaBroker(BaseBrokerInterface):
             req = MarketOrderRequest(
                 symbol=symbol,
                 qty=qty,
-                side=OrderSide.SELL,  # typical for exiting a long
+                side=AlpacaOrderSide.SELL,  # typical for exiting a long
                 time_in_force=TimeInForce.GTC,
                 order_class=OrderClass.BRACKET,  # type: ignore[arg-type]
                 take_profit={"limit_price": limit_price},
@@ -947,8 +958,4 @@ class AlpacaBroker(BaseBrokerInterface):
         )
 
 
-def _to_float(v: Any) -> float | None:
-    try:
-        return None if v is None else float(v)
-    except Exception:
-        return None
+from core.utils.type_helpers import to_float as _to_float

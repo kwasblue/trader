@@ -473,13 +473,13 @@ class ExecutionEngineBase(ABC):
                     try:
                         # Determine side: sell to close long, buy to close short
                         qty = abs(position.qty)
-                        side = "sell" if position.qty > 0 else "buy"
+                        side = OrderSide.SELL if position.qty > 0 else OrderSide.BUY
                         self.broker.place_market_order(
                             symbol=symbol,
                             qty=qty,
                             side=side
                         )
-                        logger.info(f"Emergency close: {side} {qty} {symbol}")
+                        logger.info(f"Emergency close: {side.value} {qty} {symbol}")
                     except Exception as e:
                         logger.error(f"Failed to close position {symbol}: {e}")
 

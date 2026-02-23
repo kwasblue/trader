@@ -546,13 +546,8 @@ class AutoTrader:
             return
 
         try:
-            # Start the actual trading runner
-            if self.broker == "alpaca":
-                await self._run_alpaca_session()
-            elif self.broker == "schwab":
-                await self._run_schwab_session()
-            else:
-                raise ValueError(f"Unknown broker: {self.broker}")
+            # Start the actual trading runner using factory
+            await self._run_broker_session()
 
         except Exception as e:
             self.logger.exception(f"Trading session error: {e}")
@@ -563,40 +558,22 @@ class AutoTrader:
             self.logger.info("Trading session ended")
             print(f"\n[{self.scheduler.now_et().strftime('%H:%M:%S')}] TRADING SESSION ENDED")
 
-    async def _run_alpaca_session(self) -> None:
-        """Run Alpaca trading session."""
-        from core.alpaca_runner import AlpacaLiveRunner
+    async def _run_broker_session(self) -> None:
+        """
+        Run trading session for the configured broker.
 
-        runner = AlpacaLiveRunner(symbols=self.symbols, config=self.config)
+        Uses RunnerFactory to create the appropriate runner based on
+        self.broker. Adding new brokers only requires registering them
+        with the factory - no changes to this method needed.
+        """
+        from core.runner_factory import RunnerFactory
 
-        # Create task for the runner
-        self.trading_task = asyncio.create_task(runner.run())
-
-        try:
-            # Wait until market close or stop signal
-            while self.running and self.scheduler.is_market_open():
-                await asyncio.sleep(10)
-
-            # Stop the runner gracefully
-            self.logger.info("Market closed, stopping runner...")
-            runner.stop()
-
-            # Wait for runner to finish
-            try:
-                await asyncio.wait_for(self.trading_task, timeout=30)
-            except asyncio.TimeoutError:
-                self.logger.warning("Runner did not stop gracefully, cancelling")
-                self.trading_task.cancel()
-
-        except asyncio.CancelledError:
-            runner.stop()
-            raise
-
-    async def _run_schwab_session(self) -> None:
-        """Run Schwab trading session."""
-        from core.schwab_runner import SchwabLiveRunner
-
-        runner = SchwabLiveRunner(symbols=self.symbols, config=self.config)
+        # Create runner via factory (supports alpaca, schwab, and any registered broker)
+        runner = RunnerFactory.create(
+            broker=self.broker,
+            symbols=self.symbols,
+            config=self.config
+        )
 
         # Create task for the runner
         self.trading_task = asyncio.create_task(runner.run())
@@ -607,14 +584,14 @@ class AutoTrader:
                 await asyncio.sleep(10)
 
             # Stop the runner gracefully
-            self.logger.info("Market closed, stopping Schwab runner...")
+            self.logger.info(f"Market closed, stopping {self.broker} runner...")
             runner.stop()
 
             # Wait for runner to finish
             try:
                 await asyncio.wait_for(self.trading_task, timeout=30)
             except asyncio.TimeoutError:
-                self.logger.warning("Schwab runner did not stop gracefully, cancelling")
+                self.logger.warning(f"{self.broker} runner did not stop gracefully, cancelling")
                 self.trading_task.cancel()
 
         except asyncio.CancelledError:

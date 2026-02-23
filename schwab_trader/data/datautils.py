@@ -1,15 +1,22 @@
 import time
-import os
 from datetime import datetime
+from typing import Optional
+
 import pandas as pd
+
 from data.aggregate import Aggregator
-from dotenv import load_dotenv
-from pathlib import Path
 from data.streaming.authenticator import Authenticator
 
-apikey = os.getenv("API_KEY")
-secret = os.getenv("API_SECRET")
-auth = Authenticator()
+# Lazy-loaded authenticator to avoid import-time side effects
+_auth: Optional[Authenticator] = None
+
+
+def _get_authenticator() -> Authenticator:
+    """Get or create the Authenticator instance (lazy initialization)."""
+    global _auth
+    if _auth is None:
+        _auth = Authenticator()
+    return _auth
 
 
 
@@ -103,8 +110,9 @@ def filter_data_by_date(df: pd.DataFrame, start_date_epoch: int, end_date_epoch:
     return filtered_df
 
 def load_stock_Data(stock_list: list[str]):
+    """Load data into memory for whatever reason."""
+    auth = _get_authenticator()
     aggregator = Aggregator(apikey=auth.apikey, secret=auth.secret)
-    """ Load data into memory for whatever reason"""
     for idx, stock in enumerate(stock_list):
         frame = aggregator.get_processed_data_files(stock=stock)
     return frame

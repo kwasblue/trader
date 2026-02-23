@@ -2,7 +2,13 @@
 __pycache__/
 *.py[cod]
 *.pyo
-*.pytrest_cache__/
+.pytest_cache/
+
+# === Build artifacts ===
+*.egg-info/
+dist/
+build/
+htmlcov/
 # === Virtual environments ===
 .venv/
 env/

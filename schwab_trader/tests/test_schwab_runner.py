@@ -225,19 +225,19 @@ class TestBarAggregation:
     @pytest.fixture
     def mock_runner(self):
         """Create a minimal runner for testing aggregation."""
-        with patch('core.schwab_runner.get_event_handler'), \
-             patch('core.schwab_runner.get_module_logger'), \
-             patch('core.schwab_runner.FileTradeLogger'), \
+        with patch('core.base.base_live_runner.get_event_handler'), \
+             patch('core.base.base_live_runner.get_module_logger'), \
+             patch('core.base.base_live_runner.FileTradeLogger'), \
              patch('core.schwab_runner.SchwabClient'), \
              patch('core.schwab_runner.SchwabBroker'), \
-             patch('core.schwab_runner.get_config'), \
-             patch('core.schwab_runner.StrategyRoutingManager'), \
-             patch('core.schwab_runner.LiveExecutor'), \
-             patch('core.schwab_runner.LiveExecutionEngine'), \
-             patch('core.schwab_runner.StateReconciler'), \
-             patch('core.schwab_runner.UnifiedDataPipeline'), \
-             patch('core.schwab_runner.HistoricalDataUpdater'), \
-             patch('core.schwab_runner.DynamicTradeLogicManager'):
+             patch('core.base.base_live_runner.get_config'), \
+             patch('core.base.base_live_runner.StrategyRoutingManager'), \
+             patch('core.base.base_live_runner.LiveExecutor'), \
+             patch('core.base.base_live_runner.LiveExecutionEngine'), \
+             patch('core.base.base_live_runner.StateReconciler'), \
+             patch('core.base.base_live_runner.UnifiedDataPipeline'), \
+             patch('core.base.base_live_runner.HistoricalDataUpdater'), \
+             patch('core.base.base_live_runner.DynamicTradeLogicManager'):
 
             from core.schwab_runner import SchwabLiveRunner
 

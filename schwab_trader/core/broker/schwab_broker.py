@@ -15,17 +15,23 @@ from data.streaming.streamer import SchwabStreamingClient
 from loggers.logger import Logger
 
 
+from core.enums import OrderSide
+
+# Keep Side for backward compat with short/cover
 Side = Literal["buy", "sell", "short", "cover"]
+
+
+def _normalize_side(side: OrderSide | str) -> str:
+    """Normalize OrderSide enum or string to lowercase string."""
+    if isinstance(side, OrderSide):
+        return side.value
+    return str(side).lower()
 OrderType = Literal["market", "limit", "stop", "stop_limit"]
 TIF = Literal["day", "gtc", "fok"]
 Session = Literal["NORMAL", "AM", "PM"]
 
 
-def _to_float(v: Any) -> float | None:
-    try:
-        return None if v is None else float(v)
-    except Exception:
-        return None
+from core.utils.type_helpers import to_float as _to_float
 
 
 class SchwabBroker(BaseBrokerInterface):
