@@ -74,7 +74,8 @@ class TestReconcilerConfig:
         assert config.price_tolerance == 0.01
         assert config.cash_tolerance == 1.0
         assert config.reconcile_interval == 15
-        assert config.halt_on_critical is True
+        assert config.halt_on_critical is False  # Now defaults to False (prefer auto_sync_critical)
+        assert config.auto_sync_critical is True  # New default: auto-sync instead of halt
         assert config.auto_correct_minor is True
 
     def test_custom_config(self):
@@ -364,7 +365,12 @@ class TestReconcile:
             reconciler = StateReconciler(
                 broker=mock_broker,
                 portfolio=mock_portfolio,
-                config=ReconcilerConfig(halt_on_critical=True, major_qty_diff=10, minor_qty_diff=1),
+                config=ReconcilerConfig(
+                    halt_on_critical=True,
+                    auto_sync_critical=False,  # Disable auto-sync to test halt behavior
+                    major_qty_diff=10,
+                    minor_qty_diff=1
+                ),
                 on_halt=halt_callback,
             )
 
@@ -388,6 +394,40 @@ class TestReconcile:
             assert reconciler.is_halted is True
             assert "halted" in result.action_taken
             halt_callback.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_reconcile_auto_sync_critical(self, mock_broker, mock_portfolio):
+        """Test that critical mismatches are auto-synced instead of halting (default behavior)."""
+        reconciler = StateReconciler(
+            broker=mock_broker,
+            portfolio=mock_portfolio,
+            config=ReconcilerConfig(
+                auto_sync_critical=True,  # Default behavior
+                major_qty_diff=10,
+                minor_qty_diff=1
+            ),
+        )
+
+        # Local position
+        local_pos = MagicMock()
+        local_pos.qty = 100
+        local_pos.avg_price = 150.0
+        mock_portfolio.positions = {"AAPL": local_pos}
+        mock_portfolio.cash = 100000.0
+
+        # Broker has huge difference (critical - above major_qty_diff of 10)
+        snapshot = BrokerSnapshot(
+            cash=100000.0,
+            equity=107500.0,
+            positions={"AAPL": PositionView(symbol="AAPL", qty=50, avg_entry_price=150.0)},
+        )
+        mock_broker.get_account_info.return_value = snapshot
+
+        result = await reconciler.reconcile()
+
+        # Should NOT be halted - auto-sync should fix it
+        assert reconciler.is_halted is False
+        assert "critical_auto_synced" in result.action_taken
 
 
 class TestOrderVerification:

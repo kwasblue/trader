@@ -132,8 +132,9 @@ class ReconcilerConfig:
     # Behavior
     reconcile_interval: int = 15          # Seconds between periodic checks (reduced from 60)
     stale_threshold_seconds: int = 30     # Portfolio state staleness threshold
-    halt_on_critical: bool = True         # Halt trading on critical mismatch
+    halt_on_critical: bool = False        # Halt trading on critical mismatch (prefer auto_sync_critical)
     auto_correct_minor: bool = True       # Auto-sync minor mismatches
+    auto_sync_critical: bool = True       # Auto-sync critical mismatches (safer than halting)
     auto_sync_cash: bool = True           # Auto-sync cash on mismatch
 
     # Severity thresholds
@@ -467,19 +468,52 @@ class StateReconciler:
             if self.on_mismatch:
                 self.on_mismatch(major_mismatches)
 
-        # Halt on critical mismatches
-        if critical_mismatches and self.config.halt_on_critical:
-            self._halted = True
-            msg = f"CRITICAL: {len(critical_mismatches)} position mismatches - HALTING TRADING"
-            logger.critical(
-                format_log_message(msg, correlation_id=correlation_id)
-            )
+        # Handle critical mismatches
+        if critical_mismatches:
+            symbols = [m.symbol for m in critical_mismatches]
+            details = ", ".join(f"{m.symbol}: local={m.local_qty} broker={m.broker_qty}" for m in critical_mismatches)
 
-            await self._emit_alert(msg, "error", result, correlation_id)
-            actions_taken.append("halted")
+            if self.config.auto_sync_critical:
+                # Auto-sync instead of halting - this is safer for live trading
+                msg = f"CRITICAL mismatch detected ({details}) - AUTO-SYNCING to broker state"
+                logger.warning(
+                    format_log_message(msg, correlation_id=correlation_id)
+                )
+                await self._emit_alert(msg, "warning", result, correlation_id)
 
-            if self.on_halt:
-                self.on_halt(msg)
+                # Perform full sync to fix the mismatch
+                sync_result = await self.full_sync()
+                if sync_result.success:
+                    logger.info(
+                        format_log_message(
+                            f"Auto-sync successful - positions now match broker",
+                            correlation_id=correlation_id
+                        )
+                    )
+                    actions_taken.append("critical_auto_synced")
+                else:
+                    # Sync failed - now we halt
+                    self._halted = True
+                    msg = f"CRITICAL: Auto-sync FAILED for {symbols} - HALTING TRADING"
+                    logger.critical(
+                        format_log_message(msg, correlation_id=correlation_id)
+                    )
+                    await self._emit_alert(msg, "error", result, correlation_id)
+                    actions_taken.append("halted")
+                    if self.on_halt:
+                        self.on_halt(msg)
+
+            elif self.config.halt_on_critical:
+                # Old behavior: halt immediately
+                self._halted = True
+                msg = f"CRITICAL: {len(critical_mismatches)} position mismatches - HALTING TRADING"
+                logger.critical(
+                    format_log_message(msg, correlation_id=correlation_id)
+                )
+                await self._emit_alert(msg, "error", result, correlation_id)
+                actions_taken.append("halted")
+                if self.on_halt:
+                    self.on_halt(msg)
 
         # Also check cash mismatch
         if not result.cash_match:

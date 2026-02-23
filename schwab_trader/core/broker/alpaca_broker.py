@@ -17,7 +17,8 @@ from alpaca.trading.requests import (
 from alpaca.trading.enums import OrderSide, TimeInForce, QueryOrderStatus, OrderClass
 
 from alpaca.data.historical.stock import StockHistoricalDataClient
-from alpaca.data.requests import StockLatestQuoteRequest
+from alpaca.data.requests import StockLatestQuoteRequest, StockBarsRequest
+from alpaca.data.timeframe import TimeFrame
 
 from core.base.base_broker_interface import BaseBrokerInterface
 from core.app_types import OrderResult, PositionView, BrokerSnapshot
@@ -70,6 +71,15 @@ class AlpacaBroker(BaseBrokerInterface):
         self._connected = False
         self.logger = Logger("alpaca.log", "AlpacaBroker").get_logger()
         self.event_handler = get_event_handler()
+        # Track subscriptions for re-subscribing after reconnection
+        self._bar_subscriptions: Dict[str, Any] = {}  # symbol -> callback
+        self._streaming = False  # Flag to control streaming loop
+
+        # Polling fallback
+        self._last_bar_time: Dict[str, datetime] = {}  # symbol -> last bar timestamp
+        self._polling_active = False  # Whether polling fallback is active
+        self._poll_interval = 60  # Poll every 60 seconds
+        self._stale_threshold = 120  # Consider stale if no bar for 2 minutes
 
     # ---------------------------------------------------------
     # Connections / Streaming
@@ -89,7 +99,7 @@ class AlpacaBroker(BaseBrokerInterface):
 
         self.trading_client = TradingClient(self.api_key, self.api_secret, paper=self.paper)
         # Websocket params for better connection stability
-        ws_params = {"ping_interval": 30, "ping_timeout": 20}
+        ws_params = {"ping_interval": 30, "ping_timeout": 30, "close_timeout": 10}
         self.stream = StockDataStream(self.api_key, self.api_secret, feed=DataFeed.IEX, websocket_params=ws_params)
         self.data_rest = StockHistoricalDataClient(self.api_key, self.api_secret)
         self._connected = True
@@ -109,7 +119,7 @@ class AlpacaBroker(BaseBrokerInterface):
 
         self.trading_client = TradingClient(self.api_key, self.api_secret, paper=self.paper)
         # Websocket params for better connection stability
-        ws_params = {"ping_interval": 30, "ping_timeout": 20}
+        ws_params = {"ping_interval": 30, "ping_timeout": 30, "close_timeout": 10}
         self.stream = StockDataStream(self.api_key, self.api_secret, feed=DataFeed.IEX, websocket_params=ws_params)
         self.data_rest = StockHistoricalDataClient(self.api_key, self.api_secret)
         self._connected = True
@@ -118,6 +128,7 @@ class AlpacaBroker(BaseBrokerInterface):
     def disconnect(self):
         """Close all connections and clean up resources."""
         self._connected = False
+        self._streaming = False  # Signal stream loop to exit
         if self.stream is not None:
             try:
                 # Stop the websocket stream
@@ -166,7 +177,7 @@ class AlpacaBroker(BaseBrokerInterface):
 
     async def _heartbeat_loop(self, interval: int = 10):
         """Emit periodic broker heartbeat."""
-        while True:
+        while self._streaming:
             if self.event_handler:
                 payload: HealthPayload = {
                     "broker": "alpaca",
@@ -176,8 +187,10 @@ class AlpacaBroker(BaseBrokerInterface):
                 }
                 await self.event_handler.emit(EVENT_HEALTH_UPDATE, payload)
             await asyncio.sleep(interval)
+        self.logger.debug("[heartbeat] Heartbeat loop ended")
 
-    async def start_stream(self, retry_seconds: int = 300):
+    async def start_stream(self):
+        """Start the data stream with automatic reconnection."""
         if not self.stream:
             self.logger.warning("Stream not initialized. Call connect() first.")
             if self.event_handler:
@@ -189,6 +202,7 @@ class AlpacaBroker(BaseBrokerInterface):
                 })
             return
 
+        self._streaming = True
         self.logger.info(
             f"[stream] starting... alpaca-py={getattr(alpaca,'__version__','unknown')} feed={getattr(self, 'feed', '?')}"
         )
@@ -202,8 +216,13 @@ class AlpacaBroker(BaseBrokerInterface):
             await self.event_handler.emit(EVENT_HEALTH_UPDATE, payload)
         # launch heartbeat task
         asyncio.create_task(self._heartbeat_loop(interval=15))
+        # Start polling fallback loop
+        asyncio.create_task(self._polling_fallback_loop())
 
-        while True:
+        reconnect_delay = 5  # Start with 5 seconds
+        max_delay = 60  # Cap at 60 seconds
+
+        while self._streaming:
             try:
                 run_fn = self.stream.run
                 if inspect.iscoroutinefunction(run_fn):
@@ -211,7 +230,14 @@ class AlpacaBroker(BaseBrokerInterface):
                 else:
                     await asyncio.to_thread(run_fn)
 
-                self.logger.warning("[stream] exited cleanly; restarting in 5s...")
+                # Check if we should stop
+                if not self._streaming:
+                    self.logger.info("[stream] Stop requested, exiting stream loop")
+                    break
+
+                # Stream exited cleanly - recreate stream, re-subscribe, and restart
+                self.logger.warning("[RECONNECTING] Stream exited cleanly; reconnecting in 5s...")
+                reconnect_delay = 5  # Reset on clean exit
                 if self.event_handler:
                     payload: HealthPayload = {
                         "broker": "alpaca",
@@ -223,10 +249,24 @@ class AlpacaBroker(BaseBrokerInterface):
 
                 await asyncio.sleep(5)
 
+                if not self._streaming:
+                    break
+
+                # Recreate stream and re-subscribe
+                self._recreate_stream_and_resubscribe()
+
+            except asyncio.CancelledError:
+                self.logger.info("[stream] Stream cancelled, exiting")
+                self._streaming = False
+                break
+
             except Exception as e:
-                self.logger.error(f"[stream] error: {e}; retrying in {retry_seconds}s")
+                if not self._streaming:
+                    self.logger.info("[stream] Stop requested during error handling, exiting")
+                    break
+
+                self.logger.error(f"[RECONNECTING] Stream error: {e}; reconnecting in {reconnect_delay}s")
                 if self.event_handler:
-                    # alert
                     alert_payload: AlertPayload = {
                         "level": "error",
                         "message": f"Stream error: {e}",
@@ -235,16 +275,25 @@ class AlpacaBroker(BaseBrokerInterface):
                     }
                     await self.event_handler.emit(EVENT_ALERT, alert_payload)
 
-                    # health
                     health_payload: HealthPayload = {
                         "broker": "alpaca",
                         "status": "reconnecting",
-                        "details": {"error": str(e)},
+                        "details": {"error": str(e), "retry_in": reconnect_delay},
                         "timestamp": datetime.now(timezone.utc).isoformat(),
                     }
                     await self.event_handler.emit(EVENT_HEALTH_UPDATE, health_payload)
 
-            await asyncio.sleep(retry_seconds)
+                await asyncio.sleep(reconnect_delay)
+                # Exponential backoff: 5 -> 10 -> 20 -> 40 -> 60 (capped)
+                reconnect_delay = min(reconnect_delay * 2, max_delay)
+
+                if not self._streaming:
+                    break
+
+                # Recreate stream and re-subscribe
+                self._recreate_stream_and_resubscribe()
+
+        self.logger.info("[stream] Stream loop ended")
 
     def subscribe_bars(self, callback, symbol: str):
         if not self.stream:
@@ -254,11 +303,19 @@ class AlpacaBroker(BaseBrokerInterface):
         if not asyncio.iscoroutinefunction(callback):
             async def _async_wrap(bar):
                 return callback(bar)
-            cb = _async_wrap
+            base_cb = _async_wrap
         else:
-            cb = callback
+            base_cb = callback
 
-        self.stream.subscribe_bars(cb, symbol)
+        # Wrap callback to track when bars are received (for polling fallback)
+        async def _tracking_callback(bar):
+            self.record_bar_received(symbol)
+            return await base_cb(bar)
+
+        # Track subscription for re-subscribing after reconnection
+        self._bar_subscriptions[symbol] = _tracking_callback
+
+        self.stream.subscribe_bars(_tracking_callback, symbol)
         self.logger.info(f"[stream] subscribed bars: {symbol}")
 
         if self.event_handler:
@@ -268,6 +325,162 @@ class AlpacaBroker(BaseBrokerInterface):
                 "details": {"symbol": symbol},
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }))
+
+    def _resubscribe_all(self):
+        """Re-subscribe to all tracked bar subscriptions after reconnection."""
+        if not self.stream or not self._bar_subscriptions:
+            return
+
+        self.logger.info(f"[stream] Re-subscribing to {len(self._bar_subscriptions)} symbols...")
+        for symbol, callback in self._bar_subscriptions.items():
+            self.stream.subscribe_bars(callback, symbol)
+            self.logger.info(f"[stream] re-subscribed bars: {symbol}")
+
+    def _recreate_stream_and_resubscribe(self):
+        """Recreate the stream object and re-subscribe to all bars."""
+        # Close old stream to avoid connection leaks
+        if self.stream is not None:
+            self.logger.info("[stream] Closing old stream object...")
+            try:
+                # Try to close the websocket connection
+                if hasattr(self.stream, 'close'):
+                    self.stream.close()
+                elif hasattr(self.stream, 'stop'):
+                    self.stream.stop()
+                elif hasattr(self.stream, '_ws') and self.stream._ws is not None:
+                    # Direct websocket access as fallback
+                    pass  # Let it be garbage collected
+            except Exception as e:
+                self.logger.debug(f"[stream] Error closing old stream (expected): {e}")
+            finally:
+                self.stream = None
+
+        self.logger.info("[stream] Creating new stream object...")
+        ws_params = {"ping_interval": 30, "ping_timeout": 30, "close_timeout": 10}
+        self.stream = StockDataStream(self.api_key, self.api_secret, feed=DataFeed.IEX, websocket_params=ws_params)
+        self._resubscribe_all()
+
+        # Confirm reconnection
+        symbols = list(self._bar_subscriptions.keys())
+        self.logger.info(f"[RECONNECTED] Stream restored with {len(symbols)} subscriptions: {symbols}")
+
+        if self.event_handler:
+            asyncio.create_task(self.event_handler.emit(EVENT_HEALTH_UPDATE, {
+                "broker": "alpaca",
+                "status": "reconnected",
+                "details": {"symbols": symbols},
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }))
+
+    # ---------------------------------------------------------
+    # Polling Fallback
+    # ---------------------------------------------------------
+
+    def record_bar_received(self, symbol: str):
+        """Record that a bar was received for a symbol (called by streaming callback)."""
+        self._last_bar_time[symbol] = datetime.now(timezone.utc)
+
+    def _get_stale_symbols(self) -> List[str]:
+        """Get symbols that haven't received a bar recently."""
+        now = datetime.now(timezone.utc)
+        stale = []
+        for symbol in self._bar_subscriptions.keys():
+            last_time = self._last_bar_time.get(symbol)
+            if last_time is None or (now - last_time).total_seconds() > self._stale_threshold:
+                stale.append(symbol)
+        return stale
+
+    async def _poll_bars(self, symbols: List[str]) -> Dict[str, Any]:
+        """
+        Fetch latest bars for symbols via REST API.
+
+        Returns dict of symbol -> bar data
+        """
+        if not self.data_rest or not symbols:
+            self.logger.warning("[poll] data_rest not initialized, skipping poll")
+            return {}
+
+        # Check for valid API keys
+        if not self.api_key or not self.api_secret:
+            self.logger.error("[poll] API keys not set, cannot poll")
+            return {}
+
+        try:
+            # Get the last 2 bars to ensure we have the most recent complete bar
+            request = StockBarsRequest(
+                symbol_or_symbols=symbols,
+                timeframe=TimeFrame.Minute,
+                limit=2
+            )
+
+            bars = await asyncio.to_thread(self.data_rest.get_stock_bars, request)
+
+            result = {}
+            for symbol in symbols:
+                symbol_bars = bars.get(symbol, [])
+                if symbol_bars:
+                    # Get the most recent bar
+                    latest = symbol_bars[-1]
+                    result[symbol] = latest
+
+            return result
+
+        except Exception as e:
+            self.logger.error(f"[poll] Error fetching bars: {e}")
+            # If auth error, log more details
+            if "unauthorized" in str(e).lower() or "401" in str(e):
+                self.logger.error(f"[poll] Auth error - check ALPACA_API_KEY and ALPACA_SECRET_KEY env vars")
+            return {}
+
+    async def _polling_fallback_loop(self):
+        """
+        Background task that polls for bars when streaming is stale.
+
+        Checks every poll_interval seconds. If any symbols haven't received
+        a bar via streaming in stale_threshold seconds, fetches via REST.
+        """
+        self.logger.info(f"[poll] Polling fallback started (interval={self._poll_interval}s, stale={self._stale_threshold}s)")
+
+        while self._streaming:
+            await asyncio.sleep(self._poll_interval)
+
+            if not self._streaming:
+                break
+
+            # Check for stale symbols
+            stale_symbols = self._get_stale_symbols()
+
+            if stale_symbols:
+                self._polling_active = True
+                self.logger.info(f"[poll] Fetching bars for {len(stale_symbols)} stale symbols: {stale_symbols}")
+
+                # Fetch bars via REST
+                bars = await self._poll_bars(stale_symbols)
+
+                # Route to callbacks
+                for symbol, bar in bars.items():
+                    callback = self._bar_subscriptions.get(symbol)
+                    if callback:
+                        try:
+                            await callback(bar)
+                            self.record_bar_received(symbol)
+                            self.logger.debug(f"[poll] Delivered bar for {symbol}")
+                        except Exception as e:
+                            self.logger.error(f"[poll] Error in callback for {symbol}: {e}")
+
+                if self.event_handler:
+                    await self.event_handler.emit(EVENT_HEALTH_UPDATE, {
+                        "broker": "alpaca",
+                        "status": "polling_fallback",
+                        "details": {"symbols": stale_symbols, "bars_fetched": len(bars)},
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    })
+            else:
+                if self._polling_active:
+                    self.logger.info("[poll] All symbols receiving streaming data, polling inactive")
+                    self._polling_active = False
+
+        self.logger.info("[poll] Polling fallback loop ended")
 
     # ---------------------------------------------------------
     # Convenience (from your original snippet)
