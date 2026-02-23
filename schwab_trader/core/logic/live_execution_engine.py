@@ -549,7 +549,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
             qty = self._calculate_quantity(
                 context.symbol, state, action_type, context.price, context.atr,
                 context.regime, trade_logic, signal=context.signal,
-                df=context.df, **extra_kwargs
+                df=context.df
             )
 
             if qty <= 0:
@@ -629,7 +629,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
                 time_in_force=context.time_in_force,
                 limit_price=context.limit_price,
                 stop_price=context.stop_price,
-                df=context.df, **extra_kwargs
+                df=context.df
             )
 
             # 8. UPDATE STATE ON RESULT

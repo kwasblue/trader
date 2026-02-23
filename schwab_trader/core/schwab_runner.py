@@ -133,7 +133,6 @@ class SchwabLiveRunner:
         self.router = StrategyRoutingManager(str(ROOT / "config" / "strategy_routing.json"))
         self.executor = LiveExecutor(
             broker=self.broker,
-            event_handler=self.event_handler,
         )
         self.engine = LiveExecutionEngine(
             broker=self.broker,

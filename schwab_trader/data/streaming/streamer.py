@@ -141,7 +141,8 @@ class SchwabStreamingClient():
             async with websockets.connect(
                 self.streamer_info['streamerSocketUrl'],
                 ping_interval=30,
-                ping_timeout=10,
+                ping_timeout=20,  # Increased from 10s for better tolerance
+                close_timeout=10,
             ) as ws:
                 self.connection = ws
 

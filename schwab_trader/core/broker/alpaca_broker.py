@@ -88,7 +88,9 @@ class AlpacaBroker(BaseBrokerInterface):
             self.disconnect()
 
         self.trading_client = TradingClient(self.api_key, self.api_secret, paper=self.paper)
-        self.stream = StockDataStream(self.api_key, self.api_secret, feed=DataFeed.IEX)
+        # Websocket params for better connection stability
+        ws_params = {"ping_interval": 30, "ping_timeout": 20}
+        self.stream = StockDataStream(self.api_key, self.api_secret, feed=DataFeed.IEX, websocket_params=ws_params)
         self.data_rest = StockHistoricalDataClient(self.api_key, self.api_secret)
         self._connected = True
         self.logger.info("Connected to Alpaca.")
@@ -106,7 +108,9 @@ class AlpacaBroker(BaseBrokerInterface):
             self.disconnect()
 
         self.trading_client = TradingClient(self.api_key, self.api_secret, paper=self.paper)
-        self.stream = StockDataStream(self.api_key, self.api_secret, feed=DataFeed.IEX)
+        # Websocket params for better connection stability
+        ws_params = {"ping_interval": 30, "ping_timeout": 20}
+        self.stream = StockDataStream(self.api_key, self.api_secret, feed=DataFeed.IEX, websocket_params=ws_params)
         self.data_rest = StockHistoricalDataClient(self.api_key, self.api_secret)
         self._connected = True
         self.logger.info("Connected to Alpaca.")
