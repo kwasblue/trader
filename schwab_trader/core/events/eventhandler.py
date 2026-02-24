@@ -13,10 +13,10 @@ from core.base.event_handler_base import Event, EventHandlerBase
 from core.contracts.events import EVENT_SCHEMA_MAP, GuardrailPayload, EVENT_GUARDRAIL_TRIGGERED
 from core.events.validation import validate_payload
 
-# Optimization constants
-MAX_CONCURRENT_HANDLERS = 50  # Limit concurrent async handlers
-MAX_THREAD_WORKERS = 8  # Bounded thread pool for sync callbacks
-MAX_QUEUE_SIZE = 2000  # Reduced from 10,000 for memory efficiency
+# Optimization constants - tuned for 100-200 symbol scaling
+MAX_CONCURRENT_HANDLERS = 200  # Increased from 50 for multi-symbol scaling
+MAX_THREAD_WORKERS = 16  # Increased from 8 for parallel sync callbacks
+MAX_QUEUE_SIZE = 10000  # Increased from 2000 for high-frequency events
 
 
 class EventHandler(EventHandlerBase):

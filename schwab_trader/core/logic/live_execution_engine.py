@@ -196,6 +196,10 @@ class LiveExecutionEngine(ExecutionEngineBase):
             symbol_states=self.symbol_states,
         )
 
+        # Position refresh cache to reduce broker API calls
+        self._position_cache: Dict[str, datetime] = {}  # symbol -> last_refresh_time
+        self._position_cache_ttl: float = 30.0  # Cache TTL in seconds (increased for scaling)
+
         self.logger.info(
             f"LiveExecutionEngine initialized with order registry and validator"
             f"{f', daily_loss_limit=${daily_loss_limit:,.2f}' if daily_loss_limit else ''}"
@@ -768,15 +772,33 @@ class LiveExecutionEngine(ExecutionEngineBase):
             # Conservative: assume pending orders exist on error
             return True
 
-    async def _refresh_position(self, symbol: str) -> None:
+    async def _refresh_position(self, symbol: str, force: bool = False) -> None:
         """
         Refresh position from broker before executing.
 
-        Critical for live trading to avoid stale state.
-        Uses local OrderRegistry for fast pending order checks.
+        Uses caching to reduce broker API calls. Positions are cached for
+        `_position_cache_ttl` seconds (default 5s).
+
+        Args:
+            symbol: Trading symbol
+            force: If True, bypass cache and always refresh from broker
         """
+        # Check cache unless forced refresh
+        if not force:
+            last_refresh = self._position_cache.get(symbol)
+            if last_refresh:
+                age = (datetime.now(timezone.utc) - last_refresh).total_seconds()
+                if age < self._position_cache_ttl:
+                    self.logger.debug(
+                        f"[{symbol}] Using cached position (age={age:.1f}s)"
+                    )
+                    return
+
         try:
             broker_position = await self.broker.get_position(symbol)
+
+            # Update cache timestamp
+            self._position_cache[symbol] = datetime.now(timezone.utc)
 
             if broker_position:
                 # Use proper method to sync position - maintains state ownership
@@ -812,6 +834,20 @@ class LiveExecutionEngine(ExecutionEngineBase):
 
         except Exception as e:
             self.logger.warning(f"[{symbol}] Failed to refresh position: {e}")
+
+    def invalidate_position_cache(self, symbol: Optional[str] = None) -> None:
+        """
+        Invalidate position cache.
+
+        Call this after trades complete to ensure fresh data on next check.
+
+        Args:
+            symbol: Symbol to invalidate, or None to clear all
+        """
+        if symbol:
+            self._position_cache.pop(symbol, None)
+        else:
+            self._position_cache.clear()
     
     async def _cancel_conflicting_orders(self, symbol: str, side: OrderSide) -> None:
         """
@@ -1059,6 +1095,9 @@ class LiveExecutionEngine(ExecutionEngineBase):
 
             # Update order status to filled (optimistic)
             await self.order_registry.update_status(str(order_id), "filled", qty)
+
+            # Invalidate position cache to ensure fresh data on next refresh
+            self.invalidate_position_cache(symbol)
 
             self.logger.info(
                 format_log_message(

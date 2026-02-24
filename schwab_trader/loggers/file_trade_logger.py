@@ -6,17 +6,20 @@ Extends TradeLoggerBase and provides:
 - Flexible log_trade signatures (dict, positional, keyword)
 - Automatic header creation
 - Thread-safe file operations
+- Async batched writes for high-frequency trading
 - Integration with logger system
 """
 
 from __future__ import annotations
 
+import asyncio
 import csv
 import os
 from datetime import datetime, timezone
-from typing import Optional, Any, Dict
+from typing import Optional, Any, Dict, List, Tuple
 from pathlib import Path
 import threading
+from concurrent.futures import ThreadPoolExecutor
 
 from core.base.trade_logger_base import TradeLoggerBase
 from core.enums import OrderSide
@@ -62,38 +65,54 @@ class FileTradeLogger(TradeLoggerBase):
         self,
         log_file: str = "trades.csv",
         log_dir: str = "logs",
-        logger_name: str = "TradeLogger"
+        logger_name: str = "TradeLogger",
+        batch_size: int = 10,
+        flush_interval: float = 5.0,
+        enable_async: bool = True,
     ):
         """
         Initialize file trade logger.
-        
+
         Args:
             log_file: CSV filename
             log_dir: Directory for log files
             logger_name: Logger name for app logs
+            batch_size: Number of trades to batch before writing (async mode)
+            flush_interval: Seconds between auto-flushes (async mode)
+            enable_async: Enable async batched writes (default True)
         """
         super().__init__(log_file=log_file, log_dir=log_dir)
-        
+
         # Ensure directory exists
         Path(log_dir).mkdir(parents=True, exist_ok=True)
-        
+
         # Full path to CSV
         self.log_path = os.path.join(log_dir, log_file)
-        
+
         # Thread lock for file writes
         self._lock = threading.Lock()
-        
+
+        # Async batching configuration
+        self._batch_size = batch_size
+        self._flush_interval = flush_interval
+        self._enable_async = enable_async
+        self._write_buffer: List[List[Any]] = []
+        self._buffer_lock = threading.Lock()
+        self._flush_task: Optional[asyncio.Task] = None
+        self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="trade_logger")
+        self._running = False
+
         # Setup logger
         self.logger = Logger(
             log_file=f"{logger_name}.log",
             logger_name=logger_name,
             log_dir=log_dir
         ).get_logger()
-        
+
         # Create CSV with header if doesn't exist
         self._init_csv()
-        
-        self.logger.info(f"FileTradeLogger initialized: {self.log_path}")
+
+        self.logger.info(f"FileTradeLogger initialized: {self.log_path} (async={enable_async})")
     
     def _init_csv(self) -> None:
         """Create CSV file with header if it doesn't exist."""
@@ -108,6 +127,100 @@ class FileTradeLogger(TradeLoggerBase):
                     "position_before", "position_after",
                     "pnl", "notes"
                 ])
+
+    # ========================================================================
+    # ASYNC BATCHED WRITING
+    # ========================================================================
+
+    async def start_async_writer(self) -> None:
+        """
+        Start the background flush task for async batched writes.
+
+        Call this at application startup if using async mode.
+        """
+        if self._running:
+            return
+
+        self._running = True
+        self._flush_task = asyncio.create_task(self._background_flush_loop())
+        self.logger.info("Async trade logger writer started")
+
+    async def stop_async_writer(self) -> None:
+        """
+        Stop the background flush task and flush remaining buffer.
+
+        Call this at application shutdown.
+        """
+        self._running = False
+
+        if self._flush_task:
+            self._flush_task.cancel()
+            try:
+                await self._flush_task
+            except asyncio.CancelledError:
+                pass
+
+        # Flush any remaining buffered trades
+        await self._flush_buffer_async()
+        self._executor.shutdown(wait=True)
+        self.logger.info("Async trade logger writer stopped")
+
+    async def _background_flush_loop(self) -> None:
+        """Background task that flushes buffer periodically."""
+        while self._running:
+            try:
+                await asyncio.sleep(self._flush_interval)
+                await self._flush_buffer_async()
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                self.logger.error(f"Error in background flush: {e}")
+
+    def _add_to_buffer(self, row: List[Any]) -> None:
+        """Add a row to the write buffer (thread-safe)."""
+        with self._buffer_lock:
+            self._write_buffer.append(row)
+            buffer_len = len(self._write_buffer)
+
+        # Trigger immediate flush if buffer is full (sync fallback)
+        if buffer_len >= self._batch_size and not self._running:
+            self._flush_buffer_sync()
+
+    async def _flush_buffer_async(self) -> None:
+        """Flush the buffer to disk asynchronously."""
+        with self._buffer_lock:
+            if not self._write_buffer:
+                return
+            rows_to_write = self._write_buffer.copy()
+            self._write_buffer.clear()
+
+        # Write in executor to avoid blocking event loop
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(self._executor, self._do_batch_write, rows_to_write)
+
+    def _flush_buffer_sync(self) -> None:
+        """Flush the buffer to disk synchronously."""
+        with self._buffer_lock:
+            if not self._write_buffer:
+                return
+            rows_to_write = self._write_buffer.copy()
+            self._write_buffer.clear()
+
+        self._do_batch_write(rows_to_write)
+
+    def _do_batch_write(self, rows: List[List[Any]]) -> None:
+        """Perform the actual batch write to CSV (runs in executor)."""
+        if not rows:
+            return
+
+        with self._lock:
+            try:
+                with open(self.log_path, mode="a", newline="", encoding="utf-8") as f:
+                    writer = csv.writer(f)
+                    writer.writerows(rows)
+                self.logger.debug(f"Batch wrote {len(rows)} trades to CSV")
+            except Exception as e:
+                self.logger.error(f"Failed to batch write trades: {e}")
     
     # ========================================================================
     # MAIN LOGGING METHOD (Flexible signatures)
@@ -260,42 +373,49 @@ class FileTradeLogger(TradeLoggerBase):
         notes: Optional[str] = None,
         **ignored  # Catch any extra kwargs
     ) -> None:
-        """Write trade to CSV file (thread-safe)."""
+        """Write trade to CSV file (thread-safe, optionally batched)."""
         # Normalize action (handle OrderSide enum)
         if isinstance(action, OrderSide):
             action_str = action.value.lower()
         else:
             action_str = str(action).lower()
-        
-        # Thread-safe file write
-        with self._lock:
-            try:
-                with open(self.log_path, mode="a", newline="", encoding="utf-8") as f:
-                    writer = csv.writer(f)
-                    writer.writerow([
-                        timestamp.isoformat(),
-                        symbol,
-                        action_str,
-                        f"{price:.2f}",
-                        quantity,
-                        order_id or "",
-                        f"{sl:.2f}" if sl is not None else "",
-                        f"{tp:.2f}" if tp is not None else "",
-                        f"{trailing_stop:.2f}" if trailing_stop is not None else "",
-                        strategy or "",
-                        regime or "",
-                        f"{commission:.2f}" if commission is not None else "",
-                        f"{slippage:.4f}" if slippage is not None else "",
-                        f"{cash_before:.2f}" if cash_before is not None else "",
-                        f"{cash_after:.2f}" if cash_after is not None else "",
-                        position_before if position_before is not None else "",
-                        position_after if position_after is not None else "",
-                        f"{pnl:.2f}" if pnl is not None else "",
-                        notes or ""
-                    ])
-            except Exception as e:
-                self.logger.error(f"Failed to write trade to CSV: {e}")
-        
+
+        # Build row data
+        row = [
+            timestamp.isoformat(),
+            symbol,
+            action_str,
+            f"{price:.2f}",
+            quantity,
+            order_id or "",
+            f"{sl:.2f}" if sl is not None else "",
+            f"{tp:.2f}" if tp is not None else "",
+            f"{trailing_stop:.2f}" if trailing_stop is not None else "",
+            strategy or "",
+            regime or "",
+            f"{commission:.2f}" if commission is not None else "",
+            f"{slippage:.4f}" if slippage is not None else "",
+            f"{cash_before:.2f}" if cash_before is not None else "",
+            f"{cash_after:.2f}" if cash_after is not None else "",
+            position_before if position_before is not None else "",
+            position_after if position_after is not None else "",
+            f"{pnl:.2f}" if pnl is not None else "",
+            notes or ""
+        ]
+
+        # Use batched writing if async mode enabled
+        if self._enable_async:
+            self._add_to_buffer(row)
+        else:
+            # Direct write (legacy behavior)
+            with self._lock:
+                try:
+                    with open(self.log_path, mode="a", newline="", encoding="utf-8") as f:
+                        writer = csv.writer(f)
+                        writer.writerow(row)
+                except Exception as e:
+                    self.logger.error(f"Failed to write trade to CSV: {e}")
+
         # Mirror to app log
         self.logger.info(
             f"[TRADE] {timestamp.isoformat()} | {action_str.upper()} {quantity} {symbol} @ ${price:.2f} "
@@ -394,11 +514,16 @@ class FileTradeLogger(TradeLoggerBase):
         )
     
     def flush(self) -> None:
-        """Flush any buffered data (CSV writes immediately, so no-op)."""
-        pass
-    
+        """Flush any buffered data to disk."""
+        if self._enable_async:
+            self._flush_buffer_sync()
+
     def close(self) -> None:
-        """Close logger (cleanup if needed)."""
+        """Close logger and flush remaining buffer."""
+        # Flush any remaining buffered trades
+        if self._enable_async:
+            self._flush_buffer_sync()
+        self._executor.shutdown(wait=True)
         self.logger.info("FileTradeLogger closed")
     
     # ========================================================================

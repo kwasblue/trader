@@ -1,6 +1,6 @@
 ================================================================================
 📂 PROJECT STRUCTURE
-Generated: 2026-02-23 19:08:16
+Generated: 2026-02-23 22:18:34
 Total Files: 197
 ================================================================================
 
@@ -183,6 +183,13 @@ Total Files: 197
       └── def compute(self)
 
 📄 core/base/base_live_runner.py
+   🧱 class NumpyBarBuffer
+      ├── def __init__(self, maxlen)
+      ├── def append(self, bar)
+      ├── def __len__(self)
+      ├── def get_arrays(self)
+      ├── def get_timestamps(self)
+      └── def to_dataframe(self)
    🧱 class BaseLiveRunner
       ├── def __init__(self, symbols, config)
       ├── def _create_broker(self)
@@ -1121,6 +1128,10 @@ Total Files: 197
       └── def _draw_frame(self)
 
 📄 core/simulator/simulation.py
+   🧱 class IncrementalATR
+      ├── def __init__(self, period)
+      ├── def update(self, high, low, close)
+      └── def reset(self)
    ⚙️  def compute_atr(self, df, period)
    ⚙️  def classify_regime(self, atr, atr_history)
    🧱 class SimConfig
@@ -3484,7 +3495,7 @@ Total Files: 197
 ================================================================================
 📊 STATISTICS
 ================================================================================
-Total Classes:    615
+Total Classes:    617
 Total Functions:  290
-Total Methods:    2034
+Total Methods:    2043
 ================================================================================

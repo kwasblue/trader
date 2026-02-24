@@ -64,6 +64,62 @@ from core.config_loader import get_config
 # HELPER FUNCTIONS
 # ============================================================================
 
+class IncrementalATR:
+    """
+    Maintains ATR state for O(1) updates per bar.
+
+    Instead of recalculating ATR from 300+ bars each time,
+    this class maintains a running buffer of True Range values
+    and updates incrementally.
+    """
+
+    def __init__(self, period: int = 14):
+        """
+        Initialize the incremental ATR calculator.
+
+        Args:
+            period: ATR lookback period (default: 14)
+        """
+        self.period = period
+        self.prev_close: Optional[float] = None
+        self.tr_buffer: deque = deque(maxlen=period)
+        self.current_atr: Optional[float] = None
+
+    def update(self, high: float, low: float, close: float) -> Optional[float]:
+        """
+        Update ATR with a new bar.
+
+        Args:
+            high: Bar high price
+            low: Bar low price
+            close: Bar close price
+
+        Returns:
+            Current ATR value, or None if insufficient data
+        """
+        if self.prev_close is not None:
+            # Calculate True Range
+            tr = max(
+                high - low,
+                abs(high - self.prev_close),
+                abs(low - self.prev_close)
+            )
+            self.tr_buffer.append(tr)
+
+            # Calculate ATR once we have enough data
+            if len(self.tr_buffer) >= self.period:
+                self.current_atr = float(np.mean(self.tr_buffer))
+
+        self.prev_close = close
+        return self.current_atr
+
+    def reset(self) -> None:
+        """Reset the ATR calculator state."""
+        self.prev_close = None
+        self.tr_buffer.clear()
+        self.current_atr = None
+
+
 def compute_atr(df: pd.DataFrame, period: int = 14) -> Optional[float]:
     """
     Compute the Average True Range (ATR) from OHLC data.

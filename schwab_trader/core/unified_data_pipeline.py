@@ -244,17 +244,35 @@ class UnifiedDataPipeline:
         results = {}
         start_time = datetime.now(timezone.utc)
 
-        for i, symbol in enumerate(symbols, 1):
-            self.logger.info(f"[{symbol}] Processing ({i}/{len(symbols)})...")
-            try:
-                count = await self._update_symbol(
-                    symbol, days, source, force_full, process_data
-                )
-                results[symbol] = count
-                self.logger.info(f"[{symbol}] SUCCESS: {count} bars fetched")
-            except Exception as e:
-                self.logger.exception(f"[{symbol}] FAILED: {e}")
+        # Parallel updates with rate limiting (increased for scaling)
+        semaphore = asyncio.Semaphore(20)  # Max 20 concurrent API requests
+
+        async def update_with_limit(symbol: str) -> tuple[str, int]:
+            """Update a single symbol with rate limiting."""
+            async with semaphore:
+                self.logger.info(f"[{symbol}] Processing...")
+                try:
+                    count = await self._update_symbol(
+                        symbol, days, source, force_full, process_data
+                    )
+                    self.logger.info(f"[{symbol}] SUCCESS: {count} bars fetched")
+                    return (symbol, count)
+                except Exception as e:
+                    self.logger.exception(f"[{symbol}] FAILED: {e}")
+                    return (symbol, 0)
+
+        # Run all updates in parallel with exception handling
+        tasks = [update_with_limit(s) for s in symbols]
+        task_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Process results
+        for i, result in enumerate(task_results):
+            symbol = symbols[i]
+            if isinstance(result, Exception):
+                self.logger.exception(f"[{symbol}] Task failed: {result}")
                 results[symbol] = 0
+            else:
+                results[symbol] = result[1]
 
         elapsed = (datetime.now(timezone.utc) - start_time).total_seconds()
         total = sum(results.values())

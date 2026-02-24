@@ -13,7 +13,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 import asyncio
 
-from core.events.eventhandler import EventHandler, get_event_handler
+from core.events.eventhandler import EventHandler, get_event_handler, MAX_CONCURRENT_HANDLERS
 from core.base.event_handler_base import Event
 from core.events.events import (
     EVENT_NEW_BAR, EVENT_PNL_UPDATE, EVENT_ORDER_STATUS,
@@ -381,5 +381,5 @@ class TestEventHandlerConcurrency:
 
         await asyncio.sleep(2)
 
-        # Max active should be limited by semaphore (default 50)
-        assert max_active <= 50
+        # Max active should be limited by semaphore
+        assert max_active <= MAX_CONCURRENT_HANDLERS

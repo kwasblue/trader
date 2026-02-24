@@ -21,11 +21,12 @@ import asyncio
 import contextlib
 import os
 from abc import ABC, abstractmethod
-from collections import defaultdict
+from collections import defaultdict, deque
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, Dict, Deque, List, Optional, Tuple, TYPE_CHECKING
 
+import numpy as np
 import pandas as pd
 
 from loggers.factory import get_module_logger
@@ -48,7 +49,7 @@ from core.contracts.events import (
     EVENT_HEALTH_UPDATE,
 )
 from core.config_loader import get_config, create_position_sizer, create_drawdown_monitor, TradingConfig
-from core.simulator.simulation import compute_atr, classify_regime
+from core.simulator.simulation import compute_atr, classify_regime, IncrementalATR
 from core.logic.live_execution_engine import LiveExecutionEngine
 from core.logic.trade_logic_manager import DynamicTradeLogicManager
 from core.app_types import SignalContext
@@ -61,6 +62,153 @@ if TYPE_CHECKING:
 
 # Get ROOT path for config files
 ROOT = Path(__file__).resolve().parents[2]  # .../schwab_trader
+
+
+class NumpyBarBuffer:
+    """
+    Efficient circular buffer for OHLCV data using NumPy arrays.
+
+    Provides O(1) append operations and efficient array access for
+    calculations like ATR. Converts to DataFrame lazily only when
+    needed for strategy signal generation.
+
+    Features:
+    - Pre-allocated arrays to avoid memory allocation per bar
+    - Circular buffer behavior for bounded memory usage
+    - Cached array views to avoid redundant computation
+    - Lazy DataFrame conversion
+    """
+
+    def __init__(self, maxlen: int = 300):
+        """
+        Initialize the buffer with pre-allocated arrays.
+
+        Args:
+            maxlen: Maximum number of bars to store
+        """
+        self.maxlen = maxlen
+        self.open = np.zeros(maxlen, dtype=np.float64)
+        self.high = np.zeros(maxlen, dtype=np.float64)
+        self.low = np.zeros(maxlen, dtype=np.float64)
+        self.close = np.zeros(maxlen, dtype=np.float64)
+        self.volume = np.zeros(maxlen, dtype=np.int64)
+        self.timestamps = np.empty(maxlen, dtype='datetime64[ns]')
+        self._idx = 0  # Next write position
+        self._count = 0  # Number of items stored
+        # Caching for get_arrays() and to_dataframe()
+        self._cached_arrays: Optional[Tuple[np.ndarray, ...]] = None
+        self._cached_df: Optional[pd.DataFrame] = None
+        self._cache_idx = -1  # Index when cache was last valid
+
+    def append(self, bar: Dict) -> None:
+        """
+        Append a bar to the circular buffer.
+
+        Args:
+            bar: Dict with Open, High, Low, Close, Volume, timestamp keys
+        """
+        idx = self._idx % self.maxlen
+        self.open[idx] = bar["Open"]
+        self.high[idx] = bar["High"]
+        self.low[idx] = bar["Low"]
+        self.close[idx] = bar["Close"]
+        self.volume[idx] = bar.get("Volume", 0)
+
+        # Handle timestamp conversion
+        ts = bar["timestamp"]
+        if isinstance(ts, datetime):
+            self.timestamps[idx] = np.datetime64(ts, 'ns')
+        else:
+            self.timestamps[idx] = ts
+
+        self._idx += 1
+        self._count = min(self._count + 1, self.maxlen)
+        # Invalidate cache on new data
+        self._cached_arrays = None
+        self._cached_df = None
+
+    def __len__(self) -> int:
+        """Return the number of bars in the buffer."""
+        return self._count
+
+    def get_arrays(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Get ordered OHLCV arrays for calculations.
+
+        Returns cached arrays if available, otherwise computes and caches.
+
+        Returns:
+            Tuple of (open, high, low, close, volume) arrays in chronological order
+        """
+        if self._cached_arrays is not None:
+            return self._cached_arrays
+
+        if self._count == 0:
+            empty = np.array([], dtype=np.float64)
+            result = (empty, empty, empty, empty, np.array([], dtype=np.int64))
+            self._cached_arrays = result
+            return result
+
+        if self._count < self.maxlen:
+            # Buffer not yet full - return views (no copy needed for read-only)
+            result = (
+                self.open[:self._count],
+                self.high[:self._count],
+                self.low[:self._count],
+                self.close[:self._count],
+                self.volume[:self._count],
+            )
+        else:
+            # Buffer is full - use concatenation (faster than np.roll for this case)
+            start = self._idx % self.maxlen
+            result = (
+                np.concatenate([self.open[start:], self.open[:start]]),
+                np.concatenate([self.high[start:], self.high[:start]]),
+                np.concatenate([self.low[start:], self.low[:start]]),
+                np.concatenate([self.close[start:], self.close[:start]]),
+                np.concatenate([self.volume[start:], self.volume[:start]]),
+            )
+
+        self._cached_arrays = result
+        return result
+
+    def get_timestamps(self) -> np.ndarray:
+        """Get ordered timestamp array."""
+        if self._count == 0:
+            return np.array([], dtype='datetime64[ns]')
+
+        if self._count < self.maxlen:
+            return self.timestamps[:self._count]
+        else:
+            start = self._idx % self.maxlen
+            return np.concatenate([self.timestamps[start:], self.timestamps[:start]])
+
+    def to_dataframe(self) -> pd.DataFrame:
+        """
+        Convert buffer to DataFrame for strategy compatibility.
+
+        Returns cached DataFrame if available. This is a lazy conversion -
+        only called when strategy needs DataFrame.
+        """
+        if self._cached_df is not None:
+            return self._cached_df
+
+        if self._count == 0:
+            return pd.DataFrame()
+
+        o, h, l, c, v = self.get_arrays()
+        ts = self.get_timestamps()
+
+        df = pd.DataFrame({
+            'timestamp': pd.to_datetime(ts),
+            'Open': o,
+            'High': h,
+            'Low': l,
+            'Close': c,
+            'Volume': v,
+        })
+        self._cached_df = df
+        return df
 
 
 class BaseLiveRunner(ABC):
@@ -112,8 +260,12 @@ class BaseLiveRunner(ABC):
         # State tracking
         self.portfolio = PortfolioState()
         self.symbol_state: Dict[str, SymbolState] = defaultdict(SymbolState)
-        self.history: Dict[str, List[Dict]] = defaultdict(list)
-        self.atr_hist: Dict[str, List[float]] = defaultdict(list)
+        # ATR history for regime classification
+        self.atr_hist: Dict[str, Deque[float]] = defaultdict(lambda: deque(maxlen=300))
+        # NumPy bar buffers for efficient OHLCV storage (replaces history deque)
+        self.np_buffers: Dict[str, NumpyBarBuffer] = defaultdict(NumpyBarBuffer)
+        # Incremental ATR calculators for O(1) updates
+        self.atr_calc: Dict[str, IncrementalATR] = defaultdict(IncrementalATR)
 
         risk_cfg = self.config.risk
 
@@ -322,9 +474,8 @@ class BaseLiveRunner(ABC):
         return int(ts.timestamp() // timeframe_sec)
 
     def _df_from_history(self, symbol: str) -> pd.DataFrame:
-        """Create DataFrame from recent history."""
-        rows = self.history[symbol][-300:]
-        return pd.DataFrame(rows) if rows else pd.DataFrame()
+        """Create DataFrame from recent history using NumpyBarBuffer."""
+        return self.np_buffers[symbol].to_dataframe()
 
     def _symbol_mv(self, symbol: str, last_px: float) -> float:
         """Calculate market value for a symbol position."""
@@ -400,14 +551,23 @@ class BaseLiveRunner(ABC):
                 continue
 
             for b in bars:
-                self.history[sym].append({
+                bar_dict = {
                     "timestamp": b["timestamp"],
                     "symbol": b["symbol"],
                     "Open": b["Open"], "High": b["High"], "Low": b["Low"],
                     "Close": b["Close"], "Volume": b.get("Volume", 0),
-                })
-            df = self._df_from_history(sym)
-            atr = compute_atr(df, period=14)
+                }
+                # Populate NumPy buffer (single source of truth for history)
+                self.np_buffers[sym].append(bar_dict)
+                # Warm up incremental ATR calculator
+                self.atr_calc[sym].update(
+                    float(b["High"]),
+                    float(b["Low"]),
+                    float(b["Close"])
+                )
+
+            # Get final ATR after seeding
+            atr = self.atr_calc[sym].current_atr
             if atr is not None:
                 self.atr_hist[sym].append(atr)
 
@@ -420,6 +580,7 @@ class BaseLiveRunner(ABC):
         Process a canonicalized bar through the strategy pipeline.
 
         This is the core bar processing logic shared by all runners.
+        Uses batched event emissions for efficiency.
 
         Args:
             bar: Canonical bar dict with symbol, timestamp, OHLCV
@@ -427,24 +588,13 @@ class BaseLiveRunner(ABC):
         symbol = bar["symbol"]
         ts: datetime = bar["timestamp"]
 
-        # Emit raw bar event
-        await self.event_handler.emit("BAR", {
-            "timestamp": ts,
-            "symbol": symbol,
-            "open": float(bar["Open"]),
-            "high": float(bar["High"]),
-            "low": float(bar["Low"]),
-            "close": float(bar["Close"]),
-            "volume": int(bar.get("Volume", 0)),
-        })
-
         bar_id = self._bar_bucket(ts)
         prev_bar_id = self._last_bar_id.get(symbol)
         bar_closed = (prev_bar_id is None) or (bar_id != prev_bar_id)
         self._last_bar_id[symbol] = bar_id
 
-        # Track history + MTM
-        self.history[symbol].append(bar)
+        # Track history in NumPy buffer (single source of truth)
+        self.np_buffers[symbol].append(bar)
         last_px = float(bar["Close"])
         self.portfolio.update_price(symbol, last_px)
 
@@ -455,12 +605,15 @@ class BaseLiveRunner(ABC):
         state.bar_id = bar_id
         state.bar_closed = bar_closed
 
-        # Indicators & regime
-        df = self._df_from_history(symbol)
-        atr = compute_atr(df, period=14)
+        # Incremental ATR calculation - O(1) instead of O(period) per bar
+        atr = self.atr_calc[symbol].update(
+            float(bar["High"]),
+            float(bar["Low"]),
+            float(bar["Close"])
+        )
         if atr is not None:
             self.atr_hist[symbol].append(atr)
-        regime = classify_regime(atr, self.atr_hist[symbol])
+        regime = classify_regime(atr, list(self.atr_hist[symbol]))
 
         # Drawdown monitor (daily tick + updates) - only if enabled
         if self.ddm is not None:
@@ -470,29 +623,13 @@ class BaseLiveRunner(ABC):
             self.ddm.update_portfolio(self.portfolio.total_equity())
             self.ddm.update_symbol(symbol, self._symbol_mv(symbol, last_px))
 
-        # Emit P&L update
-        await self.event_handler.emit(EVENT_PNL_UPDATE, PnLPayload(
-            portfolio_value=self.portfolio.total_equity(),
-            equity_curve=self.portfolio.equity_history,
-            unrealized=self.portfolio.total_unrealized(),
-            realized=self.portfolio.realized_pnl,
-            drawdown=self.ddm.get_portfolio_drawdown() if self.ddm else 0.0,
-            timestamp=ts.isoformat(),
-        ))
-
-        # Strategy & signal
+        # Strategy & signal - use NumpyBarBuffer for efficient DataFrame conversion
+        df = self.np_buffers[symbol].to_dataframe()
         strategy = self.router.get_strategy(symbol, regime)
         strategy_name = type(strategy).__name__
         try:
             raw_signal = strategy.generate_signal(df)
             signal = int(raw_signal if isinstance(raw_signal, (int, float)) else getattr(raw_signal, "signal", 0))
-            await self.event_handler.emit(EVENT_STRATEGY_SIGNAL, StrategySignalPayload(
-                symbol=symbol,
-                strategy=strategy_name,
-                signal={-1: "sell", 0: "hold", 1: "buy"}.get(signal, "hold"),
-                confidence=None,
-                timestamp=ts.isoformat(),
-            ))
         except Exception as e:
             self.logger.exception(f"[{symbol}] Strategy error in {strategy_name}: {e}")
             signal = 0
@@ -503,7 +640,45 @@ class BaseLiveRunner(ABC):
         state.regime = regime
         state.regime_persist = gs.regime_persist
 
-        # Hand off to execution engine
+        # Prepare event payloads (defer emission until after critical path)
+        bar_payload = {
+            "timestamp": ts,
+            "symbol": symbol,
+            "open": float(bar["Open"]),
+            "high": float(bar["High"]),
+            "low": float(bar["Low"]),
+            "close": float(bar["Close"]),
+            "volume": int(bar.get("Volume", 0)),
+        }
+
+        pnl_payload = PnLPayload(
+            portfolio_value=self.portfolio.total_equity(),
+            equity_curve=self.portfolio.equity_history,
+            unrealized=self.portfolio.total_unrealized(),
+            realized=self.portfolio.realized_pnl,
+            drawdown=self.ddm.get_portfolio_drawdown() if self.ddm else 0.0,
+            timestamp=ts.isoformat(),
+        )
+
+        signal_payload = StrategySignalPayload(
+            symbol=symbol,
+            strategy=strategy_name,
+            signal={-1: "sell", 0: "hold", 1: "buy"}.get(signal, "hold"),
+            confidence=None,
+            timestamp=ts.isoformat(),
+        )
+
+        new_bar_payload = BarPayload(
+            symbol=symbol,
+            open=float(bar["Open"]),
+            high=float(bar["High"]),
+            low=float(bar["Low"]),
+            close=float(bar["Close"]),
+            volume=int(bar.get("Volume", 0)),
+            timestamp=ts.isoformat(),
+        )
+
+        # Hand off to execution engine (critical path - await directly)
         context = SignalContext(
             symbol=symbol,
             signal=signal,
@@ -517,6 +692,15 @@ class BaseLiveRunner(ABC):
         )
         await self.engine.handle_signal_context(context)
 
+        # Batch emit all events after critical path completes
+        # Using gather() reduces await overhead from 4 context switches to 1
+        await asyncio.gather(
+            self.event_handler.emit("BAR", bar_payload),
+            self.event_handler.emit(EVENT_PNL_UPDATE, pnl_payload),
+            self.event_handler.emit(EVENT_STRATEGY_SIGNAL, signal_payload),
+            self.event_handler.emit(EVENT_NEW_BAR, new_bar_payload),
+        )
+
         # Telemetry
         pos = self.portfolio.positions.get(symbol)
         qty = pos.qty if pos else 0
@@ -524,17 +708,6 @@ class BaseLiveRunner(ABC):
             f"[{symbol}] bar={bar_id} closed={bar_closed} regime={regime} "
             f"persist={gs.regime_persist} qty={qty} equity={self.portfolio.total_equity():.2f}"
         )
-
-        # Emit processed bar event
-        await self.event_handler.emit(EVENT_NEW_BAR, BarPayload(
-            symbol=symbol,
-            open=float(bar["Open"]),
-            high=float(bar["High"]),
-            low=float(bar["Low"]),
-            close=float(bar["Close"]),
-            volume=int(bar.get("Volume", 0)),
-            timestamp=ts.isoformat(),
-        ))
 
     async def _periodic_data_update(self, interval_minutes: int = 60):
         """
