@@ -740,9 +740,67 @@ class PortfolioState:
         )
     
     # ========================================================================
+    # SINGLE-SYMBOL SYNC METHODS
+    # ========================================================================
+
+    def sync_position_from_broker(
+        self,
+        symbol: str,
+        qty: int,
+        avg_price: float,
+        last_price: Optional[float] = None
+    ) -> None:
+        """
+        Sync a single position from broker data.
+
+        Used for per-symbol position refresh without full portfolio sync.
+        Maintains proper state ownership (only PortfolioState modifies positions).
+
+        Args:
+            symbol: Trading symbol
+            qty: Position quantity from broker
+            avg_price: Average entry price from broker
+            last_price: Last traded price (optional, defaults to avg_price)
+        """
+        self.positions[symbol] = SymbolPosition(
+            qty=int(qty),
+            avg_price=float(avg_price),
+            last_price=float(last_price or avg_price),
+        )
+        self.positions[symbol].update_unrealized_pnl()
+        self.mark_updated()
+
+        self.port_logger.debug(
+            f"[{symbol}] Position synced from broker: qty={qty}, avg=${avg_price:.2f}"
+        )
+
+    def remove_position(self, symbol: str) -> bool:
+        """
+        Remove a position that no longer exists on broker.
+
+        Called when broker reports no position but local state has one.
+        Clears both position and position_state.
+
+        Args:
+            symbol: Trading symbol
+
+        Returns:
+            True if position was removed, False if didn't exist
+        """
+        if symbol not in self.positions:
+            return False
+
+        del self.positions[symbol]
+        self._position_states.pop(symbol, None)
+        self.mark_updated()
+
+        self.port_logger.debug(f"[{symbol}] Position removed (not on broker)")
+        return True
+
+    # ========================================================================
     # UTILITY METHODS
     # ========================================================================
-    
+
     def get_position(self, symbol: str) -> Optional[SymbolPosition]:
         """
         Get position for symbol.

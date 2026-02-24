@@ -13,6 +13,7 @@ import pytest
 from datetime import datetime, timezone
 
 from core.order_registry import OrderRegistry, TrackedOrder
+from core.enums import OrderStatus
 
 
 class TestTrackedOrder:
@@ -25,7 +26,7 @@ class TestTrackedOrder:
             symbol="AAPL",
             side="buy",
             qty=10,
-            status="pending",
+            status=OrderStatus.PENDING,
             correlation_id="corr123",
         )
 
@@ -33,7 +34,7 @@ class TestTrackedOrder:
         assert order.symbol == "AAPL"
         assert order.side == "buy"
         assert order.qty == 10
-        assert order.status == "pending"
+        assert order.status == OrderStatus.PENDING
         assert order.correlation_id == "corr123"
         assert order.filled_qty == 0
 
@@ -44,7 +45,7 @@ class TestTrackedOrder:
             symbol="AAPL",
             side="buy",
             qty=10,
-            status="pending",
+            status=OrderStatus.PENDING,
             correlation_id="corr123",
         )
         assert order.is_open is True
@@ -56,7 +57,7 @@ class TestTrackedOrder:
             symbol="AAPL",
             side="buy",
             qty=10,
-            status="accepted",
+            status=OrderStatus.ACCEPTED,
             correlation_id="corr123",
         )
         assert order.is_open is True
@@ -68,7 +69,7 @@ class TestTrackedOrder:
             symbol="AAPL",
             side="buy",
             qty=10,
-            status="filled",
+            status=OrderStatus.FILLED,
             correlation_id="corr123",
         )
         assert order.is_open is False
@@ -80,7 +81,7 @@ class TestTrackedOrder:
             symbol="AAPL",
             side="buy",
             qty=10,
-            status="filled",
+            status=OrderStatus.FILLED,
             correlation_id="corr123",
         )
         assert order.is_filled is True
@@ -92,7 +93,7 @@ class TestTrackedOrder:
             symbol="AAPL",
             side="buy",
             qty=10,
-            status="cancelled",
+            status=OrderStatus.CANCELLED,
             correlation_id="corr123",
         )
         assert order.is_cancelled is True
@@ -104,7 +105,7 @@ class TestTrackedOrder:
             symbol="AAPL",
             side="buy",
             qty=10,
-            status="pending",
+            status=OrderStatus.PENDING,
             correlation_id="corr123",
         )
         d = order.to_dict()
@@ -112,6 +113,7 @@ class TestTrackedOrder:
         assert d["order_id"] == "ORD123"
         assert d["symbol"] == "AAPL"
         assert d["side"] == "buy"
+        assert d["status"] == "pending"  # Serialized as string
         assert "created_at" in d
 
 
@@ -172,7 +174,7 @@ class TestOrderRegistry:
 
         updated = await registry.update_status("ORD123", "filled", 10)
         assert updated is not None
-        assert updated.status == "filled"
+        assert updated.status == OrderStatus.FILLED
         assert updated.filled_qty == 10
 
     @pytest.mark.asyncio

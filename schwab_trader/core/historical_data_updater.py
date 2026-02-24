@@ -1,24 +1,22 @@
 # core/historical_data_updater.py
 """
-Historical Data Updater - Fetches and stores historical bar data from Alpaca
+Historical Data Updater - Alpaca-specific data fetching
+
+LEGACY MODULE: Consider using UnifiedDataPipeline instead for new code.
+
+    from core.unified_data_pipeline import UnifiedDataPipeline
+    pipeline = UnifiedDataPipeline()
+    await pipeline.update_symbols(['AAPL'], source='alpaca')
+
+This module is maintained for:
+- BaseLiveRunner.seed() which uses Alpaca-specific functionality
+- Backward compatibility with existing code
 
 Features:
 - Fetches historical bars from Alpaca API
 - Saves to JSON format compatible with HistoricalBarLoader
 - Supports incremental updates (only fetch new bars)
-- Can run standalone, as background task, or scheduled
 - Thread-safe file operations
-
-Usage:
-    # Standalone
-    python -m core.historical_data_updater --symbols AAPL MSFT --days 30
-
-    # In code
-    updater = HistoricalDataUpdater(api_key, secret_key)
-    await updater.update_symbols(['AAPL', 'MSFT'], days=30)
-
-    # As background task
-    task = asyncio.create_task(updater.run_periodic(interval_minutes=60))
 """
 
 from __future__ import annotations

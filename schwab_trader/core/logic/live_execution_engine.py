@@ -219,6 +219,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
         Sync portfolio state with live broker positions.
 
         Critical for live trading to ensure internal state matches broker.
+        Uses sync_from_snapshot() to maintain proper state ownership.
         """
         try:
             self.logger.info("Syncing portfolio with broker...")
@@ -226,22 +227,9 @@ class LiveExecutionEngine(ExecutionEngineBase):
             # Get account info from broker
             account = await self.broker.get_account_info()
 
-            # Update portfolio cash/equity
-            self.portfolio.cash = getattr(account, 'cash', 0.0)
-            self.portfolio.total_value = getattr(account, 'equity', 0.0)
-
-            # Sync positions
-            broker_positions = getattr(account, 'positions', {})
-
-            for symbol, pos in broker_positions.items():
-                qty = pos.qty
-                avg_price = pos.avg_price
-
-                self.portfolio.positions[symbol] = pos
-
-                self.logger.info(
-                    f"Synced position: {symbol} qty={qty} avg=${avg_price:.2f}"
-                )
+            # Use sync_from_snapshot() - the canonical way to sync state
+            # This respects STATE_OWNERSHIP_MATRIX boundaries
+            self.portfolio.sync_from_snapshot(account)
 
             self.logger.info(
                 f"Portfolio synced: ${self.portfolio.total_value:,.2f}, "
@@ -609,7 +597,18 @@ class LiveExecutionEngine(ExecutionEngineBase):
                 else PositionState.PENDING_EXIT if action_type in ("exit", "reversal")
                 else PositionState.PENDING_ADD
             )
-            await self.portfolio.set_position_state(context.symbol, pending_state)
+            state_set = await self.portfolio.set_position_state(context.symbol, pending_state)
+            if not state_set:
+                # Invalid state transition - likely a pending order already exists
+                current_state = self.portfolio.get_position_state(context.symbol)
+                self.logger.warning(
+                    format_log_message(
+                        f"Cannot set {pending_state.value}: current state is {current_state.value}",
+                        correlation_id=correlation_id,
+                        symbol=context.symbol
+                    )
+                )
+                return None
             state.position_state = pending_state
 
             self.logger.info(
@@ -780,9 +779,9 @@ class LiveExecutionEngine(ExecutionEngineBase):
             broker_position = await self.broker.get_position(symbol)
 
             if broker_position:
-                # Convert PositionView to SymbolPosition for portfolio
-                from core.logic.portfolio_state import SymbolPosition
-                self.portfolio.positions[symbol] = SymbolPosition(
+                # Use proper method to sync position - maintains state ownership
+                self.portfolio.sync_position_from_broker(
+                    symbol=symbol,
                     qty=int(broker_position.qty),
                     avg_price=float(broker_position.avg_price),
                     last_price=float(broker_position.last_price or broker_position.avg_price),
@@ -805,9 +804,8 @@ class LiveExecutionEngine(ExecutionEngineBase):
                     )
                     return
 
-                # No pending orders, safe to remove position
-                del self.portfolio.positions[symbol]
-                await self.portfolio.clear_position_state(symbol)
+                # No pending orders, safe to remove position via proper method
+                self.portfolio.remove_position(symbol)
                 self.logger.warning(
                     f"[{symbol}] Position removed (not found on broker)"
                 )

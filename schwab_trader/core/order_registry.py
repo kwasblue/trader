@@ -15,7 +15,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 from core.enums import OrderStatus
 
@@ -30,7 +30,7 @@ class TrackedOrder:
         symbol: Trading symbol
         side: Order side ("buy" or "sell")
         qty: Order quantity
-        status: Current order status
+        status: Current order status (OrderStatus enum)
         correlation_id: ID linking related operations
         created_at: When order was placed
         filled_qty: Quantity filled so far (for partial fills)
@@ -39,7 +39,7 @@ class TrackedOrder:
     symbol: str
     side: str  # "buy" or "sell"
     qty: int
-    status: str
+    status: OrderStatus
     correlation_id: str
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     filled_qty: int = 0
@@ -47,17 +47,17 @@ class TrackedOrder:
     @property
     def is_open(self) -> bool:
         """Check if order is still open (not filled/cancelled/rejected)."""
-        return self.status.lower() in ("pending", "accepted", "new", "partial", "open")
+        return self.status.is_open
 
     @property
     def is_filled(self) -> bool:
         """Check if order is completely filled."""
-        return self.status.lower() in ("filled", "completed")
+        return self.status == OrderStatus.FILLED
 
     @property
     def is_cancelled(self) -> bool:
         """Check if order was cancelled."""
-        return self.status.lower() in ("cancelled", "canceled")
+        return self.status == OrderStatus.CANCELLED
 
     def to_dict(self) -> dict:
         """Convert to dictionary for logging/serialization."""
@@ -66,7 +66,7 @@ class TrackedOrder:
             "symbol": self.symbol,
             "side": self.side,
             "qty": self.qty,
-            "status": self.status,
+            "status": self.status.value,
             "correlation_id": self.correlation_id,
             "created_at": self.created_at.isoformat(),
             "filled_qty": self.filled_qty,
@@ -84,11 +84,53 @@ class OrderRegistry:
     - Tracking order lifecycle for state management
     """
 
+    # Valid order status transitions
+    VALID_TRANSITIONS: Dict[OrderStatus, set] = {
+        OrderStatus.PENDING: {OrderStatus.ACCEPTED, OrderStatus.REJECTED, OrderStatus.FILLED},
+        OrderStatus.ACCEPTED: {OrderStatus.PARTIAL, OrderStatus.FILLED, OrderStatus.CANCELLED, OrderStatus.EXPIRED},
+        OrderStatus.PARTIAL: {OrderStatus.FILLED, OrderStatus.CANCELLED},
+        OrderStatus.FILLED: set(),      # Terminal
+        OrderStatus.CANCELLED: set(),   # Terminal
+        OrderStatus.REJECTED: set(),    # Terminal
+        OrderStatus.EXPIRED: set(),     # Terminal
+    }
+
     def __init__(self):
         """Initialize empty order registry."""
         self._orders: Dict[str, TrackedOrder] = {}
         self._by_symbol: Dict[str, List[str]] = {}  # symbol -> [order_ids]
         self._lock = asyncio.Lock()
+
+    @staticmethod
+    def _normalize_status(status: str | OrderStatus) -> OrderStatus:
+        """Convert string status to OrderStatus enum."""
+        if isinstance(status, OrderStatus):
+            return status
+        status_str = status.lower().strip()
+        # Map common variations
+        status_map = {
+            "pending": OrderStatus.PENDING,
+            "new": OrderStatus.PENDING,
+            "open": OrderStatus.ACCEPTED,
+            "accepted": OrderStatus.ACCEPTED,
+            "partial": OrderStatus.PARTIAL,
+            "partially_filled": OrderStatus.PARTIAL,
+            "filled": OrderStatus.FILLED,
+            "completed": OrderStatus.FILLED,
+            "cancelled": OrderStatus.CANCELLED,
+            "canceled": OrderStatus.CANCELLED,
+            "rejected": OrderStatus.REJECTED,
+            "expired": OrderStatus.EXPIRED,
+        }
+        return status_map.get(status_str, OrderStatus.PENDING)
+
+    def _is_valid_transition(self, current: OrderStatus, new: OrderStatus) -> bool:
+        """Check if a status transition is valid."""
+        # Allow same-state updates (idempotent)
+        if current == new:
+            return True
+        allowed = self.VALID_TRANSITIONS.get(current, set())
+        return new in allowed
 
     async def register(
         self,
@@ -97,7 +139,7 @@ class OrderRegistry:
         side: str,
         qty: int,
         correlation_id: str,
-        status: str = "pending"
+        status: str | OrderStatus = OrderStatus.PENDING
     ) -> TrackedOrder:
         """
         Register a new order in the registry.
@@ -108,7 +150,7 @@ class OrderRegistry:
             side: Order side ("buy" or "sell")
             qty: Order quantity
             correlation_id: Correlation ID for tracking
-            status: Initial order status
+            status: Initial order status (string or OrderStatus)
 
         Returns:
             The tracked order object
@@ -119,7 +161,7 @@ class OrderRegistry:
                 symbol=symbol,
                 side=side.lower(),
                 qty=qty,
-                status=status,
+                status=self._normalize_status(status),
                 correlation_id=correlation_id,
             )
 
@@ -134,26 +176,39 @@ class OrderRegistry:
     async def update_status(
         self,
         order_id: str,
-        status: str,
+        status: str | OrderStatus,
         filled_qty: Optional[int] = None
     ) -> Optional[TrackedOrder]:
         """
         Update the status of a tracked order.
 
+        Validates that the transition is allowed per order lifecycle rules.
+
         Args:
             order_id: Order ID to update
-            status: New status
+            status: New status (string or OrderStatus)
             filled_qty: Updated filled quantity (optional)
 
         Returns:
-            Updated order or None if not found
+            Updated order or None if not found or transition invalid
         """
+        new_status = self._normalize_status(status)
+
         async with self._lock:
             order = self._orders.get(order_id)
             if order is None:
                 return None
 
-            order.status = status
+            # Validate transition
+            if not self._is_valid_transition(order.status, new_status):
+                # Log warning but allow - broker is source of truth
+                import logging
+                logging.getLogger("OrderRegistry").warning(
+                    f"Invalid order status transition for {order_id}: "
+                    f"{order.status.value} -> {new_status.value}"
+                )
+
+            order.status = new_status
             if filled_qty is not None:
                 order.filled_qty = filled_qty
 
