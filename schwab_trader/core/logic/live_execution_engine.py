@@ -1029,6 +1029,40 @@ class LiveExecutionEngine(ExecutionEngineBase):
             # This prevents wash trade rejections from Alpaca
             await self._cancel_conflicting_orders(symbol, side)
 
+            # Safety check for exit orders: verify qty against broker's actual position
+            # This prevents "insufficient qty" errors when local state is out of sync
+            if action_type in ("exit", "reversal", "partial_exit") and side_str == "sell":
+                try:
+                    broker_positions = await self.broker.get_positions()
+                    broker_pos = next((p for p in broker_positions if p.symbol == symbol), None)
+                    broker_qty = int(broker_pos.qty) if broker_pos else 0
+                    if qty > broker_qty:
+                        self.logger.warning(
+                            format_log_message(
+                                f"Exit qty {qty} exceeds broker position {broker_qty}, capping to {broker_qty}",
+                                correlation_id=correlation_id,
+                                symbol=symbol
+                            )
+                        )
+                        qty = broker_qty
+                        if qty <= 0:
+                            self.logger.warning(
+                                format_log_message(
+                                    "No position at broker to exit, skipping order",
+                                    correlation_id=correlation_id,
+                                    symbol=symbol
+                                )
+                            )
+                            return None
+                except Exception as e:
+                    self.logger.warning(
+                        format_log_message(
+                            f"Could not verify broker position: {e}, proceeding with local qty",
+                            correlation_id=correlation_id,
+                            symbol=symbol
+                        )
+                    )
+
             # Build order kwargs based on order type
             order_kwargs = {
                 "symbol": symbol,
@@ -1075,33 +1109,92 @@ class LiveExecutionEngine(ExecutionEngineBase):
                 )
             )
 
-            # Create result from expected values
-            # Note: Actual fill price/qty will be tracked via order events
+            # Verify order fill before applying to portfolio
+            # This prevents state drift from rejected/partial/cancelled orders
+            actual_filled_qty = 0
+            actual_fill_price = price  # Default to expected price
+
+            if self.reconciler:
+                verified = await self.reconciler.verify_order(
+                    order_id=str(order_id),
+                    symbol=symbol,
+                    expected_qty=qty,
+                    expected_side=side_str,
+                    correlation_id=correlation_id,
+                )
+
+                # Always get actual fill from broker, regardless of verification result
+                # This handles partial fills correctly
+                try:
+                    order_status = await self.broker.get_order_status(str(order_id))
+                    actual_filled_qty = int(order_status.filled_qty or 0)
+                    actual_fill_price = float(order_status.avg_fill_price or price)
+                    order_final_status = (order_status.status or "").lower()
+                except Exception as e:
+                    self.logger.warning(
+                        format_log_message(
+                            f"Could not get fill details: {e}",
+                            correlation_id=correlation_id,
+                            symbol=symbol
+                        )
+                    )
+                    if verified:
+                        actual_filled_qty = qty  # Assume full fill if verified
+                    order_final_status = "unknown"
+
+                if actual_filled_qty == 0:
+                    self.logger.warning(
+                        format_log_message(
+                            f"Order not filled (status={order_final_status}) - not applying to portfolio",
+                            correlation_id=correlation_id,
+                            symbol=symbol
+                        )
+                    )
+                    await self.order_registry.update_status(str(order_id), "rejected", 0)
+                    return None
+
+                if actual_filled_qty < qty:
+                    self.logger.warning(
+                        format_log_message(
+                            f"Partial fill: {actual_filled_qty}/{qty} shares",
+                            correlation_id=correlation_id,
+                            symbol=symbol
+                        )
+                    )
+            else:
+                # No reconciler - fall back to optimistic update (less safe)
+                self.logger.warning(
+                    format_log_message(
+                        "No reconciler available - using optimistic fill (unsafe)",
+                        correlation_id=correlation_id,
+                        symbol=symbol
+                    )
+                )
+                actual_filled_qty = qty
+
+            # Create result with actual fill values
             result = OrderResult(
                 order_id=str(order_id),
                 symbol=symbol,
                 side=side,
-                filled_qty=qty,
-                avg_price=price,
-                status="filled",  # Mark as filled for bool check in handle_signal_context
+                filled_qty=actual_filled_qty,
+                avg_price=actual_fill_price,
+                status="filled",
             )
 
-            # Optimistic portfolio update with state sync
-            # Apply expected fill immediately so UI/logic sees updated state
-            # The reconciler will correct if actual fill differs
-            # Use StateSynchronizer to keep Portfolio and Symbol states in sync
-            await self._state_sync.apply_fill_and_sync(symbol, side_str, qty, price)
+            # Apply verified fill to portfolio
+            await self._state_sync.apply_fill_and_sync(symbol, side_str, actual_filled_qty, actual_fill_price)
             self.portfolio.mark_updated()
 
-            # Update order status to filled (optimistic)
-            await self.order_registry.update_status(str(order_id), "filled", qty)
+            # Update order status with actual fill
+            await self.order_registry.update_status(str(order_id), "filled", actual_filled_qty)
 
             # Invalidate position cache to ensure fresh data on next refresh
             self.invalidate_position_cache(symbol)
 
             self.logger.info(
                 format_log_message(
-                    f"Order submitted and optimistic fill applied: {side.value} {qty}@${price:.2f}",
+                    f"Order verified and fill applied: {side.value} {actual_filled_qty}@${actual_fill_price:.2f}",
                     correlation_id=correlation_id,
                     symbol=symbol
                 )
@@ -1112,8 +1205,8 @@ class LiveExecutionEngine(ExecutionEngineBase):
                 trade_payload: TradePayload = {
                     "symbol": symbol,
                     "side": side_str,
-                    "qty": qty,
-                    "price": price,
+                    "qty": actual_filled_qty,
+                    "price": actual_fill_price,
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                     "pnl": None,  # P&L calculated separately
                 }
@@ -1340,22 +1433,29 @@ class LiveExecutionEngine(ExecutionEngineBase):
                 ))
 
     async def _handle_flatten_all(self, event) -> None:
-        """Flatten all positions."""
+        """Flatten all positions using broker's actual positions."""
         self.logger.info("[GUI] Flatten ALL positions")
 
-        for symbol, position in list(self.portfolio.positions.items()):
-            if position.qty != 0:
+        # Use broker's actual positions to avoid state mismatch errors
+        try:
+            broker_positions = await self.broker.get_positions()
+        except Exception as e:
+            self.logger.error(f"Failed to get broker positions: {e}")
+            return
+
+        for pos in broker_positions:
+            if pos.qty != 0:
                 try:
-                    qty = abs(position.qty)
-                    side = "sell" if position.qty > 0 else "buy"
+                    qty = abs(int(pos.qty))
+                    side = "sell" if pos.qty > 0 else "buy"
                     await self.broker.place_market_order(
-                        symbol=symbol,
+                        symbol=pos.symbol,
                         qty=qty,
                         side=side
                     )
-                    self.logger.info(f"Flattened {symbol}: {side} {qty}")
+                    self.logger.info(f"Flattened {pos.symbol}: {side} {qty}")
                 except Exception as e:
-                    self.logger.error(f"Failed to flatten {symbol}: {e}")
+                    self.logger.error(f"Failed to flatten {pos.symbol}: {e}")
                     if self.event_handler:
                         await self.event_handler.emit(EVENT_ALERT, AlertPayload(
                             level="error",
@@ -1365,16 +1465,23 @@ class LiveExecutionEngine(ExecutionEngineBase):
                         ))
 
     async def _handle_flatten_symbol(self, event) -> None:
-        """Flatten specific symbol."""
+        """Flatten specific symbol using broker's actual position."""
         symbol = event.payload["symbol"]
-        position = self.portfolio.positions.get(symbol)
 
-        if not position or position.qty == 0:
-            self.logger.info(f"[GUI] No position to flatten for {symbol}")
+        # Get actual position from broker to avoid state mismatch errors
+        try:
+            broker_positions = await self.broker.get_positions()
+            broker_pos = next((p for p in broker_positions if p.symbol == symbol), None)
+        except Exception as e:
+            self.logger.error(f"[GUI] Failed to get broker positions: {e}")
             return
 
-        qty = abs(position.qty)
-        side = "sell" if position.qty > 0 else "buy"
+        if not broker_pos or broker_pos.qty == 0:
+            self.logger.info(f"[GUI] No position at broker to flatten for {symbol}")
+            return
+
+        qty = abs(int(broker_pos.qty))
+        side = "sell" if broker_pos.qty > 0 else "buy"
 
         self.logger.info(f"[GUI] Flatten {symbol} ({side} {qty})")
 

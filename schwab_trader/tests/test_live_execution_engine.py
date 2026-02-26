@@ -92,6 +92,11 @@ def mock_trade_logic_manager():
     manager.on_bar = MagicMock()
     manager.on_trade = MagicMock()
 
+    # IMPORTANT: TradeApproverRouter calls manager.get(symbol, regime) which returns
+    # the approver. We need that returned approver to also have should_trade configured.
+    # Return self so the same mock (with should_trade) is used.
+    manager.get = MagicMock(return_value=manager)
+
     return manager
 
 

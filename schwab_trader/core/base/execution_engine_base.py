@@ -305,11 +305,18 @@ class ExecutionEngineBase(ABC):
         self._setup_approval_state(context.symbol, state)
 
         # Delegate to approver (pass context directly)
-        return trade_approver.should_trade(
+        result = trade_approver.should_trade(
             context=context,
             state=state,
             account_positions=len(self.portfolio.positions)
         )
+
+        # Defensive: ensure we have a valid tuple
+        if not result or not isinstance(result, (tuple, list)) or len(result) < 2:
+            # Invalid return from approver - default to blocking with reason
+            return (False, "Invalid approver response")
+
+        return result
 
     def _get_exit_quantity(
         self,

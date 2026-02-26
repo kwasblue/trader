@@ -117,6 +117,9 @@ class NumpyBarBuffer:
         # Handle timestamp conversion
         ts = bar["timestamp"]
         if isinstance(ts, datetime):
+            # Convert tz-aware datetime to UTC and strip tzinfo for np.datetime64
+            if ts.tzinfo is not None:
+                ts = ts.astimezone(timezone.utc).replace(tzinfo=None)
             self.timestamps[idx] = np.datetime64(ts, 'ns')
         else:
             self.timestamps[idx] = ts
@@ -316,6 +319,7 @@ class BaseLiveRunner(ABC):
         # Bar tracking
         self._last_bar_id: Dict[str, int] = {}
         self._last_ddm_date: Optional[datetime] = None
+        self._last_reset_minute: Optional[int] = None  # Track when reservations were last reset
         self._running = False
 
         # Unified data pipeline (supports Alpaca and Schwab with fallback)
@@ -587,6 +591,13 @@ class BaseLiveRunner(ABC):
         """
         symbol = bar["symbol"]
         ts: datetime = bar["timestamp"]
+
+        # Reset position sizer reservations at the start of each new minute
+        # This prevents accumulated reservations from blocking new trades
+        current_minute = ts.minute + ts.hour * 60
+        if self._last_reset_minute is None or current_minute != self._last_reset_minute:
+            self.sizer.reset_bar_reservations()
+            self._last_reset_minute = current_minute
 
         bar_id = self._bar_bucket(ts)
         prev_bar_id = self._last_bar_id.get(symbol)

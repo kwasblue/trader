@@ -686,7 +686,7 @@ class SchwabBroker(BaseBrokerInterface):
             status=(str(status).lower() if status else "submitted"),
             limit_price=_to_float(hint.get("limit_price")),
             stop_price=_to_float(hint.get("stop_price")),
-            filled_qty=_to_float(resp.get("filledQuantity")),
+            filled_qty=_to_float(resp.get("filledQuantity")) or 0.0,
             avg_fill_price=_to_float(resp.get("averagePrice")),
             raw=resp,
         )

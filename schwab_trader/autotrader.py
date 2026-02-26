@@ -429,6 +429,9 @@ class AutoTrader:
         """Wait until market opens (with pre-market buffer)."""
         self._set_state(AutoTraderState.WAITING_FOR_MARKET)
 
+        # Track last log time to avoid spamming logs
+        last_log_time = None
+
         while self.running:
             now = self.scheduler.now_et()
 
@@ -436,7 +439,7 @@ class AutoTrader:
                 self.logger.info("Market is open!")
                 return
 
-            # Calculate wait time
+            # Calculate wait time (recalculate each iteration for wall-clock accuracy)
             next_open = self.scheduler.get_next_market_open()
 
             # Account for pre-market buffer
@@ -448,15 +451,18 @@ class AutoTrader:
 
             wait_seconds = (preflight_start - now).total_seconds()
 
-            # Log status periodically
-            hours = int(wait_seconds // 3600)
-            minutes = int((wait_seconds % 3600) // 60)
+            # Log status periodically (every 5 minutes, not every loop)
+            if last_log_time is None or (now - last_log_time).total_seconds() >= 300:
+                hours = int(wait_seconds // 3600)
+                minutes = int((wait_seconds % 3600) // 60)
 
-            self.logger.info(f"Market opens at {next_open.strftime('%Y-%m-%d %H:%M %Z')}")
-            self.logger.info(f"Waiting {hours}h {minutes}m until pre-market window")
-            print(f"[{now.strftime('%H:%M:%S')}] Waiting for market. Opens in {hours}h {minutes}m")
+                self.logger.info(f"Market opens at {next_open.strftime('%Y-%m-%d %H:%M %Z')}")
+                self.logger.info(f"Waiting {hours}h {minutes}m until pre-market window")
+                print(f"[{now.strftime('%H:%M:%S')}] Waiting for market. Opens in {hours}h {minutes}m")
+                last_log_time = now
 
             # Sleep in chunks to allow graceful shutdown
+            # Use wall-clock time check after sleep to handle system suspend
             sleep_time = min(wait_seconds, 300)  # Max 5 minute sleep chunks
             await asyncio.sleep(sleep_time)
 
@@ -479,14 +485,21 @@ class AutoTrader:
         print(f"[{now.strftime('%H:%M:%S')}] Pre-flight complete. Market opens in {minutes}m {seconds}s")
 
         # Sleep in small chunks to allow graceful shutdown
-        while self.running and wait_seconds > 0:
-            chunk = min(wait_seconds, 30)  # 30 second chunks
-            await asyncio.sleep(chunk)
-            wait_seconds -= chunk
-
-            # Check if market opened (handles edge cases)
+        # Use wall-clock time check after each sleep to handle system suspend
+        while self.running:
+            # Check if market opened (handles edge cases and system suspend)
             if self.scheduler.is_market_open():
                 return
+
+            # Recalculate remaining time using wall clock
+            now = self.scheduler.now_et()
+            wait_seconds = (next_open - now).total_seconds()
+
+            if wait_seconds <= 0:
+                return
+
+            chunk = min(wait_seconds, 30)  # 30 second chunks
+            await asyncio.sleep(chunk)
 
     async def _run_preflight(self) -> bool:
         """Run pre-flight checks."""
@@ -664,10 +677,22 @@ class AutoTrader:
         print(f"  Sleeping for {hours}h {minutes}m...\n")
 
         # Sleep in chunks to allow graceful shutdown
-        while self.running and sleep_seconds > 0:
-            chunk = min(sleep_seconds, 300)  # 5 minute chunks
+        # Use wall-clock time after each sleep to handle system suspend correctly
+        while self.running:
+            now = self.scheduler.now_et()
+
+            # Check if it's time to wake up (wall-clock check handles system suspend)
+            if now >= preflight_start:
+                self.logger.info("Wake time reached, starting new daily cycle")
+                break
+
+            # Calculate remaining time from wall clock
+            remaining = (preflight_start - now).total_seconds()
+            if remaining <= 0:
+                break
+
+            chunk = min(remaining, 300)  # 5 minute chunks
             await asyncio.sleep(chunk)
-            sleep_seconds -= chunk
 
     def stop(self) -> None:
         """Signal the autotrader to stop."""

@@ -110,7 +110,8 @@ class AlpacaBroker(BaseBrokerInterface):
 
         self.trading_client = TradingClient(self.api_key, self.api_secret, paper=self.paper)
         # Websocket params for better connection stability
-        ws_params = {"ping_interval": 30, "ping_timeout": 30, "close_timeout": 10}
+        # Increased ping_timeout to 60s to handle high-latency or congested network conditions
+        ws_params = {"ping_interval": 30, "ping_timeout": 60, "close_timeout": 15}
         self.stream = StockDataStream(self.api_key, self.api_secret, feed=DataFeed.IEX, websocket_params=ws_params)
         self.data_rest = StockHistoricalDataClient(self.api_key, self.api_secret)
         self._connected = True
@@ -130,7 +131,8 @@ class AlpacaBroker(BaseBrokerInterface):
 
         self.trading_client = TradingClient(self.api_key, self.api_secret, paper=self.paper)
         # Websocket params for better connection stability
-        ws_params = {"ping_interval": 30, "ping_timeout": 30, "close_timeout": 10}
+        # Increased ping_timeout to 60s to handle high-latency or congested network conditions
+        ws_params = {"ping_interval": 30, "ping_timeout": 60, "close_timeout": 15}
         self.stream = StockDataStream(self.api_key, self.api_secret, feed=DataFeed.IEX, websocket_params=ws_params)
         self.data_rest = StockHistoricalDataClient(self.api_key, self.api_secret)
         self._connected = True
@@ -428,7 +430,7 @@ class AlpacaBroker(BaseBrokerInterface):
 
             result = {}
             for symbol in symbols:
-                symbol_bars = bars.get(symbol, [])
+                symbol_bars = bars.data.get(symbol, []) if bars.data else []
                 if symbol_bars:
                     # Get the most recent bar
                     latest = symbol_bars[-1]

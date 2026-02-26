@@ -1,6 +1,6 @@
 ================================================================================
 📂 PROJECT STRUCTURE
-Generated: 2026-02-23 22:18:34
+Generated: 2026-02-23 23:20:58
 Total Files: 197
 ================================================================================
 
@@ -859,6 +859,7 @@ Total Files: 197
       ├── def _check_daily_loss_limit_breached(self)
       ├── def get_daily_pnl(self)
       ├── def get_daily_loss_remaining(self)
+      ├── def invalidate_position_cache(self, symbol)
       ├── def _calculate_quantity(self, symbol, state, action_type, price, atr, regime, trade_logic)
       ├── def _update_portfolio_after_execution(self, symbol, result)
       └── def _post_execution(self, symbol, state, result, action_type, regime, strategy_name)
@@ -1545,7 +1546,8 @@ Total Files: 197
 📄 indicators/technical_indicators.py
    🧱 class TechnicalIndicators
       ├── def __init__(self, dataframe)
-      └── def apply_all(self, sma_window, ema_window)
+      ├── def apply_all(self, sma_window, ema_window)
+      └── def apply_all_fast(self, sma_window, ema_window, atr_window, rsi_period, macd_fast, macd_slow, macd_signal, bb_window, bb_std, momentum_period, roc_period, inplace)
 
 📄 indicators/vwap.py
    🧱 class VWAPIndicator
@@ -1559,8 +1561,11 @@ Total Files: 197
 
 📄 loggers/file_trade_logger.py
    🧱 class FileTradeLogger
-      ├── def __init__(self, log_file, log_dir, logger_name)
+      ├── def __init__(self, log_file, log_dir, logger_name, batch_size, flush_interval, enable_async)
       ├── def _init_csv(self)
+      ├── def _add_to_buffer(self, row)
+      ├── def _flush_buffer_sync(self)
+      ├── def _do_batch_write(self, rows)
       ├── def log_trade(self)
       ├── def _log_from_kwargs(self)
       ├── def _log_from_dict(self, payload)
@@ -3497,5 +3502,5 @@ Total Files: 197
 ================================================================================
 Total Classes:    617
 Total Functions:  290
-Total Methods:    2043
+Total Methods:    2048
 ================================================================================
