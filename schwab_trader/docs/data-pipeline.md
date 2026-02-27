@@ -214,6 +214,63 @@ info = pipeline.get_cache_info('AAPL')
 symbols = pipeline.list_available_symbols()
 ```
 
+## Smart Reprocessing
+
+The pipeline intelligently avoids unnecessary reprocessing:
+
+### How It Works
+
+1. **Timestamp Comparison**: Compares raw data timestamp vs processed data timestamp
+2. **Skip if Current**: If processed data is up-to-date with raw data, reprocessing is skipped
+3. **Force Reprocess**: Use `force_reprocess=True` to override and force reprocessing
+
+```python
+# Check if processed data is current
+is_current = pipeline._is_processed_data_current('AAPL')
+
+# Get timestamps for comparison
+raw_ts = pipeline._get_last_raw_timestamp('AAPL')    # Last bar in raw_AAPL_file.json
+proc_ts = pipeline._get_last_processed_timestamp('AAPL')  # Last bar in proc_AAPL_file.json
+
+# Force reprocessing even if current
+await pipeline.update_symbols(['AAPL'], force_reprocess=True)
+```
+
+### Processing Behavior
+
+When data is updated, the pipeline processes **ALL raw data**, not just new bars:
+
+```
+Fetch New Bars → Append to raw_data → Load ALL raw_data → Process ALL → Save to proc_data
+```
+
+This ensures:
+- Technical indicators (SMA_200, etc.) are computed correctly from full history
+- No data gaps or incorrect indicator values
+- Consistent processed data regardless of when it was last updated
+
+### Command Line
+
+```bash
+# Normal update (skips reprocessing if current)
+python -m core.unified_data_pipeline --symbols AAPL MSFT --days 5
+
+# Force reprocessing
+python -m core.unified_data_pipeline --symbols AAPL MSFT --days 5 --force-reprocess
+```
+
+### Manual Reprocessing Tool
+
+For rebuilding processed data without fetching new data:
+
+```bash
+# Reprocess specific symbols from raw data
+python tools/reprocess_raw_data.py --symbols AAPL MSFT NVDA
+
+# Reprocess all symbols with raw data files
+python tools/reprocess_raw_data.py --all
+```
+
 ## Periodic Updates
 
 Schedule automatic updates:

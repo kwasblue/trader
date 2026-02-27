@@ -206,7 +206,7 @@ class UnifiedDataPipeline:
         symbols: List[str],
         days: int = 30,
         source: Optional[str] = None,
-        force_full: bool = False,
+        force_reprocess: bool = False,
         process_data: bool = True,
     ) -> Dict[str, int]:
         """
@@ -216,7 +216,7 @@ class UnifiedDataPipeline:
             symbols: List of stock symbols
             days: Number of days of history
             source: 'alpaca', 'schwab', or None (auto-select)
-            force_full: Force full refresh (not incremental)
+            force_reprocess: Force reprocessing even if data is up-to-date
             process_data: Whether to process through ML pipeline
 
         Returns:
@@ -224,7 +224,7 @@ class UnifiedDataPipeline:
         """
         self.logger.info("=" * 60)
         self.logger.info(f"UPDATE SYMBOLS: {symbols}")
-        self.logger.info(f"Parameters: days={days}, source={source}, force_full={force_full}, process_data={process_data}")
+        self.logger.info(f"Parameters: days={days}, source={source}, force_reprocess={force_reprocess}, process_data={process_data}")
 
         # Check credentials and warn about expiring tokens
         await self.check_and_warn_credentials()
@@ -253,7 +253,7 @@ class UnifiedDataPipeline:
                 self.logger.info(f"[{symbol}] Processing...")
                 try:
                     count = await self._update_symbol(
-                        symbol, days, source, force_full, process_data
+                        symbol, days, source, force_reprocess, process_data
                     )
                     self.logger.info(f"[{symbol}] SUCCESS: {count} bars fetched")
                     return (symbol, count)
@@ -494,7 +494,7 @@ class UnifiedDataPipeline:
         symbol: str,
         days: int,
         source: str,
-        force_full: bool,
+        force_reprocess: bool,
         process_data: bool,
     ) -> int:
         """Update data for a single symbol."""
@@ -515,7 +515,7 @@ class UnifiedDataPipeline:
 
         # Process data if requested
         if process_data:
-            await self._process_and_save(symbol, raw_bars)
+            await self._process_and_save(symbol, raw_bars, force_reprocess=force_reprocess)
 
         self.logger.info(f"[{symbol}] Updated with {len(raw_bars)} bars from {source}")
         return len(raw_bars)
@@ -630,9 +630,137 @@ class UnifiedDataPipeline:
         except Exception as e:
             self.logger.exception(f"[{symbol}] Failed to save raw data: {e}")
 
-    async def _process_and_save(self, symbol: str, bars: List[Dict[str, Any]]) -> None:
+    def _load_all_raw_data(self, symbol: str) -> List[Dict[str, Any]]:
         """
-        Process raw bars through the ML pipeline and save to all storage targets.
+        Load ALL raw data for a symbol from the raw data file.
+
+        Args:
+            symbol: Stock symbol
+
+        Returns:
+            List of all raw bar dictionaries
+        """
+        file_path = self.raw_data_path / f"raw_{symbol}_file.json"
+
+        if not file_path.exists():
+            return []
+
+        try:
+            with open(file_path, 'r') as f:
+                data = json.load(f)
+                return data.get('candles', [])
+        except Exception as e:
+            self.logger.error(f"[{symbol}] Failed to load raw data: {e}")
+            return []
+
+    def _get_last_processed_timestamp(self, symbol: str) -> Optional[int]:
+        """
+        Get the latest timestamp from processed data file.
+
+        Args:
+            symbol: Stock symbol
+
+        Returns:
+            Latest timestamp (epoch ms) or None if no processed data
+        """
+        file_path = self.data_path / f"proc_{symbol}_file.json"
+
+        if not file_path.exists():
+            return None
+
+        try:
+            with open(file_path, 'r') as f:
+                data = json.load(f)
+                bars = data.get('bars', data) if isinstance(data, dict) else data
+
+            if not bars:
+                return None
+
+            # Find the latest timestamp
+            # Processed data uses 'Date' field (ISO string format)
+            last_bar = bars[-1]
+            date_str = last_bar.get('Date')
+
+            if date_str:
+                # Convert ISO string to epoch ms for comparison
+                dt = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+                return int(dt.timestamp() * 1000)
+
+            return None
+
+        except Exception as e:
+            self.logger.debug(f"[{symbol}] Could not read processed timestamp: {e}")
+            return None
+
+    def _get_last_raw_timestamp(self, symbol: str) -> Optional[int]:
+        """
+        Get the latest timestamp from raw data file.
+
+        Args:
+            symbol: Stock symbol
+
+        Returns:
+            Latest timestamp (epoch ms) or None if no raw data
+        """
+        file_path = self.raw_data_path / f"raw_{symbol}_file.json"
+
+        if not file_path.exists():
+            return None
+
+        try:
+            with open(file_path, 'r') as f:
+                data = json.load(f)
+                candles = data.get('candles', [])
+
+            if not candles:
+                return None
+
+            # Raw data uses 'datetime' field (epoch ms)
+            return max(c.get('datetime', 0) for c in candles)
+
+        except Exception as e:
+            self.logger.debug(f"[{symbol}] Could not read raw timestamp: {e}")
+            return None
+
+    def _is_processed_data_current(self, symbol: str) -> bool:
+        """
+        Check if processed data is up-to-date with raw data.
+
+        Args:
+            symbol: Stock symbol
+
+        Returns:
+            True if processed data contains the latest raw data
+        """
+        raw_ts = self._get_last_raw_timestamp(symbol)
+        proc_ts = self._get_last_processed_timestamp(symbol)
+
+        if raw_ts is None:
+            return True  # No raw data, nothing to process
+
+        if proc_ts is None:
+            return False  # No processed data, needs processing
+
+        # Allow 1 day tolerance (86400000 ms) for timezone differences
+        return proc_ts >= (raw_ts - 86400000)
+
+    async def _process_and_save(
+        self,
+        symbol: str,
+        bars: List[Dict[str, Any]],
+        force_reprocess: bool = False,
+    ) -> None:
+        """
+        Process raw data through the ML pipeline and save to all storage targets.
+
+        This method checks if processed data is already up-to-date before reprocessing.
+        When reprocessing is needed, it loads the COMPLETE raw data file to ensure
+        indicators like SMA_200 are computed correctly.
+
+        Args:
+            symbol: Stock symbol
+            bars: Newly fetched bars (used for cache update)
+            force_reprocess: If True, reprocess even if data appears current
 
         Storage targets:
         - JSON file (proc_{SYMBOL}_file.json)
@@ -642,8 +770,23 @@ class UnifiedDataPipeline:
         try:
             from data.processor import Processor
 
+            # Check if processed data is already current (unless forced)
+            if not force_reprocess and self._is_processed_data_current(symbol):
+                self.logger.info(f"[{symbol}] Processed data is up-to-date, skipping reprocess")
+                return
+
+            # Load ALL raw data from file (not just the passed-in bars)
+            # This ensures indicators like SMA_200 are computed correctly
+            all_bars = self._load_all_raw_data(symbol)
+
+            if not all_bars:
+                self.logger.warning(f"[{symbol}] No raw data to process")
+                return
+
+            self.logger.info(f"[{symbol}] Processing {len(all_bars)} total bars (new data detected)")
+
             # Convert bars to DataFrame
-            df = pd.DataFrame(bars)
+            df = pd.DataFrame(all_bars)
 
             if df.empty:
                 self.logger.warning(f"[{symbol}] No data to process")
@@ -838,6 +981,8 @@ Examples:
                         help='Show cache information for symbols')
     parser.add_argument('--read', action='store_true',
                         help='Read existing data instead of updating')
+    parser.add_argument('--force-reprocess', '-f', action='store_true',
+                        help='Force reprocessing even if data is up-to-date')
 
     args = parser.parse_args()
 
@@ -913,7 +1058,8 @@ Examples:
             args.symbols,
             args.days,
             source,
-            process_data=not args.no_process
+            force_reprocess=args.force_reprocess,
+            process_data=not args.no_process,
         )
 
         print("\n=== Update Results ===")

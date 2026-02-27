@@ -110,6 +110,9 @@ class SymbolState:
     position_state: PositionState = PositionState.NONE
     pending_order_id: Optional[str] = None
 
+    # Meta trade logging (for ML training)
+    trade_id: Optional[str] = None  # Links entry/exit for meta-model training
+
     def __post_init__(self):
         """Initialize asyncio lock for thread-safe operations."""
         self._lock = asyncio.Lock()
@@ -213,6 +216,7 @@ class SymbolState:
         # Reset position lifecycle state
         self.position_state = PositionState.NONE
         self.pending_order_id = None
+        self.trade_id = None  # Clear trade_id for meta logging
         # Note: strategy_name preserved (may use same strategy next time)
 
         logger.debug(f"[{self.symbol}] State reset")

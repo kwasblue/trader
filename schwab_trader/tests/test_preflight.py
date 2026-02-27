@@ -183,7 +183,7 @@ class TestCredentialChecks:
 
 
 class TestDataFreshnessChecks:
-    """Tests for data freshness validation."""
+    """Tests for data freshness validation using UnifiedDataPipeline."""
 
     @pytest.fixture
     def checker(self):
@@ -193,64 +193,104 @@ class TestDataFreshnessChecks:
     @pytest.mark.asyncio
     async def test_check_data_freshness_fresh(self, checker):
         """Test data freshness check with fresh data."""
-        with patch.dict(os.environ, {
-            'ALPACA_API_KEY': 'test_key',
-            'ALPACA_SECRET_KEY': 'test_secret'
-        }):
-            with patch('preflight.HistoricalDataUpdater') as MockUpdater:
-                mock_updater = MagicMock()
-                mock_updater.get_data_freshness.return_value = {
-                    'is_stale': False,
-                    'bar_count': 1000,
-                    'age_minutes': 30
-                }
-                MockUpdater.return_value = mock_updater
+        from datetime import datetime, timezone
+        import pandas as pd
 
-                with patch.object(checker, 'print_header'):
-                    with patch.object(checker, 'print_status'):
-                        await checker._check_data_freshness(['AAPL'], update_data=False)
+        with patch('preflight.UnifiedDataPipeline') as MockPipeline:
+            mock_pipeline = MagicMock()
+            # Data is current (proc timestamp close to raw timestamp)
+            current_ts = int(datetime.now(timezone.utc).timestamp() * 1000)
+            mock_pipeline._get_last_raw_timestamp.return_value = current_ts
+            mock_pipeline._get_last_processed_timestamp.return_value = current_ts
+            mock_pipeline._is_processed_data_current.return_value = True
+            mock_pipeline.get_data_from_file.return_value = pd.DataFrame({'Close': [150.0] * 1000})
+            MockPipeline.return_value = mock_pipeline
 
-                        assert 'Data: AAPL' in checker.passed
+            with patch.object(checker, 'print_header'):
+                with patch.object(checker, 'print_status'):
+                    await checker._check_data_freshness(['AAPL'], update_data=False)
+
+                    assert 'Data: AAPL' in checker.passed
 
     @pytest.mark.asyncio
-    async def test_check_data_freshness_stale(self, checker):
-        """Test data freshness check with stale data."""
-        with patch.dict(os.environ, {
-            'ALPACA_API_KEY': 'test_key',
-            'ALPACA_SECRET_KEY': 'test_secret'
-        }):
-            with patch('preflight.HistoricalDataUpdater') as MockUpdater:
-                mock_updater = MagicMock()
-                mock_updater.get_data_freshness.return_value = {
-                    'is_stale': True,
-                    'bar_count': 500,
-                    'age_minutes': 120
-                }
-                MockUpdater.return_value = mock_updater
+    async def test_check_data_freshness_needs_reprocessing(self, checker):
+        """Test data freshness check when processed data is behind raw data."""
+        from datetime import datetime, timezone
+        import pandas as pd
 
-                with patch.object(checker, 'print_header'):
-                    with patch.object(checker, 'print_warning'):
-                        await checker._check_data_freshness(['AAPL'], update_data=False)
+        with patch('preflight.UnifiedDataPipeline') as MockPipeline:
+            mock_pipeline = MagicMock()
+            # Processed data is not current (behind raw)
+            mock_pipeline._get_last_raw_timestamp.return_value = int(datetime.now(timezone.utc).timestamp() * 1000)
+            mock_pipeline._get_last_processed_timestamp.return_value = int(datetime.now(timezone.utc).timestamp() * 1000) - 86400000 * 2
+            mock_pipeline._is_processed_data_current.return_value = False
+            MockPipeline.return_value = mock_pipeline
 
-                        assert any('stale' in warn.lower() for warn in checker.warnings)
+            with patch.object(checker, 'print_header'):
+                with patch.object(checker, 'print_warning'):
+                    await checker._check_data_freshness(['AAPL'], update_data=False)
+
+                    assert any('needs reprocessing' in warn.lower() or 'needs update' in warn.lower() for warn in checker.warnings)
 
     @pytest.mark.asyncio
     async def test_check_data_freshness_missing(self, checker):
         """Test data freshness check with missing data."""
-        with patch.dict(os.environ, {
-            'ALPACA_API_KEY': 'test_key',
-            'ALPACA_SECRET_KEY': 'test_secret'
-        }):
-            with patch('preflight.HistoricalDataUpdater') as MockUpdater:
-                mock_updater = MagicMock()
-                mock_updater.get_data_freshness.return_value = None
-                MockUpdater.return_value = mock_updater
+        with patch('preflight.UnifiedDataPipeline') as MockPipeline:
+            mock_pipeline = MagicMock()
+            mock_pipeline._get_last_raw_timestamp.return_value = None
+            mock_pipeline._get_last_processed_timestamp.return_value = None
+            mock_pipeline._is_processed_data_current.return_value = False
+            MockPipeline.return_value = mock_pipeline
 
-                with patch.object(checker, 'print_header'):
-                    with patch.object(checker, 'print_status'):
-                        await checker._check_data_freshness(['AAPL'], update_data=False)
+            with patch.object(checker, 'print_header'):
+                with patch.object(checker, 'print_status'):
+                    await checker._check_data_freshness(['AAPL'], update_data=False)
 
-                        assert any('No data' in warn for warn in checker.warnings)
+                    assert any('No data' in warn or 'no data' in warn.lower() for warn in checker.warnings)
+
+    @pytest.mark.asyncio
+    async def test_check_data_freshness_old_data(self, checker):
+        """Test data freshness check with old but synced data."""
+        from datetime import datetime, timezone, timedelta
+        import pandas as pd
+
+        with patch('preflight.UnifiedDataPipeline') as MockPipeline:
+            mock_pipeline = MagicMock()
+            # Data is current (synced) but old (> 24 hours)
+            old_ts = int((datetime.now(timezone.utc) - timedelta(hours=48)).timestamp() * 1000)
+            mock_pipeline._get_last_raw_timestamp.return_value = old_ts
+            mock_pipeline._get_last_processed_timestamp.return_value = old_ts
+            mock_pipeline._is_processed_data_current.return_value = True
+            mock_pipeline.get_data_from_file.return_value = pd.DataFrame({'Close': [150.0] * 500})
+            MockPipeline.return_value = mock_pipeline
+
+            with patch.object(checker, 'print_header'):
+                with patch.object(checker, 'print_warning'):
+                    await checker._check_data_freshness(['AAPL'], update_data=False)
+
+                    # Should warn about stale data
+                    assert any('stale' in warn.lower() for warn in checker.warnings)
+
+    @pytest.mark.asyncio
+    async def test_check_data_freshness_with_update(self, checker):
+        """Test data freshness check triggers update for stale symbols."""
+        from datetime import datetime, timezone
+        import pandas as pd
+
+        with patch('preflight.UnifiedDataPipeline') as MockPipeline:
+            mock_pipeline = MagicMock()
+            mock_pipeline._get_last_raw_timestamp.return_value = None
+            mock_pipeline._get_last_processed_timestamp.return_value = None
+            mock_pipeline._is_processed_data_current.return_value = False
+            mock_pipeline.update_symbols = AsyncMock(return_value={'AAPL': 100})
+            MockPipeline.return_value = mock_pipeline
+
+            with patch.object(checker, 'print_header'):
+                with patch.object(checker, 'print_status'):
+                    await checker._check_data_freshness(['AAPL'], update_data=True)
+
+                    # Should have called update_symbols
+                    mock_pipeline.update_symbols.assert_called_once()
 
 
 class TestConfigurationChecks:

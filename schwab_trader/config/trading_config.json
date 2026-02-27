@@ -1,6 +1,10 @@
 {
   "general": {
-    "default_symbols": ["AAPL", "MSFT"],
+    "default_symbols": [
+      "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA",
+      "AVGO", "JPM", "V", "UNH", "XOM", "MA", "COST", "HD",
+      "PG", "JNJ", "ABBV", "WMT"
+    ],
     "default_mode": "simulation",
     "log_level": "INFO"
   },
@@ -124,5 +128,23 @@
     "retry_base_delay": 1.0,
     "circuit_breaker_failure_threshold": 5,
     "circuit_breaker_timeout": 60.0
+  },
+
+  "ml_training": {
+    "meta_logging_enabled": true,
+    "meta_log_file": "meta_trades_live.jsonl",
+    "training_data_path": "data/ml_training",
+    "model_path": "models/trade_quality_model.joblib",
+    "min_trades_for_training": 100,
+    "retrain_interval_days": 7,
+    "features": [
+      "feat_atr_percentile",
+      "feat_drawdown_portfolio_pct",
+      "feat_position_size_pct",
+      "feat_hour_of_day",
+      "feat_day_of_week",
+      "feat_bars_in_regime",
+      "feat_signal_strength"
+    ]
   }
 }

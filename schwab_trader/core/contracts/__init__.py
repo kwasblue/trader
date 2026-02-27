@@ -24,6 +24,12 @@ from core.contracts.types import (
     BrokerSnapshot,
 )
 
+# Meta types (for ML training data)
+from core.contracts.meta_types import (
+    TradeEntryContext,
+    TradeExitContext,
+)
+
 # Event names (most commonly used)
 from core.contracts.events import (
     EVENT_NEW_BAR,
@@ -54,6 +60,9 @@ __all__ = [
     'OrderResult',
     'PositionView',
     'BrokerSnapshot',
+    # Meta types
+    'TradeEntryContext',
+    'TradeExitContext',
     # Event names
     'EVENT_NEW_BAR',
     'EVENT_NEW_TRADE',

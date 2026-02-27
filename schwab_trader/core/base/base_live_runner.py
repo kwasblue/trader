@@ -299,6 +299,9 @@ class BaseLiveRunner(ABC):
             drawdown_monitor=self.ddm,
         )
 
+        # Provide ATR history reference for meta-model feature computation
+        self.engine.set_atr_hist_reference(self.atr_hist)
+
         # Wire optional attrs
         if hasattr(self.engine, "trade_gate"):
             self.engine.trade_gate = self.trade_gate
@@ -867,3 +870,29 @@ class BaseLiveRunner(ABC):
         """Stop the live trading runner."""
         self._running = False
         self.logger.info("Stop requested")
+
+    # ==========================================================================
+    # HELPER METHODS
+    # ==========================================================================
+
+    def _compute_atr_percentile(self, symbol: str, current_atr: float) -> float:
+        """
+        Compute the percentile of current ATR within recent history.
+
+        Used for meta-model feature extraction - helps identify if current
+        volatility is high or low relative to recent history.
+
+        Args:
+            symbol: Trading symbol
+            current_atr: Current ATR value
+
+        Returns:
+            Percentile (0.0 to 1.0), or 0.5 if insufficient history
+        """
+        hist = list(self.atr_hist[symbol])
+        if len(hist) < 10:
+            return 0.5  # Not enough history for meaningful percentile
+
+        # Count how many historical values are <= current ATR
+        count_below = sum(1 for h in hist if h <= current_atr)
+        return count_below / len(hist)

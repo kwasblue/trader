@@ -21,15 +21,16 @@ A comprehensive algorithmic trading platform with strategy backtesting, live tra
 10. [Strategies](strategies.md) - Available strategies and creating custom ones
 11. [Backtesting](backtesting.md) - Backtesting framework and analysis tools
 12. [AutoTrader](autotrader.md) - Autonomous trading daemon
+13. [ML Training Workflow](ml-training-workflow.md) - Training meta-models from trade data
 
 ### Operations
-13. [Operations Guide](operations.md) - Daily operations and procedures
-14. [Pre-Flight Checks](preflight.md) - System validation before trading
-15. [Monitoring](monitoring.md) - Real-time GUI monitoring dashboard
+14. [Operations Guide](operations.md) - Daily operations and procedures
+15. [Pre-Flight Checks](preflight.md) - System validation before trading
+16. [Monitoring](monitoring.md) - Real-time GUI monitoring dashboard
 
 ### Reference
-16. [API Reference](api-reference.md) - Detailed API documentation
-17. [Examples](examples.md) - Code examples and tutorials
+17. [API Reference](api-reference.md) - Detailed API documentation
+18. [Examples](examples.md) - Code examples and tutorials
 
 ---
 

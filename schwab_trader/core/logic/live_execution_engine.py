@@ -39,7 +39,9 @@ from core.contracts.events import (
     EVENT_ALERT, AlertPayload, EVENT_NEW_TRADE, TradePayload,
     EVENT_MANUAL_ORDER, EVENT_FLATTEN_ALL, EVENT_FLATTEN_SYMBOL, EVENT_CANCEL_ALL,
 )
+from core.contracts.meta_types import TradeEntryContext, TradeExitContext
 from core.exceptions import DailyLossLimitExceededError
+from loggers.meta_trade_logger import MetaTradeLogger, generate_trade_id
 
 # Import the router we created
 from core.logic.trade_logic_router import TradeApproverRouter
@@ -199,6 +201,20 @@ class LiveExecutionEngine(ExecutionEngineBase):
         # Position refresh cache to reduce broker API calls
         self._position_cache: Dict[str, datetime] = {}  # symbol -> last_refresh_time
         self._position_cache_ttl: float = 30.0  # Cache TTL in seconds (increased for scaling)
+
+        # Meta trade logger for ML training data
+        # Load config for meta logging settings
+        try:
+            from core.config_loader import get_config
+            cfg = get_config()
+            ml_config = getattr(cfg, 'ml_training', None)
+            if ml_config and getattr(ml_config, 'meta_logging_enabled', True):
+                meta_log_file = getattr(ml_config, 'meta_log_file', 'meta_trades_live.jsonl')
+                self.meta_logger = MetaTradeLogger(log_file=meta_log_file)
+            else:
+                self.meta_logger = MetaTradeLogger(log_file='meta_trades_live.jsonl')
+        except Exception:
+            self.meta_logger = MetaTradeLogger(log_file='meta_trades_live.jsonl')
 
         self.logger.info(
             f"LiveExecutionEngine initialized with order registry and validator"
@@ -658,6 +674,9 @@ class LiveExecutionEngine(ExecutionEngineBase):
                             symbol=context.symbol
                         )
                     )
+
+                    # Log entry for meta-model training
+                    self._log_meta_entry(context, state, result, qty)
 
                 # 10. Post-execution tasks
                 self._post_execution(
@@ -1327,8 +1346,194 @@ class LiveExecutionEngine(ExecutionEngineBase):
         """
         pass  # Already done in _execute_live_trade()
 
+    # ========================================================================
+    # META TRADE LOGGING
+    # ========================================================================
+
+    def _log_meta_entry(
+        self,
+        context: SignalContext,
+        state: SymbolState,
+        result: OrderResult,
+        qty: int,
+    ) -> None:
+        """
+        Log trade entry for meta-model training.
+
+        Captures all relevant features at entry time.
+
+        Args:
+            context: SignalContext with signal data
+            state: SymbolState for the symbol
+            result: OrderResult from execution
+            qty: Quantity traded
+        """
+        try:
+            # Generate and store trade_id
+            trade_id = generate_trade_id(context.symbol, context.timestamp)
+            state.trade_id = trade_id
+
+            # Compute ATR percentile if we have access to atr_hist
+            atr_percentile = 0.5  # Default
+            if hasattr(self, '_atr_hist_ref') and self._atr_hist_ref:
+                hist = list(self._atr_hist_ref.get(context.symbol, []))
+                if len(hist) >= 10:
+                    atr_percentile = sum(1 for h in hist if h <= context.atr) / len(hist)
+
+            # Get drawdown info
+            portfolio_dd = 0.0
+            symbol_dd = 0.0
+            if self.drawdown_monitor:
+                portfolio_dd = self.drawdown_monitor.get_portfolio_drawdown()
+                symbol_dd = self.drawdown_monitor.get_symbol_drawdown(context.symbol)
+
+            # Calculate position size as percentage of portfolio
+            position_value = qty * result.avg_price
+            position_size_pct = position_value / self.portfolio.total_value if self.portfolio.total_value > 0 else 0.0
+
+            # Calculate hours since last trade
+            hours_since_last_trade = 999.0
+            if state.last_trade_time:
+                delta = context.timestamp - state.last_trade_time
+                hours_since_last_trade = delta.total_seconds() / 3600
+
+            # Calculate minutes since market open (9:30 ET)
+            market_open = context.timestamp.replace(hour=14, minute=30, second=0, microsecond=0)  # 9:30 ET = 14:30 UTC
+            if context.timestamp >= market_open:
+                minutes_since_open = int((context.timestamp - market_open).total_seconds() / 60)
+            else:
+                minutes_since_open = 0
+
+            # Get bars in regime from trade gate if available
+            bars_in_regime = getattr(state, 'regime_persist', 1)
+
+            # Build entry context
+            entry_context = TradeEntryContext(
+                trade_id=trade_id,
+                timestamp=context.timestamp,
+                symbol=context.symbol,
+                side="buy" if context.signal > 0 else "sell",
+                qty=qty,
+                price=result.avg_price,
+                strategy=context.strategy_name or "unknown",
+                regime=context.regime,
+                atr=context.atr,
+                atr_percentile=atr_percentile,
+                drawdown_portfolio_pct=portfolio_dd,
+                drawdown_symbol_pct=symbol_dd,
+                position_size_pct=position_size_pct,
+                hour_of_day=context.timestamp.hour,
+                day_of_week=context.timestamp.weekday(),
+                minutes_since_open=minutes_since_open,
+                bars_in_regime=bars_in_regime,
+                hours_since_last_trade=hours_since_last_trade,
+                signal_strength=context.signal,
+            )
+
+            self.meta_logger.log_entry(entry_context)
+
+        except Exception as e:
+            self.logger.warning(f"[{context.symbol}] Failed to log meta entry: {e}")
+
+    def _log_meta_exit(
+        self,
+        symbol: str,
+        state: SymbolState,
+        result: OrderResult,
+        action_type: str,
+    ) -> None:
+        """
+        Log trade exit for meta-model training.
+
+        Captures outcome metrics for correlation with entry features.
+
+        Args:
+            symbol: Trading symbol
+            state: SymbolState with trade data
+            result: OrderResult from execution
+            action_type: Type of exit (exit, partial_exit, reversal)
+        """
+        try:
+            # Skip if no trade_id (wasn't logged on entry)
+            if not state.trade_id:
+                return
+
+            # Get entry price for P&L calculation
+            entry_price = state.entry_price or result.avg_price
+            exit_price = result.avg_price
+
+            # Calculate P&L
+            pnl_dollars = 0.0
+            pnl_percent = 0.0
+            filled_qty = result.filled_qty or 0
+
+            if filled_qty > 0 and entry_price > 0:
+                if state.side == "long":
+                    pnl_dollars = (exit_price - entry_price) * filled_qty
+                else:  # short
+                    pnl_dollars = (entry_price - exit_price) * filled_qty
+
+                pnl_percent = (exit_price - entry_price) / entry_price if entry_price > 0 else 0.0
+                if state.side == "short":
+                    pnl_percent = -pnl_percent
+
+            # Get excursion metrics
+            mae_percent = 0.0
+            mfe_percent = 0.0
+
+            if state.max_adverse_excursion is not None and entry_price > 0:
+                mae_percent = state.max_adverse_excursion / entry_price
+            if state.max_favorable_excursion is not None and entry_price > 0:
+                mfe_percent = state.max_favorable_excursion / entry_price
+
+            # Map action_type to exit_reason
+            exit_reason_map = {
+                "exit": "signal_exit",
+                "partial_exit": "partial_profit",
+                "reversal": "signal_reversal",
+                "stop_loss": "stop_loss",
+                "take_profit": "take_profit",
+            }
+            exit_reason = exit_reason_map.get(action_type, action_type)
+
+            # Build exit context
+            exit_context = TradeExitContext(
+                trade_id=state.trade_id,
+                timestamp=datetime.now(timezone.utc),
+                price=exit_price,
+                pnl_dollars=pnl_dollars,
+                pnl_percent=pnl_percent,
+                hold_bars=state.bars_held,
+                mae_percent=mae_percent,
+                mfe_percent=mfe_percent,
+                exit_reason=exit_reason,
+            )
+
+            self.meta_logger.log_exit(exit_context)
+
+            # Clear trade_id after logging
+            state.trade_id = None
+
+        except Exception as e:
+            self.logger.warning(f"[{symbol}] Failed to log meta exit: {e}")
+
+    def set_atr_hist_reference(self, atr_hist: Dict[str, Any]) -> None:
+        """
+        Set reference to ATR history for ATR percentile calculation.
+
+        Call this from the runner to provide access to atr_hist.
+
+        Args:
+            atr_hist: Dict mapping symbol to deque of ATR values
+        """
+        self._atr_hist_ref = atr_hist
+
     def _post_execution(self, symbol, state, result, action_type, regime, strategy_name):
         """Post-execution logging and state updates with Live-specific logging."""
+        # Log exit for meta-model training (before base class resets state)
+        if action_type in ("exit", "partial_exit", "reversal"):
+            self._log_meta_exit(symbol, state, result, action_type)
+
         # Use base class implementation for common logic
         super()._post_execution(symbol, state, result, action_type, regime, strategy_name)
 

@@ -86,6 +86,8 @@ Full documentation is available in the [docs/](docs/) folder:
 - [Data Flow](docs/data-flow.md) - Data flow diagram
 - [Strategies](docs/strategies.md) - Available strategies
 - [Backtesting](docs/backtesting.md) - Backtesting guide
+- [Data Pipeline](docs/data-pipeline.md) - Historical data management
+- [ML Training Workflow](docs/ml-training-workflow.md) - Training meta-models from trade data
 
 See [docs/index.md](docs/index.md) for the complete documentation index.
 

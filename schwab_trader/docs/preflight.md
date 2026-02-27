@@ -15,11 +15,17 @@ Pre-flight checks prevent trading with:
 ### Command Line
 
 ```bash
-# Quick check (minimal output)
+# Quick check (uses symbols from config/trading_config.json)
 python preflight.py
 
 # Verbose mode (detailed output)
 python preflight.py -v
+
+# Check specific symbols
+python preflight.py --symbols AAPL MSFT TSLA
+
+# Check ALL symbols that have data files
+python preflight.py --all-data
 
 # Update stale data automatically
 python preflight.py --update-data
@@ -78,10 +84,17 @@ Validates required environment variables are set:
 
 ### 3. Data Freshness
 
-For each configured symbol:
-- Checks if data file exists
-- Validates last data timestamp
-- Flags as stale if > 1 hour old (during market hours)
+Uses **UnifiedDataPipeline** for comprehensive data validation:
+
+- Checks both raw and processed data files exist
+- Compares raw vs processed timestamps to detect out-of-sync data
+- Validates last data timestamp age
+- Flags as stale if processed data is behind raw data or > 24 hours old
+
+**Symbols checked are loaded from:**
+1. `--symbols` argument (explicit list)
+2. `--all-data` flag (all symbols with data files)
+3. `config/trading_config.json` `default_symbols` (default)
 
 ### 4. Configuration Files
 
@@ -184,11 +197,19 @@ python preflight.py --update-data
 ```
 
 The checker will:
-1. Identify stale symbols
-2. Fetch latest data from best available source
-3. Process through ML pipeline
-4. Save to storage (JSON + SQLite)
-5. Re-validate freshness
+1. Identify stale or out-of-sync symbols (processed data behind raw data)
+2. Fetch latest data from best available source (Alpaca or Schwab)
+3. Append new bars to raw data files
+4. Reprocess **ALL** raw data through ML pipeline (ensures correct indicator values)
+5. Save processed data to JSON files (+ SQLite if enabled)
+6. Re-validate freshness
+
+### Smart Reprocessing
+
+The update uses the UnifiedDataPipeline's smart reprocessing:
+- Skips reprocessing if processed data is already current
+- Processes complete raw data history (not just new bars)
+- Ensures indicators like SMA_200 compute correctly
 
 ## Schwab Re-Authentication
 

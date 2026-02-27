@@ -67,7 +67,11 @@ pm = create_position_manager(cfg)        # PositionManager
 ```json
 {
   "general": {
-    "default_symbols": ["AAPL", "MSFT"],
+    "default_symbols": [
+      "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA",
+      "AVGO", "JPM", "V", "UNH", "XOM", "MA", "COST", "HD",
+      "PG", "JNJ", "ABBV", "WMT"
+    ],
     "default_mode": "simulation",
     "log_level": "INFO"
   }
@@ -246,6 +250,68 @@ from core.config_loader import enable_day_trade_mode
 
 cfg = enable_day_trade_mode()  # Sets swing_mode=False, min_hold_days=0
 ```
+
+---
+
+## Symbol Management
+
+The system uses two symbol sources for different purposes:
+
+### 1. Config Default Symbols
+
+Located in `config/trading_config.json` under `general.default_symbols`.
+
+**Used by:**
+- Pre-flight checks (default symbols to validate)
+- Live runners (symbols to trade if not overridden)
+- Simulation mode
+- Historical data updates
+
+```python
+from core.config_loader import get_config
+
+cfg = get_config()
+symbols = cfg.general.default_symbols
+# ['AAPL', 'MSFT', 'NVDA', 'GOOGL', 'AMZN', ...]
+```
+
+### 2. Trade List Database
+
+Located in `data/trading_state.db` (SQLite).
+
+**Used by:**
+- AutoTrader (autonomous trading daemon)
+- Determines which symbols are actively traded
+
+```python
+from core.symbol_list_manager import get_trade_list, add_symbol_to_list
+
+# Get current trade list
+symbols = get_trade_list()
+
+# Add a symbol
+add_symbol_to_list('AAPL', 'trade')
+
+# Remove a symbol
+remove_symbol_from_list('TSLA', 'trade')
+```
+
+### Migration Between Sources
+
+On first run, if the trade list database is empty, it migrates symbols from config:
+
+```python
+# Automatic migration happens in symbol_list_manager.py
+# Config default_symbols → trade list database
+```
+
+### Which to Modify?
+
+| Goal | Modify |
+|------|--------|
+| Change symbols for preflight/simulation | `config/trading_config.json` |
+| Change symbols for autotrader | Use `add_symbol_to_list()` / `remove_symbol_from_list()` |
+| Change both | Update config AND database |
 
 ---
 

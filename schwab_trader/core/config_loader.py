@@ -181,6 +181,26 @@ class ErrorRecoveryConfig:
 
 
 @dataclass
+class MLTrainingConfig:
+    """Configuration for ML training and trade quality prediction."""
+    meta_logging_enabled: bool = True
+    meta_log_file: str = "meta_trades_live.jsonl"
+    training_data_path: str = "data/ml_training"
+    model_path: str = "models/trade_quality_model.joblib"
+    min_trades_for_training: int = 100
+    retrain_interval_days: int = 7
+    features: List[str] = field(default_factory=lambda: [
+        "feat_atr_percentile",
+        "feat_drawdown_portfolio_pct",
+        "feat_position_size_pct",
+        "feat_hour_of_day",
+        "feat_day_of_week",
+        "feat_bars_in_regime",
+        "feat_signal_strength",
+    ])
+
+
+@dataclass
 class TradingConfig:
     """Master configuration container."""
     general: GeneralConfig = field(default_factory=GeneralConfig)
@@ -197,6 +217,7 @@ class TradingConfig:
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     autotrader: AutoTraderConfig = field(default_factory=AutoTraderConfig)
     error_recovery: ErrorRecoveryConfig = field(default_factory=ErrorRecoveryConfig)
+    ml_training: MLTrainingConfig = field(default_factory=MLTrainingConfig)
 
     # Raw dict for any custom/unknown fields
     _raw: Dict[str, Any] = field(default_factory=dict)
@@ -382,6 +403,7 @@ def load_config(config_path: Optional[str] = None) -> TradingConfig:
             logging=_dict_to_dataclass(LoggingConfig, raw.get("logging")),
             autotrader=_dict_to_dataclass(AutoTraderConfig, raw.get("autotrader")),
             error_recovery=_dict_to_dataclass(ErrorRecoveryConfig, raw.get("error_recovery")),
+            ml_training=_dict_to_dataclass(MLTrainingConfig, raw.get("ml_training")),
             _raw=raw
         )
 

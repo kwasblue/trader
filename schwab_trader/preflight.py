@@ -44,7 +44,7 @@ load_dotenv(ROOT / ".env")
 
 from core.credential_validator import CredentialValidator, CredentialStatus, ValidationResult
 from core.unified_data_pipeline import UnifiedDataPipeline
-from core.historical_data_updater import HistoricalDataUpdater
+from core.config_loader import get_config
 import subprocess
 
 
@@ -235,50 +235,61 @@ class PreFlightChecker:
         symbols: List[str],
         update_data: bool = False
     ) -> None:
-        """Check historical data freshness."""
+        """Check historical data freshness using UnifiedDataPipeline."""
         self.print_header("HISTORICAL DATA")
 
-        api_key = os.getenv('ALPACA_API_KEY') or os.getenv('ALPACA_KEY_ID')
-        api_secret = os.getenv('ALPACA_SECRET_KEY') or os.getenv('ALPACA_SECRET')
-
-        if not api_key or not api_secret:
-            self.print_warning("Data Check", "Cannot check - Alpaca credentials missing")
-            return
-
-        updater = HistoricalDataUpdater(api_key, api_secret)
+        pipeline = UnifiedDataPipeline()
         stale_symbols = []
 
         for symbol in symbols:
-            freshness = updater.get_data_freshness(symbol)
+            # Check both raw and processed data status
+            raw_ts = pipeline._get_last_raw_timestamp(symbol)
+            proc_ts = pipeline._get_last_processed_timestamp(symbol)
+            is_current = pipeline._is_processed_data_current(symbol)
 
-            if freshness is None:
-                self.print_status(symbol, False, "No data file found")
+            if raw_ts is None and proc_ts is None:
+                self.print_status(symbol, False, "No data files found")
                 stale_symbols.append(symbol)
                 self.warnings.append(f"No data for {symbol}")
-            elif freshness['is_stale']:
-                age_hours = freshness['age_minutes'] // 60
-                self.print_warning(
-                    symbol,
-                    f"Stale ({freshness['bar_count']} bars, {age_hours}h old)"
-                )
+            elif not is_current:
+                # Processed data is behind raw data
+                self.print_warning(symbol, "Processed data needs update")
                 stale_symbols.append(symbol)
-                self.warnings.append(f"{symbol} data is stale")
+                self.warnings.append(f"{symbol} needs reprocessing")
             else:
-                self.print_status(
-                    symbol,
-                    True,
-                    f"Fresh ({freshness['bar_count']} bars, {freshness['age_minutes']} min old)"
-                )
-                self.passed.append(f"Data: {symbol}")
+                # Check age of data
+                from datetime import datetime, timezone
+                if proc_ts:
+                    age_hours = (datetime.now(timezone.utc).timestamp() * 1000 - proc_ts) / 3600000
+                    # Get bar count from file
+                    df = pipeline.get_data_from_file(symbol)
+                    bar_count = len(df) if not df.empty else 0
+
+                    if age_hours > 24:  # Consider stale if > 24 hours old
+                        self.print_warning(
+                            symbol,
+                            f"Data may be stale ({bar_count} bars, {age_hours:.0f}h old)"
+                        )
+                        stale_symbols.append(symbol)
+                        self.warnings.append(f"{symbol} data may be stale")
+                    else:
+                        self.print_status(
+                            symbol,
+                            True,
+                            f"Fresh ({bar_count} bars, {age_hours:.1f}h old)"
+                        )
+                        self.passed.append(f"Data: {symbol}")
+                else:
+                    self.print_status(symbol, True, "Raw data available")
+                    self.passed.append(f"Data: {symbol}")
 
         if stale_symbols and update_data:
             print(f"\n  Updating data for: {', '.join(stale_symbols)}")
-            pipeline = UnifiedDataPipeline()
             results = await pipeline.update_symbols(stale_symbols, days=30)
 
             for symbol, count in results.items():
                 if count > 0:
-                    print(f"    ✓ {symbol}: {count} bars fetched")
+                    print(f"    ✓ {symbol}: {count} bars fetched/processed")
                 else:
                     print(f"    ✗ {symbol}: Update failed")
 
@@ -413,12 +424,19 @@ class PreFlightChecker:
 
 
 async def main():
+    # Load config to get default symbols
+    try:
+        config = get_config()
+        default_symbols = config.general.default_symbols
+    except Exception:
+        default_symbols = ['AAPL', 'MSFT']
+
     parser = argparse.ArgumentParser(
         description='Pre-flight system check for trading',
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
+        epilog=f"""
 Examples:
-  python preflight.py                        # Quick check
+  python preflight.py                        # Check symbols from config: {default_symbols}
   python preflight.py --symbols AAPL TSLA    # Check specific symbols
   python preflight.py --update-data          # Update stale data
   python preflight.py --reauth-schwab        # Re-authenticate Schwab
@@ -429,8 +447,13 @@ Examples:
     parser.add_argument(
         '--symbols', '-s',
         nargs='+',
-        default=['AAPL', 'MSFT'],
-        help='Symbols to check (default: AAPL MSFT)'
+        default=default_symbols,
+        help=f'Symbols to check (default from config: {default_symbols})'
+    )
+    parser.add_argument(
+        '--all-data',
+        action='store_true',
+        help='Check all symbols that have data files (ignores --symbols)'
     )
     parser.add_argument(
         '--update-data', '-u',
@@ -450,9 +473,19 @@ Examples:
 
     args = parser.parse_args()
 
+    # If --all-data, get symbols from existing data files
+    symbols = args.symbols
+    if args.all_data:
+        pipeline = UnifiedDataPipeline()
+        symbols = pipeline.list_available_symbols('file')
+        if not symbols:
+            print("No data files found in proc_data/")
+            sys.exit(1)
+        print(f"Checking all {len(symbols)} symbols with data: {', '.join(symbols)}")
+
     checker = PreFlightChecker(verbose=args.verbose)
     success = await checker.run_all_checks(
-        symbols=args.symbols,
+        symbols=symbols,
         update_data=args.update_data,
         reauth_schwab=args.reauth_schwab,
     )

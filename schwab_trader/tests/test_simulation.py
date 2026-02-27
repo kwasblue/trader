@@ -447,3 +447,240 @@ class TestSimulationStop:
             runner.stop()
 
             assert runner._stop_requested is True
+
+
+class TestSimConfigHistoricalData:
+    """Tests for SimConfig with historical data settings."""
+
+    def test_simconfig_historical_data_defaults(self):
+        """Test SimConfig historical data options default to False."""
+        with patch('core.simulator.simulation.Path.mkdir'):
+            config = SimConfig(symbols=["AAPL"])
+
+        assert config.use_historical_data is False
+        assert config.historical_data_path == "data/data_storage/proc_data"
+        assert config.historical_start_index == 0
+
+    def test_simconfig_historical_data_enabled(self):
+        """Test SimConfig with historical data enabled."""
+        with patch('core.simulator.simulation.Path.mkdir'):
+            config = SimConfig(
+                symbols=["AAPL", "MSFT"],
+                use_historical_data=True,
+                historical_data_path="custom/path",
+                historical_start_index=50
+            )
+
+        assert config.use_historical_data is True
+        assert config.historical_data_path == "custom/path"
+        assert config.historical_start_index == 50
+
+
+class TestHistoricalDataSimulator:
+    """Tests for HistoricalDataSimulator."""
+
+    @pytest.fixture
+    def sample_data_file(self, tmp_path):
+        """Create a sample historical data file."""
+        data = {
+            "bars": [
+                {"Date": "2024-01-08T10:00:00", "Open": 150.0, "High": 151.0, "Low": 149.0, "Close": 150.5, "Volume": 1000},
+                {"Date": "2024-01-08T10:01:00", "Open": 150.5, "High": 152.0, "Low": 150.0, "Close": 151.0, "Volume": 1100},
+                {"Date": "2024-01-08T10:02:00", "Open": 151.0, "High": 153.0, "Low": 150.5, "Close": 152.0, "Volume": 1200},
+                {"Date": "2024-01-08T10:03:00", "Open": 152.0, "High": 154.0, "Low": 151.0, "Close": 153.0, "Volume": 1300},
+                {"Date": "2024-01-08T10:04:00", "Open": 153.0, "High": 155.0, "Low": 152.0, "Close": 154.0, "Volume": 1400},
+            ]
+        }
+
+        proc_data = tmp_path / "proc_data"
+        proc_data.mkdir()
+
+        file_path = proc_data / "proc_AAPL_file.json"
+        import json
+        file_path.write_text(json.dumps(data))
+
+        return tmp_path / "proc_data"
+
+    def test_historical_simulator_init(self, sample_data_file):
+        """Test HistoricalDataSimulator initialization."""
+        from core.simulator.historical_simulator import HistoricalDataSimulator
+
+        sim = HistoricalDataSimulator(
+            symbols=["AAPL"],
+            data_path=str(sample_data_file),
+            loop_data=True,
+            start_index=0
+        )
+
+        assert "AAPL" in sim.data
+        assert len(sim.data["AAPL"]) == 5
+
+    @pytest.mark.asyncio
+    async def test_historical_simulator_generate_bar(self, sample_data_file):
+        """Test generating bars from historical data."""
+        from core.simulator.historical_simulator import HistoricalDataSimulator
+
+        sim = HistoricalDataSimulator(
+            symbols=["AAPL"],
+            data_path=str(sample_data_file),
+            start_index=0
+        )
+
+        # Mock the event bus to avoid event loop issues
+        with patch.object(sim, 'bus') as mock_bus:
+            mock_bus.emit = AsyncMock()
+
+            bar1 = sim.generate_bar("AAPL")
+            bar2 = sim.generate_bar("AAPL")
+
+            # Note: generate_bar returns lowercase keys to match GBMSimulator format
+            assert bar1["close"] == 150.5
+            assert bar2["close"] == 151.0
+            assert bar1["timestamp"] != bar2["timestamp"]
+
+    @pytest.mark.asyncio
+    async def test_historical_simulator_update_all(self, sample_data_file):
+        """Test updating all symbols at once."""
+        from core.simulator.historical_simulator import HistoricalDataSimulator
+
+        sim = HistoricalDataSimulator(
+            symbols=["AAPL"],
+            data_path=str(sample_data_file),
+            start_index=0
+        )
+
+        with patch.object(sim, 'bus') as mock_bus:
+            mock_bus.emit = AsyncMock()
+
+            bars = sim.update_all()
+
+            assert "AAPL" in bars
+            # Note: generate_bar returns lowercase keys to match GBMSimulator format
+            assert bars["AAPL"]["close"] == 150.5
+
+    @pytest.mark.asyncio
+    async def test_historical_simulator_loop_data(self, sample_data_file):
+        """Test looping when data is exhausted."""
+        from core.simulator.historical_simulator import HistoricalDataSimulator
+
+        sim = HistoricalDataSimulator(
+            symbols=["AAPL"],
+            data_path=str(sample_data_file),
+            loop_data=True,
+            start_index=0
+        )
+
+        with patch.object(sim, 'bus') as mock_bus:
+            mock_bus.emit = AsyncMock()
+
+            # Read all 5 bars
+            for _ in range(5):
+                sim.generate_bar("AAPL")
+
+            # Should loop back to beginning
+            bar = sim.generate_bar("AAPL")
+            assert bar["close"] == 150.5
+
+    @pytest.mark.asyncio
+    async def test_historical_simulator_start_index(self, sample_data_file):
+        """Test starting from a specific index."""
+        from core.simulator.historical_simulator import HistoricalDataSimulator
+
+        sim = HistoricalDataSimulator(
+            symbols=["AAPL"],
+            data_path=str(sample_data_file),
+            start_index=2  # Skip first 2 bars
+        )
+
+        with patch.object(sim, 'bus') as mock_bus:
+            mock_bus.emit = AsyncMock()
+
+            bar = sim.generate_bar("AAPL")
+
+            # Should start at index 2 (third bar)
+            assert bar["close"] == 152.0
+
+    @pytest.mark.asyncio
+    async def test_historical_simulator_raw_data_format(self, tmp_path):
+        """Test loading data from raw_* file format."""
+        import json
+
+        # Create raw data file with "candles" format
+        raw_data = tmp_path / "raw_data"
+        raw_data.mkdir()
+
+        data = {
+            "candles": [
+                {"datetime": 1704700000000, "open": 150.0, "high": 151.0, "low": 149.0, "close": 150.5, "volume": 1000},
+                {"datetime": 1704700060000, "open": 150.5, "high": 152.0, "low": 150.0, "close": 151.0, "volume": 1100}
+            ]
+        }
+
+        file_path = raw_data / "raw_AAPL_file.json"
+        file_path.write_text(json.dumps(data))
+
+        from core.simulator.historical_simulator import HistoricalDataSimulator
+
+        sim = HistoricalDataSimulator(
+            symbols=["AAPL"],
+            data_path=str(raw_data),
+            start_index=0
+        )
+
+        assert "AAPL" in sim.data
+
+        with patch.object(sim, 'bus') as mock_bus:
+            mock_bus.emit = AsyncMock()
+
+            bar = sim.generate_bar("AAPL")
+            assert bar["close"] == 150.5
+
+
+class TestSimulationRunnerWithHistoricalData:
+    """Tests for SimulationRunner using historical data."""
+
+    def test_simulation_runner_uses_historical_simulator(self, tmp_path):
+        """Test that SimulationRunner uses HistoricalDataSimulator when configured."""
+        import json
+
+        # Create test data
+        proc_data = tmp_path / "proc_data"
+        proc_data.mkdir()
+
+        data = {
+            "bars": [
+                {"Date": "2024-01-08T10:00:00", "Open": 150.0, "High": 151.0, "Low": 149.0, "Close": 150.5, "Volume": 1000}
+            ] * 100  # 100 identical bars for simplicity
+        }
+
+        file_path = proc_data / "proc_AAPL_file.json"
+        file_path.write_text(json.dumps(data))
+
+        with patch('core.simulator.simulation.Path.mkdir'):
+            config = SimConfig(
+                symbols=["AAPL"],
+                steps=10,
+                use_historical_data=True,
+                historical_data_path=str(proc_data),
+                historical_start_index=0
+            )
+
+        with patch('core.events.eventhandler.get_event_handler') as mock_eh, \
+             patch('core.simulator.simulation.Logger'), \
+             patch('core.simulator.simulation.FileTradeLogger'), \
+             patch('core.simulator.simulation.StrategyRoutingManager'), \
+             patch('core.simulator.simulation.DynamicTradeLogicManager'), \
+             patch('core.simulator.simulation.MockBroker'), \
+             patch('core.simulator.simulation.MockExecutor'), \
+             patch('core.simulator.simulation.KellyPositionSizer'), \
+             patch('core.simulator.simulation.MockExecutionEngine'):
+
+            mock_eh.return_value = MagicMock()
+
+            from core.simulator.simulation import SimulationRunner
+            from core.simulator.historical_simulator import HistoricalDataSimulator
+
+            runner = SimulationRunner(config)
+
+            # Should be using HistoricalDataSimulator, not GBMSimulator
+            assert isinstance(runner.sim, HistoricalDataSimulator)

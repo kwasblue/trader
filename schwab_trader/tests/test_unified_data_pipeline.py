@@ -342,3 +342,175 @@ class TestDataFreshness:
 
             # Stale data should need update
             # (actual implementation may vary)
+
+
+class TestSmartReprocessing:
+    """Tests for smart reprocessing functionality."""
+
+    @pytest.fixture
+    def pipeline(self, tmp_path):
+        proc_path = tmp_path / "proc"
+        raw_path = tmp_path / "raw"
+        proc_path.mkdir(parents=True)
+        raw_path.mkdir(parents=True)
+
+        with patch('core.unified_data_pipeline.CredentialValidator'):
+            return UnifiedDataPipeline(
+                data_path=str(proc_path),
+                raw_data_path=str(raw_path),
+                store_to_files=True,
+                store_to_db=False
+            )
+
+    def test_get_last_raw_timestamp(self, pipeline, tmp_path):
+        """Test getting last timestamp from raw data file."""
+        # Create raw data file with known timestamp
+        raw_file = pipeline.raw_data_path / "raw_AAPL_file.json"
+        raw_data = {
+            "candles": [
+                {"datetime": 1704700000000, "open": 150.0, "high": 151.0, "low": 149.0, "close": 150.5, "volume": 1000},
+                {"datetime": 1704700060000, "open": 150.5, "high": 152.0, "low": 150.0, "close": 151.0, "volume": 1100}
+            ]
+        }
+        raw_file.write_text(json.dumps(raw_data))
+
+        ts = pipeline._get_last_raw_timestamp('AAPL')
+
+        assert ts == 1704700060000
+
+    def test_get_last_raw_timestamp_missing_file(self, pipeline):
+        """Test getting timestamp from non-existent raw file."""
+        ts = pipeline._get_last_raw_timestamp('NONEXISTENT')
+
+        assert ts is None
+
+    def test_get_last_processed_timestamp(self, pipeline, tmp_path):
+        """Test getting last timestamp from processed data file."""
+        # Create processed data file
+        proc_file = pipeline.data_path / "proc_AAPL_file.json"
+        proc_data = {
+            "bars": [
+                {"Date": "2024-01-08T10:00:00", "Open": 150.0, "High": 151.0, "Low": 149.0, "Close": 150.5, "Volume": 1000},
+                {"Date": "2024-01-08T10:01:00", "Open": 150.5, "High": 152.0, "Low": 150.0, "Close": 151.0, "Volume": 1100}
+            ]
+        }
+        proc_file.write_text(json.dumps(proc_data))
+
+        ts = pipeline._get_last_processed_timestamp('AAPL')
+
+        assert ts is not None
+
+    def test_is_processed_data_current_true(self, pipeline, tmp_path):
+        """Test when processed data is current with raw data."""
+        # Create both files with same timestamps
+        raw_file = pipeline.raw_data_path / "raw_AAPL_file.json"
+        proc_file = pipeline.data_path / "proc_AAPL_file.json"
+
+        ts = int(datetime.now(timezone.utc).timestamp() * 1000)
+
+        raw_data = {"candles": [{"datetime": ts, "open": 150.0, "high": 151.0, "low": 149.0, "close": 150.5, "volume": 1000}]}
+        proc_data = {"bars": [{"Date": datetime.fromtimestamp(ts/1000, tz=timezone.utc).isoformat(), "Open": 150.0, "High": 151.0, "Low": 149.0, "Close": 150.5, "Volume": 1000}]}
+
+        raw_file.write_text(json.dumps(raw_data))
+        proc_file.write_text(json.dumps(proc_data))
+
+        is_current = pipeline._is_processed_data_current('AAPL')
+
+        assert is_current is True
+
+    def test_is_processed_data_current_false(self, pipeline, tmp_path):
+        """Test when processed data is behind raw data."""
+        raw_file = pipeline.raw_data_path / "raw_AAPL_file.json"
+        proc_file = pipeline.data_path / "proc_AAPL_file.json"
+
+        # Raw data is newer
+        raw_ts = int(datetime.now(timezone.utc).timestamp() * 1000)
+        proc_ts = raw_ts - 86400000 * 2  # 2 days older
+
+        raw_data = {"candles": [{"datetime": raw_ts, "open": 150.0, "high": 151.0, "low": 149.0, "close": 150.5, "volume": 1000}]}
+        proc_data = {"bars": [{"Date": datetime.fromtimestamp(proc_ts/1000, tz=timezone.utc).isoformat(), "Open": 150.0, "High": 151.0, "Low": 149.0, "Close": 150.5, "Volume": 1000}]}
+
+        raw_file.write_text(json.dumps(raw_data))
+        proc_file.write_text(json.dumps(proc_data))
+
+        is_current = pipeline._is_processed_data_current('AAPL')
+
+        assert is_current is False
+
+    def test_is_processed_data_current_no_raw(self, pipeline):
+        """Test when no raw data exists."""
+        # No raw file means current (nothing to update from)
+        is_current = pipeline._is_processed_data_current('AAPL')
+
+        assert is_current is True
+
+    def test_is_processed_data_current_no_proc(self, pipeline, tmp_path):
+        """Test when raw exists but no processed data."""
+        raw_file = pipeline.raw_data_path / "raw_AAPL_file.json"
+        raw_data = {"candles": [{"datetime": 1704700000000, "open": 150.0, "high": 151.0, "low": 149.0, "close": 150.5, "volume": 1000}]}
+        raw_file.write_text(json.dumps(raw_data))
+
+        is_current = pipeline._is_processed_data_current('AAPL')
+
+        # Raw exists but no processed = not current
+        assert is_current is False
+
+    def test_load_all_raw_data(self, pipeline, tmp_path):
+        """Test loading all raw data from file."""
+        raw_file = pipeline.raw_data_path / "raw_AAPL_file.json"
+        raw_data = {
+            "candles": [
+                {"datetime": 1704700000000, "open": 150.0, "high": 151.0, "low": 149.0, "close": 150.5, "volume": 1000},
+                {"datetime": 1704700060000, "open": 150.5, "high": 152.0, "low": 150.0, "close": 151.0, "volume": 1100},
+                {"datetime": 1704700120000, "open": 151.0, "high": 153.0, "low": 150.5, "close": 152.0, "volume": 1200}
+            ]
+        }
+        raw_file.write_text(json.dumps(raw_data))
+
+        bars = pipeline._load_all_raw_data('AAPL')
+
+        assert len(bars) == 3
+        assert bars[0]['open'] == 150.0
+        assert bars[2]['close'] == 152.0
+
+    @pytest.mark.asyncio
+    async def test_process_and_save_skips_when_current(self, pipeline, tmp_path):
+        """Test that processing is skipped when data is current."""
+        raw_file = pipeline.raw_data_path / "raw_AAPL_file.json"
+        proc_file = pipeline.data_path / "proc_AAPL_file.json"
+
+        ts = int(datetime.now(timezone.utc).timestamp() * 1000)
+
+        raw_data = {"candles": [{"datetime": ts, "open": 150.0, "high": 151.0, "low": 149.0, "close": 150.5, "volume": 1000}]}
+        proc_data = {"bars": [{"Date": datetime.fromtimestamp(ts/1000, tz=timezone.utc).isoformat(), "Open": 150.0, "High": 151.0, "Low": 149.0, "Close": 150.5, "Volume": 1000}]}
+
+        raw_file.write_text(json.dumps(raw_data))
+        proc_file.write_text(json.dumps(proc_data))
+
+        with patch.object(pipeline, '_load_all_raw_data') as mock_load:
+            # Should skip loading because data is current
+            await pipeline._process_and_save('AAPL', [], force_reprocess=False)
+
+            # _load_all_raw_data should NOT have been called
+            mock_load.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_process_and_save_forces_when_requested(self, pipeline, tmp_path):
+        """Test that force_reprocess overrides skip logic."""
+        raw_file = pipeline.raw_data_path / "raw_AAPL_file.json"
+        proc_file = pipeline.data_path / "proc_AAPL_file.json"
+
+        ts = int(datetime.now(timezone.utc).timestamp() * 1000)
+
+        raw_data = {"candles": [{"datetime": ts, "open": 150.0, "high": 151.0, "low": 149.0, "close": 150.5, "volume": 1000}]}
+        proc_data = {"bars": [{"Date": datetime.fromtimestamp(ts/1000, tz=timezone.utc).isoformat(), "Open": 150.0, "High": 151.0, "Low": 149.0, "Close": 150.5, "Volume": 1000}]}
+
+        raw_file.write_text(json.dumps(raw_data))
+        proc_file.write_text(json.dumps(proc_data))
+
+        with patch.object(pipeline, '_load_all_raw_data', return_value=[]) as mock_load:
+            with patch('data.processor.Processor'):
+                await pipeline._process_and_save('AAPL', [], force_reprocess=True)
+
+                # _load_all_raw_data SHOULD have been called
+                mock_load.assert_called_once()

@@ -31,12 +31,14 @@ import numpy as np
 
 from loggers.logger import Logger
 from loggers.file_trade_logger import FileTradeLogger
+from loggers.meta_trade_logger import MetaTradeLogger
 from indicators.technical_indicators import TechnicalIndicators
 from core.broker.mock_broker import MockBroker
 from core.mock_executor import MockExecutor
 from core.position_sizer import KellyPositionSizer
 from core.events.eventhandler import EventHandler
 from core.simulator.gbm_simulator import GBMSimulator
+from core.simulator.historical_simulator import HistoricalDataSimulator
 from core.logic.strategy_routing_manager import StrategyRoutingManager
 from core.logic.trade_logic_manager import DynamicTradeLogicManager
 from core.logic.mock_execution_engine import MockExecutionEngine
@@ -228,6 +230,27 @@ class SimConfig:
     atr_period: int = 14
     warmup_bars: int = 200
 
+    # ==========================================================================
+    # REALISM SETTINGS - Critical for training data quality
+    # ==========================================================================
+    # Slippage: % of price lost to execution (0.001 = 0.1% = 10 bps)
+    # Realistic range: 0.0005 (liquid, small orders) to 0.003 (illiquid, large)
+    slippage: float = 0.001  # 0.1% default - conservative for liquid stocks
+
+    # Commission per trade in dollars (most brokers are $0 for stocks now)
+    commission: float = 0.0
+
+    # Enable meta-trade logging for ML training data
+    meta_logging_enabled: bool = True
+    meta_log_file: str = "meta_trades_sim.jsonl"
+
+    # ==========================================================================
+    # DATA SOURCE SETTINGS
+    # ==========================================================================
+    # Use historical data instead of GBM simulation
+    use_historical_data: bool = False
+    historical_start_index: int = 0  # Starting bar index (skip warmup)
+
     @classmethod
     def from_config_file(cls, symbols: list[str] = None) -> "SimConfig":
         """
@@ -240,6 +263,11 @@ class SimConfig:
             SimConfig populated from config file
         """
         cfg = get_config()
+
+        # Get simulation realism settings if available
+        slippage = getattr(cfg.simulation, 'slippage', 0.001)
+        commission = getattr(cfg.simulation, 'commission', 0.0)
+        meta_logging = getattr(cfg.simulation, 'meta_logging_enabled', True)
 
         return cls(
             symbols=symbols or cfg.general.default_symbols,
@@ -256,6 +284,9 @@ class SimConfig:
             max_portfolio_daily_drawdown=cfg.drawdown_monitor.max_portfolio_daily_drawdown,
             atr_period=cfg.indicators.atr_period,
             warmup_bars=cfg.simulation.warmup_bars,
+            slippage=slippage,
+            commission=commission,
+            meta_logging_enabled=meta_logging,
         )
     
     def __post_init__(self):
@@ -325,12 +356,24 @@ class SimulationRunner:
     
     def _init_components(self):
         """Initialize all components"""
-        # Simulator
-        self.sim = GBMSimulator(
-            self.cfg.symbols,
-            base_price=300.0
-        )
-        
+        # Simulator - choose between GBM (synthetic) or Historical (real data)
+        if self.cfg.use_historical_data:
+            self.sim = HistoricalDataSimulator(
+                symbols=self.cfg.symbols,
+                data_path=self.cfg.historical_data_path,
+                loop_data=True,
+                start_index=self.cfg.historical_start_index,
+            )
+            self.logger.info(
+                f"[SIM] Using HISTORICAL data from {self.cfg.historical_data_path}"
+            )
+        else:
+            self.sim = GBMSimulator(
+                self.cfg.symbols,
+                base_price=300.0
+            )
+            self.logger.info("[SIM] Using GBM (synthetic) data")
+
         # Event handler - use global singleton so GUI receives events
         # NOTE: Must be created BEFORE trade logic manager to pass event handler
         from core.events.eventhandler import get_event_handler
@@ -347,12 +390,30 @@ class SimulationRunner:
             self.cfg.trade_logic_routing,
             event_handler=self.events
         )
-        
-        # Broker
-        self.broker = MockBroker(self.cfg.starting_cash)
-        
+
+        # Broker with realistic slippage/commission
+        self.broker = MockBroker(
+            starting_cash=self.cfg.starting_cash,
+            slippage=self.cfg.slippage,
+            commission=self.cfg.commission,
+        )
+        self.logger.info(
+            f"[SIM] Broker initialized: slippage={self.cfg.slippage:.4f} "
+            f"({self.cfg.slippage*100:.2f}%), commission=${self.cfg.commission:.2f}"
+        )
+
         # Executor
         self.executor = MockExecutor(self.broker)
+
+        # Meta trade logger for ML training data
+        if self.cfg.meta_logging_enabled:
+            self.meta_logger = MetaTradeLogger(
+                log_file=self.cfg.meta_log_file,
+                log_dir=self.cfg.trade_log_dir,
+            )
+            self.logger.info(f"[SIM] Meta-logging enabled: {self.cfg.meta_log_file}")
+        else:
+            self.meta_logger = None
         
         # Position sizer - use config values
         self.sizer = KellyPositionSizer(
@@ -381,7 +442,7 @@ class SimulationRunner:
             self.ddm = None
             self.logger.info("[SIM] Drawdown monitor DISABLED (via config)")
 
-        # Execution engine
+        # Execution engine with meta-logging
         self.engine = MockExecutionEngine(
             broker=self.broker,
             executor=self.executor,
@@ -390,8 +451,12 @@ class SimulationRunner:
             trade_logic_manager=self.trade_logic_manager,
             portfolio=self.portfolio,
             drawdown_monitor=self.ddm,
-            event_handler=self.events
+            event_handler=self.events,
+            meta_logger=self.meta_logger if hasattr(self, 'meta_logger') else None,
         )
+
+        # Provide ATR history reference for meta-model feature computation
+        self.engine.set_atr_hist_reference(self.atr_hist)
     
     # ========================================================================
     # BAR PROCESSING
