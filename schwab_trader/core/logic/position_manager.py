@@ -69,6 +69,7 @@ class PositionManager:
         min_bars_to_hold: int = 3,
         swing_mode: bool = False,
         min_hold_days: int = 1,
+        signal_based_exits: bool = True,
     ):
         """
         Initialize position manager.
@@ -80,6 +81,7 @@ class PositionManager:
             min_bars_to_hold: Minimum bars before allowing TP/reversal exits
             swing_mode: Whether to enforce multi-day holds
             min_hold_days: Days to hold in swing mode before allowing exit
+            signal_based_exits: If False, only exit on SL/TP (no signal reversal exits)
         """
         self.tp_mults = tp_mults or {
             "low_volatility": 1.5,
@@ -97,11 +99,13 @@ class PositionManager:
         self.min_bars_to_hold = min_bars_to_hold
         self.swing_mode = swing_mode
         self.min_hold_days = min_hold_days
+        self.signal_based_exits = signal_based_exits
 
         swing_info = f", swing_mode={swing_mode}" if swing_mode else ""
+        signal_exit_info = "" if signal_based_exits else ", signal_exits=DISABLED"
         logger.info(
             f"PositionManager initialized: exit_fraction={exit_fraction}, "
-            f"min_bars_to_hold={min_bars_to_hold}{swing_info}"
+            f"min_bars_to_hold={min_bars_to_hold}{swing_info}{signal_exit_info}"
         )
 
     # ========================================================================
@@ -288,8 +292,8 @@ class PositionManager:
         if self._check_stop_loss_hit(state, price):
             return True, "Stop loss hit"
 
-        # Signal reversal - but respect minimum hold
-        if state.bars_held >= self.min_bars_to_hold:
+        # Signal reversal - but respect minimum hold (and config)
+        if self.signal_based_exits and state.bars_held >= self.min_bars_to_hold:
             if state.is_long and signal == -1:
                 return True, "Signal reversal: exit long"
             if state.is_short and signal == 1:

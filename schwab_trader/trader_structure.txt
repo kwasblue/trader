@@ -1,0 +1,3797 @@
+================================================================================
+📂 PROJECT STRUCTURE
+Generated: 2026-02-27 15:15:36
+Total Files: 215
+================================================================================
+
+📄 autotrader.py
+   🧱 class InstanceLock
+      ├── def __init__(self, name)
+      ├── def acquire(self)
+      ├── def release(self)
+      ├── def __enter__(self)
+      └── def __exit__(self)
+   🧱 class AutoTraderState
+      (no methods)
+   🧱 class MarketScheduler
+      ├── def __init__(self, logger)
+      ├── def now_et(self)
+      ├── def is_trading_day(self, date)
+      ├── def is_market_open(self)
+      ├── def get_next_market_open(self)
+      ├── def get_market_close_today(self)
+      ├── def seconds_until_market_open(self)
+      └── def seconds_until_market_close(self)
+   🧱 class AutoTrader
+      ├── def __init__(self, symbols, broker, dry_run, update_data_days, day_trade)
+      ├── def _set_state(self, new_state)
+      ├── def stop(self)
+      └── def get_status(self)
+   ⚙️  def signal_handler()
+
+📄 autotrader_ctl.py
+   ⚙️  def get_pid()
+   ⚙️  def is_running()
+   ⚙️  def start(self, args)
+   ⚙️  def stop(self, args)
+   ⚙️  def restart(self, args)
+   ⚙️  def status(self, args)
+   ⚙️  def logs(self, args)
+   ⚙️  def list_symbols(self, args)
+   ⚙️  def add_symbol(self, args)
+   ⚙️  def move_symbol(self, args)
+   ⚙️  def remove_symbol(self, args)
+   ⚙️  def export_lists(self, args)
+   ⚙️  def import_lists(self, args)
+   ⚙️  def _show_positions()
+   ⚙️  def _show_lists_summary()
+   ⚙️  def main()
+
+📄 cache/cache.py
+   🧱 class CacheManager
+      ├── def __new__(self, cls, cache_file)
+      ├── def __init__(self, cache_file)
+      ├── def _load_cache(self)
+      ├── def _save_cache(self)
+      ├── def get(self, section, key)
+      ├── def get_last_processed_date(self, section, stock)
+      ├── def update(self, section, key, value)
+      ├── def delete(self, section, key)
+      └── def clear_all(self)
+
+📄 cli/main.py
+   ⚙️  def cli()
+   ⚙️  def start(self, symbols, broker, dry_run, daemon)
+   ⚙️  def stop()
+   ⚙️  def status()
+   ⚙️  def gui(self, mode, symbols, speed, steps)
+   ⚙️  def preflight(self, verbose, update_data, reauth_schwab)
+   ⚙️  def token()
+   ⚙️  def token_status()
+   ⚙️  def token_refresh(self, force)
+   ⚙️  def token_keeper(self, interval, daemon)
+   ⚙️  def test(self, coverage, verbose, unit, integration, path)
+   ⚙️  def logs(self, follow, lines, file)
+   ⚙️  def stats(self, summary, by_day, by_symbol, by_hour, by_strategy, worst)
+   ⚙️  def symbols()
+   ⚙️  def symbols_list(self, trade, watch)
+   ⚙️  def symbols_add(self, symbol, trade, watch)
+   ⚙️  def symbols_remove(self, symbol)
+   ⚙️  def data()
+   ⚙️  def data_update(self, symbols, days, source)
+   ⚙️  def data_status(self, symbols)
+   ⚙️  def strategy()
+   ⚙️  def strategy_select(self, symbol, days, top, metric, no_walk_forward, regime, save, capital)
+   ⚙️  def strategy_list()
+   ⚙️  def strategy_show(self, symbol)
+   ⚙️  def strategy_refresh()
+   ⚙️  def backtest()
+   ⚙️  def backtest_run(self, symbol, strategy, days, capital, hybrid, verbose)
+   ⚙️  def backtest_compare(self, symbol, strategies, days, metric, capital)
+   ⚙️  def backtest_hybrid(self, symbol, strategies, days, capital)
+   ⚙️  def backtest_categories(self, symbol, categories, days, capital)
+   ⚙️  def backtest_full(self, symbol, strategies, days, output, capital)
+   ⚙️  def backtest_optimize(self, symbols, days, strategies, dry_run)
+   ⚙️  def main()
+
+📄 core/alpaca_runner.py
+   🧱 class AlpacaLiveRunner
+      ├── def __init__(self, symbols, config)
+      ├── def _create_broker(self)
+      ├── def _canonicalize_bar(self, raw_bar)
+      └── def _subscribe_to_data(self)
+   ⚙️  def _ensure_live_config(self, dir_path)
+
+📄 core/backtest/backtest_comparison.py
+   🧱 class StrategyComparisonResult
+      (no methods)
+   🧱 class CategoryComparisonResult
+      (no methods)
+   🧱 class HybridComparisonResult
+      (no methods)
+   🧱 class ComparisonReport
+      ├── def to_markdown(self)
+      ├── def _format_strategy_comparison(self)
+      ├── def _format_category_comparison(self)
+      ├── def _format_hybrid_comparison(self)
+      └── def to_json(self)
+   🧱 class BacktestComparison
+      ├── def __init__(self, data, initial_capital, transaction_cost, symbol)
+      ├── def _get_data_period(self)
+      ├── def compare_strategies(self, strategies, metric, use_hybrid)
+      ├── def compare_categories(self, categories, metric)
+      ├── def compare_hybrid(self, strategies)
+      ├── def full_comparison(self, strategies, categories, include_hybrid, metric)
+      ├── def _rank_by_metric(self, results, metric)
+      ├── def _generate_insights(self, report)
+      └── def generate_report(self, strategy_result, category_result, hybrid_result)
+   ⚙️  def print_strategy_table(self, results, symbol, title)
+   ⚙️  def print_hybrid_table(self, hybrid_result, symbol)
+
+📄 core/backtest/backtester.py
+   🧱 class BacktestConfig
+      (no methods)
+   🧱 class VectorizedBacktester
+      ├── def __init__(self, data, initial_capital, transaction_cost, slippage_model)
+      ├── def run(self, strategy_name, strategy_params, position_sizing, position_size, stop_loss_atr, take_profit_atr)
+      └── def get_metrics(self, result)
+
+📄 core/backtest/benchmarking.py
+   🧱 class BenchmarkComparison
+      (no methods)
+   ⚙️  def compare_to_benchmark(self, strategy_returns, benchmark_returns, risk_free_rate)
+   ⚙️  def calculate_rolling_metrics(self, strategy_returns, benchmark_returns, window, risk_free_rate)
+   ⚙️  def calculate_drawdown_analysis(self, returns)
+
+📄 core/backtest/monte_carlo.py
+   🧱 class MonteCarloResult
+      (no methods)
+   ⚙️  def monte_carlo_simulation(self, trades, initial_capital, n_simulations, seed)
+   ⚙️  def bootstrap_returns(self, returns, n_simulations, block_size, seed)
+
+📄 core/backtest/optimization.py
+   🧱 class OptimizationResult
+      (no methods)
+   ⚙️  def grid_search(self, data, strategy_name, param_grid, metric, initial_capital, transaction_cost, n_jobs, verbose)
+   ⚙️  def evaluate_params(self, params_tuple)
+   ⚙️  def random_search(self, data, strategy_name, param_distributions, n_iter, metric, initial_capital, transaction_cost, verbose, seed)
+
+📄 core/backtest/regime_backtest.py
+   ⚙️  def calculate_atr(self, high, low, close, period)
+   ⚙️  def classify_regime(self, atr, atr_history)
+   🧱 class RegimeStats
+      (no methods)
+   🧱 class StrategyRegimeResult
+      (no methods)
+   🧱 class RegimeAnalysisResult
+      (no methods)
+   🧱 class RegimeBacktester
+      ├── def __init__(self, data, symbol, initial_capital, transaction_cost, strategies)
+      ├── def _normalize_columns(self)
+      ├── def _calculate_regimes(self)
+      ├── def get_regime_distribution(self)
+      ├── def _generate_signals(self, strategy_name)
+      ├── def _backtest_regime_segment(self, strategy_name, regime, signals)
+      ├── def run_regime_analysis(self, metric, verbose)
+      ├── def print_results(self, result)
+      └── def save_routing_config(self, result, config_path, merge)
+   ⚙️  def run_multi_symbol_regime_analysis(self, symbols, days, strategies, metric, save_config, verbose)
+
+📄 core/backtest/slippage_models.py
+   🧱 class SlippageModel
+      └── def calculate_slippage(self, price, quantity, side, volume, volatility)
+   🧱 class FixedSlippage
+      ├── def __init__(self, slippage_pct)
+      └── def calculate_slippage(self, price, quantity, side, volume, volatility)
+   🧱 class RandomSlippage
+      ├── def __init__(self, min_pct, max_pct)
+      └── def calculate_slippage(self, price, quantity, side, volume, volatility)
+   🧱 class VolumeBasedSlippage
+      ├── def __init__(self, base_slippage, volume_impact, max_slippage)
+      └── def calculate_slippage(self, price, quantity, side, volume, volatility)
+   🧱 class VolatilityAdjustedSlippage
+      ├── def __init__(self, base_slippage, volatility_multiplier, max_slippage)
+      └── def calculate_slippage(self, price, quantity, side, volume, volatility)
+   🧱 class CompositeSlippage
+      ├── def __init__(self, models, weights)
+      └── def calculate_slippage(self, price, quantity, side, volume, volatility)
+
+📄 core/backtest/strategy_selector.py
+   🧱 class StrategyEvaluation
+      (no methods)
+   🧱 class SelectionResult
+      (no methods)
+   🧱 class StrategySelector
+      ├── def __init__(self, data, initial_capital, transaction_cost)
+      ├── def _get_available_strategies(self)
+      ├── def select_best_strategies(self, symbol, top_n, metric, use_walk_forward, walk_forward_train_size, walk_forward_test_size, parallel, n_jobs, verbose)
+      ├── def _evaluate_strategy(self, strategy_name, use_walk_forward, walk_forward_train_size, walk_forward_test_size, verbose)
+      ├── def _calculate_composite_score(self, metrics, weights)
+      ├── def _print_results(self, result)
+      └── def save_to_config(self, result, config_dir, regime)
+   ⚙️  def select_best_strategies(self, symbol, data, top_n)
+
+📄 core/backtest/unified_backtest_runner.py
+   ⚙️  def get_strategy_category(self, strategy_name)
+   ⚙️  def get_strategies_by_category(self, category)
+   🧱 class BacktestConfig
+      (no methods)
+   🧱 class TradeRecord
+      (no methods)
+   🧱 class BacktestMetrics
+      └── def to_dict(self)
+   🧱 class BacktestResult
+      └── def get_trades_df(self)
+   🧱 class UnifiedBacktestRunner
+      ├── def __init__(self, data, slippage_model)
+      ├── def _normalize_columns(self)
+      ├── def _calculate_atr(self, period)
+      ├── def _build_daily_context(self)
+      ├── def run(self, config)
+      ├── def _generate_signals(self, strategy)
+      ├── def _simulate(self, signals, config, hybrid_sizer)
+      ├── def _get_exec_price(self, price, quantity, side, volume, atr)
+      ├── def _calculate_metrics(self, result_df, trades, config)
+      ├── def run_strategy(self, strategy_name, strategy_params, use_hybrid)
+      └── def compare_hybrid(self, strategy_name, strategy_params)
+   ⚙️  def list_available_strategies()
+   ⚙️  def list_categories()
+
+📄 core/backtest/validation.py
+   🧱 class ValidationResult
+      (no methods)
+   ⚙️  def validate_ohlcv_data(self, data, required_columns, fix_issues)
+
+📄 core/backtest/walk_forward.py
+   🧱 class WalkForwardResult
+      (no methods)
+   ⚙️  def walk_forward_analysis(self, data, strategy_name, param_grid, train_size, test_size, step_size, metric, initial_capital, verbose)
+   ⚙️  def anchored_walk_forward(self, data, strategy_name, param_grid, initial_train_size, test_size, metric, initial_capital, verbose)
+
+📄 core/base/base_broker_interface.py
+   🧱 class BaseBrokerInterface
+      ├── def __init__(self)
+      ├── def get_available_funds(self)
+      ├── def get_default_account(self)
+      ├── def get_quote(self, symbol)
+      ├── def mark_price(self, symbol, price)
+      ├── def _validate_order(self, symbol, qty, side, order_type, limit_price, stop_price)
+      └── def __repr__(self)
+
+📄 core/base/base_indicator.py
+   🧱 class BaseIndicator
+      ├── def __init__(self, df)
+      └── def compute(self)
+
+📄 core/base/base_live_runner.py
+   🧱 class NumpyBarBuffer
+      ├── def __init__(self, maxlen)
+      ├── def append(self, bar)
+      ├── def __len__(self)
+      ├── def get_arrays(self)
+      ├── def get_timestamps(self)
+      └── def to_dataframe(self)
+   🧱 class BaseLiveRunner
+      ├── def __init__(self, symbols, config)
+      ├── def _create_broker(self)
+      ├── def _canonicalize_bar(self, raw_data)
+      ├── def _subscribe_to_data(self)
+      ├── def _on_reconciler_halt(self, message)
+      ├── def _bar_bucket(self, ts, timeframe_sec)
+      ├── def _df_from_history(self, symbol)
+      ├── def _symbol_mv(self, symbol, last_px)
+      ├── def stop(self)
+      └── def _compute_atr_percentile(self, symbol, current_atr)
+
+📄 core/base/base_strategy.py
+   🧱 class BaseStrategy
+      ├── def __init__(self)
+      ├── def generate_signal(self, data)
+      ├── def initialize(self)
+      ├── def on_bar(self, bar)
+      ├── def on_data(self, data, vectorized)
+      ├── def generate_signals_vectorized(self, data)
+      ├── def cleanup(self)
+      ├── def get_param(self, key, default)
+      ├── def set_param(self, key, value)
+      ├── def validate_data(self, data)
+      ├── def log(self, message, level)
+      ├── def __repr__(self)
+      └── def __str__(self)
+
+📄 core/base/event_handler_base.py
+   🧱 class Event
+      ├── def __init__(self, name, payload)
+      └── def __repr__(self)
+   🧱 class EventHandlerBase
+      ├── def __init__(self)
+      ├── def unsubscribe(self, event_name, callback)
+      ├── def get_event_names(self)
+      ├── def subscriber_count(self, event_name)
+      ├── def has_subscribers(self, event_name)
+      ├── def clear_all_subscribers(self)
+      └── def __repr__(self)
+
+📄 core/base/execution_engine_base.py
+   🧱 class ExecutionEngineBase
+      ├── def __init__(self, broker, executor, sizer, performance_tracker, trade_logic_manager, portfolio, position_manager)
+      ├── def handle_signal(self, context, state)
+      ├── def _determine_action(self, symbol, state, signal, reason)
+      ├── def _setup_approval_state(self, symbol, state)
+      ├── def _get_or_create_state(self, symbol)
+      ├── def _check_trade_approval(self, trade_approver, context, state)
+      ├── def _get_exit_quantity(self, symbol, action_type, trade_logic)
+      ├── def _post_execution(self, symbol, state, result, action_type, regime, strategy_name)
+      ├── def _update_portfolio_after_execution(self, symbol, result)
+      ├── def on_market_open(self)
+      ├── def on_market_close(self)
+      ├── def on_new_bar(self, symbol, bar)
+      ├── def emergency_stop(self)
+      ├── def get_portfolio_summary(self)
+      ├── def get_performance_metrics(self)
+      ├── def validate_state(self)
+      └── def __repr__(self)
+
+📄 core/base/executor_base.py
+   🧱 class BaseExecutor
+      ├── def __init__(self)
+      ├── def buy(self, symbol, qty, order_type)
+      ├── def sell(self, symbol, qty, order_type)
+      ├── def place_oco_order(self, symbol, qty, stop_price, limit_price)
+      ├── def get_open_orders(self)
+      ├── def cancel_order(self, order_id)
+      ├── def get_order_status(self, order_id)
+      ├── def log_order_response(self, response)
+      ├── def retry_failed_order(self)
+      └── def __repr__(self)
+
+📄 core/base/position_sizer_base.py
+   🧱 class PositionSizerBase
+      ├── def __init__(self)
+      ├── def calculate_position_size(self, symbol, price, account_value, signal_strength, atr, stop_loss_price)
+      ├── def adjust_for_volatility(self, base_size, atr, price)
+      ├── def adjust_for_signal_strength(self, base_size, signal_strength)
+      ├── def apply_minimum_size(self, size, min_size)
+      ├── def apply_maximum_size(self, size, max_size)
+      ├── def calculate_stop_distance(self, price, stop_loss_price, atr, atr_multiplier)
+      ├── def get_param(self, key, default)
+      ├── def set_param(self, key, value)
+      └── def __repr__(self)
+
+📄 core/base/risk_model_base.py
+   🧱 class RiskModelBase
+      ├── def __init__(self)
+      ├── def compute_metrics(self, returns, prices, benchmark_returns)
+      ├── def compute_metric(self, returns, metric_name)
+      ├── def compute_total_return(self, returns)
+      ├── def compute_annualized_return(self, returns)
+      ├── def compute_volatility(self, returns, annualized)
+      ├── def compute_sharpe_ratio(self, returns)
+      ├── def compute_sortino_ratio(self, returns)
+      ├── def compute_max_drawdown(self, returns)
+      ├── def compute_current_drawdown(self, returns)
+      ├── def compute_calmar_ratio(self, returns)
+      ├── def compute_var(self, returns, confidence)
+      ├── def compute_cvar(self, returns, confidence)
+      ├── def compute_win_rate(self, returns)
+      ├── def compute_profit_factor(self, returns)
+      ├── def validate_returns(self, returns, min_periods)
+      ├── def get_param(self, key, default)
+      ├── def set_param(self, key, value)
+      └── def __repr__(self)
+
+📄 core/base/sentiment_model_base.py
+   🧱 class SentimentModelBase
+      ├── def analyze_text(self, text)
+      ├── def analyze_batch(self, texts)
+      └── def analyze_asset(self, symbol)
+
+📄 core/base/trade_logger_base.py
+   🧱 class TradeLoggerBase
+      ├── def __init__(self)
+      ├── def log_trade(self, symbol, action, price, quantity, timestamp, order_id, commission, slippage, pnl, strategy, regime, sl, tp, trailing_stop, cash_before, cash_after, position_before, position_after, notes)
+      ├── def log_order_status(self, order_id, symbol, status, side, quantity, filled_quantity, avg_price, timestamp, reason)
+      ├── def log_error(self, message, error, context, timestamp)
+      ├── def log_info(self, message, context, timestamp)
+      ├── def log_warning(self, message, context, timestamp)
+      ├── def log_summary(self, summary_stats, period, timestamp)
+      ├── def log_position_update(self, symbol, quantity, avg_price, current_price, unrealized_pnl, timestamp)
+      ├── def flush(self)
+      ├── def close(self)
+      ├── def get_trades(self, symbol, start_date, end_date, strategy)
+      ├── def get_metrics(self)
+      ├── def _get_timestamp(self, timestamp)
+      ├── def _format_trade_id(self, symbol, timestamp, side)
+      ├── def log_from_order_result(self, result)
+      ├── def get_param(self, key, default)
+      ├── def __repr__(self)
+      ├── def __enter__(self)
+      └── def __exit__(self, exc_type, exc_val, exc_tb)
+
+📄 core/base/trade_logic_manager_base.py
+   🧱 class TradeApprover
+      ├── def __init__(self)
+      ├── def should_trade(self, context, state, account_positions)
+      ├── def can_enter_position(self, symbol, state, side)
+      ├── def can_exit_position(self, symbol, state, side)
+      ├── def check_cooldown(self, symbol, state, current_time)
+      ├── def on_bar(self, symbol)
+      ├── def on_trade(self, symbol)
+      ├── def reset_bar_cooldown(self, symbol)
+      ├── def check_position_limit(self, current_positions, max_positions)
+      ├── def check_market_hours(self, market_open, allow_after_hours)
+      ├── def check_signal_strength(self, signal, signal_strength, min_strength)
+      ├── def check_regime_compatibility(self, regime, allowed_regimes)
+      ├── def is_in_position(self, state)
+      ├── def is_long(self, state)
+      ├── def is_short(self, state)
+      ├── def is_flat(self, state)
+      ├── def get_position_side(self, state)
+      ├── def get_param(self, key, default)
+      ├── def set_param(self, key, value)
+      └── def __repr__(self)
+   🧱 class TradeLogicManagerBase
+      └── def __init__(self)
+
+📄 core/broker/alpaca_broker.py
+   ⚙️  def _map_side(self, side)
+   ⚙️  def _map_tif(self, tif)
+   🧱 class AlpacaBroker
+      ├── def __init__(self, api_key, api_secret, event_handler, paper)
+      ├── def connect_sync(self)
+      ├── def disconnect(self)
+      ├── def subscribe_bars(self, callback, symbol)
+      ├── def _resubscribe_all(self)
+      ├── def _recreate_stream_and_resubscribe(self)
+      ├── def record_bar_received(self, symbol)
+      ├── def _get_stale_symbols(self)
+      ├── def execute_trade(self, trade)
+      ├── def submit_market_order(self, symbol, qty, side)
+      ├── def get_default_account(self)
+      ├── def get_quote(self, symbol)
+      ├── def get_available_funds(self)
+      ├── def get_buying_power(self)
+      ├── def mark_price(self, symbol, price)
+      ├── def _mk_order_result(self, o)
+      ├── def _mk_position_view(self, p)
+      └── def _mk_broker_snapshot(self, a, positions)
+   ⚙️  def _submit()
+   ⚙️  def _cancel()
+   ⚙️  def _submit()
+   ⚙️  def _submit()
+   ⚙️  def _get()
+   ⚙️  def _get_all()
+   ⚙️  def _acct()
+   ⚙️  def _clock()
+   ⚙️  def _orders()
+   ⚙️  def _status()
+
+📄 core/broker/coinbase_broker.py
+   🧱 class CoinbaseAuth
+      (no methods)
+   🧱 class CoinbaseBroker
+      ├── def __init__(self, auth)
+      ├── def _make_rest_client(self, auth, timeout)
+      ├── def open_ws(self, on_message)
+      ├── def subscribe_ws(self, product_ids, channels)
+      ├── def close_ws(self)
+      ├── def open_user_ws(self, on_message)
+      ├── def subscribe_user_ws(self, channels)
+      └── def close_user_ws(self)
+   ⚙️  def safe_asyncio_run(self, coro)
+   🧱 class _StubCB
+      └── def __init__(self)
+
+📄 core/broker/mock_broker.py
+   🧱 class MockBroker
+      ├── def __init__(self, starting_cash, slippage, commission, event_handler, respect_market_hours)
+      ├── def get_quote(self, symbol)
+      ├── def get_available_funds(self)
+      ├── def get_buying_power(self)
+      ├── def has_sufficient_funds(self, symbol, qty)
+      ├── def get_default_account(self)
+      ├── def mark_price(self, symbol, price)
+      ├── def reset(self, starting_cash)
+      └── def __repr__(self)
+
+📄 core/broker/schwab_broker.py
+   ⚙️  def _normalize_side(self, side)
+   🧱 class SchwabBroker
+      ├── def __init__(self, client, session, account_number)
+      ├── def is_connected(self)
+      ├── def set_health_callback(self, callback)
+      ├── def _instruction(self, side)
+      ├── def _duration(self, tif)
+      ├── def _fmt_price(self, v)
+      ├── def get_default_account(self)
+      ├── def get_quote(self, symbol, fallback_to_cache)
+      ├── def get_available_funds(self)
+      ├── def get_buying_power(self)
+      ├── def mark_price(self, symbol, price)
+      ├── def connect_stream(self, api_key, secret_key)
+      ├── def subscribe_quotes(self, callback, symbol)
+      ├── def unsubscribe_quotes(self, callback, symbol)
+      ├── def subscribe_bars(self, callback, symbol)
+      ├── def _mk_order_result(self, resp)
+      ├── def _mk_position_view(self, p)
+      └── def _mk_broker_snapshot(self, acct, positions)
+
+📄 core/config_loader.py
+   🧱 class GeneralConfig
+      (no methods)
+   🧱 class SimulationConfig
+      (no methods)
+   🧱 class AlpacaConfig
+      (no methods)
+   🧱 class SchwabConfig
+      (no methods)
+   🧱 class RiskConfig
+      (no methods)
+   🧱 class DrawdownMonitorConfig
+      (no methods)
+   🧱 class PositionSizerConfig
+      (no methods)
+   🧱 class TradeLogicConfig
+      (no methods)
+   🧱 class IndicatorsConfig
+      (no methods)
+   🧱 class DataConfig
+      (no methods)
+   🧱 class GUIConfig
+      (no methods)
+   🧱 class LoggingConfig
+      (no methods)
+   🧱 class AutoTraderConfig
+      (no methods)
+   🧱 class ErrorRecoveryConfig
+      (no methods)
+   🧱 class MLTrainingConfig
+      (no methods)
+   🧱 class HybridSizingConfig
+      (no methods)
+   🧱 class TradingConfig
+      (no methods)
+   ⚙️  def _dict_to_dataclass(self, cls, data)
+   ⚙️  def _apply_env_overrides(self, config)
+   ⚙️  def _parse_env_value(self, value)
+   ⚙️  def load_config(self, config_path)
+   ⚙️  def get_config(self, reload)
+   ⚙️  def set_config(self, config)
+   ⚙️  def enable_day_trade_mode()
+   ⚙️  def reload_config()
+   ⚙️  def get_app_path()
+   ⚙️  def get_logs_path()
+   ⚙️  def get_data_path()
+   ⚙️  def get_raw_data_path()
+   ⚙️  def get_tokens_path()
+   ⚙️  def get_env_path()
+   ⚙️  def validate_config(self, config)
+   🧱 class _ConfigProxy
+      └── def __getattr__(self, name)
+   ⚙️  def create_position_sizer(self, config)
+   ⚙️  def create_drawdown_monitor(self, config)
+   ⚙️  def create_trade_approver(self, config, event_handler)
+   ⚙️  def create_position_manager(self, config)
+
+📄 core/contracts/events.py
+   🧱 class BarPayload
+      (no methods)
+   🧱 class PricePayload
+      (no methods)
+   🧱 class RegimePayload
+      (no methods)
+   🧱 class NewsPayload
+      (no methods)
+   🧱 class TradePayload
+      (no methods)
+   🧱 class OrderStatusPayload
+      (no methods)
+   🧱 class PositionPayload
+      (no methods)
+   🧱 class PnLPayload
+      (no methods)
+   🧱 class PerformanceMetricsPayload
+      (no methods)
+   🧱 class HeatmapPayload
+      (no methods)
+   🧱 class DistributionPayload
+      (no methods)
+   🧱 class TradeStatsPayload
+      (no methods)
+   🧱 class RegimePerfPayload
+      (no methods)
+   🧱 class HistoryPayload
+      (no methods)
+   🧱 class BenchmarkPayload
+      (no methods)
+   🧱 class ReplayFramePayload
+      (no methods)
+   🧱 class AlertPayload
+      (no methods)
+   🧱 class LogPayload
+      (no methods)
+   🧱 class HealthPayload
+      (no methods)
+   🧱 class GuardrailPayload
+      (no methods)
+   🧱 class SessionPayload
+      (no methods)
+   🧱 class ConfigSnapshotPayload
+      (no methods)
+   🧱 class StrategySignalPayload
+      (no methods)
+   🧱 class FlattenSymbolPayload
+      (no methods)
+   🧱 class PlaceOrderPayload
+      (no methods)
+   🧱 class SetStrategyPayload
+      (no methods)
+   🧱 class FlattenAllPayload
+      (no methods)
+   🧱 class CancelAllPayload
+      (no methods)
+   🧱 class TogglePanicPayload
+      (no methods)
+   🧱 class HaltedPayload
+      (no methods)
+   🧱 class HaltStatePayload
+      (no methods)
+   🧱 class CooldownStatePayload
+      (no methods)
+   🧱 class OrderQueueUpdatePayload
+      (no methods)
+   🧱 class ManualOrderPayload
+      (no methods)
+
+📄 core/contracts/meta_types.py
+   🧱 class TradeEntryContext
+      └── def to_dict(self)
+   🧱 class TradeExitContext
+      └── def to_dict(self)
+
+📄 core/contracts/types.py
+   🧱 class SignalPayload
+      (no methods)
+   🧱 class SignalContext
+      ├── def from_kwargs(self, cls, symbol, signal, price, atr, regime, timestamp, strategy_name, confidence, df, market_open, order_type, time_in_force, limit_price, stop_price)
+      ├── def is_buy(self)
+      ├── def is_sell(self)
+      └── def is_hold(self)
+   🧱 class OrderResult
+      ├── def __bool__(self)
+      ├── def to_dict(self)
+      ├── def is_filled(self)
+      ├── def is_rejected(self)
+      └── def filled_value(self)
+   🧱 class PositionView
+      ├── def to_dict(self)
+      ├── def avg_price(self)
+      └── def unrealized_pnl(self)
+   🧱 class BrokerSnapshot
+      └── def to_dict(self)
+
+📄 core/credential_validator.py
+   🧱 class CredentialStatus
+      (no methods)
+   🧱 class ValidationResult
+      (no methods)
+   🧱 class CredentialValidator
+      ├── def __init__(self, config_path)
+      ├── def get_best_data_source(self, results)
+      ├── def get_best_trading_broker(self, results)
+      ├── def _find_schwab_token_file(self)
+      ├── def _get_schwab_token_paths(self)
+      ├── def _check_access_token(self, token_data)
+      └── def _check_refresh_token(self, token_data)
+
+📄 core/drawdown_monitor.py
+   ⚙️  def _try_create_task(self, coro)
+   🧱 class DrawdownMonitor
+      ├── def __init__(self, max_symbol_drawdown, max_symbol_daily_drawdown, symbol_cooldown_seconds, max_portfolio_drawdown, max_portfolio_daily_drawdown, portfolio_cooldown_seconds)
+      ├── def start_new_day(self, portfolio_equity, per_symbol_equity)
+      ├── def update_portfolio(self, portfolio_equity)
+      ├── def update_symbol(self, symbol, symbol_equity)
+      ├── def can_trade(self, symbol)
+      ├── def is_symbol_blocked(self, symbol)
+      ├── def is_symbol_in_cooldown(self, symbol)
+      ├── def is_portfolio_blocked(self)
+      ├── def is_portfolio_in_cooldown(self)
+      ├── def get_portfolio_drawdown(self)
+      ├── def get_portfolio_daily_drawdown(self)
+      ├── def get_symbol_drawdown(self, symbol)
+      ├── def get_symbol_daily_drawdown(self, symbol)
+      ├── def unlock_symbol(self, symbol)
+      ├── def reset_symbol(self, symbol)
+      ├── def unlock_portfolio(self)
+      ├── def reset_portfolio(self)
+      ├── def set_persistence_path(self, path)
+      ├── def _persist_state(self)
+      ├── def _serialize_state(self)
+      ├── def save_state(self)
+      ├── def load_state(self, path)
+      └── def _deserialize_state(self, state)
+
+📄 core/enums.py
+   🧱 class OrderSide
+      ├── def __str__(self)
+      ├── def sign(self)
+      └── def opposite(self)
+   🧱 class OrderType
+      ├── def __str__(self)
+      ├── def requires_limit_price(self)
+      └── def requires_stop_price(self)
+   🧱 class OrderStatus
+      ├── def __str__(self)
+      ├── def is_open(self)
+      └── def is_closed(self)
+   🧱 class TimeInForce
+      └── def __str__(self)
+   🧱 class PositionSide
+      ├── def __str__(self)
+      ├── def sign(self)
+      └── def from_quantity(self, cls, qty)
+   🧱 class PositionState
+      ├── def __str__(self)
+      ├── def is_pending(self)
+      └── def allows_new_orders(self)
+   🧱 class MarketStatus
+      ├── def __str__(self)
+      └── def is_tradeable(self)
+   🧱 class AssetClass
+      └── def __str__(self)
+   🧱 class SignalType
+      ├── def __str__(self)
+      ├── def is_entry(self)
+      ├── def is_exit(self)
+      └── def side(self)
+   🧱 class StrategyState
+      └── def __str__(self)
+   🧱 class ExecutionType
+      ├── def __str__(self)
+      └── def is_live(self)
+   🧱 class FillType
+      └── def __str__(self)
+   🧱 class RiskLevel
+      └── def __str__(self)
+   🧱 class PositionSizingMethod
+      └── def __str__(self)
+   🧱 class EventPriority
+      └── def __str__(self)
+   🧱 class BarInterval
+      ├── def __str__(self)
+      └── def seconds(self)
+   🧱 class DataFeed
+      └── def __str__(self)
+   ⚙️  def parse_order_side(self, value)
+   ⚙️  def parse_order_type(self, value)
+   ⚙️  def parse_time_in_force(self, value)
+
+📄 core/events/event_models.py
+   🧱 class OrderStatusEvent
+      ├── def validate_side(self, cls, v)
+      ├── def validate_status(self, cls, v)
+      └── def validate_filled_qty(self, cls, v, info)
+   🧱 class Config
+      (no methods)
+   🧱 class TradeEvent
+      ├── def validate_side(self, cls, v)
+      ├── def trade_value(self)
+      └── def net_value(self)
+   🧱 class Config
+      (no methods)
+   🧱 class PnLUpdateEvent
+      ├── def total_pnl(self)
+      └── def drawdown_pct(self)
+   🧱 class Config
+      (no methods)
+   🧱 class PositionUpdateEvent
+      ├── def market_value(self)
+      ├── def is_long(self)
+      ├── def is_short(self)
+      └── def is_flat(self)
+   🧱 class Config
+      (no methods)
+   🧱 class SignalEvent
+      └── def validate_side(self, cls, v)
+   🧱 class Config
+      (no methods)
+   🧱 class RiskAlertEvent
+      ├── def breach_amount(self)
+      └── def breach_pct(self)
+   🧱 class Config
+      (no methods)
+   🧱 class SystemEvent
+      (no methods)
+   🧱 class Config
+      (no methods)
+   ⚙️  def validate_event(self, event_cls, data)
+
+📄 core/events/eventhandler.py
+   🧱 class EventHandler
+      ├── def __new__(self, cls)
+      ├── def __init__(self)
+      ├── def subscribe_sync(self, event_name, callback)
+      ├── def has_subscribers(self, event_name)
+      ├── def _safe_sync_call(self, cb, event)
+      ├── def unsubscribe(self, event_name, callback)
+      └── def get_event_names(self)
+   ⚙️  def get_event_handler()
+
+📄 core/events/protocol.py
+   ⚙️  def _make_protocol()
+
+📄 core/events/validation.py
+   ⚙️  def validate_payload(self, payload, schema)
+
+📄 core/exceptions.py
+   🧱 class TradingSystemError
+      (no methods)
+   🧱 class BrokerError
+      └── def __init__(self, message, broker_name)
+   🧱 class ConnectionError
+      (no methods)
+   🧱 class AuthenticationError
+      (no methods)
+   🧱 class OrderError
+      (no methods)
+   🧱 class OrderNotFoundError
+      └── def __init__(self, order_id, message)
+   🧱 class OrderRejectedError
+      └── def __init__(self, reason, order_details)
+   🧱 class OrderCancellationError
+      (no methods)
+   🧱 class InsufficientFundsError
+      └── def __init__(self, required, available)
+   🧱 class PositionError
+      (no methods)
+   🧱 class PositionNotFoundError
+      └── def __init__(self, symbol)
+   🧱 class InsufficientPositionError
+      └── def __init__(self, symbol, requested, available)
+   🧱 class MarketDataError
+      (no methods)
+   🧱 class SymbolNotFoundError
+      └── def __init__(self, symbol)
+   🧱 class MarketClosedError
+      └── def __init__(self, message)
+   🧱 class DataUnavailableError
+      (no methods)
+   🧱 class StaleDataError
+      └── def __init__(self, symbol, age_seconds, max_age)
+   🧱 class StrategyError
+      (no methods)
+   🧱 class StrategyInitializationError
+      (no methods)
+   🧱 class StrategyConfigurationError
+      (no methods)
+   🧱 class SignalGenerationError
+      (no methods)
+   🧱 class RiskViolationError
+      └── def __init__(self, rule, message)
+   🧱 class ConfigurationError
+      (no methods)
+   🧱 class MissingConfigError
+      └── def __init__(self, key)
+   🧱 class InvalidConfigError
+      └── def __init__(self, key, value, reason)
+   🧱 class ValidationError
+      (no methods)
+   🧱 class InvalidParameterError
+      └── def __init__(self, param_name, value, reason)
+   🧱 class InvalidOrderError
+      (no methods)
+   🧱 class BacktestError
+      (no methods)
+   🧱 class BacktestDataError
+      (no methods)
+   🧱 class BacktestConfigError
+      (no methods)
+   🧱 class RiskManagementError
+      (no methods)
+   🧱 class PositionLimitExceededError
+      └── def __init__(self, symbol, requested, limit)
+   🧱 class DailyLossLimitExceededError
+      └── def __init__(self, current_loss, limit)
+   🧱 class MaxDrawdownExceededError
+      └── def __init__(self, current_dd, max_dd)
+   ⚙️  def format_error_context(self, error)
+
+📄 core/executor.py
+   🧱 class LiveExecutor
+      ├── def __init__(self, broker, dry_run)
+      ├── def place_order(self, symbol, qty, side, order_type)
+      ├── def buy(self, symbol, qty)
+      ├── def sell(self, symbol, qty)
+      ├── def place_oco_order(self, symbol, qty, stop_price, limit_price)
+      ├── def cancel_order(self, order_id)
+      ├── def get_open_orders(self, symbol)
+      ├── def get_order_status(self, order_id)
+      ├── def _extract_order_id(self, response)
+      ├── def log_order_response(self, response)
+      └── def retry_failed_order(self, symbol, side, qty)
+
+📄 core/historical_data_updater.py
+   🧱 class HistoricalDataUpdater
+      ├── def __init__(self, api_key, api_secret, data_path, timeframe)
+      ├── def get_data_freshness(self, symbol)
+      ├── def _get_last_timestamp(self, symbol)
+      └── def _save_bars(self, symbol, new_bars, append)
+   ⚙️  def _do_fetch()
+
+📄 core/historical_loader.py
+   🧱 class HistoricalBarLoader
+      ├── def __init__(self, path)
+      ├── def load_last_n_bars(self, symbol, n)
+      ├── def get_latest_close_price(self, symbol)
+      └── def _normalize_row(self, row, fallback_symbol)
+   ⚙️  def _num(self, x)
+
+📄 core/logging_config.py
+   ⚙️  def get_component_logger(self, name, structured, context)
+   ⚙️  def get_trading_logger(self, symbol, strategy, correlation_id)
+   ⚙️  def format_log_message(self, message, correlation_id, symbol)
+
+📄 core/logic/default_trade_logic.py
+   🧱 class StandardTradeApprover
+      ├── def __init__(self, tp_mult_low, tp_mult_normal, tp_mult_high, sl_mult_low, sl_mult_normal, sl_mult_high, exit_fraction, trailing_stop, min_bars_to_hold, swing_mode, min_hold_days, cooldown_seconds, cooldown_bars, cooldown_mode, max_positions, event_handler)
+      ├── def should_trade(self, context, state, account_positions)
+      ├── def can_enter_position(self, symbol, state, side)
+      ├── def _can_enter_position_impl(self, symbol, state, side, account_positions, market_open)
+      ├── def can_exit_position(self, symbol, state, side)
+      ├── def _emit_signal_event(self, symbol, state, signal, price, regime)
+      └── def normalize_regime(self, regime)
+   🧱 class DefaultTradeLogicManager
+      └── def __init__(self)
+
+📄 core/logic/hybrid_position_sizer.py
+   🧱 class HybridSizingResult
+      (no methods)
+   🧱 class HybridPositionSizer
+      ├── def __init__(self, enabled, config)
+      ├── def calculate(self, signal, confidence, daily_context)
+      ├── def _get_confidence_tier(self, confidence)
+      ├── def _get_trend(self, daily_context)
+      ├── def _is_aligned(self, signal, trend)
+      ├── def _build_reason(self, tier, confidence, aligned, trend, multiplier)
+      ├── def should_trade(self, signal, confidence, daily_context)
+      └── def get_daily_trend(self, daily_context)
+
+📄 core/logic/live_execution_engine.py
+   ⚙️  def get_default_position_manager()
+   🧱 class LiveExecutionEngine
+      ├── def __init__(self, broker, executor, sizer, performance_tracker, trade_logic_manager, portfolio, sync_on_start, reconciler, event_handler, daily_loss_limit, drawdown_monitor, position_manager)
+      ├── def start_new_trading_day(self)
+      ├── def record_trade_pnl(self, realized_pnl)
+      ├── def _check_daily_loss_limit_breached(self)
+      ├── def get_daily_pnl(self)
+      ├── def get_daily_loss_remaining(self)
+      ├── def invalidate_position_cache(self, symbol)
+      ├── def _calculate_quantity(self, symbol, state, action_type, price, atr, regime, trade_logic)
+      ├── def _update_portfolio_after_execution(self, symbol, result)
+      ├── def _log_meta_entry(self, context, state, result, qty)
+      ├── def _log_meta_exit(self, symbol, state, result, action_type)
+      ├── def set_atr_hist_reference(self, atr_hist)
+      └── def _post_execution(self, symbol, state, result, action_type, regime, strategy_name)
+
+📄 core/logic/mock_execution_engine.py
+   🧱 class MockExecutionEngine
+      ├── def __init__(self, broker, executor, sizer, performance_tracker, trade_logic_manager, portfolio, drawdown_monitor, event_handler, position_manager, meta_logger)
+      ├── def _execute_mock_trade(self, symbol, state, side, qty, price, action_type)
+      ├── def _update_mock_portfolio(self, symbol, side, qty, price)
+      ├── def _calculate_quantity(self, symbol, state, action_type, price, atr, regime, trade_logic)
+      ├── def _update_portfolio_after_execution(self, symbol, result)
+      ├── def _post_execution(self, symbol, state, result, action_type, regime, strategy_name)
+      ├── def _log_meta_entry(self, context, state, result, qty)
+      ├── def _log_meta_exit(self, symbol, state, result, action_type)
+      ├── def set_atr_hist_reference(self, atr_hist)
+      └── def _emit_alert(self, level, message, symbol)
+
+📄 core/logic/portfolio_state.py
+   🧱 class SymbolPosition
+      ├── def is_long(self)
+      ├── def is_short(self)
+      ├── def is_flat(self)
+      ├── def market_value(self)
+      ├── def cost_basis(self)
+      ├── def update_unrealized_pnl(self)
+      └── def __repr__(self)
+   🧱 class PortfolioState
+      ├── def __post_init__(self)
+      ├── def is_stale(self, threshold_seconds)
+      ├── def mark_updated(self)
+      ├── def mark_synced(self)
+      ├── def equity(self)
+      ├── def num_positions(self)
+      ├── def long_positions(self)
+      ├── def short_positions(self)
+      ├── def update_price(self, symbol, price)
+      ├── def apply_fill(self, symbol, side, qty, price, validate)
+      ├── def update_position(self, symbol, order_result)
+      ├── def get_position_state(self, symbol)
+      ├── def _is_valid_state_transition(self, current, new)
+      ├── def _calculate_realized_pnl(self, old_qty, trade_qty, avg_price, fill_price)
+      ├── def total_unrealized(self)
+      ├── def unrealized_pnl(self, symbol)
+      ├── def total_equity(self)
+      ├── def total_realized(self)
+      ├── def _update_position(self, pos, old_qty, new_qty, trade_qty, price)
+      ├── def current_drawdown(self)
+      ├── def drawdown(self)
+      ├── def max_drawdown(self)
+      ├── def sync_from_snapshot(self, snap)
+      ├── def sync_position_from_broker(self, symbol, qty, avg_price, last_price)
+      ├── def remove_position(self, symbol)
+      ├── def get_position(self, symbol)
+      ├── def has_position(self, symbol)
+      ├── def reset(self)
+      └── def __repr__(self)
+
+📄 core/logic/position_manager.py
+   🧱 class PositionManager
+      ├── def __init__(self, tp_mults, sl_mults, exit_fraction, min_bars_to_hold, swing_mode, min_hold_days)
+      ├── def calculate_levels(self, state, price, atr, condition, side)
+      ├── def update_trailing_stop(self, state, price, atr, condition)
+      ├── def update_excursions(self, state, current_price, avg_price)
+      ├── def check_exit_conditions(self, state, price, signal)
+      ├── def _check_stop_loss_hit(self, state, price)
+      ├── def _check_take_profit_hit(self, state, price)
+      ├── def check_partial_exit(self, state, price)
+      └── def get_exit_quantity(self, current_position, is_partial)
+   ⚙️  def get_position_manager()
+
+📄 core/logic/strategy_routing_manager.py
+   🧱 class StrategyRoutingManager
+      ├── def __init__(self, config_path, auto_create)
+      ├── def get_strategy(self, symbol, regime)
+      ├── def get_strategy_name(self, symbol, regime)
+      ├── def set_strategy(self, symbol, regime, strategy_name, persist)
+      ├── def remove_strategy(self, symbol, regime, persist)
+      ├── def _load_config(self)
+      ├── def _create_default_config(self)
+      ├── def refresh(self)
+      ├── def save(self)
+      ├── def _resolve_strategy_name(self, symbol, regime)
+      ├── def _instantiate_strategy(self, strategy_name)
+      ├── def _get_strategy_registry(self)
+      ├── def _create_noop_strategy(self)
+      ├── def list_symbols(self)
+      ├── def list_regimes(self, symbol)
+      ├── def get_routing_map(self)
+      ├── def clear_cache(self)
+      ├── def validate_config(self)
+      └── def __repr__(self)
+   🧱 class NoOpStrategy
+      ├── def __init__(self)
+      └── def generate_signal(self, data)
+
+📄 core/logic/symbol_state.py
+   🧱 class SymbolState
+      ├── def __post_init__(self)
+      ├── def is_long(self)
+      ├── def is_short(self)
+      ├── def is_flat(self)
+      ├── def is_in_position(self)
+      ├── def unrealized_pnl(self)
+      ├── def has_stop_loss(self)
+      ├── def has_take_profit(self)
+      ├── def has_partial_targets(self)
+      ├── def pop_partial_target(self)
+      ├── def reset(self)
+      ├── def update_from_portfolio(self, qty, avg_price)
+      ├── def get_risk_distance(self)
+      ├── def get_reward_distance(self)
+      ├── def get_risk_reward_ratio(self)
+      ├── def to_dict(self)
+      └── def __repr__(self)
+
+📄 core/logic/trade_gate.py
+   🧱 class GateState
+      (no methods)
+   🧱 class TradeGate
+      ├── def __init__(self, max_layers, min_bars_between_layers, regime_min_persist_bars, flip_cooldown_bars)
+      ├── def get_state(self, symbol)
+      ├── def get_regime_persist(self, symbol)
+      ├── def on_new_bar(self, symbol, bar_id, regime)
+      ├── def can_enter(self, symbol, side, ts, bar_id, regime, allow_pyramiding)
+      ├── def mark_action(self, symbol, ts, bar_id, new_side, action, flipped, pyramided)
+      └── def close_position(self, symbol, ts, bar_id)
+
+📄 core/logic/trade_logic_manager.py
+   🧱 class DynamicTradeLogicManager
+      ├── def __init__(self, config_path, auto_create, event_handler)
+      ├── def _load_global_trade_logic_params(self)
+      ├── def get(self, symbol, regime)
+      ├── def _resolve_config(self, symbol, regime)
+      ├── def _instantiate_approver(self, symbol, regime, config)
+      ├── def _load_config(self)
+      ├── def _create_default_config(self)
+      ├── def refresh(self)
+      ├── def save(self)
+      ├── def set_logic(self, symbol, regime, logic_class, params, persist)
+      ├── def remove_logic(self, symbol, regime, persist)
+      ├── def list_symbols(self)
+      ├── def list_regimes(self, symbol)
+      ├── def get_config(self, symbol, regime)
+      ├── def clear_cache(self)
+      ├── def validate_config(self)
+      └── def __repr__(self)
+
+📄 core/logic/trade_logic_router.py
+   🧱 class TradeApproverRouter
+      ├── def __init__(self, default_approver)
+      ├── def register_symbol_approver(self, symbol, approver)
+      ├── def register_strategy_approver(self, strategy, approver)
+      ├── def register_regime_approver(self, regime, approver)
+      ├── def get_approver(self, symbol, strategy, regime)
+      ├── def clear_overrides(self)
+      └── def __repr__(self)
+
+📄 core/ml/trade_quality_filter.py
+   🧱 class TradeQualityFilter
+      ├── def __init__(self, model_path, min_confidence, enabled, features)
+      ├── def _load_model(self)
+      ├── def evaluate(self, features, symbol)
+      ├── def build_features(self, atr, atr_history, portfolio_drawdown, symbol_drawdown, position_size_pct, hour, day_of_week, minutes_since_open, bars_in_regime, hours_since_last_trade, signal_strength)
+      ├── def get_stats(self)
+      ├── def reset_stats(self)
+      └── def set_min_confidence(self, value)
+   ⚙️  def get_trade_filter(self, model_path)
+
+📄 core/mock_executor.py
+   🧱 class MockExecutor
+      ├── def __init__(self, broker, event_handler)
+      ├── def buy(self, symbol, qty)
+      ├── def sell(self, symbol, qty)
+      ├── def place_oco_order(self, symbol, qty, stop_price, limit_price)
+      ├── def get_open_orders(self, symbol)
+      ├── def cancel_order(self, order_id)
+      ├── def get_order_status(self, order_id)
+      ├── def log_order_response(self, response)
+      ├── def retry_failed_order(self, symbol, side, qty)
+      ├── def _place_order(self, symbol, qty, side, price)
+      └── def _emit_alert(self, level, message, symbol)
+
+📄 core/order_registry.py
+   🧱 class TrackedOrder
+      ├── def is_open(self)
+      ├── def is_filled(self)
+      ├── def is_cancelled(self)
+      └── def to_dict(self)
+   🧱 class OrderRegistry
+      ├── def __init__(self)
+      ├── def _normalize_status(self, status)
+      ├── def _is_valid_transition(self, current, new)
+      ├── def __len__(self)
+      └── def __repr__(self)
+
+📄 core/position_sizer.py
+   🧱 class SimplePositionSizer
+      ├── def __init__(self, risk_percentage)
+      ├── def adjust_risk_percentage(self, market_conditions)
+      ├── def calculate_position_size(self, symbol, price, account_value, signal_strength, atr, stop_loss_price)
+      ├── def update_capital(self, new_capital)
+      └── def reset_risk(self, new_risk)
+   🧱 class KellyPositionSizer
+      ├── def __init__(self, risk_percentage)
+      ├── def adjust_risk_percentage(self, market_conditions)
+      ├── def calculate_position_size(self, symbol, price, account_value, signal_strength, atr, stop_loss_price)
+      └── def reset_reserved(self, symbol)
+   ⚙️  def _deprecated_alias(self, name, new_name, cls)
+   🧱 class DeprecatedAlias
+      └── def __init__(self)
+
+📄 core/position_sizer_factory.py
+   🧱 class PositionSizerFactory
+      ├── def _ensure_loaded(self, cls)
+      ├── def register(self, cls, name, sizer_class)
+      ├── def get(self, cls, sizer_type)
+      ├── def create(self, cls, sizer_type, risk_percentage)
+      ├── def create_from_config(self, cls, config)
+      ├── def available_types(self, cls)
+      └── def is_registered(self, cls, sizer_type)
+
+📄 core/risk/metrics.py
+   🧱 class StandardRiskModel
+      ├── def compute_metrics(self, returns, prices, benchmark_returns)
+      ├── def compute_metric(self, returns, metric_name)
+      ├── def _compute_beta_alpha(self, returns, benchmark_returns)
+      └── def _empty_metrics(self)
+   🧱 class RiskQuantifier
+      ├── def __init__(self)
+      ├── def set_returns(self, returns_df, return_column)
+      ├── def set_risk_free_rate(self, risk_free_rate)
+      ├── def calculate_standard_deviation(self)
+      ├── def calculate_sharpe_ratio(self, periods_per_year)
+      ├── def calculate_sortino_ratio(self)
+      ├── def calculate_max_drawdown(self)
+      ├── def calculate_kelly_criterion(self)
+      ├── def calculate_beta(self, market_returns_df)
+      ├── def calculate_alpha(self, market_returns_df)
+      ├── def calculate_treynor_ratio(self, market_returns_df)
+      ├── def calculate_var(self, confidence_level)
+      └── def risk_profile(self, df, strategy_name)
+
+📄 core/runner_factory.py
+   🧱 class RunnerFactory
+      ├── def _ensure_loaded(self, cls)
+      ├── def register(self, cls, name, runner_class)
+      ├── def get(self, cls, broker)
+      ├── def create(self, cls, broker, symbols, config)
+      ├── def available_brokers(self, cls)
+      └── def is_registered(self, cls, broker)
+
+📄 core/schwab_runner.py
+   🧱 class SchwabLiveRunner
+      ├── def __init__(self, symbols, client, config)
+      ├── def _create_broker(self)
+      ├── def _canonicalize_bar(self, raw_data)
+      ├── def _subscribe_to_data(self)
+      ├── def _canonicalize_schwab_chart_bar(self, data, symbol)
+      ├── def _canonicalize_schwab_quote(self, quote, symbol)
+      ├── def _aggregate_quote_to_bar(self, symbol, price, volume, bar_id)
+      └── def _create_quote_callback(self, symbol)
+   ⚙️  def _ensure_live_config(self, dir_path)
+
+📄 core/simulator/gbm_simulator.py
+   🧱 class GBMSimulator
+      ├── def __init__(self, symbols, base_price, log_prices)
+      ├── def _apply_shock(self, symbol, price)
+      ├── def generate_bar(self, symbol)
+      └── def update_all(self)
+
+📄 core/simulator/historical_simulator.py
+   🧱 class HistoricalDataSimulator
+      ├── def __init__(self, symbols, data_path, loop_data, start_index, log_prices)
+      ├── def _load_symbol_data(self, symbol)
+      ├── def _parse_json_file(self, filepath, symbol)
+      ├── def generate_bar(self, symbol)
+      ├── def update_all(self)
+      ├── def get_remaining_bars(self, symbol)
+      ├── def get_total_bars(self, symbol)
+      └── def reset(self, start_index)
+
+📄 core/simulator/live_plotter.py
+   🧱 class TradeMarker
+      (no methods)
+   🧱 class AsyncLivePlotter
+      ├── def __init__(self, symbols, window, refresh_hz, backend, save_snapshots, snapshot_path)
+      ├── def update_bar(self, symbol, ts, close, volume)
+      ├── def record_signal(self, symbol, ts, signal)
+      ├── def record_trade(self, symbol, ts, price, side)
+      ├── def record_pnl(self, symbol, ts, pnl)
+      ├── def _setup_figure(self)
+      └── def _draw_frame(self)
+
+📄 core/simulator/simulation.py
+   🧱 class IncrementalATR
+      ├── def __init__(self, period)
+      ├── def update(self, high, low, close)
+      └── def reset(self)
+   ⚙️  def compute_atr(self, df, period)
+   ⚙️  def classify_regime(self, atr, atr_history)
+   🧱 class SimConfig
+      ├── def from_config_file(self, cls, symbols)
+      ├── def __post_init__(self)
+      └── def trade_log_path(self)
+   🧱 class SimulationRunner
+      ├── def __init__(self, cfg)
+      ├── def stop(self)
+      ├── def _init_components(self)
+      ├── def _df_from_history(self, symbol)
+      ├── def _classify_regime(self, indicators_row, atr_history)
+      └── def _seed(self)
+
+📄 core/state_reconciler.py
+   🧱 class ReconcileAction
+      (no methods)
+   🧱 class PositionMismatch
+      └── def to_dict(self)
+   🧱 class ReconcileResult
+      └── def to_dict(self)
+   🧱 class ReconcilerConfig
+      (no methods)
+   🧱 class StateReconciler
+      ├── def __init__(self, broker, portfolio, config, on_mismatch, on_halt)
+      ├── def is_halted(self)
+      ├── def last_result(self)
+      ├── def clear_halt(self)
+      ├── def _classify_severity(self, qty_diff)
+      └── def get_stats(self)
+
+📄 core/state_sync.py
+   🧱 class StateSynchronizer
+      ├── def __init__(self, portfolio, symbol_states)
+      ├── def register_symbol(self, symbol, state)
+      └── def unregister_symbol(self, symbol)
+
+📄 core/symbol_list_manager.py
+   🧱 class SymbolEntry
+      ├── def to_dict(self)
+      └── def from_row(self, cls, row)
+   🧱 class SymbolListManager
+      ├── def __init__(self, db_path)
+      ├── def _ensure_directory(self)
+      ├── def _get_connection(self)
+      ├── def _transaction(self)
+      ├── def _init_schema(self)
+      ├── def _migrate_defaults_if_empty(self)
+      ├── def get_trade_list(self)
+      ├── def add_to_trade_list(self, symbol, notes)
+      ├── def get_watch_list(self)
+      ├── def add_to_watch_list(self, symbol, notes)
+      ├── def move_to_trade_list(self, symbol)
+      ├── def move_to_watch_list(self, symbol)
+      ├── def get_symbol(self, symbol)
+      ├── def get_all_symbols(self)
+      ├── def remove_symbol(self, symbol)
+      ├── def set_notes(self, symbol, notes)
+      ├── def symbol_exists(self, symbol)
+      ├── def get_list_type(self, symbol)
+      └── def close(self)
+   ⚙️  def get_list_manager(self, db_path)
+   ⚙️  def reset_list_manager()
+
+📄 core/trade_validator.py
+   🧱 class ValidationResult
+      ├── def success(self, cls, warnings)
+      ├── def failure(self, cls, errors, warnings)
+      ├── def add_error(self, error)
+      ├── def add_warning(self, warning)
+      └── def to_dict(self)
+   🧱 class TradeValidator
+      ├── def __init__(self, portfolio, order_registry, reconciler, broker)
+      ├── def _check_halt(self, result)
+      ├── def _check_position_state(self, result, position_state)
+      └── def _check_position_exists(self, result, symbol)
+
+📄 core/unified_data_pipeline.py
+   🧱 class UnifiedDataPipeline
+      ├── def __init__(self, data_path, raw_data_path, database, store_to_db, store_to_files)
+      ├── def datastore(self)
+      ├── def get_data_from_db(self, symbol)
+      ├── def get_data_from_file(self, symbol)
+      ├── def get_data(self, symbol, prefer_db)
+      ├── def load_symbol_data(self, symbol, prefer_db)
+      ├── def list_available_symbols(self, source)
+      ├── def get_cache_info(self, symbol)
+      ├── def _save_raw_data(self, symbol, bars)
+      ├── def _load_all_raw_data(self, symbol)
+      ├── def _get_last_processed_timestamp(self, symbol)
+      ├── def _get_last_raw_timestamp(self, symbol)
+      ├── def _is_processed_data_current(self, symbol)
+      ├── def _save_processed_data_file(self, symbol, df)
+      ├── def _save_processed_data_db(self, symbol, df)
+      └── def _update_cache(self, symbol, bars)
+   ⚙️  def _do_fetch()
+   ⚙️  def _do_fetch()
+
+📄 core/utils/health.py
+   🧱 class HealthStatus
+      (no methods)
+   🧱 class ComponentHealth
+      └── def to_dict(self)
+   🧱 class SystemHealth
+      └── def to_dict(self)
+   🧱 class HealthChecker
+      ├── def __new__(self, cls)
+      ├── def __init__(self)
+      ├── def register(self, name, check_func, metadata)
+      ├── def unregister(self, name)
+      └── def get_status(self)
+   ⚙️  def get_health_checker()
+
+📄 core/utils/logging_utils.py
+   ⚙️  def get_correlation_id()
+   ⚙️  def set_correlation_id(self, cid)
+   ⚙️  def generate_correlation_id()
+   ⚙️  def mask_sensitive_data(self, data, depth)
+   🧱 class StructuredFormatter
+      ├── def __init__(self, include_timestamp, include_correlation_id, mask_sensitive)
+      └── def format(self, record)
+   🧱 class ContextLogger
+      ├── def __init__(self, logger, context)
+      ├── def process(self, msg, kwargs)
+      └── def with_context(self)
+   ⚙️  def get_structured_logger(self, name, level, context)
+   ⚙️  def setup_structured_logging(self, level, json_output, stream)
+   ⚙️  def with_correlation_id(self, func)
+   ⚙️  def wrapper()
+   ⚙️  def async_with_correlation_id(self, func)
+
+📄 core/utils/persistence.py
+   🧱 class PersistedPosition
+      ├── def to_dict(self)
+      └── def from_dict(self, cls, d)
+   🧱 class PersistedOrder
+      └── def to_dict(self)
+   🧱 class SystemState
+      └── def to_dict(self)
+   🧱 class StatePersistence
+      ├── def __init__(self, db_path)
+      ├── def _ensure_directory(self)
+      ├── def _get_connection(self)
+      ├── def _transaction(self)
+      ├── def _init_schema(self)
+      ├── def save_position(self, position)
+      ├── def get_position(self, symbol)
+      ├── def get_all_positions(self)
+      ├── def delete_position(self, symbol)
+      ├── def save_order(self, order)
+      ├── def get_pending_orders(self)
+      ├── def get_order(self, order_id)
+      ├── def save_system_state(self, state_id, cash_balance, total_equity, positions, pending_orders, metadata)
+      ├── def get_latest_state(self)
+      ├── def get_state_by_id(self, state_id)
+      ├── def record_trade(self, order_id, symbol, side, quantity, price, pnl, metadata)
+      ├── def get_trade_history(self, symbol, limit)
+      ├── def cleanup_old_states(self, keep_days)
+      └── def close(self)
+   ⚙️  def get_persistence()
+
+📄 core/utils/retry.py
+   🧱 class CircuitState
+      (no methods)
+   🧱 class RetryConfig
+      (no methods)
+   🧱 class CircuitBreakerConfig
+      (no methods)
+   🧱 class CircuitBreaker
+      ├── def _should_allow_request(self)
+      ├── def record_success(self)
+      └── def record_failure(self, exc)
+   🧱 class CircuitOpenError
+      └── def __init__(self, breaker_name)
+   ⚙️  def get_circuit_breaker(self, name, config)
+   ⚙️  def calculate_delay(self, attempt, config)
+   ⚙️  def retry(self, max_attempts, base_delay, max_delay, retryable_exceptions, circuit_breaker)
+   ⚙️  def decorator(self, func)
+   ⚙️  def wrapper()
+   ⚙️  def async_retry(self, max_attempts, base_delay, max_delay, retryable_exceptions, circuit_breaker)
+   ⚙️  def decorator(self, func)
+
+📄 core/utils/shutdown.py
+   🧱 class ShutdownPhase
+      (no methods)
+   🧱 class ShutdownManager
+      ├── def __init__(self, flatten_on_shutdown, drain_timeout, save_state)
+      ├── def is_shutting_down(self)
+      ├── def should_accept_work(self)
+      ├── def register_handler(self, phase, handler)
+      └── def install_signal_handlers(self)
+   ⚙️  def signal_handler(self, sig, frame)
+   ⚙️  def get_shutdown_manager(self, flatten_on_shutdown, drain_timeout, save_state)
+   ⚙️  def create_shutdown_handlers(self, event_handler, portfolio_state, broker, persistence)
+
+📄 core/utils/type_helpers.py
+   ⚙️  def to_float(self, value)
+   ⚙️  def to_int(self, value)
+   ⚙️  def to_bool(self, value)
+   ⚙️  def coalesce()
+
+📄 data/aggregate.py
+   🧱 class Aggregator
+      ├── def __init__(self, apikey, secret, database)
+      ├── def is_stock_outdated(self, last_saved_ms, today)
+      ├── def raw_data_store(self, stock)
+      ├── def store_processed_data_files(self, stock, processed_data)
+      ├── def get_raw_data(self, stock)
+      ├── def _read_raw_data(self, filepath)
+      ├── def get_processed_data_files(self, stock)
+      ├── def store_processed_data(self, stock, processed_data)
+      ├── def store_processed_data_batch(self, stocks, processed_data_list)
+      ├── def aggregate_data(self, stock_list, start, end)
+      ├── def fetch_data(self, stock, start_date, end_date)
+      └── def dataframes(self)
+
+📄 data/data_validator.py
+   🧱 class BarValidator
+      ├── def __init__(self, max_age_sec, max_move_pct)
+      └── def is_valid(self, prev_close, bar)
+
+📄 data/datastorage.py
+   🧱 class DataStore
+      ├── def __init__(self, db, use_config)
+      ├── def __enter__(self)
+      ├── def __exit__(self, exc_type, exc_val, exc_tb)
+      ├── def open_db(self)
+      ├── def close_db(self)
+      ├── def commit(self)
+      ├── def _sanitize_table_name(self, name)
+      ├── def sanitize_column_name(self, name)
+      ├── def _ensure_connected(self)
+      ├── def create_database(self, table_name, dataframe)
+      ├── def fill_database(self, table_name, data)
+      ├── def upsert_data(self, table_name, data, key_columns)
+      ├── def get_data_base(self, table_name)
+      ├── def get_data_by_symbol(self, table_name, symbol)
+      ├── def table_exists(self, table_name)
+      ├── def list_tables(self)
+      ├── def get_row_count(self, table_name)
+      └── def delete_data(self, table_name, where_clause, params)
+
+📄 data/datautils.py
+   ⚙️  def _get_authenticator()
+   🧱 class DictHandler
+      ├── def __init__(self, data)
+      └── def find_key(self, target_key, partial, case_insensitive, max_depth)
+   ⚙️  def get_epoch_dates(self, start_date, end_date)
+   ⚙️  def filter_data_by_date(self, df, start_date_epoch, end_date_epoch)
+   ⚙️  def load_stock_Data(self, stock_list)
+   ⚙️  def epoch_to_date(self, epoch_timestamp)
+
+📄 data/output/writer.py
+   🧱 class FileWriter
+      ├── def __init__(self, log_file, logger_name, log_dir)
+      ├── def write_json(self, target_path, target_file, data)
+      ├── def write_txt(self, target_path, target_file, data)
+      ├── def modify_json(self, target_path, target_file, new_data)
+      ├── def write_file(self, target_path, target_file, data, file_format)
+      └── def find(self, name, path)
+   ⚙️  def serialize_obj(self, obj)
+
+📄 data/processor.py
+   ⚙️  def _parse_date_column(self, series)
+   ⚙️  def _get_fft_freqs(self, n)
+   🧱 class Processor
+      ├── def __init__(self, stock, frame)
+      ├── def update(self, stock, frame)
+      ├── def dataframe(self, copy)
+      ├── def _frame_hash(self)
+      ├── def clean_stock_data(self, use_cache)
+      ├── def apply_indicators(self, sma_window, ema_window)
+      ├── def feature_engineering(self)
+      ├── def normalizing_scaling(self, df, method)
+      ├── def denoise_fft(self, signal, threshold, low_freq_cutoff, high_freq_cutoff)
+      ├── def apply_signal_processing(self, df, columns_to_denoise)
+      ├── def pca_feature_selection(self, df, n_components)
+      ├── def process(self, sma_window, ema_window, scaling_method, pca_components, denoise_cols)
+      └── def ml_process(self, sma_window, ema_window)
+
+📄 data/streaming/authenticator.py
+   🧱 class Authenticator
+      ├── def __new__(self, cls)
+      ├── def _initialize(self, apikey, secretkey)
+      ├── def _set_headers_params(self, endpoint, apikey, secret, grant_type, code, redrirect_url, refresh_token)
+      ├── def _read_token_file(self)
+      ├── def _is_access_token_expired(self, token_data)
+      ├── def _contains_error(self, token_data)
+      ├── def _is_refresh_token_expired(self, token_data, refresh_interval_days)
+      ├── def access_token(self)
+      └── def refresh_token(self)
+
+📄 data/streaming/schwab_client.py
+   🧱 class TokenBucketRateLimiter
+      ├── def __init__(self, rate, capacity)
+      └── def acquire(self, timeout)
+   🧱 class SchwabClient
+      ├── def __init__(self, apikey, secretkey)
+      ├── def _request(self, method, endpoint, headers, params, data, timeout)
+      ├── def close(self)
+      ├── def _get(self, endpoint, headers, params)
+      ├── def _post(self, endpoint, headers, data)
+      ├── def _set_headers_params(self, endpoint)
+      ├── def account_number(self)
+      ├── def accounts(self)
+      ├── def accounts_number(self, account_number)
+      ├── def all_orders(self, account_number)
+      ├── def generate_order(self, orderType, session, duration, orderStrategyType, instruction, quantity, symbol, assetType)
+      ├── def place_orders(self, account_number, order_data)
+      ├── def quote(self, symbol)
+      ├── def daily_price_history(self, symbol, start, end)
+      ├── def custom_price_history(self, symbol, start, end, periodType, frequencyType, period, frequency)
+      ├── def get_order_by_id(self, account_number, order_id)
+      ├── def cancel_order(self, account_number, order_id)
+      ├── def replace_order(self, account_number, order_id, new_order_data)
+      ├── def all_orders_all_accounts(self)
+      ├── def transactions(self, account_number)
+      ├── def transaction_by_id(self, account_number, transaction_id)
+      ├── def user_preferences(self)
+      └── def close_all_positions(self, account_number)
+
+📄 data/streaming/streamer.py
+   🧱 class SchwabStreamingClient
+      ├── def __init__(self, apikey, secretkey)
+      ├── def set_quote_callback(self, callback)
+      └── def get_quote(self, symbol)
+
+📄 examples/01_basic_backtest.py
+   ⚙️  def generate_sample_data(self, days)
+   ⚙️  def main()
+
+📄 examples/02_strategy_comparison.py
+   ⚙️  def generate_sample_data(self, days)
+   ⚙️  def main()
+
+📄 examples/03_parameter_optimization.py
+   ⚙️  def generate_sample_data(self, days)
+   ⚙️  def main()
+
+📄 examples/04_walk_forward_analysis.py
+   ⚙️  def generate_sample_data(self, days)
+   ⚙️  def main()
+
+📄 examples/05_monte_carlo_simulation.py
+   ⚙️  def generate_sample_data(self, days)
+   ⚙️  def main()
+
+📄 examples/06_custom_strategy.py
+   🧱 class DualMomentumStrategy
+      ├── def __init__(self, ma_period, roc_period, roc_threshold)
+      ├── def generate_signal(self, data)
+      └── def generate_signals_vectorized(self, data)
+   🧱 class VolatilityBreakoutStrategy
+      ├── def __init__(self, atr_period, breakout_mult)
+      ├── def generate_signal(self, data)
+      └── def generate_signals_vectorized(self, data)
+   ⚙️  def generate_sample_data(self, days)
+   ⚙️  def test_strategy(self, data, strategy, name)
+   ⚙️  def main()
+
+📄 indicators/atr.py
+   🧱 class ATRIndicator
+      ├── def __init__(self, df, window)
+      └── def compute(self)
+
+📄 indicators/bollinger.py
+   🧱 class BollingerBandsIndicator
+      ├── def __init__(self, df, window)
+      └── def compute(self)
+
+📄 indicators/ema.py
+   🧱 class EMAIndicator
+      ├── def __init__(self, df, window)
+      └── def compute(self)
+
+📄 indicators/macd.py
+   🧱 class MACDIndicator
+      └── def compute(self)
+
+📄 indicators/momentum.py
+   🧱 class MomentumIndicator
+      ├── def __init__(self, df, window)
+      └── def compute(self)
+
+📄 indicators/obv.py
+   🧱 class OBVIndicator
+      └── def compute(self)
+
+📄 indicators/percent_change.py
+   🧱 class PercentChangeIndicator
+      └── def compute(self)
+
+📄 indicators/price_change.py
+   🧱 class PriceChangeIndicator
+      └── def compute(self)
+
+📄 indicators/psar.py
+   🧱 class PSARIndicator
+      └── def compute(self)
+
+📄 indicators/roc.py
+   🧱 class ROCIndicator
+      ├── def __init__(self, df, window)
+      └── def compute(self)
+
+📄 indicators/rsi.py
+   🧱 class RSIIndicator
+      ├── def __init__(self, df, periods)
+      └── def compute(self)
+
+📄 indicators/sma.py
+   🧱 class SMAIndicator
+      ├── def __init__(self, df, window)
+      └── def compute(self)
+
+📄 indicators/technical_indicators.py
+   🧱 class TechnicalIndicators
+      ├── def __init__(self, dataframe)
+      ├── def apply_all(self, sma_window, ema_window)
+      └── def apply_all_fast(self, sma_window, ema_window, atr_window, rsi_period, macd_fast, macd_slow, macd_signal, bb_window, bb_std, momentum_period, roc_period, inplace)
+
+📄 indicators/vwap.py
+   🧱 class VWAPIndicator
+      └── def compute(self)
+
+📄 loggers/bootstrap.py
+   ⚙️  def init_root_logger(self, log_dir, root_file, level, console, max_bytes, backup_count)
+
+📄 loggers/factory.py
+   ⚙️  def get_module_logger(self, module_name, file_key, level)
+
+📄 loggers/file_trade_logger.py
+   🧱 class FileTradeLogger
+      ├── def __init__(self, log_file, log_dir, logger_name, batch_size, flush_interval, enable_async)
+      ├── def _init_csv(self)
+      ├── def _add_to_buffer(self, row)
+      ├── def _flush_buffer_sync(self)
+      ├── def _do_batch_write(self, rows)
+      ├── def log_trade(self)
+      ├── def _log_from_kwargs(self)
+      ├── def _log_from_dict(self, payload)
+      ├── def _log_timestamp_first(self)
+      ├── def _log_symbol_first(self)
+      ├── def _write_row(self, timestamp, symbol, action, price, quantity, order_id, sl, tp, trailing_stop, strategy, regime, commission, slippage, cash_before, cash_after, position_before, position_after, pnl, notes)
+      ├── def log_order_status(self, order_id, symbol, status, side, quantity, filled_qty, avg_price, timestamp)
+      ├── def log_error(self, message, error, context, timestamp)
+      ├── def log_info(self, message, context, timestamp)
+      ├── def log_warning(self, message, context, timestamp)
+      ├── def log_summary(self, summary_stats, period, timestamp)
+      ├── def log_position_update(self, symbol, quantity, avg_price, current_price, unrealized_pnl, timestamp)
+      ├── def flush(self)
+      ├── def close(self)
+      ├── def get_trades(self, symbol, start_time, end_time)
+      └── def get_metrics(self)
+
+📄 loggers/logger.py
+   🧱 class UniqueMessageFilter
+      ├── def __init__(self)
+      └── def filter(self, record)
+   🧱 class Logger
+      ├── def __init__(self, log_file, logger_name, log_dir, level, timestamp_format, propagate, max_bytes, backup_count, console)
+      ├── def get_logger(self)
+      ├── def debug(self, msg)
+      ├── def info(self, msg)
+      ├── def warning(self, msg)
+      ├── def error(self, msg)
+      └── def critical(self, msg)
+
+📄 loggers/meta_trade_logger.py
+   🧱 class MetaTradeLogger
+      ├── def __init__(self, log_file, log_dir, logger_name)
+      ├── def log_entry(self, context)
+      ├── def log_exit(self, context)
+      ├── def _write_event(self, event)
+      ├── def flush(self)
+      └── def close(self)
+   ⚙️  def generate_trade_id(self, symbol, timestamp)
+
+📄 machine_learning/ml_pipeline.py
+   🧱 class MLConfig
+      └── def from_file(self, cls, path)
+   🧱 class MLPipeline
+      ├── def __init__(self, config)
+      ├── def _create_run_dir(self, tag)
+      ├── def _get_model_configs(self)
+      ├── def preprocess_data(self, df)
+      ├── def _create_preprocessor(self, X)
+      ├── def _clean_params(self, d)
+      ├── def _save_model(self, model, model_name)
+      ├── def _save_metrics(self, metrics, model_name)
+      ├── def _update_leaderboard(self, results, tag)
+      ├── def train(self, data, symbols, tag)
+      ├── def _load_stock_data(self, symbols)
+      └── def load_best_model(self, model, primary)
+   ⚙️  def json_default(self, o)
+   ⚙️  def main()
+
+📄 monitoring/app.py
+   ⚙️  def main()
+
+📄 monitoring/bus.py
+   🧱 class ControlBridge
+      ├── def __init__(self, bus)
+      └── def _emit_halt(self, is_halted)
+
+📄 monitoring/dialogs/manual_order.py
+   🧱 class ManualOrderDialog
+      ├── def __init__(self, parent, symbols)
+      ├── def _on_accept(self)
+      └── def payload(self)
+
+📄 monitoring/feeds/feeder.py
+   🧱 class FeedSignals
+      (no methods)
+   🧱 class DataFeeder
+      ├── def __init__(self)
+      ├── def _subscribe_all(self)
+      ├── def _emit(self, signal)
+      └── def _emit_health(self)
+
+📄 monitoring/feeds/state_aggregator.py
+   🧱 class StateAggregator
+      ├── def __init__(self, feeder, interval_ms, window)
+      ├── def _init_cache(self)
+      ├── def _connect_signals(self)
+      ├── def _iso_now()
+      ├── def _mark_seen(self, sym)
+      ├── def _append_price_point(self, sym, ts, price, ma20, ma50)
+      ├── def _append_ohlc_point(self, sym, ts, o, h, l, c, v)
+      ├── def _on_positions(self, rows)
+      ├── def _on_orders(self, rows)
+      ├── def _on_trades(self, rows)
+      ├── def _on_pnl(self, data)
+      ├── def _on_alerts(self, alerts)
+      ├── def _on_health(self, payload)
+      ├── def _on_regime(self, payload)
+      ├── def _on_ohlc(self, sym, df)
+      ├── def _on_news(self, news_list)
+      ├── def _update_drawdown(self)
+      ├── def _compute_metrics(self)
+      ├── def _serialize_buffers(self)
+      ├── def _emit_snapshot(self)
+      └── def _prune_inactive_symbols(self)
+
+📄 monitoring/models.py
+   🧱 class SymbolsTableModel
+      ├── def __init__(self, rows)
+      ├── def rowCount(self, parent)
+      ├── def columnCount(self, parent)
+      ├── def headerData(self, section, orientation, role)
+      ├── def data(self, index, role)
+      ├── def update_from_df(self, df)
+      ├── def replace_rows(self, rows)
+      ├── def update_position(self, pos)
+      └── def remove_position(self, symbol)
+   🧱 class OrdersTableModel
+      ├── def __init__(self, rows)
+      ├── def rowCount(self, parent)
+      ├── def columnCount(self, parent)
+      ├── def headerData(self, section, orientation, role)
+      ├── def data(self, index, role)
+      └── def replace_rows(self, rows)
+   🧱 class TradesTableModel
+      ├── def __init__(self, rows)
+      ├── def rowCount(self, parent)
+      ├── def columnCount(self, parent)
+      ├── def headerData(self, section, orientation, role)
+      ├── def data(self, index, role)
+      └── def replace_rows(self, rows)
+
+📄 monitoring/theme.py
+   ⚙️  def apply_dark_palette(self, app)
+
+📄 monitoring/views/main_window.py
+   🧱 class MainWindow
+      ├── def __init__(self)
+      ├── def _connect_feeder_signals(self)
+      ├── def _gui_on_pnl(self, data)
+      ├── def _gui_on_equity(self, value)
+      ├── def _gui_on_bar(self, symbol, bar)
+      ├── def _gui_on_price(self, symbol, price)
+      ├── def _gui_on_health(self, data)
+      ├── def _gui_on_trade(self, data)
+      ├── def _gui_on_position(self, data)
+      ├── def _gui_on_order(self, data)
+      ├── def _gui_on_alert(self, data)
+      ├── def _update_alert_counts(self)
+      ├── def _gui_on_strategy_signal(self, data)
+      ├── def _gui_on_history(self, data)
+      ├── def _gui_on_benchmark(self, data)
+      ├── def _gui_on_replay_frame(self, data)
+      ├── def _gui_on_news(self, data)
+      ├── def _gui_on_regime(self, data)
+      ├── def _update_calendar_plot(self)
+      ├── def _update_equity_chart(self)
+      ├── def _wire_gui_to_bus(self)
+      ├── def _emit_and_log(self, event_name, payload)
+      ├── def _subscribe_backend_events(self)
+      ├── def _on_mode_changed(self, mode)
+      ├── def _start_trading(self)
+      ├── def _stop_trading(self)
+      ├── def _update_perf_dashboard(self, pnl)
+      ├── def _update_health_panel(self, payload)
+      ├── def _handle_new_trade(self, trade)
+      ├── def _update_position_row(self, pos)
+      ├── def _update_order_kpis(self, order)
+      ├── def _update_price_chart(self, price)
+      ├── def _append_log(self, msg)
+      ├── def _calculate_and_update_performance(self)
+      ├── def _periodic_perf_update(self)
+      ├── def _update_performance_tab(self, metrics)
+      ├── def _on_cooldown_state(self, cooldown)
+      ├── def _update_from_snapshot(self, snap)
+      ├── def log_event(self, event_name, payload)
+      ├── def _flush_csv(self, fname)
+      ├── def _write_footer(self, fname)
+      ├── def _export_all_csvs(self)
+      ├── def closeEvent(self, event)
+      ├── def _build_dashboard_tab(self)
+      ├── def _group_box_style(self)
+      ├── def _kpi_card(self, title, value_label)
+      ├── def _big_kpi_label(self)
+      ├── def _metric_label(self, text)
+      ├── def _update_symbol_price(self, symbol, price, change_pct)
+      ├── def _build_market_tab(self)
+      ├── def _build_performance_tab(self)
+      ├── def _build_execution_tab(self)
+      ├── def _build_alerts_tab(self)
+      ├── def _clear_alerts(self)
+      ├── def _build_strategy_tab(self)
+      ├── def _build_lists_tab(self)
+      ├── def _on_symbol_moved(self, symbol, list_type)
+      ├── def _build_ops_tab(self)
+      ├── def _build_history_tab(self)
+      ├── def _refresh_history_from_session(self)
+      ├── def _export_history(self)
+      ├── def _build_replay_tab(self)
+      ├── def _load_replay_session(self)
+      ├── def _toggle_replay(self)
+      ├── def _replay_step(self)
+      ├── def _on_replay_slider_changed(self, value)
+      ├── def _style_panic(self, halted)
+      ├── def _show_manual_order(self)
+      ├── def _confirm_flatten(self)
+      ├── def _confirm_cancel_all(self)
+      ├── def _toggle_panic(self)
+      ├── def _kpi_label(self)
+      ├── def _set_kpi(self, lbl, val, money, pct)
+      ├── def _start_sim_clicked(self)
+      └── def _stop_simulation(self)
+
+📄 monitoring/views/symbol_list_widget.py
+   🧱 class SymbolListWidget
+      ├── def __init__(self, parent)
+      ├── def _setup_ui(self)
+      ├── def _group_box_style(self, accent_color)
+      ├── def _list_style(self)
+      ├── def _load_lists(self)
+      ├── def _add_to_trade(self)
+      ├── def _add_to_watch(self)
+      ├── def _move_to_watch(self)
+      ├── def _move_to_trade(self)
+      ├── def _show_context_menu(self, pos, list_type)
+      ├── def _context_move(self, symbol, target_list)
+      ├── def _remove_symbol(self, symbol)
+      ├── def get_trade_symbols(self)
+      └── def get_watch_symbols(self)
+
+📄 monitoring/widgets/candles.py
+   🧱 class Candles
+      ├── def __init__(self, df)
+      ├── def generatePicture(self)
+      ├── def paint(self, p)
+      └── def boundingRect(self)
+
+📄 preflight.py
+   🧱 class PreFlightChecker
+      ├── def __init__(self, verbose)
+      ├── def print_header(self, text)
+      ├── def print_status(self, name, passed, message)
+      ├── def print_warning(self, name, message)
+      ├── def _check_environment(self)
+      ├── def _check_configuration(self)
+      ├── def _is_token_keeper_running(self)
+      ├── def _start_token_keeper(self)
+      └── def _print_summary(self)
+
+📄 run_trading.py
+   🧱 class TradingMode
+      (no methods)
+   ⚙️  def parse_args()
+   🧱 class TradingBackend
+      └── def __init__(self, mode, symbols)
+   🧱 class TradingApplication
+      ├── def __init__(self, mode, symbols)
+      ├── def run(self)
+      └── def _on_quit(self)
+   ⚙️  def main()
+
+📄 strategies/patterns/pattern.py
+   🧱 class PatternDetector
+      ├── def __init__(self, data)
+      ├── def detect_moving_average_crossover(self, short_window, long_window)
+      ├── def detect_head_and_shoulders(self)
+      ├── def detect_double_top(self)
+      ├── def detect_double_bottom(self)
+      ├── def detect_doji(self)
+      ├── def detect_hammer(self)
+      ├── def detect_hanging_man(self)
+      ├── def detect_bullish_engulfing(self)
+      ├── def detect_bearish_engulfing(self)
+      ├── def detect_volume_spikes(self, threshold)
+      └── def detect_volume_divergence(self)
+
+📄 strategies/strategy_registry/__init__.py
+   ⚙️  def load_strategy(self, name, params)
+   ⚙️  def list_strategies()
+
+📄 strategies/strategy_registry/adx_strategy.py
+   🧱 class ADXStrategy
+      ├── def generate_signal(self, data)
+      └── def generate_signals_vectorized(self, data)
+
+📄 strategies/strategy_registry/bollinger_strategy.py
+   🧱 class BollingerStrategy
+      ├── def generate_signal(self, data)
+      └── def generate_signals_vectorized(self, data)
+
+📄 strategies/strategy_registry/breakout_strategy.py
+   🧱 class BreakoutStrategy
+      ├── def generate_signal(self, data)
+      └── def generate_signals_vectorized(self, data)
+
+📄 strategies/strategy_registry/combined_strategy.py
+   🧱 class CombinedStrategy
+      ├── def generate_signal(self, data)
+      └── def generate_signals_vectorized(self, data)
+
+📄 strategies/strategy_registry/donchian_strategy.py
+   🧱 class DonchianStrategy
+      ├── def generate_signal(self, data)
+      └── def generate_signals_vectorized(self, data)
+
+📄 strategies/strategy_registry/ema_strategy.py
+   🧱 class EMAStrategy
+      ├── def generate_signal(self, data)
+      └── def generate_signals_vectorized(self, data)
+
+📄 strategies/strategy_registry/ichimoku_strategy.py
+   🧱 class IchimokuStrategy
+      ├── def generate_signal(self, data)
+      └── def generate_signals_vectorized(self, data)
+
+📄 strategies/strategy_registry/logistic_regression_strategy.py
+   ⚙️  def _load_ml_config()
+   🧱 class LogisticRegressionStrategy
+      ├── def __init__(self)
+      ├── def generate_signal(self, data)
+      └── def generate_signals_vectorized(self, data)
+
+📄 strategies/strategy_registry/macd_strategy.py
+   🧱 class MACDStrategy
+      ├── def generate_signal(self, data)
+      └── def generate_signals_vectorized(self, data)
+
+📄 strategies/strategy_registry/mean_reversion_strategy.py
+   🧱 class MeanReversionStrategy
+      ├── def __init__(self, window, threshold)
+      ├── def generate_signal(self, data)
+      └── def generate_signals_vectorized(self, data)
+
+📄 strategies/strategy_registry/momentum_strategy.py
+   🧱 class MomentumStrategy
+      ├── def __init__(self, lookback)
+      ├── def generate_signal(self, data)
+      └── def generate_signals_vectorized(self, data)
+
+📄 strategies/strategy_registry/psar_strategy.py
+   🧱 class PSARStrategy
+      ├── def generate_signal(self, data)
+      └── def generate_signals_vectorized(self, data)
+
+📄 strategies/strategy_registry/rsi_strategy.py
+   🧱 class RSIStrategy
+      ├── def generate_signal(self, data)
+      └── def generate_signals_vectorized(self, data)
+
+📄 strategies/strategy_registry/sma_strategy.py
+   🧱 class SMAStrategy
+      ├── def __init__(self, fast, slow)
+      ├── def generate_signal(self, data)
+      └── def generate_signals_vectorized(self, data)
+
+📄 strategies/strategy_registry/stochastic_strategy.py
+   🧱 class StochasticStrategy
+      ├── def generate_signal(self, data)
+      └── def generate_signals_vectorized(self, data)
+
+📄 strategies/strategy_registry/strategy_registry.py
+   ⚙️  def _camel_to_snake(self, name)
+   ⚙️  def _register_with_aliases(self, cls)
+   ⚙️  def load_strategies_from_directory(self, directory)
+
+📄 strategies/strategy_registry/vwap_strategy.py
+   🧱 class VWAPStrategy
+      ├── def generate_signal(self, data)
+      └── def generate_signals_vectorized(self, data)
+
+📄 tests/conftest.py
+   ⚙️  def event_loop()
+   ⚙️  def mock_env_vars()
+   ⚙️  def clean_env()
+   ⚙️  def mock_broker()
+   ⚙️  def mock_alpaca_broker(self, mock_broker)
+   ⚙️  def mock_schwab_broker(self, mock_broker)
+   ⚙️  def mock_sizer()
+   ⚙️  def mock_trade_logger()
+   ⚙️  def mock_trade_logic_manager()
+   ⚙️  def mock_strategy_router()
+   ⚙️  def mock_drawdown_monitor()
+   ⚙️  def mock_trade_gate()
+   ⚙️  def sample_bar_data()
+   ⚙️  def sample_ohlcv_df(self, sample_bar_data)
+   ⚙️  def sample_position()
+   ⚙️  def mock_config()
+   ⚙️  def sample_config_dict()
+   ⚙️  def mock_event_handler()
+   ⚙️  def temp_data_dir(self, tmp_path)
+   ⚙️  def sample_token_file(self, tmp_path)
+   ⚙️  def create_mock_bar(self, symbol, price, volume)
+   ⚙️  def create_mock_order_result(self, order_id, symbol, side, qty, status, fill_price)
+
+📄 tests/test_aggregator.py
+   🧱 class TestAggregatorInit
+      └── def test_init(self, mock_cache, mock_writer, mock_logger, mock_store, mock_auth, mock_logs_path, mock_client)
+   🧱 class TestIsStockOutdated
+      ├── def setUp(self, mock_cache, mock_writer, mock_logger, mock_store, mock_auth, mock_logs_path, mock_client)
+      ├── def test_no_timestamp_is_outdated(self)
+      ├── def test_old_timestamp_is_outdated(self)
+      └── def test_recent_timestamp_not_outdated(self)
+   🧱 class TestRawDataStore
+      ├── def setUp(self, mock_cache, mock_writer, mock_logger, mock_store, mock_auth, mock_logs_path, mock_client)
+      ├── def test_up_to_date_returns_no_update(self)
+      ├── def test_no_candles_returns_no_update(self)
+      └── def test_new_file_created(self, mock_exists)
+   🧱 class TestStoreProcessedData
+      ├── def setUp(self, mock_cache, mock_writer, mock_logger, mock_store, mock_auth, mock_logs_path, mock_client)
+      ├── def test_store_processed_data_success(self)
+      └── def test_store_empty_dataframe(self)
+   🧱 class TestFetchData
+      ├── def setUp(self, mock_cache, mock_writer, mock_logger, mock_store, mock_auth, mock_logs_path, mock_client)
+      ├── def test_fetch_data_returns_dataframe(self)
+      └── def test_fetch_data_error_returns_empty(self)
+
+📄 tests/test_alpaca_broker.py
+   ⚙️  def mock_async_create_task(self, monkeypatch)
+   ⚙️  def mock_create_task(self, coro)
+   🧱 class TestAlpacaBrokerInit
+      ├── def test_init(self)
+      └── def test_init_live_mode(self)
+   🧱 class TestConnection
+      └── def broker(self)
+   🧱 class TestOrderPlacement
+      └── def connected_broker(self)
+   🧱 class TestOrderCancellation
+      └── def connected_broker(self)
+   🧱 class TestPositionRetrieval
+      └── def connected_broker(self)
+   🧱 class TestMarketStatus
+      └── def connected_broker(self)
+   🧱 class TestStreaming
+      ├── def connected_broker(self)
+      ├── def test_subscribe_bars(self, connected_broker)
+      └── def test_subscribe_quotes(self, connected_broker)
+   🧱 class TestAccountInfo
+      └── def connected_broker(self)
+   🧱 class TestErrorHandling
+      └── def broker(self)
+
+📄 tests/test_authenticator.py
+   ⚙️  def reset_authenticator_singleton()
+   🧱 class TestAuthenticatorInit
+      ├── def setUp(self)
+      ├── def test_singleton_pattern(self, mock_dotenv, mock_writer, mock_logger, mock_env_path, mock_logs_path, mock_app_path, mock_tokens_path)
+      └── def test_loads_credentials_from_env(self, mock_dotenv, mock_writer, mock_logger, mock_env_path, mock_logs_path, mock_app_path, mock_tokens_path)
+   🧱 class TestTokenOperations
+      ├── def setUp(self)
+      ├── def _create_authenticator(self, mock_dotenv, mock_writer, mock_logger, mock_env_path, mock_logs_path, mock_app_path, mock_tokens_path)
+      ├── def test_read_token_file_success(self)
+      ├── def test_read_token_file_not_found(self)
+      ├── def test_access_token_retrieval(self)
+      └── def test_refresh_token_retrieval(self)
+   🧱 class TestTokenExpiration
+      ├── def setUp(self)
+      ├── def _create_authenticator(self, mock_dotenv, mock_writer, mock_logger, mock_env_path, mock_logs_path, mock_app_path, mock_tokens_path)
+      ├── def test_access_token_expired(self)
+      ├── def test_access_token_valid(self)
+      ├── def test_refresh_token_expired(self)
+      ├── def test_refresh_token_valid(self)
+      ├── def test_contains_error(self)
+      └── def test_no_error(self)
+   🧱 class TestTokenRenewal
+      ├── def setUp(self)
+      ├── def _create_authenticator(self, mock_dotenv, mock_writer, mock_logger, mock_env_path, mock_logs_path, mock_app_path, mock_tokens_path)
+      ├── def test_renew_access_success(self)
+      └── def test_set_headers_params(self)
+
+📄 tests/test_autotrader.py
+   🧱 class TestMarketScheduler
+      ├── def scheduler(self)
+      ├── def test_is_trading_day_weekday(self, scheduler)
+      ├── def test_is_trading_day_weekend(self, scheduler)
+      ├── def test_is_trading_day_holiday(self, scheduler)
+      ├── def test_is_market_open_during_hours(self, scheduler)
+      ├── def test_is_market_open_before_hours(self, scheduler)
+      ├── def test_is_market_open_after_hours(self, scheduler)
+      ├── def test_is_market_open_weekend(self, scheduler)
+      ├── def test_get_next_market_open_same_day(self, scheduler)
+      ├── def test_get_next_market_open_next_day(self, scheduler)
+      ├── def test_get_next_market_open_over_weekend(self, scheduler)
+      ├── def test_get_market_close_today(self, scheduler)
+      ├── def test_seconds_until_market_open(self, scheduler)
+      └── def test_seconds_until_market_close(self, scheduler)
+   🧱 class TestAutoTrader
+      ├── def autotrader(self)
+      ├── def test_init(self, autotrader)
+      ├── def test_set_state(self, autotrader)
+      ├── def test_stop(self, autotrader)
+      └── def test_get_status(self, autotrader)
+   🧱 class TestAutoTraderIntegration
+      (no methods)
+   ⚙️  def mock_is_open()
+
+📄 tests/test_back_test.py
+   🧱 class TestBacktestEngine
+      ├── def setUp(self)
+      ├── def test_backtest_returns_results(self)
+      └── def test_backtest_calculates_returns(self)
+   ⚙️  def mock_backtest(self, data, strategy)
+   🧱 class TestBacktestMetrics
+      ├── def test_sharpe_ratio_calculation(self)
+      ├── def test_max_drawdown_calculation(self)
+      ├── def test_win_rate_calculation(self)
+      └── def test_profit_factor_calculation(self)
+   🧱 class TestBacktestTradeExecution
+      ├── def test_simulate_market_order(self)
+      ├── def test_simulate_limit_order_fill(self)
+      └── def test_simulate_limit_order_no_fill(self)
+   🧱 class TestBacktestSlippage
+      ├── def test_fixed_slippage(self)
+      └── def test_volume_based_slippage(self)
+   🧱 class TestDataValidation
+      ├── def setUp(self)
+      ├── def test_valid_data_passes(self)
+      ├── def test_missing_columns_detected(self)
+      ├── def test_nan_values_fixed(self)
+      └── def test_ohlc_consistency_fixed(self)
+   🧱 class TestSlippageModels
+      ├── def test_fixed_slippage_model(self)
+      ├── def test_volume_based_slippage_model(self)
+      └── def test_volatility_adjusted_slippage(self)
+   🧱 class TestMonteCarloSimulation
+      ├── def test_monte_carlo_returns_statistics(self)
+      └── def test_monte_carlo_confidence_interval(self)
+   🧱 class TestBenchmarkComparison
+      ├── def test_compare_to_benchmark(self)
+      └── def test_up_down_capture(self)
+   🧱 class TestVectorizedBacktester
+      ├── def setUp(self)
+      ├── def test_vectorized_backtest_runs(self)
+      └── def test_vectorized_metrics(self)
+   🧱 class TestSortino
+      └── def test_sortino_ratio(self)
+
+📄 tests/test_broker_interface_parity.py
+   🧱 class TestMockBrokerInterface
+      └── def mock_broker(self)
+   🧱 class TestBrokerInterfaceContract
+      ├── def test_mock_broker_has_required_async_methods(self)
+      └── def test_mock_broker_has_sync_helpers(self)
+   🧱 class TestOrderResultFromBroker
+      └── def mock_broker(self)
+   🧱 class TestAlpacaBrokerInterface
+      ├── def test_alpaca_broker_has_async_connect(self)
+      ├── def test_alpaca_broker_has_sync_connect(self)
+      ├── def test_alpaca_broker_place_market_order_is_async(self)
+      ├── def test_alpaca_broker_place_oco_order_is_async(self)
+      └── def test_alpaca_broker_place_order_returns_order_result(self)
+   🧱 class TestSchwabBrokerInterface
+      ├── def test_schwab_broker_connect_returns_none(self)
+      ├── def test_schwab_broker_has_is_connected_property(self)
+      ├── def test_schwab_broker_place_market_order_is_async(self)
+      └── def test_schwab_broker_place_oco_order_is_async(self)
+   🧱 class TestMockBrokerOpenOrderTracking
+      └── def mock_broker(self)
+   🧱 class TestMockBrokerLimitOrders
+      └── def mock_broker(self)
+   🧱 class TestMockBrokerStopOrders
+      └── def mock_broker(self)
+   🧱 class TestMockBrokerStopLimitOrders
+      └── def mock_broker(self)
+   🧱 class TestMockBrokerOCOOrders
+      └── def mock_broker(self)
+   🧱 class TestMockBrokerMarketHours
+      (no methods)
+   🧱 class TestSchwabStreamerFieldMapping
+      ├── def test_quote_field_mapping_correctness(self)
+      ├── def test_chart_equity_field_mapping(self)
+      ├── def test_bid_ask_spread_calculation(self)
+      └── def test_incomplete_quote_handling(self)
+   🧱 class TestMockBrokerReset
+      (no methods)
+
+📄 tests/test_config_loader.py
+   🧱 class TestDataclasses
+      ├── def test_general_config_defaults(self)
+      ├── def test_simulation_config_defaults(self)
+      ├── def test_alpaca_config_defaults(self)
+      ├── def test_schwab_config_defaults(self)
+      ├── def test_risk_config_defaults(self)
+      ├── def test_drawdown_monitor_config_defaults(self)
+      ├── def test_position_sizer_config_defaults(self)
+      ├── def test_trade_logic_config_defaults(self)
+      ├── def test_indicators_config_defaults(self)
+      ├── def test_data_config_defaults(self)
+      ├── def test_gui_config_defaults(self)
+      ├── def test_logging_config_defaults(self)
+      └── def test_autotrader_config_defaults(self)
+   🧱 class TestDictToDataclass
+      ├── def test_converts_valid_dict(self)
+      ├── def test_ignores_unknown_fields(self)
+      ├── def test_handles_none_input(self)
+      ├── def test_handles_empty_dict(self)
+      └── def test_partial_override(self)
+   🧱 class TestLoadConfig
+      ├── def test_load_config_from_file(self, tmp_path)
+      ├── def test_load_config_missing_file(self, tmp_path)
+      ├── def test_load_config_invalid_json(self, tmp_path)
+      ├── def test_load_config_preserves_raw(self, tmp_path)
+      └── def test_load_all_sections(self, tmp_path)
+   🧱 class TestGetConfig
+      ├── def test_get_config_caches(self)
+      └── def test_get_config_reload(self)
+   🧱 class TestReloadConfig
+      └── def test_reload_config(self)
+   🧱 class TestConfigProxy
+      └── def test_proxy_access(self)
+
+📄 tests/test_core_utils.py
+   🧱 class TestRetryDecorator
+      ├── def test_successful_function_no_retry(self)
+      ├── def test_failing_function_retries(self)
+      └── def test_exhausted_retries_raises(self)
+   ⚙️  def successful_fn()
+   ⚙️  def failing_fn()
+   ⚙️  def always_fails()
+   🧱 class TestAsyncRetry
+      ├── def test_async_retry_success(self)
+      └── def test_async_retry_with_failures(self)
+   🧱 class TestCircuitBreaker
+      ├── def test_circuit_starts_closed(self)
+      ├── def test_circuit_opens_on_failures(self)
+      ├── def test_circuit_rejects_when_open(self)
+      └── def test_circuit_closes_on_success(self)
+   🧱 class TestDelayCalculation
+      ├── def test_exponential_increase(self)
+      └── def test_max_delay_cap(self)
+   🧱 class TestHealthChecker
+      ├── def test_register_component(self)
+      ├── def test_check_healthy_component(self)
+      └── def test_check_unhealthy_component(self)
+   🧱 class TestMaskSensitiveData
+      ├── def test_mask_api_key(self)
+      ├── def test_mask_password(self)
+      ├── def test_mask_nested_sensitive(self)
+      └── def test_preserve_non_sensitive(self)
+   🧱 class TestCorrelationId
+      ├── def test_generate_correlation_id(self)
+      └── def test_set_and_get_correlation_id(self)
+   🧱 class TestPersistence
+      ├── def setUp(self)
+      ├── def tearDown(self)
+      ├── def test_save_and_get_position(self)
+      ├── def test_save_and_get_order(self)
+      ├── def test_get_all_positions(self)
+      └── def test_record_trade(self)
+   🧱 class TestStructuredFormatter
+      └── def test_format_includes_required_fields(self)
+
+📄 tests/test_credential_validator.py
+   🧱 class TestCredentialStatus
+      └── def test_status_values(self)
+   🧱 class TestValidationResult
+      ├── def test_creation(self)
+      └── def test_defaults(self)
+   🧱 class TestCredentialValidator
+      ├── def validator(self)
+      ├── def test_get_best_data_source_prefers_alpaca(self, validator)
+      ├── def test_get_best_data_source_falls_back_to_schwab(self, validator)
+      ├── def test_get_best_data_source_none_available(self, validator)
+      └── def test_get_best_trading_broker(self, validator)
+   🧱 class TestConvenienceFunctions
+      (no methods)
+
+📄 tests/test_data_processor.py
+   🧱 class TestParseDateColumn
+      ├── def test_parse_epoch_milliseconds(self)
+      ├── def test_parse_string_dates(self)
+      └── def test_parse_already_datetime(self)
+   🧱 class TestGetFFTFreqs
+      ├── def test_get_fft_freqs_returns_array(self)
+      ├── def test_get_fft_freqs_caching(self)
+      └── def test_get_fft_freqs_different_lengths(self)
+   🧱 class TestProcessorInit
+      ├── def sample_df(self)
+      ├── def test_processor_init_default(self)
+      ├── def test_processor_init_with_data(self, sample_df)
+      └── def test_processor_update(self, sample_df)
+   🧱 class TestProcessorDataframe
+      ├── def sample_df(self)
+      ├── def test_dataframe_copy(self, sample_df)
+      └── def test_dataframe_no_copy(self, sample_df)
+   🧱 class TestFrameHash
+      ├── def test_frame_hash_empty(self)
+      ├── def test_frame_hash_none(self)
+      ├── def test_frame_hash_with_data(self)
+      └── def test_frame_hash_changes_on_update(self)
+   🧱 class TestCleanStockData
+      ├── def sample_df(self)
+      ├── def test_clean_stock_data_renames_columns(self, sample_df)
+      ├── def test_clean_stock_data_removes_duplicates(self, sample_df)
+      ├── def test_clean_stock_data_caching(self, sample_df)
+      └── def test_clean_stock_data_missing_column(self)
+   🧱 class TestDenoiseFFT
+      ├── def processor(self)
+      ├── def test_denoise_fft_basic(self, processor)
+      ├── def test_denoise_fft_empty_signal(self, processor)
+      ├── def test_denoise_fft_none_signal(self, processor)
+      ├── def test_denoise_fft_with_nan(self, processor)
+      └── def test_denoise_fft_with_inf(self, processor)
+   🧱 class TestApplySignalProcessing
+      ├── def processor(self)
+      └── def test_apply_signal_processing(self, processor)
+   🧱 class TestNormalizingScaling
+      ├── def sample_df(self)
+      ├── def test_standard_scaling(self, sample_df)
+      ├── def test_minmax_scaling(self, sample_df)
+      └── def test_invalid_scaling_method(self, sample_df)
+   🧱 class TestFeatureEngineering
+      ├── def sample_df(self)
+      ├── def test_feature_engineering_basic(self, sample_df)
+      ├── def test_feature_engineering_returns(self, sample_df)
+      ├── def test_feature_engineering_volatility(self, sample_df)
+      ├── def test_feature_engineering_trend(self, sample_df)
+      └── def test_feature_engineering_removes_inf(self, sample_df)
+   🧱 class TestPCAFeatureSelection
+      ├── def sample_df(self)
+      ├── def test_pca_basic(self, sample_df)
+      └── def test_pca_components_capped(self, sample_df)
+   🧱 class TestApplyIndicators
+      ├── def sample_df(self)
+      ├── def test_apply_indicators_basic(self, sample_df)
+      └── def test_apply_indicators_error_handling(self)
+   🧱 class TestMLProcess
+      ├── def sample_df(self)
+      ├── def test_ml_process_basic(self, sample_df)
+      ├── def test_ml_process_with_scaling(self, sample_df)
+      ├── def test_ml_process_with_pca(self, sample_df)
+      ├── def test_ml_process_return_artifacts(self, sample_df)
+      └── def test_ml_process_with_denoise(self, sample_df)
+   🧱 class TestProcess
+      ├── def sample_df(self)
+      ├── def test_process_basic(self, sample_df)
+      └── def test_process_error_handling(self)
+   🧱 class TestEdgeCases
+      ├── def test_processor_with_nan_values(self)
+      ├── def test_processor_with_empty_frame(self)
+      └── def test_feature_engineering_insufficient_data(self)
+
+📄 tests/test_datastore.py
+   🧱 class TestDataStore
+      ├── def test_datastore_create_database(self)
+      ├── def test_datastore_fill_database(self)
+      ├── def test_datastore_get_by_symbol(self)
+      ├── def test_datastore_upsert(self)
+      ├── def test_datastore_list_tables(self)
+      ├── def test_datastore_row_count(self)
+      └── def test_datastore_delete_data(self)
+   🧱 class TestJsonFileOperations
+      ├── def setUp(self)
+      ├── def tearDown(self)
+      ├── def test_write_json(self)
+      ├── def test_read_json(self)
+      └── def test_append_to_json_list(self)
+   🧱 class TestRawDataStorage
+      ├── def setUp(self)
+      ├── def test_store_raw_data(self, mock_json_dump, mock_file)
+      └── def test_raw_data_format(self)
+   🧱 class TestProcessedDataStorage
+      ├── def setUp(self)
+      ├── def test_processed_data_has_indicators(self)
+      └── def test_processed_data_maintains_ohlcv(self)
+   🧱 class TestDataStorageConfig
+      ├── def test_default_storage_paths(self)
+      └── def test_symbol_file_naming(self)
+
+📄 tests/test_drawdown_integration.py
+   ⚙️  def portfolio()
+   ⚙️  def drawdown_monitor()
+   ⚙️  def mock_broker()
+   ⚙️  def mock_executor()
+   ⚙️  def mock_sizer()
+   ⚙️  def mock_trade_logger()
+   ⚙️  def mock_trade_logic_manager()
+   ⚙️  def engine(self, portfolio, mock_broker, mock_executor, mock_sizer, mock_trade_logger, mock_trade_logic_manager, drawdown_monitor)
+   🧱 class TestDrawdownIntegration
+      (no methods)
+   🧱 class TestDrawdownMonitorAsyncWrappers
+      (no methods)
+
+📄 tests/test_drawdown_monitor.py
+   ⚙️  def mock_async_create_task(self, monkeypatch)
+   ⚙️  def mock_create_task(self, coro)
+   🧱 class TestDrawdownMonitorInit
+      ├── def test_init_defaults(self)
+      └── def test_init_custom_values(self)
+   🧱 class TestSymbolDrawdown
+      ├── def monitor(self)
+      ├── def test_update_symbol_returns_bool(self, monitor)
+      ├── def test_update_symbol_allows_trading_initially(self, monitor)
+      ├── def test_symbol_blocked_on_max_drawdown(self, monitor)
+      └── def test_symbol_allowed_within_limits(self, monitor)
+   🧱 class TestPortfolioDrawdown
+      ├── def monitor(self)
+      ├── def test_update_portfolio_returns_bool(self, monitor)
+      ├── def test_update_portfolio_allows_trading_initially(self, monitor)
+      ├── def test_portfolio_blocked_on_max_drawdown(self, monitor)
+      └── def test_portfolio_allowed_within_limits(self, monitor)
+   🧱 class TestCanTrade
+      ├── def monitor(self)
+      ├── def test_can_trade_when_all_ok(self, monitor)
+      ├── def test_can_trade_blocked_by_symbol(self, monitor)
+      └── def test_can_trade_blocked_by_portfolio(self, monitor)
+   🧱 class TestIsBlocked
+      ├── def monitor(self)
+      ├── def test_is_symbol_blocked_initially_false(self, monitor)
+      ├── def test_is_portfolio_blocked_initially_false(self, monitor)
+      ├── def test_is_symbol_blocked_after_breach(self, monitor)
+      └── def test_is_portfolio_blocked_after_breach(self, monitor)
+   🧱 class TestMultipleSymbols
+      ├── def monitor(self)
+      ├── def test_symbols_tracked_independently(self, monitor)
+      └── def test_blocked_symbol_doesnt_affect_others(self, monitor)
+   🧱 class TestStartNewDay
+      ├── def monitor(self)
+      ├── def test_start_new_day_sets_portfolio(self, monitor)
+      ├── def test_start_new_day_sets_symbols(self, monitor)
+      └── def test_start_new_day_both(self, monitor)
+   🧱 class TestDrawdownValues
+      ├── def monitor(self)
+      ├── def test_get_portfolio_drawdown(self, monitor)
+      ├── def test_get_portfolio_daily_drawdown(self, monitor)
+      ├── def test_get_symbol_drawdown(self, monitor)
+      ├── def test_get_symbol_daily_drawdown(self, monitor)
+      └── def test_get_symbol_drawdown_unknown(self, monitor)
+   🧱 class TestAdminControls
+      ├── def monitor(self)
+      ├── def test_unlock_symbol(self, monitor)
+      ├── def test_reset_symbol(self, monitor)
+      ├── def test_unlock_portfolio(self, monitor)
+      └── def test_reset_portfolio(self, monitor)
+   🧱 class TestCooldown
+      ├── def monitor(self)
+      ├── def test_is_symbol_in_cooldown_true(self, monitor)
+      ├── def test_is_symbol_in_cooldown_false(self, monitor)
+      ├── def test_is_symbol_in_cooldown_no_unlock(self, monitor)
+      ├── def test_is_portfolio_in_cooldown_true(self, monitor)
+      ├── def test_is_portfolio_in_cooldown_false(self, monitor)
+      └── def test_is_portfolio_in_cooldown_no_unlock(self, monitor)
+   🧱 class TestPersistence
+      ├── def monitor(self)
+      ├── def test_serialize_state(self, monitor)
+      ├── def test_deserialize_state(self, monitor)
+      ├── def test_set_persistence_path(self, monitor)
+      └── def test_save_state(self, monitor)
+   🧱 class TestAsyncWrappers
+      └── def monitor(self)
+   🧱 class TestPeakTracking
+      ├── def monitor(self)
+      ├── def test_portfolio_peak_updates_on_new_high(self, monitor)
+      ├── def test_symbol_peak_updates_on_new_high(self, monitor)
+      └── def test_peak_does_not_decrease(self, monitor)
+   🧱 class TestDailyDrawdownBreaches
+      ├── def monitor(self)
+      ├── def test_portfolio_daily_breach_locks(self, monitor)
+      └── def test_symbol_daily_breach_locks(self, monitor)
+
+📄 tests/test_e2e_trading_pipeline.py
+   ⚙️  def sample_ohlcv_data()
+   ⚙️  def mock_broker()
+   ⚙️  def event_collector()
+   🧱 class EventCollector
+      ├── def __init__(self)
+      ├── def get_events(self, event_type)
+      └── def clear(self)
+   🧱 class TestDataGathering
+      ├── def test_ohlcv_data_validation(self, sample_ohlcv_data)
+      ├── def test_historical_data_format(self, sample_ohlcv_data)
+      └── def test_atr_calculation(self, sample_ohlcv_data)
+   🧱 class TestStrategySignalGeneration
+      ├── def test_strategy_registry_loads(self)
+      ├── def test_strategy_generates_signal(self, sample_ohlcv_data)
+      ├── def test_vectorized_signal_generation(self, sample_ohlcv_data)
+      └── def test_multiple_strategies(self, sample_ohlcv_data)
+   🧱 class TestTradeLogicAndRisk
+      ├── def test_trade_gate_basic(self)
+      ├── def test_trade_gate_layering(self)
+      └── def test_position_sizer(self)
+   🧱 class TestOrderExecution
+      (no methods)
+   🧱 class TestPnLTracking
+      ├── def test_portfolio_state_tracking(self)
+      ├── def test_realized_pnl_on_close(self)
+      └── def test_drawdown_calculation(self)
+   🧱 class TestEventEmission
+      (no methods)
+   🧱 class TestFullE2EPipeline
+      (no methods)
+   🧱 class TestBacktestValidation
+      ├── def test_vectorized_backtest(self, sample_ohlcv_data)
+      └── def test_benchmark_comparison(self, sample_ohlcv_data)
+   🧱 class TestIntegrationScenarios
+      (no methods)
+
+📄 tests/test_event_pipeline.py
+   ⚙️  def reset_singleton()
+   ⚙️  def test_singleton_initialization()
+   ⚙️  def test_synchronous_subscription()
+   ⚙️  def run_all_tests()
+
+📄 tests/test_event_system.py
+   ⚙️  def event_handler()
+   ⚙️  def reset_singleton()
+   🧱 class TestEventHandlerBasics
+      (no methods)
+   🧱 class TestSyncHandlers
+      (no methods)
+   ⚙️  def sync_handler(self, event)
+   ⚙️  def sync_handler(self, event)
+   🧱 class TestEventHandlerErrors
+      (no methods)
+   🧱 class TestEventPayloads
+      (no methods)
+   🧱 class TestEventHandlerQueue
+      (no methods)
+   🧱 class TestGlobalSingleton
+      └── def test_get_event_handler_returns_same_instance(self, reset_singleton)
+   🧱 class TestEventHandlerShutdown
+      (no methods)
+   🧱 class TestEventHandlerConcurrency
+      (no methods)
+
+📄 tests/test_execution_engine_parity.py
+   ⚙️  def shared_components()
+   ⚙️  def live_engine(self, shared_components)
+   ⚙️  def mock_engine(self, shared_components)
+   🧱 class TestDetermineActionParity
+      ├── def test_entry_long_no_position(self, live_engine, mock_engine)
+      ├── def test_entry_short_no_position(self, live_engine, mock_engine)
+      ├── def test_exit_long_position(self, live_engine, mock_engine)
+      ├── def test_exit_short_position(self, live_engine, mock_engine)
+      ├── def test_partial_exit_long(self, live_engine, mock_engine)
+      ├── def test_partial_exit_short(self, live_engine, mock_engine)
+      ├── def test_reversal_long_to_short(self, live_engine, mock_engine)
+      └── def test_reversal_short_to_long(self, live_engine, mock_engine)
+   🧱 class TestSetupApprovalStateParity
+      ├── def test_no_position(self, live_engine, mock_engine)
+      ├── def test_with_long_position(self, live_engine, mock_engine)
+      └── def test_with_short_position(self, live_engine, mock_engine)
+   🧱 class TestGetExitQuantityParity
+      ├── def test_full_exit_long(self, live_engine, mock_engine, shared_components)
+      ├── def test_full_exit_short(self, live_engine, mock_engine, shared_components)
+      ├── def test_reversal_quantity(self, live_engine, mock_engine, shared_components)
+      ├── def test_partial_exit_default_fraction(self, live_engine, mock_engine, shared_components)
+      └── def test_no_position_returns_zero(self, live_engine, mock_engine, shared_components)
+   🧱 class TestSignalToDecisionParity
+      ├── def test_entry_decision_parity(self, live_engine, mock_engine, shared_components)
+      └── def test_exit_decision_parity(self, live_engine, mock_engine, shared_components)
+   🧱 class TestBaseClassInheritance
+      ├── def test_both_inherit_from_base(self, live_engine, mock_engine)
+      ├── def test_determine_action_is_inherited(self, live_engine, mock_engine)
+      ├── def test_setup_approval_state_is_inherited(self, live_engine, mock_engine)
+      └── def test_get_exit_quantity_is_inherited(self, live_engine, mock_engine)
+   🧱 class TestPortfolioStaleDetection
+      ├── def test_portfolio_stale_when_never_updated(self)
+      ├── def test_portfolio_not_stale_after_update(self)
+      ├── def test_portfolio_not_stale_after_sync(self)
+      ├── def test_portfolio_stale_with_custom_threshold(self)
+      ├── def test_apply_fill_marks_updated(self)
+      └── def test_update_price_marks_updated(self)
+   🧱 class TestLiveEngineOptimisticUpdates
+      (no methods)
+   🧱 class TestReconcilerConfig
+      ├── def test_reconciler_interval_reduced(self)
+      └── def test_reconciler_stale_threshold_exists(self)
+
+📄 tests/test_historical_data_updater.py
+   🧱 class TestHistoricalDataUpdaterInit
+      ├── def test_init_with_credentials(self)
+      └── def test_init_custom_path(self, tmp_path)
+   🧱 class TestDataFetching
+      └── def updater(self, tmp_path)
+   🧱 class TestFileSaving
+      └── def updater(self, tmp_path)
+   🧱 class TestDataFreshness
+      ├── def updater(self, tmp_path)
+      ├── def test_freshness_no_file(self, updater)
+      ├── def test_freshness_fresh_data(self, updater, tmp_path)
+      └── def test_freshness_stale_data(self, updater, tmp_path)
+   🧱 class TestIncrementalUpdate
+      └── def updater(self, tmp_path)
+   🧱 class TestMultiSymbolUpdate
+      └── def updater(self, tmp_path)
+   🧱 class TestPeriodicUpdates
+      └── def updater(self, tmp_path)
+   🧱 class TestErrorHandling
+      └── def updater(self, tmp_path)
+
+📄 tests/test_hybrid_position_sizer.py
+   🧱 class TestHybridPositionSizer
+      ├── def setup_method(self)
+      ├── def test_disabled_mode_returns_full_multiplier(self)
+      ├── def test_disabled_mode_ignores_low_confidence(self)
+      ├── def test_high_confidence_with_trend_full_size(self)
+      ├── def test_high_confidence_against_trend_half_size(self)
+      ├── def test_med_confidence_with_trend_60_percent(self)
+      ├── def test_med_confidence_against_trend_25_percent(self)
+      ├── def test_low_confidence_with_trend_30_percent(self)
+      ├── def test_low_confidence_against_trend_blocked(self)
+      ├── def test_trend_bullish_requires_two_votes(self)
+      ├── def test_trend_bearish_requires_two_votes(self)
+      ├── def test_trend_neutral_when_mixed(self)
+      ├── def test_trend_neutral_with_no_context(self)
+      ├── def test_buy_aligned_with_bullish(self)
+      ├── def test_sell_aligned_with_bearish(self)
+      ├── def test_buy_not_aligned_with_bearish(self)
+      ├── def test_sell_not_aligned_with_bullish(self)
+      ├── def test_hold_always_aligned(self)
+      ├── def test_any_signal_aligned_with_neutral(self)
+      ├── def test_custom_high_threshold(self)
+      ├── def test_custom_low_threshold(self)
+      ├── def test_boundary_confidence_high(self)
+      ├── def test_boundary_confidence_low(self)
+      ├── def test_partial_daily_context(self)
+      ├── def test_rsi_exactly_50_is_neutral(self)
+      ├── def test_should_trade_returns_true_for_nonzero_multiplier(self)
+      ├── def test_should_trade_returns_false_for_blocked_trade(self)
+      └── def test_get_daily_trend_public_method(self)
+   🧱 class TestHybridSizingResult
+      └── def test_result_has_all_fields(self)
+
+📄 tests/test_indicators.py
+   🧱 class TestATRIndicator
+      ├── def setUp(self)
+      ├── def test_atr_calculation(self)
+      └── def test_atr_with_insufficient_data(self)
+   🧱 class TestEMAIndicator
+      ├── def setUp(self)
+      ├── def test_ema_calculation(self)
+      └── def test_ema_smoothing(self)
+   🧱 class TestRSIIndicator
+      ├── def setUp(self)
+      ├── def test_rsi_uptrend(self)
+      └── def test_rsi_downtrend(self)
+   🧱 class TestBollingerBands
+      ├── def setUp(self)
+      ├── def test_bollinger_band_calculation(self)
+      └── def test_bollinger_contains_most_prices(self)
+
+📄 tests/test_live_execution_engine.py
+   ⚙️  def mock_broker()
+   ⚙️  def mock_sizer()
+   ⚙️  def mock_trade_logger()
+   ⚙️  def mock_trade_logic_manager()
+   ⚙️  def mock_executor()
+   ⚙️  def mock_portfolio()
+   🧱 class TestLiveExecutionEngineSignals
+      (no methods)
+   🧱 class TestLiveExecutionEnginePositionManagement
+      (no methods)
+   🧱 class TestLiveExecutionEngineRiskManagement
+      (no methods)
+   🧱 class TestLiveExecutionEngineLogging
+      (no methods)
+   🧱 class TestLiveExecutionEngineTradeLogic
+      (no methods)
+   🧱 class TestLiveExecutionEngineErrorHandling
+      (no methods)
+
+📄 tests/test_logger.py
+   🧱 class TestLoggerInitialization
+      ├── def test_logger_creation(self)
+      ├── def test_logger_level_configuration(self)
+      └── def test_logger_propagation(self)
+   🧱 class TestLoggerFormatters
+      ├── def test_standard_format(self)
+      └── def test_trade_log_format(self)
+   🧱 class TestFileTradeLogger
+      ├── def setUp(self)
+      ├── def tearDown(self)
+      ├── def test_trade_logger_writes_csv(self)
+      └── def test_trade_logger_appends(self)
+   🧱 class TestModuleLogger
+      ├── def test_get_module_logger(self)
+      └── def test_module_logger_isolation(self)
+   🧱 class TestLogLevels
+      ├── def test_debug_level(self)
+      ├── def test_info_level(self)
+      ├── def test_warning_level(self)
+      ├── def test_error_level(self)
+      ├── def test_critical_level(self)
+      └── def test_level_filtering(self)
+   🧱 class TestLogRotation
+      ├── def test_rotation_config(self)
+      └── def test_timed_rotation_config(self)
+
+📄 tests/test_meta_trade_logger.py
+   🧱 class TestTradeEntryContext
+      ├── def test_create_entry_context(self)
+      └── def test_entry_context_to_dict(self)
+   🧱 class TestTradeExitContext
+      ├── def test_create_exit_context(self)
+      └── def test_exit_context_to_dict(self)
+   🧱 class TestGenerateTradeId
+      ├── def test_generate_trade_id_format(self)
+      └── def test_generate_trade_id_unique(self)
+   🧱 class TestMetaTradeLogger
+      ├── def setUp(self)
+      ├── def tearDown(self)
+      ├── def test_log_entry(self)
+      ├── def test_log_exit(self)
+      ├── def test_log_entry_and_exit(self)
+      └── def test_jsonl_format(self)
+
+📄 tests/test_monitor.py
+   🧱 class TestSystemMonitor
+      ├── def test_connection_status_tracking(self)
+      └── def test_heartbeat_monitoring(self)
+   🧱 class TestPerformanceMonitor
+      ├── def test_latency_tracking(self)
+      ├── def test_throughput_tracking(self)
+      └── def test_error_rate_tracking(self)
+   🧱 class TestAlertManager
+      ├── def test_alert_creation(self)
+      ├── def test_alert_levels(self)
+      └── def test_alert_deduplication(self)
+   ⚙️  def add_alert(self, level, message)
+   🧱 class TestHealthCheck
+      ├── def test_component_health_check(self)
+      └── def test_overall_health_status(self)
+   ⚙️  def check_broker()
+   ⚙️  def check_database()
+   ⚙️  def check_streamer()
+   🧱 class TestDrawdownMonitorAlerts
+      ├── def test_drawdown_threshold_alert(self)
+      └── def test_drawdown_warning_levels(self)
+   🧱 class TestPositionMonitor
+      ├── def test_position_size_alert(self)
+      └── def test_concentration_alert(self)
+   🧱 class TestMarketHoursMonitor
+      ├── def test_market_open_check(self)
+      └── def test_weekend_detection(self)
+
+📄 tests/test_monitoring_integration.py
+   ⚙️  def qapp()
+   ⚙️  def event_handler()
+   ⚙️  def sample_pnl_payload()
+   ⚙️  def sample_position_payload()
+   ⚙️  def sample_order_payload()
+   ⚙️  def sample_bar_payload()
+   ⚙️  def sample_health_payload()
+   🧱 class TestDataFeederWiring
+      ├── def test_datafeeder_imports(self)
+      └── def test_feed_signals_exist(self)
+   🧱 class TestStateAggregator
+      ├── def test_state_aggregator_imports(self)
+      ├── def test_state_aggregator_initialization(self, qapp)
+      └── def test_state_aggregator_metrics(self, qapp)
+   🧱 class TestControlBridge
+      └── def test_control_bridge_imports(self)
+   🧱 class TestEventFlowIntegration
+      (no methods)
+   ⚙️  def on_pnl(self, data)
+   ⚙️  def on_position(self, data)
+   ⚙️  def on_order(self, data)
+   ⚙️  def on_bar(self, symbol, data)
+   🧱 class TestMonitoringModels
+      ├── def test_symbols_table_model(self, qapp)
+      ├── def test_orders_table_model(self, qapp)
+      ├── def test_trades_table_model(self, qapp)
+      └── def test_symbols_model_update(self, qapp)
+   🧱 class TestMainWindowComponents
+      ├── def test_main_window_imports(self, qapp)
+      └── def test_main_window_has_required_attributes(self, qapp)
+   🧱 class TestCompleteMonitoringPipeline
+      (no methods)
+   ⚙️  def on_snapshot(self, snap)
+   ⚙️  def on_health(self, data)
+   🧱 class TestEventTypesCoverage
+      ├── def test_all_monitoring_events_exist(self)
+      └── def test_control_events_exist(self)
+
+📄 tests/test_monte_carlo.py
+   🧱 class TestMonteCarloResult
+      ├── def test_dataclass_creation(self)
+      └── def test_dataclass_fields(self)
+   🧱 class TestMonteCarloSimulation
+      ├── def sample_trades(self)
+      ├── def test_monte_carlo_basic(self, sample_trades)
+      ├── def test_monte_carlo_reproducibility(self, sample_trades)
+      ├── def test_monte_carlo_statistics(self, sample_trades)
+      ├── def test_monte_carlo_percentiles(self, sample_trades)
+      ├── def test_monte_carlo_empty_trades_raises(self)
+      ├── def test_monte_carlo_no_pnl_raises(self)
+      ├── def test_monte_carlo_infers_pnl_from_actions(self)
+      └── def test_monte_carlo_max_drawdowns(self, sample_trades)
+   🧱 class TestBootstrapReturns
+      ├── def sample_returns(self)
+      ├── def test_bootstrap_basic(self, sample_returns)
+      ├── def test_bootstrap_reproducibility(self, sample_returns)
+      ├── def test_bootstrap_statistics(self, sample_returns)
+      ├── def test_bootstrap_different_block_sizes(self, sample_returns)
+      ├── def test_bootstrap_sharpe_ratios(self, sample_returns)
+      └── def test_bootstrap_confidence_interval(self, sample_returns)
+   🧱 class TestEdgeCases
+      ├── def test_single_trade(self)
+      ├── def test_all_winning_trades(self)
+      ├── def test_all_losing_trades(self)
+      ├── def test_bootstrap_short_returns(self)
+      └── def test_monte_carlo_large_trades(self)
+
+📄 tests/test_optimization.py
+   ⚙️  def create_mock_backtester(self, sharpe, total_return, sortino, max_dd)
+   🧱 class TestOptimizationResult
+      ├── def test_dataclass_creation(self)
+      └── def test_dataclass_all_fields(self)
+   🧱 class TestGridSearch
+      ├── def sample_data(self)
+      ├── def test_grid_search_basic(self, sample_data)
+      ├── def test_grid_search_returns_all_results(self, sample_data)
+      ├── def test_grid_search_different_metrics(self, sample_data)
+      ├── def test_grid_search_best_is_maximum(self, sample_data)
+      └── def test_grid_search_no_valid_results_raises(self, sample_data)
+   🧱 class TestRandomSearch
+      ├── def sample_data(self)
+      ├── def test_random_search_basic(self, sample_data)
+      ├── def test_random_search_with_tuple_range(self, sample_data)
+      ├── def test_random_search_reproducibility(self, sample_data)
+      └── def test_random_search_n_iter(self, sample_data)
+   🧱 class TestOptimizationMetrics
+      ├── def sample_data(self)
+      ├── def test_sharpe_ratio_metric(self, sample_data)
+      ├── def test_total_return_metric(self, sample_data)
+      ├── def test_sortino_ratio_metric(self, sample_data)
+      └── def test_max_drawdown_metric(self, sample_data)
+   🧱 class TestEdgeCases
+      ├── def sample_data(self)
+      ├── def test_single_param_combination(self, sample_data)
+      ├── def test_multiple_params(self, sample_data)
+      └── def test_grid_search_with_transaction_cost(self, sample_data)
+
+📄 tests/test_order_registry.py
+   🧱 class TestTrackedOrder
+      ├── def test_tracked_order_creation(self)
+      ├── def test_is_open_pending(self)
+      ├── def test_is_open_accepted(self)
+      ├── def test_is_open_filled(self)
+      ├── def test_is_filled(self)
+      ├── def test_is_cancelled(self)
+      └── def test_to_dict(self)
+   🧱 class TestOrderRegistry
+      ├── def registry(self)
+      └── def test_repr(self, registry)
+
+📄 tests/test_pattern.py
+   🧱 class TestCandlestickPatterns
+      ├── def test_detect_doji(self)
+      ├── def test_detect_hammer(self)
+      └── def test_detect_engulfing(self)
+   🧱 class TestChartPatterns
+      ├── def setUp(self)
+      ├── def test_detect_double_bottom(self)
+      ├── def test_detect_head_and_shoulders(self)
+      └── def test_detect_triangle(self)
+   🧱 class TestSupportResistance
+      ├── def test_identify_support_level(self)
+      ├── def test_identify_resistance_level(self)
+      └── def test_breakout_detection(self)
+   🧱 class TestTrendPatterns
+      ├── def test_detect_uptrend(self)
+      ├── def test_detect_downtrend(self)
+      └── def test_detect_ranging(self)
+   🧱 class TestVolumePatterns
+      ├── def test_volume_confirmation(self)
+      └── def test_volume_divergence(self)
+
+📄 tests/test_portfolio_concurrency.py
+   🧱 class TestPortfolioStatePositionStates
+      ├── def portfolio(self)
+      └── def test_get_position_state_default(self, portfolio)
+   🧱 class TestApplyFillSafe
+      └── def portfolio(self)
+   🧱 class TestConcurrentStateTransitions
+      └── def portfolio(self)
+   🧱 class TestPortfolioLockBehavior
+      └── def portfolio(self)
+   ⚙️  def tracking_apply_fill()
+   🧱 class TestPortfolioStateIntegration
+      └── def portfolio(self)
+
+📄 tests/test_position_manager.py
+   🧱 class TestPositionManagerInit
+      ├── def test_default_initialization(self)
+      ├── def test_custom_initialization(self)
+      └── def test_multipliers_stored(self)
+   🧱 class TestCalculateLevels
+      ├── def pm(self)
+      ├── def test_long_entry_levels(self, pm)
+      ├── def test_short_entry_levels(self, pm)
+      ├── def test_high_volatility_uses_different_multipliers(self, pm)
+      └── def test_resets_tracking_fields(self, pm)
+   🧱 class TestTrailingStop
+      ├── def pm(self)
+      ├── def test_long_trailing_stop_moves_up(self, pm)
+      ├── def test_long_trailing_stop_doesnt_move_down(self, pm)
+      ├── def test_short_trailing_stop_moves_down(self, pm)
+      └── def test_short_trailing_stop_doesnt_move_up(self, pm)
+   🧱 class TestCheckExitConditions
+      ├── def pm(self)
+      ├── def test_not_in_position_returns_false(self, pm)
+      ├── def test_stop_loss_hit_long(self, pm)
+      ├── def test_stop_loss_hit_short(self, pm)
+      ├── def test_take_profit_hit_after_min_hold(self, pm)
+      ├── def test_take_profit_blocked_before_min_hold(self, pm)
+      ├── def test_signal_reversal_triggers_exit(self, pm)
+      └── def test_signal_reversal_blocked_before_min_hold(self, pm)
+   🧱 class TestSwingMode
+      ├── def test_swing_mode_blocks_same_day_exit(self)
+      ├── def test_swing_mode_allows_stop_loss_same_day(self)
+      └── def test_swing_mode_allows_exit_after_hold_days(self)
+   🧱 class TestPartialExit
+      ├── def test_partial_exit_target_hit_long(self)
+      ├── def test_partial_exit_target_hit_short(self)
+      └── def test_no_partial_exit_if_target_not_hit(self)
+   🧱 class TestGetExitQuantity
+      ├── def test_full_exit_returns_full_position(self)
+      ├── def test_partial_exit_returns_fraction(self)
+      ├── def test_partial_exit_minimum_one(self)
+      └── def test_handles_negative_position(self)
+   🧱 class TestExcursionTracking
+      ├── def test_update_excursions_long(self)
+      └── def test_update_excursions_short(self)
+
+📄 tests/test_position_sizer.py
+   🧱 class TestSimplePositionSizerInit
+      ├── def test_init_valid_risk(self)
+      ├── def test_init_invalid_risk_zero(self)
+      ├── def test_init_invalid_risk_negative(self)
+      ├── def test_init_invalid_risk_one(self)
+      └── def test_init_sets_min_max_risk(self)
+   🧱 class TestAdjustRiskPercentage
+      ├── def sizer(self)
+      ├── def test_adjust_low_volatility(self, sizer)
+      ├── def test_adjust_normal(self, sizer)
+      └── def test_adjust_high_volatility(self, sizer)
+   🧱 class TestCalculatePositionSize
+      ├── def sizer(self)
+      ├── def test_basic_calculation_buy(self, sizer)
+      ├── def test_basic_calculation_sell(self, sizer)
+      ├── def test_low_volatility_increases_size(self, sizer)
+      ├── def test_high_volatility_decreases_size(self, sizer)
+      ├── def test_returns_zero_for_zero_signal(self, sizer)
+      ├── def test_minimum_one_share(self, sizer)
+      ├── def test_handles_wide_stop(self, sizer)
+      └── def test_handles_tight_stop(self, sizer)
+   🧱 class TestEdgeCases
+      ├── def test_small_cash(self)
+      └── def test_expensive_stock(self)
+
+📄 tests/test_position_state.py
+   🧱 class TestPositionStateEnum
+      ├── def test_none_value(self)
+      ├── def test_pending_entry_value(self)
+      ├── def test_open_value(self)
+      ├── def test_pending_exit_value(self)
+      ├── def test_pending_add_value(self)
+      ├── def test_is_pending_none(self)
+      ├── def test_is_pending_pending_entry(self)
+      ├── def test_is_pending_open(self)
+      ├── def test_is_pending_pending_exit(self)
+      ├── def test_is_pending_pending_add(self)
+      ├── def test_allows_new_orders_none(self)
+      ├── def test_allows_new_orders_pending_entry(self)
+      ├── def test_allows_new_orders_open(self)
+      ├── def test_allows_new_orders_pending_exit(self)
+      ├── def test_allows_new_orders_pending_add(self)
+      ├── def test_enum_iteration(self)
+      ├── def test_enum_from_string(self)
+      ├── def test_enum_comparison(self)
+      └── def test_enum_is_str(self)
+   🧱 class TestPositionStateTransitions
+      ├── def test_valid_transitions_from_none(self)
+      ├── def test_valid_transitions_from_pending_entry(self)
+      ├── def test_valid_transitions_from_open(self)
+      ├── def test_valid_transitions_from_pending_exit(self)
+      └── def test_valid_transitions_from_pending_add(self)
+   🧱 class TestPositionStateUseCases
+      ├── def test_entry_flow(self)
+      ├── def test_exit_flow(self)
+      ├── def test_cancelled_entry_flow(self)
+      └── def test_add_to_position_flow(self)
+   🧱 class TestStateSynchronizer
+      ├── def portfolio(self)
+      ├── def symbol_states(self)
+      └── def synchronizer(self, portfolio, symbol_states)
+
+📄 tests/test_preflight.py
+   🧱 class TestPreFlightChecker
+      ├── def checker(self)
+      ├── def verbose_checker(self)
+      ├── def test_init(self, checker)
+      └── def test_init_verbose(self, verbose_checker)
+   🧱 class TestEnvironmentChecks
+      ├── def checker(self)
+      ├── def test_check_environment_all_set(self, checker)
+      ├── def test_check_environment_missing_alpaca(self, checker)
+      └── def test_check_environment_missing_schwab_is_warning(self, checker)
+   🧱 class TestCredentialChecks
+      └── def checker(self)
+   🧱 class TestDataFreshnessChecks
+      └── def checker(self)
+   🧱 class TestConfigurationChecks
+      ├── def checker(self)
+      ├── def test_check_configuration_all_present(self, checker, tmp_path)
+      └── def test_check_configuration_missing_config(self, checker, tmp_path)
+   🧱 class TestSummary
+      ├── def checker(self)
+      ├── def test_print_summary_all_passed(self, checker)
+      ├── def test_print_summary_with_issues(self, checker)
+      └── def test_print_summary_warnings_only(self, checker)
+   🧱 class TestRunAllChecks
+      └── def checker(self)
+
+📄 tests/test_processor.py
+   🧱 class TestHistoricalBarLoader
+      ├── def setUp(self)
+      ├── def test_loader_initialization(self)
+      └── def test_loader_loads_bars(self, mock_json_load, mock_open, mock_exists)
+   🧱 class TestDataTransformation
+      ├── def setUp(self)
+      ├── def test_returns_calculation(self)
+      ├── def test_log_returns_calculation(self)
+      └── def test_normalize_data(self)
+   🧱 class TestDataValidation
+      ├── def test_detect_missing_values(self)
+      ├── def test_detect_outliers_zscore(self)
+      └── def test_detect_duplicate_timestamps(self)
+   🧱 class TestFeatureEngineering
+      ├── def setUp(self)
+      ├── def test_price_momentum_feature(self)
+      ├── def test_volume_ma_feature(self)
+      └── def test_volatility_feature(self)
+
+📄 tests/test_risk_metrics.py
+   🧱 class TestStandardRiskModelInit
+      ├── def test_default_init(self)
+      └── def test_custom_init(self)
+   🧱 class TestComputeMetrics
+      ├── def model(self)
+      ├── def sample_returns(self)
+      ├── def test_compute_metrics_returns_dict(self, model, sample_returns)
+      ├── def test_compute_metrics_all_keys(self, model, sample_returns)
+      ├── def test_compute_metrics_with_benchmark(self, model, sample_returns)
+      └── def test_compute_metrics_empty_returns(self, model)
+   🧱 class TestComputeMetric
+      ├── def model(self)
+      ├── def sample_returns(self)
+      ├── def test_compute_single_metric(self, model, sample_returns)
+      ├── def test_compute_metric_var(self, model, sample_returns)
+      ├── def test_compute_metric_cvar(self, model, sample_returns)
+      └── def test_compute_metric_unknown(self, model, sample_returns)
+   🧱 class TestIndividualMetrics
+      ├── def model(self)
+      ├── def test_compute_total_return(self, model)
+      ├── def test_compute_annualized_return(self, model)
+      ├── def test_compute_volatility(self, model)
+      ├── def test_compute_volatility_annualized(self, model)
+      ├── def test_compute_sharpe_ratio_positive(self, model)
+      ├── def test_compute_sharpe_ratio_negative(self, model)
+      ├── def test_compute_sortino_ratio(self, model)
+      ├── def test_compute_max_drawdown(self, model)
+      ├── def test_compute_current_drawdown(self, model)
+      ├── def test_compute_var(self, model)
+      ├── def test_compute_cvar(self, model)
+      ├── def test_compute_win_rate(self, model)
+      ├── def test_compute_profit_factor(self, model)
+      └── def test_compute_calmar_ratio(self, model)
+   🧱 class TestBetaAlpha
+      ├── def model(self)
+      ├── def test_beta_alpha_calculation(self, model)
+      └── def test_beta_alpha_insufficient_data(self, model)
+   🧱 class TestEmptyMetrics
+      └── def test_empty_metrics(self)
+   🧱 class TestRiskQuantifier
+      ├── def quantifier(self)
+      ├── def returns_df(self)
+      ├── def test_set_returns(self, quantifier, returns_df)
+      ├── def test_set_returns_invalid_column(self, quantifier, returns_df)
+      ├── def test_set_returns_not_dataframe(self, quantifier)
+      ├── def test_set_risk_free_rate(self, quantifier)
+      ├── def test_calculate_standard_deviation(self, quantifier, returns_df)
+      ├── def test_calculate_standard_deviation_no_data(self, quantifier)
+      ├── def test_calculate_sharpe_ratio(self, quantifier, returns_df)
+      ├── def test_calculate_sortino_ratio(self, quantifier, returns_df)
+      ├── def test_calculate_max_drawdown(self, quantifier, returns_df)
+      ├── def test_calculate_kelly_criterion(self, quantifier, returns_df)
+      ├── def test_calculate_var(self, quantifier, returns_df)
+      ├── def test_calculate_beta(self, quantifier, returns_df)
+      ├── def test_calculate_alpha(self, quantifier, returns_df)
+      ├── def test_calculate_treynor_ratio(self, quantifier, returns_df)
+      ├── def test_risk_profile(self, quantifier)
+      └── def test_risk_profile_missing_column(self, quantifier)
+
+📄 tests/test_schwab_broker.py
+   ⚙️  def mock_client()
+   ⚙️  def broker(self, mock_client)
+   🧱 class TestSchwabBrokerOrders
+      (no methods)
+   🧱 class TestSchwabBrokerAccount
+      ├── def test_get_quote(self, broker, mock_client)
+      └── def test_get_available_funds(self, broker, mock_client)
+   🧱 class TestSchwabBrokerMarketHours
+      (no methods)
+   🧱 class TestCircuitBreaker
+      ├── def test_initial_state(self)
+      ├── def test_opens_after_threshold(self)
+      └── def test_resets_on_success(self)
+   🧱 class TestSchwabBrokerStreaming
+      ├── def test_connect_stream(self, broker)
+      ├── def test_subscribe_quotes(self, broker)
+      └── def test_unsubscribe_quotes(self, broker)
+   🧱 class TestSchwabBrokerConnection
+      (no methods)
+   🧱 class TestSchwabBrokerEventEmission
+      (no methods)
+
+📄 tests/test_schwab_client.py
+   🧱 class TestSchwabClientAuthentication
+      ├── def test_client_requires_credentials(self, mock_logger, mock_logs_path, mock_auth)
+      └── def test_client_loads_env_credentials(self)
+   🧱 class TestSchwabClientPriceHistory
+      ├── def setUp(self)
+      ├── def test_daily_price_history(self, mock_get)
+      ├── def test_candle_data_format(self)
+      └── def test_daily_price_history_integration(self, mock_logger, mock_logs_path, mock_auth)
+   🧱 class TestSchwabClientQuotes
+      ├── def setUp(self)
+      ├── def test_get_quote(self, mock_get)
+      └── def test_quote_has_bid_ask(self)
+   🧱 class TestSchwabClientOrders
+      ├── def setUp(self)
+      ├── def test_place_market_order(self, mock_post)
+      ├── def test_get_order_status(self, mock_get)
+      ├── def test_cancel_order(self, mock_delete)
+      └── def test_generate_order(self, mock_logger, mock_logs_path, mock_auth)
+   🧱 class TestSchwabClientAccountInfo
+      ├── def setUp(self)
+      ├── def test_get_account_info(self, mock_get)
+      ├── def test_account_has_balances(self)
+      └── def test_account_has_positions(self)
+   🧱 class TestSchwabClientErrorHandling
+      ├── def test_handles_rate_limit(self, mock_get)
+      ├── def test_handles_unauthorized(self, mock_get)
+      ├── def test_rate_limiter_integration(self, mock_logger, mock_logs_path, mock_auth)
+      └── def test_session_close(self, mock_logger, mock_logs_path, mock_auth)
+
+📄 tests/test_schwab_error_recovery.py
+   ⚙️  def mock_client()
+   ⚙️  def broker(self, mock_client)
+   🧱 class TestGetPositionRetry
+      (no methods)
+   ⚙️  def failing_then_success()
+   🧱 class TestGetAccountInfoRetry
+      (no methods)
+   ⚙️  def failing_then_success()
+   🧱 class TestCircuitBreaker
+      (no methods)
+   🧱 class TestMarketHoursSafeDefault
+      (no methods)
+   🧱 class TestConfigurableCircuitBreaker
+      └── def test_circuit_breaker_uses_config(self, mock_client)
+   🧱 class TestGetOpenOrdersRetry
+      (no methods)
+   ⚙️  def failing_then_success()
+   🧱 class TestGetOrderStatusRetry
+      (no methods)
+   ⚙️  def failing_then_success()
+
+📄 tests/test_schwab_runner.py
+   🧱 class TestCanonicalizeSchwabQuote
+      ├── def test_canonicalize_with_numeric_fields(self)
+      ├── def test_canonicalize_with_named_fields(self)
+      ├── def test_canonicalize_uses_mid_price_when_no_last(self)
+      ├── def test_canonicalize_partial_quote(self)
+      └── def test_canonicalize_timestamp_from_trade_time(self)
+   🧱 class TestCanonicalizeSchwabChartBar
+      ├── def test_canonicalize_chart_bar(self)
+      └── def test_chart_vs_levelone_field_difference(self)
+   🧱 class TestBarBucket
+      ├── def test_bar_bucket_60_second_default(self)
+      ├── def test_bar_bucket_different_minutes(self)
+      └── def test_bar_bucket_custom_timeframe(self)
+   🧱 class TestBarAggregation
+      ├── def mock_runner(self)
+      ├── def test_aggregation_first_quote_starts_bar(self, mock_runner)
+      ├── def test_aggregation_updates_ohlc(self, mock_runner)
+      ├── def test_aggregation_accumulates_volume(self, mock_runner)
+      ├── def test_aggregation_new_bar_closes_previous(self, mock_runner)
+      ├── def test_aggregation_after_bar_close(self, mock_runner)
+      └── def test_aggregation_multiple_symbols_independent(self, mock_runner)
+   🧱 class TestPeriodicDataUpdate
+      (no methods)
+   🧱 class TestSchwabRunnerFieldMappingIntegration
+      ├── def test_field_1_is_bid_not_last(self)
+      └── def test_field_3_is_last_not_low(self)
+
+📄 tests/test_signal_context.py
+   🧱 class TestSignalContext
+      ├── def test_signal_context_creation(self)
+      ├── def test_signal_context_defaults(self)
+      ├── def test_signal_context_from_kwargs(self)
+      ├── def test_signal_context_from_kwargs_with_defaults(self)
+      ├── def test_signal_context_from_kwargs_with_extra_metadata(self)
+      ├── def test_signal_context_is_buy(self)
+      ├── def test_signal_context_is_sell(self)
+      └── def test_signal_context_is_hold(self)
+   🧱 class TestOrderResultEnhancements
+      ├── def test_order_result_commission_field(self)
+      ├── def test_order_result_commission_default(self)
+      ├── def test_order_result_filled_value(self)
+      ├── def test_order_result_filled_value_partial_fill(self)
+      ├── def test_order_result_filled_value_no_fill(self)
+      ├── def test_order_result_filled_value_legacy_avg_price(self)
+      ├── def test_order_result_to_dict_includes_commission(self)
+      └── def test_order_result_bool_behavior_unchanged(self)
+   🧱 class TestHandleSignalContextIntegration
+      └── def mock_engine_components(self)
+   🧱 class TestSignalContextAbstractMethod
+      ├── def test_handle_signal_context_is_abstract(self)
+      ├── def test_handle_signal_context_signature(self)
+      ├── def test_live_engine_implements_handle_signal_context(self)
+      └── def test_mock_engine_implements_handle_signal_context(self)
+
+📄 tests/test_simulation.py
+   🧱 class TestComputeATR
+      ├── def test_compute_atr_basic(self)
+      ├── def test_compute_atr_empty_df(self)
+      ├── def test_compute_atr_insufficient_data(self)
+      ├── def test_compute_atr_exact_period(self)
+      ├── def test_compute_atr_lowercase_columns(self)
+      └── def test_compute_atr_custom_period(self)
+   🧱 class TestClassifyRegime
+      ├── def test_classify_regime_high_volatility(self)
+      ├── def test_classify_regime_low_volatility(self)
+      ├── def test_classify_regime_normal(self)
+      ├── def test_classify_regime_none_atr(self)
+      ├── def test_classify_regime_insufficient_history(self)
+      └── def test_classify_regime_empty_history(self)
+   🧱 class TestSimConfig
+      ├── def test_simconfig_defaults(self)
+      ├── def test_simconfig_custom_values(self)
+      ├── def test_simconfig_empty_symbols_raises(self)
+      ├── def test_simconfig_trade_log_path(self)
+      └── def test_simconfig_from_config_file(self)
+   🧱 class TestSimulationRunnerInit
+      ├── def sim_config(self)
+      └── def test_simulation_runner_init(self, sim_config)
+   🧱 class TestSimulationHelpers
+      ├── def test_df_from_history_empty(self)
+      └── def test_df_from_history_with_data(self)
+   🧱 class TestClassifyRegimeMethod
+      ├── def test_classify_regime_unknown_missing_data(self)
+      └── def test_classify_regime_high_volatility_method(self)
+   🧱 class TestSimulationStop
+      └── def test_stop_sets_flag(self)
+   🧱 class TestSimConfigHistoricalData
+      ├── def test_simconfig_historical_data_defaults(self)
+      └── def test_simconfig_historical_data_enabled(self)
+   🧱 class TestHistoricalDataSimulator
+      ├── def sample_data_file(self, tmp_path)
+      └── def test_historical_simulator_init(self, sample_data_file)
+   🧱 class TestSimulationRunnerWithHistoricalData
+      └── def test_simulation_runner_uses_historical_simulator(self, tmp_path)
+
+📄 tests/test_simulation_to_feeder.py
+   🧱 class MockFeeder
+      └── def __init__(self)
+
+📄 tests/test_standard_trade_approver.py
+   🧱 class TestStandardTradeApproverInit
+      ├── def test_default_initialization(self)
+      ├── def test_custom_initialization(self)
+      └── def test_multipliers_stored(self)
+   🧱 class TestShouldTrade
+      ├── def approver(self)
+      ├── def flat_state(self)
+      ├── def long_state(self)
+      ├── def test_hold_signal_blocked(self, approver, flat_state)
+      ├── def test_invalid_price_blocked(self, approver, flat_state)
+      ├── def test_invalid_atr_blocked(self, approver, flat_state)
+      ├── def test_buy_signal_allowed_when_flat(self, approver, flat_state)
+      ├── def test_sell_signal_allowed_when_flat(self, approver, flat_state)
+      └── def test_in_position_always_allowed(self, approver, long_state)
+   🧱 class TestCooldown
+      ├── def test_bar_cooldown_blocks(self)
+      ├── def test_bar_cooldown_allows_after_elapsed(self)
+      ├── def test_time_cooldown_blocks(self)
+      ├── def test_time_cooldown_allows_after_elapsed(self)
+      ├── def test_on_bar_increments_counter(self)
+      └── def test_on_trade_resets_counter(self)
+   🧱 class TestPositionLimit
+      ├── def test_position_limit_blocks(self)
+      └── def test_position_limit_allows_below(self)
+   🧱 class TestMarketHours
+      ├── def test_market_closed_blocks_by_default(self)
+      └── def test_market_closed_allows_with_after_hours(self)
+   🧱 class TestCanEnterPosition
+      └── def test_cannot_enter_when_in_position(self)
+   🧱 class TestCanExitPosition
+      ├── def test_cannot_exit_when_flat(self)
+      ├── def test_can_exit_long_with_sell(self)
+      └── def test_cannot_exit_long_with_buy(self)
+   🧱 class TestHelperMethods
+      ├── def test_is_in_position(self)
+      ├── def test_is_long(self)
+      ├── def test_is_short(self)
+      └── def test_get_position_side(self)
+
+📄 tests/test_state_reconciler.py
+   ⚙️  def mock_broker()
+   ⚙️  def mock_portfolio()
+   ⚙️  def reconciler(self, mock_broker, mock_portfolio)
+   🧱 class TestReconcilerConfig
+      ├── def test_default_config(self)
+      └── def test_custom_config(self)
+   🧱 class TestPositionMismatch
+      ├── def test_mismatch_creation(self)
+      └── def test_mismatch_to_dict(self)
+   🧱 class TestReconcileResult
+      ├── def test_result_creation(self)
+      └── def test_result_to_dict(self)
+   🧱 class TestFullSync
+      (no methods)
+   🧱 class TestCheckPositions
+      (no methods)
+   🧱 class TestReconcile
+      (no methods)
+   🧱 class TestOrderVerification
+      (no methods)
+   🧱 class TestPeriodicReconciliation
+      (no methods)
+   🧱 class TestHaltManagement
+      (no methods)
+   🧱 class TestCashSync
+      (no methods)
+   🧱 class TestSeverityClassification
+      ├── def test_minor_severity(self, reconciler)
+      ├── def test_major_severity(self, reconciler)
+      └── def test_critical_severity(self, reconciler)
+   🧱 class TestReconcilerStats
+      └── def test_last_result_property(self, reconciler)
+
+📄 tests/test_strategy.py
+   🧱 class TestStrategySignalTypes
+      ├── def setUpClass(self, cls)
+      ├── def _assert_valid_signal(self, signal, strategy_name)
+      ├── def test_ema_strategy_returns_int(self)
+      ├── def test_sma_strategy_returns_int(self)
+      ├── def test_rsi_strategy_returns_int(self)
+      ├── def test_macd_strategy_returns_int(self)
+      ├── def test_bollinger_strategy_returns_int(self)
+      ├── def test_momentum_strategy_returns_int(self)
+      ├── def test_mean_reversion_strategy_returns_int(self)
+      ├── def test_breakout_strategy_returns_int(self)
+      ├── def test_donchian_strategy_returns_int(self)
+      ├── def test_vwap_strategy_returns_int(self)
+      ├── def test_stochastic_strategy_returns_int(self)
+      ├── def test_ichimoku_strategy_returns_int(self)
+      ├── def test_adx_strategy_returns_int(self)
+      ├── def test_psar_strategy_returns_int(self)
+      ├── def test_ema_strategy_with_minimal_data(self)
+      └── def test_sma_strategy_with_minimal_data(self)
+   🧱 class TestStrategySignalValues
+      ├── def test_ema_crossover_buy_signal(self)
+      ├── def test_ema_crossover_sell_signal(self)
+      └── def test_rsi_oversold_buy_signal(self)
+   🧱 class TestCombinedStrategy
+      ├── def setUp(self)
+      └── def test_combined_strategy_returns_int(self)
+   🧱 class MockStrategyObj
+      ├── def ema_strat(self, data)
+      └── def rsi_strat(self, data)
+
+📄 tests/test_streamer.py
+   🧱 class TestStreamerConnection
+      ├── def test_streamer_initialization(self)
+      ├── def test_websocket_connect(self, mock_connect)
+      └── def test_streamer_reconnect_config(self)
+   🧱 class TestStreamerSubscription
+      ├── def test_subscribe_to_quotes(self)
+      ├── def test_subscribe_to_bars(self)
+      └── def test_unsubscribe(self)
+   🧱 class TestStreamerMessages
+      ├── def setUp(self)
+      ├── def test_parse_quote_message(self)
+      └── def test_parse_bar_message(self)
+   🧱 class TestStreamerEventHandling
+      ├── def test_on_quote_callback(self)
+      ├── def test_on_bar_callback(self)
+      └── def test_on_error_callback(self)
+   ⚙️  def on_quote(self, symbol, data)
+   ⚙️  def on_bar(self, symbol, bar)
+   ⚙️  def on_error(self, error)
+   🧱 class TestStreamerHeartbeat
+      ├── def test_heartbeat_response(self)
+      └── def test_heartbeat_timeout_detection(self)
+   🧱 class TestStreamerDataTransformation
+      ├── def test_transform_quote_to_dict(self)
+      └── def test_transform_bar_to_dataframe_format(self)
+   🧱 class TestSchwabStreamerFieldMapping
+      ├── def setUp(self)
+      ├── def test_quote_extraction_matches_schwab_spec(self)
+      ├── def test_bid_ask_field_order(self)
+      ├── def test_last_price_is_field_3(self)
+      ├── def test_ohlc_fields_correct(self)
+      ├── def test_volume_is_field_8(self)
+      └── def test_partial_quote_handling(self)
+   🧱 class TestSchwabChartEquityFieldMapping
+      ├── def setUp(self)
+      ├── def test_chart_bar_extraction(self)
+      └── def test_chart_vs_levelone_field_differences(self)
+
+📄 tests/test_trade_gate.py
+   🧱 class TestTradeGateInit
+      ├── def test_init_defaults(self)
+      └── def test_init_custom_values(self)
+   🧱 class TestGateState
+      ├── def gate(self)
+      ├── def test_get_state_creates_new(self, gate)
+      ├── def test_get_state_returns_same(self, gate)
+      └── def test_state_has_expected_attributes(self, gate)
+   🧱 class TestCanEnter
+      ├── def gate(self)
+      ├── def test_can_enter_returns_tuple(self, gate)
+      └── def test_blocks_after_action_this_bar(self, gate)
+   🧱 class TestOnNewBar
+      ├── def gate(self)
+      ├── def test_on_new_bar_resets_action_flag(self, gate)
+      ├── def test_on_new_bar_updates_regime_persist(self, gate)
+      └── def test_on_new_bar_resets_on_regime_change(self, gate)
+   🧱 class TestMultipleSymbols
+      ├── def gate(self)
+      ├── def test_symbols_independent(self, gate)
+      └── def test_action_on_one_symbol_doesnt_block_other(self, gate)
+
+📄 tests/test_trade_logic.py
+   🧱 class TestTradeGate
+      ├── def test_trade_gate_initialization(self)
+      ├── def test_trade_gate_allows_first_trade(self)
+      └── def test_trade_gate_tracks_regime(self)
+   🧱 class TestTradeLogicManager
+      ├── def setUp(self)
+      ├── def test_trade_logic_manager_loads_config(self)
+      └── def test_default_trade_logic(self)
+   🧱 class TestPortfolioState
+      ├── def test_portfolio_state_initialization(self)
+      └── def test_portfolio_tracks_equity(self)
+   🧱 class TestSymbolState
+      ├── def test_symbol_state_initialization(self)
+      └── def test_symbol_state_tracks_bar(self)
+   🧱 class TestDrawdownMonitor
+      ├── def test_drawdown_monitor_initialization(self)
+      └── def test_drawdown_calculation(self, mock_create_task)
+
+📄 tests/test_trade_validator.py
+   🧱 class TestValidationResult
+      ├── def test_success_result(self)
+      ├── def test_success_with_warnings(self)
+      ├── def test_failure_result(self)
+      ├── def test_add_error(self)
+      ├── def test_add_warning(self)
+      └── def test_to_dict(self)
+   🧱 class TestTradeValidator
+      ├── def mock_portfolio(self)
+      ├── def mock_registry(self)
+      ├── def mock_reconciler(self)
+      ├── def mock_broker(self)
+      └── def validator(self, mock_portfolio, mock_registry, mock_reconciler, mock_broker)
+
+📄 tests/test_trader.py
+   🧱 class TestTraderInitialization
+      ├── def test_trader_requires_broker(self)
+      ├── def test_trader_accepts_symbols(self)
+      └── def test_trader_default_config(self)
+   🧱 class TestTraderLifecycle
+      ├── def test_trader_start_sequence(self)
+      └── def test_trader_stop_sequence(self)
+   ⚙️  def mock_connect()
+   ⚙️  def mock_seed()
+   ⚙️  def mock_subscribe()
+   ⚙️  def mock_unsubscribe()
+   ⚙️  def mock_close_positions()
+   ⚙️  def mock_disconnect()
+   🧱 class TestTraderSignalProcessing
+      ├── def test_signal_validation(self)
+      └── def test_signal_to_action_mapping(self)
+   🧱 class TestTraderRiskManagement
+      ├── def test_position_size_limit(self)
+      ├── def test_max_drawdown_check(self)
+      └── def test_daily_loss_limit(self)
+   🧱 class TestTraderEventHandling
+      ├── def test_on_bar_event(self)
+      ├── def test_on_signal_event(self)
+      └── def test_on_trade_event(self)
+   ⚙️  def on_bar(self, symbol, bar)
+   ⚙️  def on_signal(self, symbol, signal, strategy)
+   ⚙️  def on_trade(self, symbol, side, qty, price)
+   🧱 class TestTraderStateManagement
+      ├── def test_position_tracking(self)
+      └── def test_mode_transitions(self)
+
+📄 tests/test_unified_data_pipeline.py
+   🧱 class TestUnifiedDataPipelineInit
+      ├── def test_init_default_paths(self)
+      ├── def test_init_custom_paths(self, tmp_path)
+      └── def test_init_storage_options(self, tmp_path)
+   🧱 class TestDataSourceSelection
+      └── def pipeline(self, tmp_path)
+   🧱 class TestAlpacaDataFetching
+      └── def pipeline(self, tmp_path)
+   🧱 class TestDataProcessing
+      └── def pipeline(self, tmp_path)
+   🧱 class TestDataStorage
+      ├── def pipeline(self, tmp_path)
+      ├── def test_save_processed_data_file(self, pipeline, tmp_path)
+      ├── def test_get_data_from_file(self, pipeline, tmp_path)
+      └── def test_get_data_from_file_not_found(self, pipeline)
+   🧱 class TestUpdateSymbols
+      └── def pipeline(self, tmp_path)
+   🧱 class TestCacheManagement
+      ├── def pipeline(self, tmp_path)
+      └── def test_update_cache(self, pipeline)
+   🧱 class TestDataFreshness
+      ├── def pipeline(self, tmp_path)
+      ├── def test_check_freshness_fresh_data(self, pipeline)
+      └── def test_check_freshness_stale_data(self, pipeline)
+   🧱 class TestSmartReprocessing
+      ├── def pipeline(self, tmp_path)
+      ├── def test_get_last_raw_timestamp(self, pipeline, tmp_path)
+      ├── def test_get_last_raw_timestamp_missing_file(self, pipeline)
+      ├── def test_get_last_processed_timestamp(self, pipeline, tmp_path)
+      ├── def test_is_processed_data_current_true(self, pipeline, tmp_path)
+      ├── def test_is_processed_data_current_false(self, pipeline, tmp_path)
+      ├── def test_is_processed_data_current_no_raw(self, pipeline)
+      ├── def test_is_processed_data_current_no_proc(self, pipeline, tmp_path)
+      └── def test_load_all_raw_data(self, pipeline, tmp_path)
+
+📄 tests/test_writer.py
+   🧱 class TestJsonWriter
+      ├── def setUp(self)
+      ├── def tearDown(self)
+      ├── def test_write_json_file(self)
+      ├── def test_write_json_pretty(self)
+      └── def test_write_json_list(self)
+   🧱 class TestCsvWriter
+      ├── def setUp(self)
+      ├── def tearDown(self)
+      ├── def test_write_csv_with_header(self)
+      └── def test_append_to_csv(self)
+   🧱 class TestTradeWriter
+      ├── def setUp(self)
+      ├── def tearDown(self)
+      ├── def test_write_trade_record(self)
+      └── def test_trade_log_format(self)
+   🧱 class TestCandelDataWriter
+      ├── def setUp(self)
+      ├── def tearDown(self)
+      ├── def test_write_ohlcv_data(self)
+      └── def test_candle_data_validation(self)
+   🧱 class TestMetricsWriter
+      ├── def setUp(self)
+      ├── def tearDown(self)
+      ├── def test_write_performance_metrics(self)
+      └── def test_write_equity_curve(self)
+   🧱 class TestFileNaming
+      ├── def test_symbol_file_naming(self)
+      └── def test_timestamp_in_filename(self)
+
+📄 token_keeper.py
+   ⚙️  def setup_logging()
+   ⚙️  def daemonize()
+   ⚙️  def main()
+   ⚙️  def signal_handler(self, sig, frame)
+
+📄 tools/analyze_trades.py
+   ⚙️  def load_and_match_trades(self, csv_path)
+   ⚙️  def print_summary(self, trades_df, open_count)
+   ⚙️  def print_by_day(self, trades_df)
+   ⚙️  def print_by_symbol(self, trades_df)
+   ⚙️  def print_by_hour(self, trades_df)
+   ⚙️  def print_by_strategy(self, trades_df)
+   ⚙️  def print_by_hold_time(self, trades_df)
+   ⚙️  def print_worst_trades(self, trades_df, n)
+   ⚙️  def print_open_positions(self, positions)
+   ⚙️  def main()
+
+📄 tools/backtest_hybrid.py
+   🧱 class TradeRecord
+      (no methods)
+   🧱 class BacktestResult
+      └── def win_rate(self)
+   🧱 class ComparisonReport
+      ├── def print_report(self)
+      └── def _print_trade_distribution(self)
+   🧱 class HybridBacktester
+      ├── def __init__(self, symbols, data_path, starting_cash)
+      ├── def load_data(self, symbol)
+      ├── def generate_mock_signals(self, bars)
+      ├── def run_backtest(self, hybrid_enabled, bars_limit)
+      ├── def _get_tier(self, confidence)
+      └── def run_comparison(self, bars_limit)
+   ⚙️  def main()
+
+📄 tools/compare_strategies.py
+   ⚙️  def load_data(self, symbol, days)
+   ⚙️  def list_strategies_cmd()
+   ⚙️  def compare_strategies_cmd(self, args)
+   ⚙️  def compare_categories_cmd(self, args)
+   ⚙️  def compare_hybrid_cmd(self, args)
+   ⚙️  def full_comparison_cmd(self, args)
+   ⚙️  def main()
+
+📄 tools/convert_meta_trades.py
+   ⚙️  def load_jsonl(self, filepath)
+   ⚙️  def join_trades(self, events)
+   ⚙️  def convert_types(self, df)
+   ⚙️  def get_stats(self, df)
+   ⚙️  def main()
+
+📄 tools/optimize_routing.py
+   ⚙️  def should_use_hybrid(self, strategy)
+   ⚙️  def determine_hybrid_config(self, routing)
+   ⚙️  def main()
+
+📄 tools/reprocess_raw_data.py
+   ⚙️  def get_raw_data_files(self, raw_path)
+   ⚙️  def load_raw_data(self, filepath)
+   ⚙️  def process_symbol(self, symbol, raw_path, proc_path, dry_run)
+   ⚙️  def save_processed_data(self, symbol, df, proc_path)
+   ⚙️  def main()
+
+📄 tools/run_historical_sim.py
+   ⚙️  def main()
+
+📄 tools/structure.py
+   ⚙️  def load_gitignore(self, project_root)
+   ⚙️  def attach_parents(self, tree)
+   ⚙️  def extract_defs_from_file(self, filepath)
+   ⚙️  def should_ignore_path(self, rel_path)
+   ⚙️  def scan_directory(self, base_path, respect_gitignore)
+   ⚙️  def format_args(self, args)
+   ⚙️  def print_structure(self, structure, output_file, show_line_numbers)
+   ⚙️  def generate_tree_view(self, structure)
+   ⚙️  def main()
+
+📄 tools/train_trade_model.py
+   🧱 class TradeQualityTrainer
+      ├── def __init__(self, model_dir, features)
+      ├── def load_data(self, data_path)
+      ├── def _load_jsonl(self, path)
+      ├── def prepare_data(self, df, target_col, min_trades)
+      ├── def train(self, X, y, feature_names, model_type, test_size, cv_folds)
+      ├── def save_model(self, model_name)
+      ├── def load_model(self, model_name)
+      └── def predict(self, features)
+   ⚙️  def find_data_files(self, data_dir)
+   ⚙️  def main()
+
+📄 utils/framemanager.py
+   🧱 class DataFrameManager
+      ├── def __new__(self, cls)
+      ├── def __init__(self)
+      ├── def add_dataframe(self, key, dataframe, strategy)
+      ├── def get_dataframe(self, key)
+      ├── def remove_dataframe(self, key)
+      ├── def list_keys(self)
+      ├── def clear_all(self)
+      ├── def size(self)
+      ├── def has_key(self, key)
+      └── def describe(self, key)
+
+📄 utils/market_calendar.py
+   🧱 class MarketCalendar
+      └── def is_market_open(self, ts)
+
+📄 utils/replay.py
+   ⚙️  def replay_equity_from_trades(self, csv_path, starting_cash, final_prices)
+   ⚙️  def mtm_equity()
+   ⚙️  def buy(self, sym, qty, px)
+   ⚙️  def sell(self, sym, qty, px)
+
+================================================================================
+📊 STATISTICS
+================================================================================
+Total Classes:    655
+Total Functions:  344
+Total Methods:    2199
+================================================================================

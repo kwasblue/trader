@@ -376,6 +376,54 @@ def logs(follow, lines, file):
 
 
 # =============================================================================
+# STATS COMMAND
+# =============================================================================
+
+@cli.command()
+@click.option('--summary', is_flag=True, help='Show summary only')
+@click.option('--by-day', is_flag=True, help='Show daily breakdown')
+@click.option('--by-symbol', is_flag=True, help='Show per-symbol stats')
+@click.option('--by-hour', is_flag=True, help='Show hourly performance')
+@click.option('--by-strategy', is_flag=True, help='Show per-strategy stats')
+@click.option('--worst', type=int, metavar='N', help='Show worst N trades')
+def stats(summary, by_day, by_symbol, by_hour, by_strategy, worst):
+    """Analyze trading performance and win rate.
+
+    \b
+    Shows:
+        - Overall win rate and PnL
+        - Performance by day, symbol, hour, strategy
+        - Hold time analysis
+        - Open positions
+
+    \b
+    Examples:
+        trader stats                   # Full analysis
+        trader stats --summary         # Quick summary only
+        trader stats --by-day          # Daily breakdown
+        trader stats --worst 10        # Show 10 worst trades
+    """
+    import subprocess
+
+    cmd = [sys.executable, str(ROOT / "tools" / "analyze_trades.py")]
+
+    if summary:
+        cmd.append('--summary')
+    if by_day:
+        cmd.append('--by-day')
+    if by_symbol:
+        cmd.append('--by-symbol')
+    if by_hour:
+        cmd.append('--by-hour')
+    if by_strategy:
+        cmd.append('--by-strategy')
+    if worst:
+        cmd.extend(['--worst', str(worst)])
+
+    subprocess.run(cmd)
+
+
+# =============================================================================
 # SYMBOLS COMMAND GROUP
 # =============================================================================
 

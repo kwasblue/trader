@@ -335,6 +335,13 @@ class SchwabBroker(BaseBrokerInterface):
         return None
 
     @async_retry(max_attempts=3, base_delay=1.0)
+    async def get_positions(self) -> List[PositionView]:
+        """Get all open positions."""
+        acct = await self._to_thread(self.client.accounts_number, self.account_number)
+        positions = (acct.get("securitiesAccount", {}) or {}).get("positions", []) or []
+        return [self._mk_position_view(p) for p in positions]
+
+    @async_retry(max_attempts=3, base_delay=1.0)
     async def get_account_info(self) -> BrokerSnapshot:
         acct = await self._to_thread(self.client.accounts_number, self.account_number)
         # Extract positions from account response

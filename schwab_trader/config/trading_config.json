@@ -79,7 +79,8 @@
     "min_hold_days": 1,
     "allow_after_hours": false,
     "trading_cutoff_hour_et": 15,
-    "close_positions_eod": true
+    "close_positions_eod": true,
+    "signal_based_exits": false
   },
 
   "indicators": {

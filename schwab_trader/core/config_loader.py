@@ -123,6 +123,7 @@ class TradeLogicConfig:
     allow_after_hours: bool = False  # Allow trading outside market hours
     trading_cutoff_hour_et: int = 15  # Stop new entries after this hour ET (15 = 3pm)
     close_positions_eod: bool = True  # Close all positions at end of day
+    signal_based_exits: bool = True  # If False, only exit on SL/TP (no signal reversal exits)
 
 
 @dataclass
@@ -810,4 +811,5 @@ def create_position_manager(config: Optional[TradingConfig] = None) -> "Position
         min_bars_to_hold=tl.min_bars_to_hold,
         swing_mode=tl.swing_mode,
         min_hold_days=tl.min_hold_days,
+        signal_based_exits=tl.signal_based_exits,
     )

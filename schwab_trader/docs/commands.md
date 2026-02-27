@@ -26,10 +26,12 @@ This installs the `trader` command globally in your virtual environment.
 | Check status | `trader status` |
 | Launch GUI | `trader gui` |
 | Pre-flight check | `trader preflight -v` |
+| Optimize strategies | `trader preflight --optimize-strategies` |
 | Check tokens | `trader token status` |
 | Refresh tokens | `trader token refresh` |
 | Select strategies | `trader strategy select AAPL --save` |
 | Show routing | `trader strategy show` |
+| **View trade stats** | `trader stats` |
 | Run tests | `trader test` |
 | View logs | `trader logs -f` |
 
@@ -136,6 +138,15 @@ trader preflight --reauth-schwab
 
 # Full check with data update
 trader preflight -v --update-data
+
+# Optimize strategies (regime-based backtesting)
+trader preflight --optimize-strategies
+
+# Optimize with custom lookback period
+trader preflight -o --optimization-days 180
+
+# Full refresh: update data + optimize strategies
+trader preflight -u --optimize-strategies
 ```
 
 **What preflight checks:**
@@ -145,6 +156,56 @@ trader preflight -v --update-data
 - Historical data freshness
 - Configuration files
 - Auto-starts token keeper daemon if Schwab tokens are valid
+
+**Strategy Optimization (`--optimize-strategies`):**
+- Runs regime-aware backtests on all symbols
+- Tests multiple strategies (SMA, EMA, MACD, RSI, Bollinger, etc.)
+- Selects optimal strategy per (symbol, regime) combination
+- Updates `config/strategy_routing.json` with best strategies
+- Automatically sets `use_hybrid` flag based on strategy type:
+  - Trend-following strategies (SMA, EMA, MACD): hybrid enabled
+  - Mean-reversion strategies (RSI, Bollinger): hybrid disabled
+
+---
+
+## Trading Statistics
+
+Analyze your trading performance and win rate.
+
+```bash
+# Full analysis
+trader stats
+
+# Quick summary only
+trader stats --summary
+
+# Daily breakdown
+trader stats --by-day
+
+# Per-symbol performance
+trader stats --by-symbol
+
+# Hourly performance (find best trading hours)
+trader stats --by-hour
+
+# Per-strategy performance
+trader stats --by-strategy
+
+# Show worst N trades
+trader stats --worst 10
+```
+
+**Output includes:**
+- Overall win rate and PnL
+- Performance by day, symbol, hour, strategy
+- Hold time analysis (find optimal hold duration)
+- Open positions
+
+**Direct script access:**
+```bash
+python tools/analyze_trades.py
+python tools/analyze_trades.py --help
+```
 
 ---
 

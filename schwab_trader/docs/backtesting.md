@@ -495,3 +495,142 @@ print(f"Information Ratio: {comparison.information_ratio:.2f}")
 | Ignoring slippage | Use volume-based slippage model |
 | Curve fitting | Test on out-of-sample data |
 | Small sample | Use 3+ years of data |
+
+---
+
+## Regime-Based Backtesting
+
+The system supports regime-aware backtesting that matches the live trading system's behavior.
+
+### Market Regimes
+
+Regimes are classified using ATR (Average True Range):
+- **low_volatility**: ATR below historical mean - 0.5 * std
+- **normal**: ATR within normal range
+- **high_volatility**: ATR above historical mean + std
+
+### Strategy Optimization by Regime
+
+```bash
+# Optimize all symbols and update routing config
+python tools/optimize_routing.py
+
+# Specific symbols
+python tools/optimize_routing.py -s AAPL,MSFT,GOOGL
+
+# Custom lookback period
+python tools/optimize_routing.py -d 180
+
+# Dry run (don't save)
+python tools/optimize_routing.py --dry-run
+```
+
+Or via preflight:
+```bash
+trader preflight --optimize-strategies
+```
+
+### Output
+
+The optimizer updates `config/strategy_routing.json`:
+
+```json
+{
+  "AAPL": {
+    "low_volatility": "meanreversion",
+    "normal": "rsi",
+    "high_volatility": "rsi",
+    "default": "rsi",
+    "use_hybrid": false
+  },
+  "GOOGL": {
+    "low_volatility": "sma",
+    "normal": "bollinger",
+    "high_volatility": "macd",
+    "default": "bollinger",
+    "use_hybrid": true
+  }
+}
+```
+
+### Hybrid Sizing Flag
+
+The `use_hybrid` flag is automatically set based on strategy types:
+- **Trend-following** (SMA, EMA, MACD, Momentum): `use_hybrid: true`
+- **Mean-reversion** (RSI, Bollinger, Stochastic): `use_hybrid: false`
+
+Hybrid sizing increases position size for trades aligned with the daily trend.
+
+---
+
+## Strategy Comparison Tools
+
+### Compare Multiple Strategies
+
+```bash
+# Compare specific strategies
+python tools/compare_strategies.py AAPL -s sma,ema,rsi,macd
+
+# Compare by category
+python tools/compare_strategies.py AAPL --categories trend_following,mean_reversion
+
+# Compare hybrid vs standard sizing
+python tools/compare_strategies.py AAPL --hybrid-comparison -s sma,macd,rsi
+
+# Full comparison with report
+python tools/compare_strategies.py AAPL --full -o reports/comparison.md
+```
+
+### Output Example
+
+```
+============================================================
+           STRATEGY COMPARISON REPORT - AAPL
+============================================================
+Strategy        Return    Sharpe   Max DD   Win Rate   Trades
+------------------------------------------------------------
+macd           +18.5%      1.42   -8.2%     58.3%        84
+sma            +15.2%      1.28   -9.1%     55.6%        72
+rsi            +12.3%      0.95  -11.2%     52.1%        96
+------------------------------------------------------------
+```
+
+---
+
+## Trade Analysis
+
+Analyze live trading performance:
+
+```bash
+# Full analysis
+python tools/analyze_trades.py
+
+# Or via CLI
+trader stats
+
+# Specific breakdowns
+trader stats --by-day
+trader stats --by-symbol
+trader stats --by-hour
+trader stats --by-strategy
+trader stats --worst 10
+```
+
+### Key Metrics
+
+| Metric | Description |
+|--------|-------------|
+| Win Rate | Percentage of profitable trades |
+| Total PnL | Net profit/loss |
+| Avg Win/Loss | Average winning vs losing trade |
+| Risk/Reward | Ratio of avg win to avg loss |
+| Hold Time | Average position duration |
+
+### Performance by Time
+
+Helps identify optimal trading hours:
+```
+Hour   Trades    Win%          PnL
+14:00      39   43.6%     $+293.91  <- Best hour
+19:00       7   14.3%   $-1,265.34  <- Worst hour
+```

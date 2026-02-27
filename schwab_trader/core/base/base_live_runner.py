@@ -24,6 +24,7 @@ from abc import ABC, abstractmethod
 from collections import defaultdict, deque
 from dataclasses import asdict
 from datetime import datetime, date, timezone
+from zoneinfo import ZoneInfo
 from pathlib import Path
 from typing import Any, Dict, Deque, List, Optional, Tuple, TYPE_CHECKING
 
@@ -702,9 +703,17 @@ class BaseLiveRunner(ABC):
         ts: datetime = bar["timestamp"]
 
         # Check trading cutoff time (convert to ET for comparison)
-        # UTC hour - 5 = ET hour (approximately, ignoring DST for simplicity)
         cutoff_hour_et = getattr(self.config.trade_logic, 'trading_cutoff_hour_et', 16)
-        et_hour = (ts.hour - 5) % 24  # Simple UTC to ET conversion
+
+        # Proper timezone conversion to Eastern Time (handles DST automatically)
+        et_tz = ZoneInfo("America/New_York")
+        if ts.tzinfo is None:
+            # Assume naive datetime is UTC (Alpaca streams in UTC)
+            ts_utc = ts.replace(tzinfo=timezone.utc)
+        else:
+            ts_utc = ts
+        ts_et = ts_utc.astimezone(et_tz)
+        et_hour = ts_et.hour
         past_cutoff = et_hour >= cutoff_hour_et
 
         # Reset EOD close flag at start of new trading day (before cutoff)
@@ -714,6 +723,9 @@ class BaseLiveRunner(ABC):
         # Close all positions at EOD if enabled and past cutoff
         close_eod = getattr(self.config.trade_logic, 'close_positions_eod', False)
         if past_cutoff and close_eod and not self._eod_close_triggered:
+            self.logger.info(
+                f"EOD TRIGGER: Bar time {ts_et.strftime('%H:%M:%S')} ET >= cutoff {cutoff_hour_et}:00 ET"
+            )
             self._eod_close_triggered = True
             await self._close_all_positions_eod()
 

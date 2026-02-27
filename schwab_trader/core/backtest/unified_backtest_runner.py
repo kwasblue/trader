@@ -76,6 +76,7 @@ class BacktestConfig:
     # Risk management
     stop_loss_atr: float = 2.0
     take_profit_atr: float = 3.0
+    signal_based_exits: bool = True  # If False, only exit on SL/TP (no signal reversal exits)
 
     # Capital
     initial_capital: float = 10000.0
@@ -487,9 +488,13 @@ class UnifiedBacktestRunner:
             quantity = int(trade_value / current_price) if current_price > 0 else 0
 
             # Process trades
-            if signal == 1 and position[i] <= 0 and quantity > 0:
-                # Close short if any
-                if position[i] < 0 and current_trade is not None:
+            # When signal_based_exits=False, only enter when flat (don't flip on reversal)
+            can_enter_long = position[i] == 0 if not config.signal_based_exits else position[i] <= 0
+            can_enter_short = position[i] == 0 if not config.signal_based_exits else position[i] >= 0
+
+            if signal == 1 and can_enter_long and quantity > 0:
+                # Close short if any (only if signal_based_exits enabled)
+                if position[i] < 0 and current_trade is not None and config.signal_based_exits:
                     exec_price = self._get_exec_price(current_price, abs(int(position[i])), "buy", volume[i], current_atr)
                     cost = abs(position[i]) * exec_price * (1 + config.transaction_cost)
                     cash[i] -= cost
@@ -502,28 +507,29 @@ class UnifiedBacktestRunner:
                     trades.append(current_trade)
                     position[i] = 0
 
-                # Open long
-                exec_price = self._get_exec_price(current_price, quantity, "buy", volume[i], current_atr)
-                cost = quantity * exec_price * (1 + config.transaction_cost)
+                # Open long (only if position is now flat)
+                if position[i] == 0:
+                    exec_price = self._get_exec_price(current_price, quantity, "buy", volume[i], current_atr)
+                    cost = quantity * exec_price * (1 + config.transaction_cost)
 
-                if cost <= cash[i]:
-                    cash[i] -= cost
-                    position[i] = quantity
+                    if cost <= cash[i]:
+                        cash[i] -= cost
+                        position[i] = quantity
 
-                    current_trade = TradeRecord(
-                        entry_idx=i,
-                        entry_price=exec_price,
-                        entry_signal=1,
-                        quantity=quantity,
-                        trend=trend,
-                        aligned=aligned,
-                        confidence=confidence,
-                        size_multiplier=size_multiplier,
-                    )
+                        current_trade = TradeRecord(
+                            entry_idx=i,
+                            entry_price=exec_price,
+                            entry_signal=1,
+                            quantity=quantity,
+                            trend=trend,
+                            aligned=aligned,
+                            confidence=confidence,
+                            size_multiplier=size_multiplier,
+                        )
 
-            elif signal == -1 and position[i] >= 0 and quantity > 0:
-                # Close long if any
-                if position[i] > 0 and current_trade is not None:
+            elif signal == -1 and can_enter_short and quantity > 0:
+                # Close long if any (only if signal_based_exits enabled)
+                if position[i] > 0 and current_trade is not None and config.signal_based_exits:
                     exec_price = self._get_exec_price(current_price, int(position[i]), "sell", volume[i], current_atr)
                     proceeds = position[i] * exec_price * (1 - config.transaction_cost)
                     cash[i] += proceeds

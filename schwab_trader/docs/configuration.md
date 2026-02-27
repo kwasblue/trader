@@ -153,10 +153,12 @@ pm = create_position_manager(cfg)        # PositionManager
     "exit_fraction": 0.25,
     "trailing_stop": true,
     "max_positions": 10,
-    "min_bars_to_hold": 3,
+    "min_bars_to_hold": 5,
     "swing_mode": true,
     "min_hold_days": 1,
-    "allow_after_hours": false
+    "allow_after_hours": false,
+    "trading_cutoff_hour_et": 15,
+    "close_positions_eod": true
   }
 }
 ```
@@ -171,10 +173,43 @@ pm = create_position_manager(cfg)        # PositionManager
 | `exit_fraction` | Fraction for partial exits | 0.25 |
 | `trailing_stop` | Enable trailing stops | true |
 | `max_positions` | Maximum concurrent positions | 10 |
-| `min_bars_to_hold` | Min bars before TP/reversal exits | 3 |
+| `min_bars_to_hold` | Min bars before TP/reversal exits | 5 |
 | `swing_mode` | Prevent same-day exits (except SL) | true |
 | `min_hold_days` | Days to hold in swing mode | 1 |
 | `allow_after_hours` | Trade outside market hours | false |
+| `trading_cutoff_hour_et` | Stop new entries after this hour ET | 15 (3pm) |
+| `close_positions_eod` | Close all positions at cutoff time | true |
+
+**Trading Cutoff**: When `trading_cutoff_hour_et` is set (e.g., 15 for 3pm ET), the system:
+1. Blocks all new entry signals after the cutoff time
+2. If `close_positions_eod` is true, closes all open positions at cutoff
+3. Still allows stop loss triggers for protection
+
+#### Hybrid Position Sizing
+
+```json
+{
+  "hybrid_sizing": {
+    "enabled": false,
+    "high_confidence_threshold": 0.7,
+    "low_confidence_threshold": 0.5,
+    "trend_indicators": ["RSI", "MACD", "SMA_200"]
+  }
+}
+```
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `enabled` | Enable hybrid position sizing | false |
+| `high_confidence_threshold` | Threshold for full position size | 0.7 |
+| `low_confidence_threshold` | Threshold for reduced position | 0.5 |
+| `trend_indicators` | Indicators used to determine trend | RSI, MACD, SMA_200 |
+
+**Hybrid Sizing Logic**:
+- Trades WITH the daily trend get full position size
+- Trades AGAINST the daily trend get reduced size (or blocked)
+- Best for trend-following strategies (SMA, EMA, MACD, Momentum)
+- Mean-reversion strategies should disable hybrid sizing (they trade against trend by design)
 
 #### Drawdown Monitor
 

@@ -47,10 +47,12 @@ trader start --symbols AAPL,MSFT
 | Check status | `trader status` |
 | Launch GUI | `trader gui` |
 | Pre-flight check | `trader preflight -v` |
+| Optimize strategies | `trader preflight --optimize-strategies` |
 | Check tokens | `trader token status` |
 | Refresh tokens | `trader token refresh` |
 | Select strategies | `trader strategy select AAPL --save` |
 | Show routing | `trader strategy show` |
+| **View trade stats** | `trader stats` |
 | Run tests | `trader test` |
 | View logs | `trader logs -f` |
 
@@ -68,10 +70,45 @@ sizer = create_position_sizer(cfg)  # Pre-configured from config
 Key configurable parameters:
 - **Position Sizing**: risk_percentage, max_trade_pct, max_holding_pct
 - **Trade Logic**: cooldown_bars, swing_mode, min_bars_to_hold, SL/TP multipliers
+- **Trading Hours**: trading_cutoff_hour_et (stop entries after 3pm), close_positions_eod
+- **Hybrid Sizing**: Adjust position size based on trend alignment
 - **Drawdown Monitor**: enabled, max_portfolio_drawdown, cooldown_seconds
 - **Indicators**: ATR period, SMA periods, RSI settings
 
 See [Configuration Guide](docs/configuration.md) for full details.
+
+## Strategy Optimization
+
+Automatically find the best strategy for each symbol based on market regime:
+
+```bash
+# Run regime-aware backtests and update routing
+trader preflight --optimize-strategies
+
+# Or use the standalone tool
+python tools/optimize_routing.py
+```
+
+This tests all strategies across market regimes (low_volatility, normal, high_volatility) and updates `config/strategy_routing.json` with optimal configurations.
+
+## Performance Analysis
+
+Track your trading performance with detailed statistics:
+
+```bash
+# Full analysis
+trader stats
+
+# Quick summary
+trader stats --summary
+
+# By day, symbol, hour, or strategy
+trader stats --by-day
+trader stats --by-symbol
+trader stats --by-hour
+```
+
+See [Commands Reference](docs/commands.md) for all options.
 
 ## Documentation
 

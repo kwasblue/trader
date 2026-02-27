@@ -813,6 +813,17 @@ class AlpacaBroker(BaseBrokerInterface):
 
         return await asyncio.to_thread(_get)
 
+    async def get_positions(self) -> List[PositionView]:
+        """Get all open positions."""
+        if not self.trading_client:
+            raise RuntimeError("Not connected: call connect() first")
+
+        def _get_all():
+            positions_list = self.trading_client.get_all_positions()
+            return [self._mk_position_view(p) for p in positions_list]
+
+        return await asyncio.to_thread(_get_all)
+
     async def get_account_info(self) -> BrokerSnapshot:
         if not self.trading_client:
             raise RuntimeError("Not connected: call connect() first")
