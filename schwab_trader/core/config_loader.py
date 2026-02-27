@@ -117,10 +117,12 @@ class TradeLogicConfig:
     exit_fraction: float = 0.25
     trailing_stop: bool = True
     max_positions: int = 10
-    min_bars_to_hold: int = 3  # Minimum bars before allowing TP/reversal exits
+    min_bars_to_hold: int = 5  # Minimum bars before allowing TP/reversal exits
     swing_mode: bool = True  # If True, prevent same-day exits (except stop loss)
     min_hold_days: int = 1  # Minimum days to hold before allowing exit
     allow_after_hours: bool = False  # Allow trading outside market hours
+    trading_cutoff_hour_et: int = 15  # Stop new entries after this hour ET (15 = 3pm)
+    close_positions_eod: bool = True  # Close all positions at end of day
 
 
 @dataclass
@@ -201,6 +203,41 @@ class MLTrainingConfig:
 
 
 @dataclass
+class HybridSizingConfig:
+    """
+    Configuration for hybrid position sizing.
+
+    Hybrid sizing uses daily indicators for trend context while executing
+    on minute bars. Position sizes are adjusted based on:
+    - Signal confidence (high/medium/low)
+    - Trend alignment (with/against daily trend)
+
+    Position Sizing Matrix:
+                           Against Trend    With Trend
+                         +----------------+----------------+
+         High Confidence |    Medium      |     Full       |
+              (>0.7)     |     (50%)      |    (100%)      |
+                         +----------------+----------------+
+         Med Confidence  |    Small       |    Medium      |
+            (0.5-0.7)    |     (25%)      |     (60%)      |
+                         +----------------+----------------+
+         Low Confidence  |   NO TRADE     |    Small       |
+              (<0.5)     |      (0%)      |     (30%)      |
+                         +----------------+----------------+
+
+    Attributes:
+        enabled: If False, hybrid sizing is disabled (pass-through mode)
+        high_confidence_threshold: Confidence >= this is "high" tier
+        low_confidence_threshold: Confidence < this is "low" tier
+        trend_indicators: Which indicators to use for trend detection
+    """
+    enabled: bool = False  # Off by default, opt-in
+    high_confidence_threshold: float = 0.7
+    low_confidence_threshold: float = 0.5
+    trend_indicators: List[str] = field(default_factory=lambda: ["RSI", "MACD", "SMA_200"])
+
+
+@dataclass
 class TradingConfig:
     """Master configuration container."""
     general: GeneralConfig = field(default_factory=GeneralConfig)
@@ -218,6 +255,7 @@ class TradingConfig:
     autotrader: AutoTraderConfig = field(default_factory=AutoTraderConfig)
     error_recovery: ErrorRecoveryConfig = field(default_factory=ErrorRecoveryConfig)
     ml_training: MLTrainingConfig = field(default_factory=MLTrainingConfig)
+    hybrid_sizing: HybridSizingConfig = field(default_factory=HybridSizingConfig)
 
     # Raw dict for any custom/unknown fields
     _raw: Dict[str, Any] = field(default_factory=dict)
@@ -275,6 +313,7 @@ def _apply_env_overrides(config: TradingConfig) -> TradingConfig:
         "LOGGING": "logging",
         "AUTOTRADER": "autotrader",
         "ERROR_RECOVERY": "error_recovery",
+        "HYBRID_SIZING": "hybrid_sizing",
     }
 
     # Collect overrides by section
@@ -404,6 +443,7 @@ def load_config(config_path: Optional[str] = None) -> TradingConfig:
             autotrader=_dict_to_dataclass(AutoTraderConfig, raw.get("autotrader")),
             error_recovery=_dict_to_dataclass(ErrorRecoveryConfig, raw.get("error_recovery")),
             ml_training=_dict_to_dataclass(MLTrainingConfig, raw.get("ml_training")),
+            hybrid_sizing=_dict_to_dataclass(HybridSizingConfig, raw.get("hybrid_sizing")),
             _raw=raw
         )
 

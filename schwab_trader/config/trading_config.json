@@ -74,10 +74,12 @@
     "exit_fraction": 0.25,
     "trailing_stop": true,
     "max_positions": 10,
-    "min_bars_to_hold": 3,
+    "min_bars_to_hold": 5,
     "swing_mode": true,
     "min_hold_days": 1,
-    "allow_after_hours": false
+    "allow_after_hours": false,
+    "trading_cutoff_hour_et": 15,
+    "close_positions_eod": true
   },
 
   "indicators": {
@@ -146,5 +148,12 @@
       "feat_bars_in_regime",
       "feat_signal_strength"
     ]
+  },
+
+  "hybrid_sizing": {
+    "enabled": false,
+    "high_confidence_threshold": 0.7,
+    "low_confidence_threshold": 0.5,
+    "trend_indicators": ["RSI", "MACD", "SMA_200"]
   }
 }

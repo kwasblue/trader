@@ -24,6 +24,7 @@ from core.base.trade_logic_manager_base import TradeLogicManagerBase
 from core.logic.portfolio_state import PortfolioState
 from core.logic.symbol_state import SymbolState
 from core.logic.position_manager import PositionManager
+from core.logic.hybrid_position_sizer import HybridPositionSizer
 from core.app_types import OrderResult, SignalContext
 from core.enums import OrderSide, PositionState
 from core.order_registry import OrderRegistry
@@ -215,6 +216,10 @@ class LiveExecutionEngine(ExecutionEngineBase):
                 self.meta_logger = MetaTradeLogger(log_file='meta_trades_live.jsonl')
         except Exception:
             self.meta_logger = MetaTradeLogger(log_file='meta_trades_live.jsonl')
+
+        # Hybrid position sizer - set by BaseLiveRunner if enabled
+        # Uses confidence + trend alignment to adjust position sizes
+        self.hybrid_sizer: Optional[HybridPositionSizer] = None
 
         self.logger.info(
             f"LiveExecutionEngine initialized with order registry and validator"
@@ -553,11 +558,11 @@ class LiveExecutionEngine(ExecutionEngineBase):
 
                 side = OrderSide.SELL if state.side == "long" else OrderSide.BUY
 
-            # 4. Calculate quantity
+            # 4. Calculate quantity (pass context for hybrid sizing)
             qty = self._calculate_quantity(
                 context.symbol, state, action_type, context.price, context.atr,
                 context.regime, trade_logic, signal=context.signal,
-                df=context.df
+                df=context.df, context=context
             )
 
             if qty <= 0:
@@ -1272,7 +1277,14 @@ class LiveExecutionEngine(ExecutionEngineBase):
         return super()._check_trade_approval(trade_logic, context, state)
 
     def _calculate_quantity(self, symbol, state, action_type, price, atr, regime, trade_logic, **kwargs):
-        """Calculate position size for entries, use PositionManager for exits."""
+        """
+        Calculate position size for entries, use PositionManager for exits.
+
+        For entries, applies hybrid sizing if enabled:
+        - Gets base quantity from standard sizer
+        - Applies confidence + trend multiplier from hybrid sizer
+        - Can block trades (return 0) if low confidence against trend
+        """
         # Handle exits via PositionManager
         if action_type in ("exit", "reversal", "partial_exit"):
             position = self.portfolio.positions.get(symbol)
@@ -1281,8 +1293,9 @@ class LiveExecutionEngine(ExecutionEngineBase):
             is_partial = action_type == "partial_exit"
             return self.position_manager.get_exit_quantity(position.qty, is_partial=is_partial)
 
-        # Get signal from kwargs (passed from handle_signal)
+        # Get signal and context from kwargs
         signal = kwargs.get('signal', 1)
+        context = kwargs.get('context')
 
         sl_mults = getattr(trade_logic, 'sl_mults', {"normal": 1.5})
         sl_mult = sl_mults.get(regime, 1.5)
@@ -1323,7 +1336,8 @@ class LiveExecutionEngine(ExecutionEngineBase):
             self.logger.warning(f"[{symbol}] Insufficient buying power: ${buying_power:.2f}")
             return 0
 
-        return self.sizer.calculate_position_size(
+        # Calculate base position size
+        base_qty = self.sizer.calculate_position_size(
             symbol=symbol,
             price=price,
             account_value=self.portfolio.total_value,
@@ -1333,8 +1347,48 @@ class LiveExecutionEngine(ExecutionEngineBase):
             signal=signal,
             portfolio=self.portfolio,
             market_conditions=regime,
-            current_cash=buying_power  # Use actual buying power, not cash!
+            current_cash=buying_power
         )
+
+        # Apply hybrid sizing if enabled
+        if self.hybrid_sizer and self.hybrid_sizer.enabled:
+            # Get daily context and confidence from context metadata
+            daily_ctx = {}
+            confidence = 1.0  # Default to full confidence if not provided
+
+            if context:
+                daily_ctx = context.metadata.get('daily_context', {})
+                confidence = getattr(context, 'confidence', 1.0)
+
+            # Calculate hybrid sizing result
+            sizing_result = self.hybrid_sizer.calculate(
+                signal=signal,
+                confidence=confidence,
+                daily_context=daily_ctx,
+            )
+
+            # Apply multiplier
+            adjusted_qty = int(base_qty * sizing_result.base_multiplier)
+
+            # Log sizing decision
+            if sizing_result.base_multiplier == 0:
+                self.logger.info(
+                    f"[{symbol}] Trade BLOCKED by hybrid sizer: {sizing_result.reason}"
+                )
+                return 0
+            elif sizing_result.base_multiplier < 1.0:
+                self.logger.info(
+                    f"[{symbol}] Position reduced to {sizing_result.base_multiplier:.0%}: "
+                    f"{sizing_result.reason} (base_qty={base_qty} -> {adjusted_qty})"
+                )
+            else:
+                self.logger.debug(
+                    f"[{symbol}] Hybrid sizing: {sizing_result.reason}"
+                )
+
+            return adjusted_qty
+
+        return base_qty
     
     def _update_portfolio_after_execution(self, symbol: str, result) -> None:
         """

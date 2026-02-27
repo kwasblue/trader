@@ -22,7 +22,8 @@ import contextlib
 import os
 from abc import ABC, abstractmethod
 from collections import defaultdict, deque
-from datetime import datetime, timezone
+from dataclasses import asdict
+from datetime import datetime, date, timezone
 from pathlib import Path
 from typing import Any, Dict, Deque, List, Optional, Tuple, TYPE_CHECKING
 
@@ -36,6 +37,7 @@ from core.logic.portfolio_state import PortfolioState
 from core.logic.symbol_state import SymbolState
 from core.logic.trade_gate import TradeGate
 from core.logic.strategy_routing_manager import StrategyRoutingManager
+from core.logic.hybrid_position_sizer import HybridPositionSizer
 from core.drawdown_monitor import DrawdownMonitor
 from core.historical_loader import HistoricalBarLoader
 from core.historical_data_updater import HistoricalDataUpdater
@@ -48,7 +50,7 @@ from core.contracts.events import (
     EVENT_POSITION_UPDATE, PositionPayload,
     EVENT_HEALTH_UPDATE,
 )
-from core.config_loader import get_config, create_position_sizer, create_drawdown_monitor, TradingConfig
+from core.config_loader import get_config, create_position_sizer, create_drawdown_monitor, create_position_manager, TradingConfig
 from core.simulator.simulation import compute_atr, classify_regime, IncrementalATR
 from core.logic.live_execution_engine import LiveExecutionEngine
 from core.logic.trade_logic_manager import DynamicTradeLogicManager
@@ -287,6 +289,8 @@ class BaseLiveRunner(ABC):
         self.sizer = create_position_sizer(self.config)
         self.router = StrategyRoutingManager(str(ROOT / "config" / "strategy_routing.json"))
         self.executor = LiveExecutor(broker=self.broker)
+        # Create PositionManager with config values (min_bars_to_hold, swing_mode, etc.)
+        self.position_manager = create_position_manager(self.config)
         self.engine = LiveExecutionEngine(
             broker=self.broker,
             executor=self.executor,
@@ -297,10 +301,19 @@ class BaseLiveRunner(ABC):
             sync_on_start=False,  # Sync is done by reconciler in run()
             event_handler=self.event_handler,
             drawdown_monitor=self.ddm,
+            position_manager=self.position_manager,
         )
 
         # Provide ATR history reference for meta-model feature computation
         self.engine.set_atr_hist_reference(self.atr_hist)
+
+        # Log trading rules
+        tl = self.config.trade_logic
+        self.logger.info(
+            f"Trading rules: min_bars_to_hold={tl.min_bars_to_hold}, "
+            f"cutoff={tl.trading_cutoff_hour_et}:00 ET, "
+            f"close_eod={tl.close_positions_eod}"
+        )
 
         # Wire optional attrs
         if hasattr(self.engine, "trade_gate"):
@@ -324,6 +337,7 @@ class BaseLiveRunner(ABC):
         self._last_ddm_date: Optional[datetime] = None
         self._last_reset_minute: Optional[int] = None  # Track when reservations were last reset
         self._running = False
+        self._eod_close_triggered: bool = False  # Track if EOD close has been triggered today
 
         # Unified data pipeline (supports Alpaca and Schwab with fallback)
         self.data_pipeline = UnifiedDataPipeline(
@@ -340,6 +354,30 @@ class BaseLiveRunner(ABC):
 
         # Background update task reference
         self._update_task: Optional[asyncio.Task] = None
+
+        # Daily indicator context for hybrid position sizing
+        # Maps symbol -> dict of daily indicator values (RSI, MACD, SMA_200, etc.)
+        self.daily_context: Dict[str, Dict[str, Any]] = {}
+        self._last_daily_refresh: Optional[date] = None
+
+        # Hybrid position sizer for confidence + trend-based sizing
+        hybrid_config = getattr(self.config, 'hybrid_sizing', None)
+        if hybrid_config and hybrid_config.enabled:
+            self.hybrid_sizer = HybridPositionSizer(
+                enabled=True,
+                config=asdict(hybrid_config)
+            )
+            self.logger.info(
+                f"Hybrid position sizing ENABLED: "
+                f"high_conf={hybrid_config.high_confidence_threshold}, "
+                f"low_conf={hybrid_config.low_confidence_threshold}"
+            )
+        else:
+            self.hybrid_sizer = HybridPositionSizer(enabled=False)
+            self.logger.info("Hybrid position sizing DISABLED (pass-through mode)")
+
+        # Pass hybrid sizer to execution engine
+        self.engine.hybrid_sizer = self.hybrid_sizer
 
     # ==========================================================================
     # ABSTRACT METHODS - Subclasses must implement
@@ -475,6 +513,56 @@ class BaseLiveRunner(ABC):
         self.logger.critical("Manual intervention required. Review positions at broker.")
         self._running = False
 
+    async def _close_all_positions_eod(self) -> None:
+        """
+        Close all positions at end of day.
+
+        Called when past trading_cutoff_hour_et and close_positions_eod is True.
+        Uses broker's actual positions to avoid state mismatch errors.
+        """
+        self.logger.info("=" * 60)
+        self.logger.info("EOD POSITION CLOSE: Closing all positions")
+        self.logger.info("=" * 60)
+
+        try:
+            broker_positions = await self.broker.get_positions()
+        except Exception as e:
+            self.logger.error(f"EOD close failed - couldn't get positions: {e}")
+            return
+
+        if not broker_positions:
+            self.logger.info("EOD close: No positions to close")
+            return
+
+        closed_count = 0
+        for pos in broker_positions:
+            if pos.qty == 0:
+                continue
+
+            try:
+                qty = abs(int(pos.qty))
+                side = "sell" if pos.qty > 0 else "buy"
+
+                self.logger.info(f"[{pos.symbol}] EOD closing: {side} {qty} shares")
+
+                await self.broker.place_market_order(
+                    symbol=pos.symbol,
+                    qty=qty,
+                    side=side
+                )
+                closed_count += 1
+
+                # Update local state
+                state = self.symbol_state.get(pos.symbol)
+                if state:
+                    state.side = None
+                    state.bars_held = 0
+
+            except Exception as e:
+                self.logger.error(f"[{pos.symbol}] EOD close failed: {e}")
+
+        self.logger.info(f"EOD close complete: {closed_count} positions closed")
+
     @staticmethod
     def _bar_bucket(ts: datetime, timeframe_sec: int = 60) -> int:
         """Calculate bar bucket ID for deduplication."""
@@ -578,8 +666,26 @@ class BaseLiveRunner(ABC):
             if atr is not None:
                 self.atr_hist[sym].append(atr)
 
+            # Load daily context for hybrid sizing
+            # Use the last bar's daily indicators (RSI, MACD, SMA_200, Close)
+            if bars:
+                last_bar = bars[-1]
+                self.daily_context[sym] = {
+                    'RSI': last_bar.get('RSI'),
+                    'MACD': last_bar.get('MACD'),
+                    'MACD_Signal': last_bar.get('MACD_Signal'),
+                    'SMA_200': last_bar.get('SMA_200'),
+                    'Close': last_bar.get('Close'),
+                }
+                rsi_val = self.daily_context[sym].get('RSI')
+                if rsi_val is not None:
+                    self.logger.info(f"[{sym}] Loaded daily context: RSI={rsi_val:.1f}")
+                else:
+                    self.logger.debug(f"[{sym}] Daily context loaded (RSI not available)")
+
             self.logger.info(f"[{sym}] Seeded with {len(bars)} bars")
 
+        self._last_daily_refresh = datetime.now(timezone.utc).date()
         self.logger.info(f"Seeded {len(self.symbols)} symbols with up to {lookback_bars} bars.")
 
     async def _process_bar(self, bar: Dict) -> None:
@@ -594,6 +700,22 @@ class BaseLiveRunner(ABC):
         """
         symbol = bar["symbol"]
         ts: datetime = bar["timestamp"]
+
+        # Check trading cutoff time (convert to ET for comparison)
+        # UTC hour - 5 = ET hour (approximately, ignoring DST for simplicity)
+        cutoff_hour_et = getattr(self.config.trade_logic, 'trading_cutoff_hour_et', 16)
+        et_hour = (ts.hour - 5) % 24  # Simple UTC to ET conversion
+        past_cutoff = et_hour >= cutoff_hour_et
+
+        # Reset EOD close flag at start of new trading day (before cutoff)
+        if not past_cutoff:
+            self._eod_close_triggered = False
+
+        # Close all positions at EOD if enabled and past cutoff
+        close_eod = getattr(self.config.trade_logic, 'close_positions_eod', False)
+        if past_cutoff and close_eod and not self._eod_close_triggered:
+            self._eod_close_triggered = True
+            await self._close_all_positions_eod()
 
         # Reset position sizer reservations at the start of each new minute
         # This prevents accumulated reservations from blocking new trades
@@ -692,17 +814,35 @@ class BaseLiveRunner(ABC):
             timestamp=ts.isoformat(),
         )
 
+        # Get daily context for hybrid sizing
+        daily_ctx = self.daily_context.get(symbol, {})
+
+        # Block new entries after cutoff time (but allow exits)
+        # If past cutoff, force signal to 0 (hold) unless we're in a position
+        adjusted_signal = signal
+        if past_cutoff and not state.is_in_position:
+            if signal != 0:
+                self.logger.info(
+                    f"[{symbol}] Entry blocked: past {cutoff_hour_et}:00 ET cutoff "
+                    f"(current ET hour: {et_hour})"
+                )
+                adjusted_signal = 0
+
         # Hand off to execution engine (critical path - await directly)
         context = SignalContext(
             symbol=symbol,
-            signal=signal,
+            signal=adjusted_signal,
             price=last_px,
             atr=float(atr or 0.0),
             regime=regime,
             timestamp=ts,
             strategy_name=strategy_name,
             market_open=True,
-            metadata={'state': state}
+            metadata={
+                'state': state,
+                'daily_context': daily_ctx,
+                'past_cutoff': past_cutoff,
+            }
         )
         await self.engine.handle_signal_context(context)
 

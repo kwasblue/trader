@@ -411,6 +411,22 @@ class UnifiedDataPipeline:
                 return df
             return self.get_data_from_db(symbol)
 
+    def load_symbol_data(self, symbol: str, prefer_db: bool = False) -> pd.DataFrame:
+        """
+        Alias for get_data() - Load processed data for a symbol.
+
+        This method exists for backward compatibility with code that uses
+        load_symbol_data() instead of get_data().
+
+        Args:
+            symbol: Stock symbol
+            prefer_db: If True, prefer database over files
+
+        Returns:
+            DataFrame with processed data
+        """
+        return self.get_data(symbol, prefer_db=prefer_db)
+
     def list_available_symbols(self, source: str = 'file') -> List[str]:
         """
         List symbols with available data.

@@ -734,6 +734,273 @@ def strategy_refresh():
 
 
 # =============================================================================
+# BACKTEST COMMAND GROUP
+# =============================================================================
+
+@cli.group()
+def backtest():
+    """Backtesting commands.
+
+    \b
+    Commands:
+        trader backtest run         Run single strategy backtest
+        trader backtest compare     Compare strategies
+        trader backtest hybrid      Compare hybrid vs standard sizing
+    """
+    pass
+
+
+@backtest.command('run')
+@click.argument('symbol')
+@click.option('--strategy', '-s', default='sma', help='Strategy to backtest')
+@click.option('--days', '-d', type=int, default=365, help='Days of historical data')
+@click.option('--capital', type=float, default=10000, help='Initial capital')
+@click.option('--hybrid/--no-hybrid', default=False, help='Use hybrid sizing')
+@click.option('-v', '--verbose', is_flag=True, help='Verbose output')
+def backtest_run(symbol, strategy, days, capital, hybrid, verbose):
+    """Run a backtest for a single strategy.
+
+    \b
+    Examples:
+        trader backtest run AAPL -s sma
+        trader backtest run MSFT -s macd --hybrid
+        trader backtest run TSLA -s rsi -d 180 --capital 50000
+    """
+    import asyncio
+    from core.unified_data_pipeline import UnifiedDataPipeline
+    from core.backtest.unified_backtest_runner import UnifiedBacktestRunner, BacktestConfig
+
+    symbol = symbol.upper()
+
+    click.echo(f"\nLoading {days} days of data for {symbol}...")
+
+    # Load data
+    try:
+        pipeline = UnifiedDataPipeline()
+        data = pipeline.get_data(symbol)
+
+        if data is None or data.empty:
+            click.echo("No cached data, fetching...")
+
+            async def fetch():
+                return await pipeline.update_symbols([symbol], days=days)
+
+            asyncio.run(fetch())
+            data = pipeline.get_data(symbol)
+
+        if data is None or data.empty:
+            click.secho(f"Error: Could not load data for {symbol}", fg='red')
+            return
+
+        if len(data) > days:
+            data = data.tail(days).reset_index(drop=True)
+
+        click.echo(f"Loaded {len(data)} bars")
+
+    except Exception as e:
+        click.secho(f"Error loading data: {e}", fg='red')
+        return
+
+    # Run backtest
+    click.echo(f"\nRunning backtest: {strategy} (hybrid={hybrid})")
+
+    try:
+        runner = UnifiedBacktestRunner(data)
+        config = BacktestConfig(
+            strategy_name=strategy,
+            initial_capital=capital,
+            use_hybrid_sizing=hybrid,
+        )
+        result = runner.run(config)
+
+        # Display results
+        m = result.metrics
+        click.echo("\n" + "=" * 50)
+        click.echo(f"  BACKTEST RESULTS - {symbol}")
+        click.echo("=" * 50)
+        click.echo(f"  Strategy: {strategy}")
+        click.echo(f"  Hybrid Sizing: {'Yes' if hybrid else 'No'}")
+        click.echo("-" * 50)
+        click.echo(f"  Total Return:  {m.total_return:>+10.2%}")
+        click.echo(f"  Sharpe Ratio:  {m.sharpe_ratio:>10.2f}")
+        click.echo(f"  Sortino Ratio: {m.sortino_ratio:>10.2f}")
+        click.echo(f"  Max Drawdown:  {m.max_drawdown:>10.2%}")
+        click.echo(f"  Win Rate:      {m.win_rate:>10.2%}")
+        click.echo(f"  Num Trades:    {m.num_trades:>10}")
+        click.echo(f"  Final Value:   ${m.final_value:>10,.2f}")
+
+        if hybrid:
+            click.echo("-" * 50)
+            click.echo(f"  Trades with trend:     {m.trades_with_trend}")
+            click.echo(f"  Trades against trend:  {m.trades_against_trend}")
+            click.echo(f"  Win rate (with):       {m.win_rate_with_trend:.1%}")
+            click.echo(f"  Win rate (against):    {m.win_rate_against_trend:.1%}")
+
+        click.echo("=" * 50)
+
+    except Exception as e:
+        click.secho(f"Error running backtest: {e}", fg='red')
+        import traceback
+        traceback.print_exc()
+
+
+@backtest.command('compare')
+@click.argument('symbol')
+@click.option('--strategies', '-s', default='sma,ema,macd,rsi',
+              help='Comma-separated strategies to compare')
+@click.option('--days', '-d', type=int, default=365, help='Days of data')
+@click.option('--metric', '-m', default='sharpe_ratio',
+              type=click.Choice(['sharpe_ratio', 'total_return', 'sortino_ratio']),
+              help='Metric for ranking')
+@click.option('--capital', type=float, default=10000, help='Initial capital')
+def backtest_compare(symbol, strategies, days, metric, capital):
+    """Compare multiple strategies.
+
+    \b
+    Examples:
+        trader backtest compare AAPL -s sma,ema,macd,rsi
+        trader backtest compare MSFT -s momentum,breakout -m total_return
+    """
+    # Delegate to compare_strategies tool
+    cmd = [
+        sys.executable, str(ROOT / "tools" / "compare_strategies.py"),
+        symbol.upper(),
+        "-s", strategies,
+        "-d", str(days),
+        "-m", metric,
+        "--capital", str(capital),
+    ]
+
+    os.execv(sys.executable, cmd)
+
+
+@backtest.command('hybrid')
+@click.argument('symbol')
+@click.option('--strategies', '-s', default='sma,macd,rsi',
+              help='Comma-separated strategies')
+@click.option('--days', '-d', type=int, default=365, help='Days of data')
+@click.option('--capital', type=float, default=10000, help='Initial capital')
+def backtest_hybrid(symbol, strategies, days, capital):
+    """Compare hybrid vs standard sizing.
+
+    \b
+    Examples:
+        trader backtest hybrid AAPL -s sma,macd,rsi
+        trader backtest hybrid MSFT -s momentum,ema,bollinger
+    """
+    # Delegate to compare_strategies tool with hybrid flag
+    cmd = [
+        sys.executable, str(ROOT / "tools" / "compare_strategies.py"),
+        symbol.upper(),
+        "-s", strategies,
+        "-d", str(days),
+        "--capital", str(capital),
+        "--hybrid-comparison",
+    ]
+
+    os.execv(sys.executable, cmd)
+
+
+@backtest.command('categories')
+@click.argument('symbol')
+@click.option('--categories', '-c', default='trend_following,mean_reversion',
+              help='Comma-separated categories')
+@click.option('--days', '-d', type=int, default=365, help='Days of data')
+@click.option('--capital', type=float, default=10000, help='Initial capital')
+def backtest_categories(symbol, categories, days, capital):
+    """Compare strategy categories.
+
+    \b
+    Categories:
+        trend_following - SMA, EMA, MACD, ADX, etc.
+        mean_reversion  - RSI, Bollinger, Stochastic, etc.
+        momentum        - Momentum-based strategies
+
+    \b
+    Examples:
+        trader backtest categories AAPL
+        trader backtest categories MSFT -c trend_following,momentum
+    """
+    # Delegate to compare_strategies tool
+    cmd = [
+        sys.executable, str(ROOT / "tools" / "compare_strategies.py"),
+        symbol.upper(),
+        "--categories", categories,
+        "-d", str(days),
+        "--capital", str(capital),
+    ]
+
+    os.execv(sys.executable, cmd)
+
+
+@backtest.command('full')
+@click.argument('symbol')
+@click.option('--strategies', '-s', default=None, help='Strategies to include')
+@click.option('--days', '-d', type=int, default=365, help='Days of data')
+@click.option('-o', '--output', default=None, help='Output file (.md or .json)')
+@click.option('--capital', type=float, default=10000, help='Initial capital')
+def backtest_full(symbol, strategies, days, output, capital):
+    """Run full comparison analysis.
+
+    \b
+    Examples:
+        trader backtest full AAPL
+        trader backtest full MSFT -o reports/msft_analysis.md
+        trader backtest full TSLA -s sma,macd,rsi,momentum --days 180
+    """
+    cmd = [
+        sys.executable, str(ROOT / "tools" / "compare_strategies.py"),
+        symbol.upper(),
+        "-d", str(days),
+        "--capital", str(capital),
+        "--full",
+    ]
+
+    if strategies:
+        cmd.extend(["-s", strategies])
+
+    if output:
+        cmd.extend(["-o", output])
+
+    os.execv(sys.executable, cmd)
+
+
+@backtest.command('optimize')
+@click.option('--symbols', '-s', default=None, help='Comma-separated symbols (default: all)')
+@click.option('--days', '-d', type=int, default=365, help='Days of data')
+@click.option('--strategies', default=None, help='Comma-separated strategies to test')
+@click.option('--dry-run', is_flag=True, help="Don't save config")
+def backtest_optimize(symbols, days, strategies, dry_run):
+    """Optimize strategy routing for all symbols.
+
+    Runs regime-aware backtests on all symbols and updates strategy_routing.json
+    with the optimal strategy for each (symbol, regime) combination.
+
+    \b
+    Examples:
+        trader backtest optimize                    # All symbols
+        trader backtest optimize -s AAPL,MSFT      # Specific symbols
+        trader backtest optimize -d 180            # Use 180 days
+        trader backtest optimize --dry-run         # Don't save
+    """
+    cmd = [
+        sys.executable, str(ROOT / "tools" / "optimize_routing.py"),
+        "-d", str(days),
+    ]
+
+    if symbols:
+        cmd.extend(["-s", symbols])
+
+    if strategies:
+        cmd.extend(["--strategies", strategies])
+
+    if dry_run:
+        cmd.append("--dry-run")
+
+    os.execv(sys.executable, cmd)
+
+
+# =============================================================================
 # MAIN
 # =============================================================================
 

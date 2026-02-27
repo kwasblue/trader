@@ -103,9 +103,18 @@ class PreFlightChecker:
         symbols: List[str],
         update_data: bool = False,
         reauth_schwab: bool = False,
+        optimize_strategies: bool = False,
+        optimization_days: int = 365,
     ) -> bool:
         """
         Run all pre-flight checks.
+
+        Args:
+            symbols: List of symbols to check
+            update_data: Update stale data
+            reauth_schwab: Re-authenticate Schwab
+            optimize_strategies: Run regime-based strategy optimization
+            optimization_days: Days of data for optimization
 
         Returns:
             True if all critical checks pass
@@ -114,7 +123,8 @@ class PreFlightChecker:
 
         self.logger.info(f"Starting pre-flight checks at {timestamp}")
         self.logger.info(f"Symbols: {symbols}")
-        self.logger.info(f"Options: update_data={update_data}, reauth_schwab={reauth_schwab}")
+        self.logger.info(f"Options: update_data={update_data}, reauth_schwab={reauth_schwab}, "
+                        f"optimize_strategies={optimize_strategies}")
 
         self.print_header("PRE-FLIGHT SYSTEM CHECK")
         print(f"  Timestamp: {timestamp}")
@@ -132,7 +142,11 @@ class PreFlightChecker:
         # 4. Check configuration
         self._check_configuration()
 
-        # 5. Print summary
+        # 5. Optimize strategies if requested
+        if optimize_strategies:
+            await self._optimize_strategies(symbols, optimization_days)
+
+        # 6. Print summary
         return self._print_summary()
 
     def _check_environment(self) -> None:
@@ -309,10 +323,14 @@ class PreFlightChecker:
         # Check strategy routing
         routing_path = ROOT / "config" / "strategy_routing.json"
         if routing_path.exists():
-            self.print_status("strategy_routing.json", True, "Found")
+            import json
+            with open(routing_path) as f:
+                routing = json.load(f)
+            symbol_count = len([k for k in routing.keys() if k != "default"])
+            self.print_status("strategy_routing.json", True, f"Found ({symbol_count} symbols)")
             self.passed.append("Strategy routing")
         else:
-            self.print_warning("strategy_routing.json", "Not found")
+            self.print_warning("strategy_routing.json", "Not found - run with --optimize-strategies")
             self.warnings.append("Strategy routing missing")
 
         # Check data directories
@@ -324,6 +342,118 @@ class PreFlightChecker:
         else:
             self.print_status("Processed data dir", False, "Not found")
             self.issues.append("Data directory missing")
+
+    async def _optimize_strategies(self, symbols: List[str], days: int = 365) -> None:
+        """Run regime-aware strategy optimization."""
+        self.print_header("STRATEGY OPTIMIZATION")
+        print(f"  Optimizing strategies for {len(symbols)} symbols...")
+        print(f"  Using {days} days of historical data")
+        print()
+
+        from core.backtest.regime_backtest import RegimeBacktester, REGIME_TYPES
+        from collections import Counter
+        import json
+
+        pipeline = UnifiedDataPipeline()
+
+        # Load existing config to merge with (preserve symbols not being optimized)
+        config_path = ROOT / "config" / "strategy_routing.json"
+        if config_path.exists():
+            with open(config_path) as f:
+                combined_routing = json.load(f)
+        else:
+            combined_routing = {}
+
+        all_results = {}
+
+        # Strategy categories for hybrid sizing
+        trend_following = {"sma", "ema", "macd", "momentum", "adx", "ichimoku", "psar", "donchian", "breakout"}
+        mean_reversion = {"rsi", "bollinger", "stochastic", "meanreversion", "vwap"}
+
+        strategies = ["sma", "ema", "macd", "rsi", "bollinger", "momentum", "meanreversion", "stochastic"]
+
+        for i, symbol in enumerate(symbols):
+            print(f"  [{i+1}/{len(symbols)}] {symbol}...", end=" ")
+
+            try:
+                data = pipeline.get_data(symbol)
+                if data is None or data.empty:
+                    print("NO DATA")
+                    continue
+
+                if len(data) > days:
+                    data = data.tail(days).reset_index(drop=True)
+
+                tester = RegimeBacktester(
+                    data=data,
+                    symbol=symbol,
+                    strategies=strategies,
+                )
+
+                result = tester.run_regime_analysis(metric="sharpe_ratio", verbose=False)
+                all_results[symbol] = result
+                combined_routing.update(result.routing_config)
+
+                # Print summary
+                best = result.best_strategies
+                print(f"low={best.get('low_volatility', '?')}, "
+                      f"norm={best.get('normal', '?')}, "
+                      f"high={best.get('high_volatility', '?')}")
+
+            except Exception as e:
+                print(f"ERROR: {e}")
+
+        if not combined_routing:
+            self.print_status("Strategy Optimization", False, "No results")
+            self.issues.append("Strategy optimization failed")
+            return
+
+        # Determine hybrid sizing for each symbol
+        for symbol, config in combined_routing.items():
+            if symbol == "default":
+                continue
+
+            trend_count = sum(
+                1 for regime in ["low_volatility", "normal", "high_volatility"]
+                if config.get(regime, "").lower() in trend_following
+            )
+            mr_count = sum(
+                1 for regime in ["low_volatility", "normal", "high_volatility"]
+                if config.get(regime, "").lower() in mean_reversion
+            )
+
+            # Enable hybrid if trend-following is dominant
+            config["use_hybrid"] = trend_count > mr_count
+
+        # Add default routing
+        if all_results:
+            low_vol = [r.best_strategies.get("low_volatility") for r in all_results.values()]
+            normal = [r.best_strategies.get("normal") for r in all_results.values()]
+            high_vol = [r.best_strategies.get("high_volatility") for r in all_results.values()]
+
+            combined_routing["default"] = {
+                "low_volatility": Counter(low_vol).most_common(1)[0][0] if low_vol else "sma",
+                "normal": Counter(normal).most_common(1)[0][0] if normal else "bollinger",
+                "high_volatility": Counter(high_vol).most_common(1)[0][0] if high_vol else "rsi",
+                "default": "momentum",
+                "use_hybrid": True,
+            }
+
+        # Save config
+        config_path = ROOT / "config" / "strategy_routing.json"
+        with open(config_path, "w") as f:
+            json.dump(combined_routing, f, indent=2)
+
+        # Summary
+        hybrid_enabled = sum(1 for s, c in combined_routing.items() if s != "default" and c.get("use_hybrid"))
+        hybrid_disabled = len(combined_routing) - 1 - hybrid_enabled
+
+        print()
+        self.print_status("Strategy Optimization", True,
+                         f"Optimized {len(combined_routing) - 1} symbols")
+        print(f"      Hybrid sizing: {hybrid_enabled} enabled, {hybrid_disabled} disabled")
+        print(f"      Config saved to: {config_path}")
+        self.passed.append("Strategy optimization")
 
     async def _reauth_schwab(self) -> None:
         """Trigger Schwab re-authentication."""
@@ -441,6 +571,8 @@ Examples:
   python preflight.py --update-data          # Update stale data
   python preflight.py --reauth-schwab        # Re-authenticate Schwab
   python preflight.py -v --update-data       # Verbose with data update
+  python preflight.py --optimize-strategies  # Run strategy optimization
+  python preflight.py -u --optimize-strategies  # Full refresh: update data + optimize
         """
     )
 
@@ -466,6 +598,17 @@ Examples:
         help='Trigger Schwab re-authentication'
     )
     parser.add_argument(
+        '--optimize-strategies', '-o',
+        action='store_true',
+        help='Run regime-based strategy optimization and update routing config'
+    )
+    parser.add_argument(
+        '--optimization-days',
+        type=int,
+        default=365,
+        help='Days of data to use for strategy optimization (default: 365)'
+    )
+    parser.add_argument(
         '--verbose', '-v',
         action='store_true',
         help='Verbose output'
@@ -488,6 +631,8 @@ Examples:
         symbols=symbols,
         update_data=args.update_data,
         reauth_schwab=args.reauth_schwab,
+        optimize_strategies=args.optimize_strategies,
+        optimization_days=args.optimization_days,
     )
 
     sys.exit(0 if success else 1)
