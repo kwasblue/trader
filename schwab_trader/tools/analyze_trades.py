@@ -12,14 +12,19 @@ Usage:
 """
 
 import sys
+import os
 import argparse
 from pathlib import Path
 from collections import defaultdict
 
 import pandas as pd
+from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_LOG = ROOT / "logs" / "live_trades.csv"
+
+# Load environment for broker credentials
+load_dotenv(ROOT / ".env")
 
 
 def load_and_match_trades(csv_path: Path) -> pd.DataFrame:
@@ -336,7 +341,7 @@ def print_worst_trades(trades_df: pd.DataFrame, n: int = 10):
 
 
 def print_open_positions(positions: dict):
-    """Print currently open positions."""
+    """Print currently open positions (from CSV matching - may be inaccurate)."""
     open_list = []
     for symbol, pos_list in positions.items():
         for pos in pos_list:
@@ -353,7 +358,7 @@ def print_open_positions(positions: dict):
 
     print()
     print("=" * 70)
-    print("  OPEN POSITIONS")
+    print("  OPEN POSITIONS (from CSV - may be stale)")
     print("=" * 70)
     print(f"{'Symbol':<8} {'Side':<6} {'Qty':>6} {'Entry Price':>12} {'Entry Date':<12}")
     print("-" * 70)
@@ -364,6 +369,64 @@ def print_open_positions(positions: dict):
 
     print("-" * 70)
     print("=" * 70)
+
+
+def fetch_live_positions():
+    """Fetch actual positions from Alpaca broker."""
+    try:
+        from alpaca.trading.client import TradingClient
+
+        api_key = os.getenv('ALPACA_API_KEY')
+        secret_key = os.getenv('ALPACA_SECRET_KEY')
+
+        if not api_key or not secret_key:
+            print("Error: ALPACA_API_KEY or ALPACA_SECRET_KEY not set")
+            return None
+
+        paper = os.getenv('ALPACA_PAPER', 'true').lower() == 'true'
+        client = TradingClient(api_key, secret_key, paper=paper)
+        return client.get_all_positions()
+    except Exception as e:
+        print(f"Error fetching positions: {e}")
+        return None
+
+
+def print_live_positions():
+    """Print actual positions from broker."""
+    positions = fetch_live_positions()
+
+    if positions is None:
+        return 0
+
+    print()
+    print("=" * 70)
+    print("  OPEN POSITIONS (LIVE from Alpaca)")
+    print("=" * 70)
+
+    if not positions:
+        print("  No open positions")
+        print("=" * 70)
+        return 0
+
+    print(f"{'Symbol':<8} {'Side':<6} {'Qty':>8} {'Avg Entry':>12} {'Market Val':>12} {'Unrealized':>12}")
+    print("-" * 70)
+
+    total_unrealized = 0.0
+    for pos in positions:
+        qty = int(float(pos.qty))
+        avg_entry = float(pos.avg_entry_price)
+        market_val = float(pos.market_value)
+        unrealized = float(pos.unrealized_pl)
+        total_unrealized += unrealized
+
+        print(f"{pos.symbol:<8} {pos.side.value:<6} {qty:>8} "
+              f"${avg_entry:>10.2f} ${market_val:>10.2f} ${unrealized:>+10.2f}")
+
+    print("-" * 70)
+    print(f"{'Total':>36} ${sum(float(p.market_value) for p in positions):>10.2f} ${total_unrealized:>+10.2f}")
+    print("=" * 70)
+
+    return len(positions)
 
 
 def main():
@@ -384,6 +447,7 @@ def main():
     parser.add_argument('--by-hold-time', action='store_true', help="Show hold time analysis")
     parser.add_argument('--worst', type=int, metavar='N', help="Show worst N trades")
     parser.add_argument('--open', action='store_true', help="Show open positions")
+    parser.add_argument('--live', action='store_true', help="Query live positions from broker (instead of CSV)")
 
     args = parser.parse_args()
 
@@ -397,11 +461,20 @@ def main():
     # If no specific flags, show everything
     show_all = not any([
         args.summary, args.by_day, args.by_symbol, args.by_hour,
-        args.by_strategy, args.by_hold_time, args.worst, args.open
+        args.by_strategy, args.by_hold_time, args.worst, args.open, args.live
     ])
 
+    # Use live position count for summary if --live flag is set
+    if args.live or show_all:
+        live_positions = fetch_live_positions()
+        live_open_count = len(live_positions) if live_positions else 0
+    else:
+        live_open_count = None
+
     if show_all or args.summary:
-        print_summary(trades_df, open_count)
+        # Show live count in summary if available
+        display_open_count = live_open_count if live_open_count is not None else open_count
+        print_summary(trades_df, display_open_count)
 
     if show_all or args.by_day:
         print_by_day(trades_df)
@@ -421,7 +494,10 @@ def main():
     if args.worst:
         print_worst_trades(trades_df, args.worst)
 
-    if show_all or args.open:
+    # Show live positions by default, fall back to CSV if --open explicitly requested
+    if show_all or args.live:
+        print_live_positions()
+    elif args.open:
         print_open_positions(positions)
 
 
