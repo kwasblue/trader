@@ -501,36 +501,151 @@ class AutoTrader:
             chunk = min(wait_seconds, 30)  # 30 second chunks
             await asyncio.sleep(chunk)
 
+    async def _check_network_connectivity(self) -> bool:
+        """
+        Check if network is available by attempting DNS resolution.
+
+        Returns True if network is reachable, False otherwise.
+        """
+        import socket
+
+        hosts_to_check = [
+            ("paper-api.alpaca.markets", 443),
+            ("api.alpaca.markets", 443),
+            ("google.com", 443),
+        ]
+
+        for host, port in hosts_to_check:
+            try:
+                # Try DNS resolution
+                socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
+                return True
+            except socket.gaierror:
+                continue
+
+        return False
+
+    async def _wait_for_network(self) -> bool:
+        """
+        Wait for network connectivity until market opens.
+
+        Returns True if network became available, False if market opened without network.
+        """
+        check_interval = 30  # seconds
+
+        while self.running:
+            if await asyncio.to_thread(self._check_network_connectivity_sync):
+                self.logger.info("Network connectivity confirmed")
+                return True
+
+            # Check if we've run out of time (market is about to open)
+            seconds_to_open = self.scheduler.seconds_until_market_open()
+            if seconds_to_open <= 60:  # Less than 1 minute to market open
+                self.logger.error("Market opening soon but no network connectivity")
+                return False
+
+            self.logger.warning(
+                f"No network connectivity, retrying in {check_interval}s... "
+                f"({int(seconds_to_open/60)} min until market open)"
+            )
+            print(
+                f"[{self.scheduler.now_et().strftime('%H:%M:%S')}] "
+                f"Waiting for network... ({int(seconds_to_open/60)} min until market open)"
+            )
+            await asyncio.sleep(check_interval)
+
+        return False
+
+    def _check_network_connectivity_sync(self) -> bool:
+        """Synchronous network check for use with asyncio.to_thread."""
+        import socket
+
+        hosts_to_check = [
+            ("paper-api.alpaca.markets", 443),
+            ("api.alpaca.markets", 443),
+            ("google.com", 443),
+        ]
+
+        for host, port in hosts_to_check:
+            try:
+                socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
+                return True
+            except socket.gaierror:
+                continue
+
+        return False
+
     async def _run_preflight(self) -> bool:
-        """Run pre-flight checks."""
+        """
+        Run pre-flight checks with network wait and retry logic.
+
+        First waits for network connectivity (until market opens),
+        then runs preflight with retries for other transient failures.
+        """
         self._set_state(AutoTraderState.PRE_FLIGHT)
 
-        self.logger.info("Running pre-flight checks...")
-        print(f"[{self.scheduler.now_et().strftime('%H:%M:%S')}] Running pre-flight checks...")
+        # First, ensure we have network connectivity
+        self.logger.info("Checking network connectivity...")
+        print(f"[{self.scheduler.now_et().strftime('%H:%M:%S')}] Checking network connectivity...")
 
-        try:
-            from preflight import PreFlightChecker
-
-            checker = PreFlightChecker(verbose=False)
-            success = await checker.run_all_checks(
-                symbols=self.symbols,
-                update_data=True,  # Update stale data
-                reauth_schwab=False,  # Don't attempt manual reauth in auto mode
-            )
-
-            if success:
-                self.logger.info("Pre-flight checks PASSED")
-                print(f"[{self.scheduler.now_et().strftime('%H:%M:%S')}] Pre-flight: PASSED")
-            else:
-                self.logger.error("Pre-flight checks FAILED")
-                print(f"[{self.scheduler.now_et().strftime('%H:%M:%S')}] Pre-flight: FAILED")
-
-            return success
-
-        except Exception as e:
-            self.logger.exception(f"Pre-flight error: {e}")
-            print(f"[{self.scheduler.now_et().strftime('%H:%M:%S')}] Pre-flight ERROR: {e}")
+        if not await self._wait_for_network():
+            self.logger.error("Failed to establish network connectivity")
+            print(f"[{self.scheduler.now_et().strftime('%H:%M:%S')}] No network connectivity")
             return False
+
+        # Now run preflight with retries
+        max_retries = getattr(self.config.autotrader, 'preflight_max_retries', 3)
+        retry_delay = getattr(self.config.autotrader, 'preflight_retry_delay', 60)
+
+        for attempt in range(1, max_retries + 1):
+            self.logger.info(f"Running pre-flight checks (attempt {attempt}/{max_retries})...")
+            print(f"[{self.scheduler.now_et().strftime('%H:%M:%S')}] Running pre-flight checks (attempt {attempt}/{max_retries})...")
+
+            try:
+                from preflight import PreFlightChecker
+
+                checker = PreFlightChecker(verbose=False)
+                success = await checker.run_all_checks(
+                    symbols=self.symbols,
+                    update_data=True,  # Update stale data
+                    reauth_schwab=False,  # Don't attempt manual reauth in auto mode
+                )
+
+                if success:
+                    self.logger.info("Pre-flight checks PASSED")
+                    print(f"[{self.scheduler.now_et().strftime('%H:%M:%S')}] Pre-flight: PASSED")
+                    return True
+
+                # Check if we should retry
+                if attempt < max_retries:
+                    self.logger.warning(
+                        f"Pre-flight checks failed, retrying in {retry_delay}s..."
+                    )
+                    print(
+                        f"[{self.scheduler.now_et().strftime('%H:%M:%S')}] "
+                        f"Pre-flight failed, retrying in {retry_delay}s..."
+                    )
+                    await asyncio.sleep(retry_delay)
+                else:
+                    self.logger.error("Pre-flight checks FAILED after all retries")
+                    print(f"[{self.scheduler.now_et().strftime('%H:%M:%S')}] Pre-flight: FAILED")
+                    return False
+
+            except Exception as e:
+                self.logger.exception(f"Pre-flight error (attempt {attempt}): {e}")
+
+                if attempt < max_retries:
+                    self.logger.warning(f"Retrying in {retry_delay}s...")
+                    print(
+                        f"[{self.scheduler.now_et().strftime('%H:%M:%S')}] "
+                        f"Pre-flight error, retrying in {retry_delay}s..."
+                    )
+                    await asyncio.sleep(retry_delay)
+                else:
+                    print(f"[{self.scheduler.now_et().strftime('%H:%M:%S')}] Pre-flight ERROR: {e}")
+                    return False
+
+        return False
 
     async def _run_trading_session(self) -> None:
         """Run the trading session until market close."""
@@ -591,10 +706,29 @@ class AutoTrader:
         # Create task for the runner
         self.trading_task = asyncio.create_task(runner.run())
 
+        # Config for market close position closing
+        close_on_market_close = getattr(
+            self.config.autotrader, 'close_positions_on_market_close', True
+        )
+        minutes_before = getattr(
+            self.config.autotrader, 'market_close_minutes_before', 5
+        )
+        positions_closed = False
+
         try:
             # Wait until market close or stop signal
             while self.running and self.scheduler.is_market_open():
                 await asyncio.sleep(10)
+
+                # Check if we should close positions (X minutes before market close)
+                if close_on_market_close and not positions_closed:
+                    seconds_to_close = self.scheduler.seconds_until_market_close()
+                    if seconds_to_close <= (minutes_before * 60):
+                        self.logger.info(
+                            f"Triggering position close {int(seconds_to_close/60)} minutes before market close"
+                        )
+                        await self._close_all_positions_market_close(runner)
+                        positions_closed = True
 
             # Stop the runner gracefully
             self.logger.info(f"Market closed, stopping {self.broker} runner...")
@@ -610,6 +744,64 @@ class AutoTrader:
         except asyncio.CancelledError:
             runner.stop()
             raise
+
+    async def _close_all_positions_market_close(self, runner) -> None:
+        """
+        Close all positions before market close (safety net).
+
+        This is a failsafe in case the EOD close logic in the runner didn't trigger
+        due to missing bar data. Directly accesses the broker to close positions.
+        Triggered X minutes before market close (configurable via market_close_minutes_before).
+        """
+        self.logger.info("=" * 60)
+        self.logger.info("PRE-MARKET-CLOSE: Checking for open positions to close")
+        self.logger.info("=" * 60)
+
+        try:
+            broker = runner.broker
+            positions = await broker.get_positions()
+
+            if not positions:
+                self.logger.info("Market close: No positions to close")
+                return
+
+            # Filter to only positions with non-zero qty
+            open_positions = [p for p in positions if p.qty != 0]
+
+            if not open_positions:
+                self.logger.info("Market close: No open positions to close")
+                return
+
+            self.logger.warning(
+                f"Market close safety net: Found {len(open_positions)} open positions to close"
+            )
+            print(
+                f"[{self.scheduler.now_et().strftime('%H:%M:%S')}] "
+                f"WARNING: Closing {len(open_positions)} positions at market close"
+            )
+
+            closed_count = 0
+            for pos in open_positions:
+                try:
+                    qty = abs(int(pos.qty))
+                    side = "sell" if pos.qty > 0 else "buy"
+
+                    self.logger.info(f"[{pos.symbol}] Market close: {side} {qty} shares")
+
+                    await broker.place_market_order(
+                        symbol=pos.symbol,
+                        qty=qty,
+                        side=side
+                    )
+                    closed_count += 1
+
+                except Exception as e:
+                    self.logger.error(f"[{pos.symbol}] Market close failed: {e}")
+
+            self.logger.info(f"Market close complete: {closed_count}/{len(open_positions)} positions closed")
+
+        except Exception as e:
+            self.logger.error(f"Market close position check failed: {e}")
 
     async def _run_post_market(self) -> None:
         """Run post-market activities (data updates)."""

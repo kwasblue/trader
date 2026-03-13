@@ -67,6 +67,7 @@ class AlpacaLiveRunner(BaseLiveRunner):
             api_key=os.getenv("ALPACA_API_KEY"),
             api_secret=os.getenv("ALPACA_SECRET_KEY"),
             paper=config.alpaca.paper,
+            poll_timeout=getattr(config.alpaca, 'poll_timeout_seconds', 30),
         )
 
     def _canonicalize_bar(self, raw_bar: Any) -> Dict:

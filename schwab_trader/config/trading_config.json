@@ -22,7 +22,8 @@
   "alpaca": {
     "enabled": true,
     "paper": true,
-    "data_feed": "iex"
+    "data_feed": "iex",
+    "poll_timeout_seconds": 30
   },
 
   "schwab": {
@@ -79,6 +80,7 @@
     "min_hold_days": 1,
     "allow_after_hours": false,
     "trading_cutoff_hour_et": 15,
+    "trading_cutoff_minute_et": 45,
     "close_positions_eod": true,
     "signal_based_exits": false
   },
@@ -123,7 +125,11 @@
     "pre_market_buffer_minutes": 15,
     "post_market_delay_minutes": 5,
     "data_update_days": 5,
-    "dry_run": false
+    "dry_run": false,
+    "close_positions_on_market_close": true,
+    "market_close_minutes_before": 5,
+    "preflight_max_retries": 3,
+    "preflight_retry_delay": 60
   },
 
   "error_recovery": {

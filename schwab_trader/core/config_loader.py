@@ -59,6 +59,7 @@ class AlpacaConfig:
     enabled: bool = True
     paper: bool = True
     data_feed: str = "iex"
+    poll_timeout_seconds: int = 30  # Timeout for REST API poll requests
 
 
 @dataclass
@@ -122,6 +123,7 @@ class TradeLogicConfig:
     min_hold_days: int = 1  # Minimum days to hold before allowing exit
     allow_after_hours: bool = False  # Allow trading outside market hours
     trading_cutoff_hour_et: int = 15  # Stop new entries after this hour ET (15 = 3pm)
+    trading_cutoff_minute_et: int = 45  # Stop new entries after this minute (combined with hour)
     close_positions_eod: bool = True  # Close all positions at end of day
     signal_based_exits: bool = True  # If False, only exit on SL/TP (no signal reversal exits)
 
@@ -172,6 +174,10 @@ class AutoTraderConfig:
     post_market_delay_minutes: int = 5
     data_update_days: int = 5
     dry_run: bool = False
+    close_positions_on_market_close: bool = True  # Safety net: close positions before market closes
+    market_close_minutes_before: int = 5  # Minutes before close to trigger position closing
+    preflight_max_retries: int = 3  # Number of preflight retry attempts
+    preflight_retry_delay: int = 60  # Seconds between preflight retries
 
 
 @dataclass

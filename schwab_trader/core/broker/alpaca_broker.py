@@ -1,6 +1,7 @@
 from __future__ import annotations
 import asyncio
 import inspect
+import uuid
 from typing import Optional, List, Dict, Any
 
 import alpaca
@@ -71,7 +72,7 @@ class AlpacaBroker(BaseBrokerInterface):
     you originally used (connect/start_stream/subscribe_bars/execute_trade).
     """
 
-    def __init__(self, api_key: str, api_secret: str, event_handler: EventHandler | None = None, paper: bool = True):
+    def __init__(self, api_key: str, api_secret: str, event_handler: EventHandler | None = None, paper: bool = True, poll_timeout: int = 30):
         self.api_key = api_key
         self.api_secret = api_secret
         self.paper = paper
@@ -91,6 +92,7 @@ class AlpacaBroker(BaseBrokerInterface):
         self._polling_active = False  # Whether polling fallback is active
         self._poll_interval = 60  # Poll every 60 seconds
         self._stale_threshold = 120  # Consider stale if no bar for 2 minutes
+        self._poll_timeout = poll_timeout  # Timeout for poll REST requests
 
     # ---------------------------------------------------------
     # Connections / Streaming
@@ -426,7 +428,11 @@ class AlpacaBroker(BaseBrokerInterface):
                 limit=2
             )
 
-            bars = await asyncio.to_thread(self.data_rest.get_stock_bars, request)
+            # Use wait_for to prevent hanging indefinitely on API calls
+            bars = await asyncio.wait_for(
+                asyncio.to_thread(self.data_rest.get_stock_bars, request),
+                timeout=self._poll_timeout
+            )
 
             result = {}
             for symbol in symbols:
@@ -438,6 +444,9 @@ class AlpacaBroker(BaseBrokerInterface):
 
             return result
 
+        except asyncio.TimeoutError:
+            self.logger.error(f"[poll] Timeout after {self._poll_timeout}s fetching bars for {len(symbols)} symbols")
+            return {}
         except Exception as e:
             self.logger.error(f"[poll] Error fetching bars: {e}")
             # If auth error, log more details
@@ -584,10 +593,14 @@ class AlpacaBroker(BaseBrokerInterface):
         limit_price: float | None = None,
         stop_price: float | None = None,
         time_in_force: str = "gtc",
+        max_retries: int = 3,
+        retry_delay: float = 5.0,
         **kwargs,
     ) -> OrderResult:
         """
-        Place an order asynchronously.
+        Place an order asynchronously with retry logic.
+
+        Uses client_order_id to prevent duplicate orders on retry.
 
         Returns:
             OrderResult with order details and status
@@ -608,48 +621,83 @@ class AlpacaBroker(BaseBrokerInterface):
         tif = _map_tif(time_in_force)
         s = _map_side(side)
 
-        def _submit():
-            ot = (order_type or "market").lower()
-            if ot == "market":
-                req = MarketOrderRequest(symbol=symbol, qty=qty, side=s, time_in_force=tif)
-            elif ot == "limit":
-                if limit_price is None:
-                    raise ValueError("limit_price is required for limit orders")
-                req = LimitOrderRequest(symbol=symbol, qty=qty, side=s, time_in_force=tif, limit_price=limit_price)
-            else:
-                raise ValueError(f"Unsupported order_type: {order_type}")
-            o = self.trading_client.submit_order(req)
-            return self._mk_order_result(o)
+        # Generate unique client_order_id to prevent duplicates on retry
+        client_order_id = f"ord_{symbol}_{uuid.uuid4().hex[:12]}"
 
-        try:
-            res = await asyncio.to_thread(_submit)
+        last_error = None
+        for attempt in range(1, max_retries + 1):
+            try:
+                def _submit():
+                    ot = (order_type or "market").lower()
+                    if ot == "market":
+                        req = MarketOrderRequest(
+                            symbol=symbol, qty=qty, side=s, time_in_force=tif,
+                            client_order_id=client_order_id
+                        )
+                    elif ot == "limit":
+                        if limit_price is None:
+                            raise ValueError("limit_price is required for limit orders")
+                        req = LimitOrderRequest(
+                            symbol=symbol, qty=qty, side=s, time_in_force=tif,
+                            limit_price=limit_price, client_order_id=client_order_id
+                        )
+                    else:
+                        raise ValueError(f"Unsupported order_type: {order_type}")
+                    o = self.trading_client.submit_order(req)
+                    return self._mk_order_result(o)
 
-            if self.event_handler:
-                payload: OrderStatusPayload = {
-                    "order_id": res.order_id or "N/A",
-                    "symbol": res.symbol or symbol,
-                    "status": res.status or "submitted",
-                    "filled_qty": res.filled_qty or 0.0,
-                    "avg_price": res.avg_fill_price,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                }
-                await self.event_handler.emit(EVENT_ORDER_STATUS, payload)
+                res = await asyncio.to_thread(_submit)
 
-            return res
+                if self.event_handler:
+                    payload: OrderStatusPayload = {
+                        "order_id": res.order_id or "N/A",
+                        "symbol": res.symbol or symbol,
+                        "status": res.status or "submitted",
+                        "filled_qty": res.filled_qty or 0.0,
+                        "avg_price": res.avg_fill_price,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    }
+                    await self.event_handler.emit(EVENT_ORDER_STATUS, payload)
 
-        except Exception as e:
-            self.logger.error(f"Order failed for {symbol}: {e}")
-            if self.event_handler:
-                payload: OrderStatusPayload = {
-                    "order_id": "N/A",
-                    "symbol": symbol,
-                    "status": "rejected",
-                    "filled_qty": 0.0,
-                    "avg_price": None,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                }
-                await self.event_handler.emit(EVENT_ORDER_STATUS, payload)
-            raise  # Re-raise so caller knows order failed
+                return res
+
+            except Exception as e:
+                last_error = e
+                error_str = str(e).lower()
+
+                # Check if this is a duplicate order error
+                if "duplicate" in error_str or "already exists" in error_str:
+                    self.logger.info(
+                        f"[{symbol}] Order {client_order_id} already exists, fetching status..."
+                    )
+                    try:
+                        existing = await self._get_order_by_client_id(client_order_id)
+                        if existing:
+                            return existing
+                    except Exception as fetch_err:
+                        self.logger.warning(f"[{symbol}] Could not fetch existing order: {fetch_err}")
+
+                # Log and retry
+                if attempt < max_retries:
+                    self.logger.warning(
+                        f"[{symbol}] Order failed (attempt {attempt}/{max_retries}): {e}, "
+                        f"retrying in {retry_delay}s..."
+                    )
+                    await asyncio.sleep(retry_delay)
+                else:
+                    self.logger.error(f"Order failed for {symbol} after {max_retries} attempts: {e}")
+                    if self.event_handler:
+                        payload: OrderStatusPayload = {
+                            "order_id": "N/A",
+                            "symbol": symbol,
+                            "status": "rejected",
+                            "filled_qty": 0.0,
+                            "avg_price": None,
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                        }
+                        await self.event_handler.emit(EVENT_ORDER_STATUS, payload)
+
+        raise RuntimeError(f"Order failed after {max_retries} attempts: {last_error}")
 
 
     async def cancel_order(self, order_id: str) -> None:  # no return; emits instead
@@ -702,15 +750,29 @@ class AlpacaBroker(BaseBrokerInterface):
                 await self.event_handler.emit(EVENT_ORDER_STATUS, payload)
             return res
 
-    async def place_market_order(self, symbol: str, qty: int, side, price: float | None = None) -> OrderResult:
+    async def place_market_order(
+        self,
+        symbol: str,
+        qty: int,
+        side,
+        price: float | None = None,
+        max_retries: int = 3,
+        retry_delay: float = 5.0,
+    ) -> OrderResult:
         """
-        Place a market order asynchronously.
+        Place a market order asynchronously with retry logic.
+
+        Uses client_order_id to prevent duplicate orders on retry.
+        If we timeout waiting for response but order was placed,
+        subsequent retries will detect the existing order.
 
         Args:
             symbol: Trading symbol
             qty: Quantity to trade
             side: OrderSide enum or string ("buy"/"sell")
             price: Optional price hint (ignored for market orders)
+            max_retries: Maximum retry attempts (default 3)
+            retry_delay: Seconds between retries (default 5)
 
         Returns:
             OrderResult with execution details
@@ -722,45 +784,110 @@ class AlpacaBroker(BaseBrokerInterface):
         if isinstance(side, str):
             alpaca_side = _map_side(side)
         else:
-            # Assume it's an OrderSide enum from core.enums
             alpaca_side = _map_side(side.value if hasattr(side, 'value') else str(side))
 
-        def _submit():
-            return self.trading_client.submit_order(
-                MarketOrderRequest(symbol=symbol, qty=qty, side=alpaca_side, time_in_force=TimeInForce.DAY)
-            )
+        # Generate unique client_order_id to prevent duplicates on retry
+        client_order_id = f"st_{symbol}_{uuid.uuid4().hex[:12]}"
 
-        o = await asyncio.to_thread(_submit)
-        res = self._mk_order_result(o)
+        last_error = None
+        for attempt in range(1, max_retries + 1):
+            try:
+                def _submit():
+                    return self.trading_client.submit_order(
+                        MarketOrderRequest(
+                            symbol=symbol,
+                            qty=qty,
+                            side=alpaca_side,
+                            time_in_force=TimeInForce.DAY,
+                            client_order_id=client_order_id,
+                        )
+                    )
 
-        # Emit event
-        if self.event_handler:
-            payload = {
-                "order_id": res.order_id,
-                "symbol": res.symbol,
-                "status": res.status,
-                "side": res.side,
-                "qty": res.qty,
-                "filled_qty": res.filled_qty,
-                "avg_price": res.avg_fill_price,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-            }
-            await self.event_handler.emit(EVENT_ORDER_STATUS, payload)
+                o = await asyncio.to_thread(_submit)
+                res = self._mk_order_result(o)
 
-        return res
+                # Emit event
+                if self.event_handler:
+                    payload = {
+                        "order_id": res.order_id,
+                        "symbol": res.symbol,
+                        "status": res.status,
+                        "side": res.side,
+                        "qty": res.qty,
+                        "filled_qty": res.filled_qty,
+                        "avg_price": res.avg_fill_price,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    }
+                    await self.event_handler.emit(EVENT_ORDER_STATUS, payload)
+
+                return res
+
+            except Exception as e:
+                last_error = e
+                error_str = str(e).lower()
+
+                # Check if this is a duplicate order error (order already exists)
+                if "duplicate" in error_str or "already exists" in error_str:
+                    self.logger.info(
+                        f"[{symbol}] Order {client_order_id} already exists, fetching status..."
+                    )
+                    try:
+                        existing = await self._get_order_by_client_id(client_order_id)
+                        if existing:
+                            return existing
+                    except Exception as fetch_err:
+                        self.logger.warning(f"[{symbol}] Could not fetch existing order: {fetch_err}")
+
+                # Log and retry
+                if attempt < max_retries:
+                    self.logger.warning(
+                        f"[{symbol}] Order failed (attempt {attempt}/{max_retries}): {e}, "
+                        f"retrying in {retry_delay}s..."
+                    )
+                    await asyncio.sleep(retry_delay)
+                else:
+                    self.logger.error(
+                        f"[{symbol}] Order failed after {max_retries} attempts: {e}"
+                    )
+
+        # All retries exhausted
+        raise RuntimeError(f"Order failed after {max_retries} attempts: {last_error}")
+
+    async def _get_order_by_client_id(self, client_order_id: str) -> Optional[OrderResult]:
+        """Fetch an order by client_order_id."""
+        try:
+            def _fetch():
+                return self.trading_client.get_order_by_client_id(client_order_id)
+
+            o = await asyncio.to_thread(_fetch)
+            return self._mk_order_result(o)
+        except Exception as e:
+            self.logger.debug(f"Could not fetch order by client_id {client_order_id}: {e}")
+            return None
 
 
-    async def place_oco_order(self, symbol: str, qty: int, stop_price: float, limit_price: float) -> OrderResult:
+    async def place_oco_order(
+        self,
+        symbol: str,
+        qty: int,
+        stop_price: float,
+        limit_price: float,
+        max_retries: int = 3,
+        retry_delay: float = 5.0,
+    ) -> OrderResult:
         """
-        Place OCO (One-Cancels-Other) bracket order asynchronously.
+        Place OCO (One-Cancels-Other) bracket order asynchronously with retry logic.
 
         Uses Alpaca's bracket order_class with take_profit/stop_loss.
+        Uses client_order_id to prevent duplicate orders on retry.
 
         Args:
             symbol: Trading symbol
             qty: Quantity to trade
             stop_price: Stop-loss trigger price
             limit_price: Take-profit limit price
+            max_retries: Maximum retry attempts (default 3)
+            retry_delay: Seconds between retries (default 5)
 
         Returns:
             OrderResult for the OCO order group
@@ -768,36 +895,73 @@ class AlpacaBroker(BaseBrokerInterface):
         if not self.trading_client:
             raise RuntimeError("Not connected: call connect() first")
 
-        def _submit():
-            req = MarketOrderRequest(
-                symbol=symbol,
-                qty=qty,
-                side=AlpacaOrderSide.SELL,  # typical for exiting a long
-                time_in_force=TimeInForce.GTC,
-                order_class=OrderClass.BRACKET,  # type: ignore[arg-type]
-                take_profit={"limit_price": limit_price},
-                stop_loss={"stop_price": stop_price},
-            )
-            return self.trading_client.submit_order(req)
+        # Generate unique client_order_id to prevent duplicates on retry
+        client_order_id = f"oco_{symbol}_{uuid.uuid4().hex[:12]}"
 
-        o = await asyncio.to_thread(_submit)
-        res = self._mk_order_result(o)
+        last_error = None
+        for attempt in range(1, max_retries + 1):
+            try:
+                def _submit():
+                    req = MarketOrderRequest(
+                        symbol=symbol,
+                        qty=qty,
+                        side=AlpacaOrderSide.SELL,  # typical for exiting a long
+                        time_in_force=TimeInForce.GTC,
+                        order_class=OrderClass.BRACKET,  # type: ignore[arg-type]
+                        take_profit={"limit_price": limit_price},
+                        stop_loss={"stop_price": stop_price},
+                        client_order_id=client_order_id,
+                    )
+                    return self.trading_client.submit_order(req)
 
-        # Emit order status
-        if self.event_handler:
-            payload = {
-                "order_id": res.order_id,
-                "symbol": res.symbol,
-                "status": res.status,
-                "side": res.side,
-                "qty": res.qty,
-                "filled_qty": res.filled_qty,
-                "avg_price": res.avg_fill_price,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-            }
-            await self.event_handler.emit(EVENT_ORDER_STATUS, payload)
+                o = await asyncio.to_thread(_submit)
+                res = self._mk_order_result(o)
 
-        return res
+                # Emit order status
+                if self.event_handler:
+                    payload = {
+                        "order_id": res.order_id,
+                        "symbol": res.symbol,
+                        "status": res.status,
+                        "side": res.side,
+                        "qty": res.qty,
+                        "filled_qty": res.filled_qty,
+                        "avg_price": res.avg_fill_price,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    }
+                    await self.event_handler.emit(EVENT_ORDER_STATUS, payload)
+
+                return res
+
+            except Exception as e:
+                last_error = e
+                error_str = str(e).lower()
+
+                # Check if this is a duplicate order error
+                if "duplicate" in error_str or "already exists" in error_str:
+                    self.logger.info(
+                        f"[{symbol}] OCO order {client_order_id} already exists, fetching status..."
+                    )
+                    try:
+                        existing = await self._get_order_by_client_id(client_order_id)
+                        if existing:
+                            return existing
+                    except Exception as fetch_err:
+                        self.logger.warning(f"[{symbol}] Could not fetch existing order: {fetch_err}")
+
+                # Log and retry
+                if attempt < max_retries:
+                    self.logger.warning(
+                        f"[{symbol}] OCO order failed (attempt {attempt}/{max_retries}): {e}, "
+                        f"retrying in {retry_delay}s..."
+                    )
+                    await asyncio.sleep(retry_delay)
+                else:
+                    self.logger.error(
+                        f"[{symbol}] OCO order failed after {max_retries} attempts: {e}"
+                    )
+
+        raise RuntimeError(f"OCO order failed after {max_retries} attempts: {last_error}")
 
 
     async def get_position(self, symbol: str) -> Optional[PositionView]:

@@ -310,9 +310,10 @@ class BaseLiveRunner(ABC):
 
         # Log trading rules
         tl = self.config.trade_logic
+        cutoff_minute = getattr(tl, 'trading_cutoff_minute_et', 0)
         self.logger.info(
             f"Trading rules: min_bars_to_hold={tl.min_bars_to_hold}, "
-            f"cutoff={tl.trading_cutoff_hour_et}:00 ET, "
+            f"cutoff={tl.trading_cutoff_hour_et:02d}:{cutoff_minute:02d} ET, "
             f"close_eod={tl.close_positions_eod}"
         )
 
@@ -703,7 +704,8 @@ class BaseLiveRunner(ABC):
         ts: datetime = bar["timestamp"]
 
         # Check trading cutoff time (convert to ET for comparison)
-        cutoff_hour_et = getattr(self.config.trade_logic, 'trading_cutoff_hour_et', 16)
+        cutoff_hour_et = getattr(self.config.trade_logic, 'trading_cutoff_hour_et', 15)
+        cutoff_minute_et = getattr(self.config.trade_logic, 'trading_cutoff_minute_et', 45)
 
         # Proper timezone conversion to Eastern Time (handles DST automatically)
         et_tz = ZoneInfo("America/New_York")
@@ -713,8 +715,11 @@ class BaseLiveRunner(ABC):
         else:
             ts_utc = ts
         ts_et = ts_utc.astimezone(et_tz)
-        et_hour = ts_et.hour
-        past_cutoff = et_hour >= cutoff_hour_et
+
+        # Compare time as total minutes since midnight for precise cutoff
+        current_minutes = ts_et.hour * 60 + ts_et.minute
+        cutoff_minutes = cutoff_hour_et * 60 + cutoff_minute_et
+        past_cutoff = current_minutes >= cutoff_minutes
 
         # Reset EOD close flag at start of new trading day (before cutoff)
         if not past_cutoff:
@@ -724,7 +729,7 @@ class BaseLiveRunner(ABC):
         close_eod = getattr(self.config.trade_logic, 'close_positions_eod', False)
         if past_cutoff and close_eod and not self._eod_close_triggered:
             self.logger.info(
-                f"EOD TRIGGER: Bar time {ts_et.strftime('%H:%M:%S')} ET >= cutoff {cutoff_hour_et}:00 ET"
+                f"EOD TRIGGER: Bar time {ts_et.strftime('%H:%M:%S')} ET >= cutoff {cutoff_hour_et:02d}:{cutoff_minute_et:02d} ET"
             )
             self._eod_close_triggered = True
             await self._close_all_positions_eod()
