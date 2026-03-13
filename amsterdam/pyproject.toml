@@ -58,7 +58,7 @@ charts = [
 ]
 
 [project.scripts]
-trader = "cli.main:main"
+amsterdam = "cli.main:main"
 
 [project.urls]
 Documentation = "docs/index.md"
