@@ -6,33 +6,19 @@
     "default": "rsi",
     "use_hybrid": false
   },
-  "MSFT": {
-    "low_volatility": "rsi",
+  "ABBV": {
+    "low_volatility": "macd",
     "normal": "meanreversion",
     "high_volatility": "rsi",
     "default": "meanreversion",
     "use_hybrid": false
   },
-  "default": {
-    "low_volatility": "macd",
-    "normal": "bollinger",
-    "high_volatility": "rsi",
-    "default": "momentum",
-    "use_hybrid": true
-  },
-  "ABBV": {
-    "low_volatility": "macd",
-    "normal": "stochastic",
-    "high_volatility": "rsi",
-    "default": "stochastic",
-    "use_hybrid": false
-  },
   "AMZN": {
     "low_volatility": "sma",
-    "normal": "bollinger",
+    "normal": "sma",
     "high_volatility": "rsi",
-    "default": "bollinger",
-    "use_hybrid": false
+    "default": "sma",
+    "use_hybrid": true
   },
   "AVGO": {
     "low_volatility": "rsi",
@@ -49,7 +35,7 @@
     "use_hybrid": false
   },
   "GOOGL": {
-    "low_volatility": "sma",
+    "low_volatility": "ema",
     "normal": "bollinger",
     "high_volatility": "macd",
     "default": "bollinger",
@@ -79,15 +65,22 @@
   "MA": {
     "low_volatility": "macd",
     "normal": "bollinger",
-    "high_volatility": "momentum",
+    "high_volatility": "sma",
     "default": "bollinger",
     "use_hybrid": true
   },
   "META": {
-    "low_volatility": "macd",
+    "low_volatility": "sma",
     "normal": "bollinger",
     "high_volatility": "meanreversion",
     "default": "bollinger",
+    "use_hybrid": false
+  },
+  "MSFT": {
+    "low_volatility": "meanreversion",
+    "normal": "meanreversion",
+    "high_volatility": "rsi",
+    "default": "meanreversion",
     "use_hybrid": false
   },
   "NVDA": {
@@ -99,17 +92,17 @@
   },
   "PG": {
     "low_volatility": "rsi",
-    "normal": "macd",
+    "normal": "rsi",
     "high_volatility": "rsi",
-    "default": "macd",
+    "default": "rsi",
     "use_hybrid": false
   },
   "TSLA": {
-    "low_volatility": "ema",
+    "low_volatility": "macd",
     "normal": "bollinger",
-    "high_volatility": "macd",
+    "high_volatility": "meanreversion",
     "default": "bollinger",
-    "use_hybrid": true
+    "use_hybrid": false
   },
   "UNH": {
     "low_volatility": "ema",
@@ -120,15 +113,15 @@
   },
   "V": {
     "low_volatility": "meanreversion",
-    "normal": "bollinger",
+    "normal": "stochastic",
     "high_volatility": "sma",
-    "default": "bollinger",
+    "default": "stochastic",
     "use_hybrid": false
   },
   "WMT": {
     "low_volatility": "meanreversion",
     "normal": "stochastic",
-    "high_volatility": "sma",
+    "high_volatility": "macd",
     "default": "stochastic",
     "use_hybrid": false
   },
@@ -138,5 +131,12 @@
     "high_volatility": "meanreversion",
     "default": "meanreversion",
     "use_hybrid": false
+  },
+  "default": {
+    "low_volatility": "macd",
+    "normal": "meanreversion",
+    "high_volatility": "rsi",
+    "default": "momentum",
+    "use_hybrid": true
   }
 }

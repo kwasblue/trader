@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "schwab-trader"
+name = "amsterdam"
 version = "1.0.0"
 description = "Algorithmic trading platform with Schwab and Alpaca support"
 readme = "README.md"

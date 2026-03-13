@@ -1,0 +1,24 @@
+2026-03-13 15:50:57 - UnifiedDataPipeline - DEBUG - Logger 'UnifiedDataPipeline' initialized → logs/unified_pipeline.log
+2026-03-13 15:50:57 - UnifiedDataPipeline - INFO - UnifiedDataPipeline initialized. Data: /Users/kwasiaddo/projects/trader/schwab_trader/data/data_storage/proc_data, DB: stock_base.db, store_to_db=True, store_to_files=True
+2026-03-13 15:50:57 - UnifiedDataPipeline - DEBUG - [AAPL] Retrieved 5065 rows from file
+2026-03-13 15:53:08 - UnifiedDataPipeline - DEBUG - Logger 'UnifiedDataPipeline' initialized → logs/unified_pipeline.log
+2026-03-13 15:53:08 - UnifiedDataPipeline - INFO - UnifiedDataPipeline initialized. Data: /Users/kwasiaddo/projects/trader/schwab_trader/data/data_storage/proc_data, DB: stock_base.db, store_to_db=True, store_to_files=True
+2026-03-13 15:53:09 - UnifiedDataPipeline - DEBUG - [AAPL] Retrieved 5065 rows from file
+2026-03-13 15:53:09 - UnifiedDataPipeline - DEBUG - [ABBV] Retrieved 3274 rows from file
+2026-03-13 15:53:09 - UnifiedDataPipeline - DEBUG - [AMZN] Retrieved 5049 rows from file
+2026-03-13 15:53:09 - UnifiedDataPipeline - DEBUG - [AVGO] Retrieved 4131 rows from file
+2026-03-13 15:53:09 - UnifiedDataPipeline - DEBUG - [COST] Retrieved 5026 rows from file
+2026-03-13 15:53:10 - UnifiedDataPipeline - DEBUG - [GOOGL] Retrieved 5049 rows from file
+2026-03-13 15:53:10 - UnifiedDataPipeline - DEBUG - [HD] Retrieved 5050 rows from file
+2026-03-13 15:53:10 - UnifiedDataPipeline - DEBUG - [JNJ] Retrieved 5050 rows from file
+2026-03-13 15:53:10 - UnifiedDataPipeline - DEBUG - [JPM] Retrieved 5050 rows from file
+2026-03-13 15:53:11 - UnifiedDataPipeline - DEBUG - [MA] Retrieved 4937 rows from file
+2026-03-13 15:53:11 - UnifiedDataPipeline - DEBUG - [META] Retrieved 3429 rows from file
+2026-03-13 15:53:11 - UnifiedDataPipeline - DEBUG - [MSFT] Retrieved 5065 rows from file
+2026-03-13 15:53:11 - UnifiedDataPipeline - DEBUG - [NVDA] Retrieved 5065 rows from file
+2026-03-13 15:53:11 - UnifiedDataPipeline - DEBUG - [PG] Retrieved 5050 rows from file
+2026-03-13 15:53:12 - UnifiedDataPipeline - DEBUG - [TSLA] Retrieved 3906 rows from file
+2026-03-13 15:53:12 - UnifiedDataPipeline - DEBUG - [UNH] Retrieved 5051 rows from file
+2026-03-13 15:53:12 - UnifiedDataPipeline - DEBUG - [V] Retrieved 4480 rows from file
+2026-03-13 15:53:12 - UnifiedDataPipeline - DEBUG - [WMT] Retrieved 5051 rows from file
+2026-03-13 15:53:13 - UnifiedDataPipeline - DEBUG - [XOM] Retrieved 5049 rows from file

@@ -1,4 +1,4 @@
-# Schwab Trader
+# Amsterdam
 
 A comprehensive algorithmic trading platform with support for Schwab and Alpaca brokers, featuring real-time streaming, backtesting, and a professional monitoring GUI.
 
@@ -19,7 +19,7 @@ A comprehensive algorithmic trading platform with support for Schwab and Alpaca 
 
 ```bash
 # Setup
-cd schwab_trader
+cd amsterdam
 python -m venv .venv
 source .venv/bin/activate
 pip install -e .
@@ -131,7 +131,7 @@ See [docs/index.md](docs/index.md) for the complete documentation index.
 ## Project Structure
 
 ```
-schwab_trader/
+amsterdam/
 ├── autotrader.py           # Autonomous trading daemon
 ├── autotrader_ctl.py       # Daemon control script
 ├── preflight.py            # Pre-flight validation
