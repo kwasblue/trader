@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """
-Schwab Trader CLI - Unified Command Line Interface
+Amsterdam CLI - Unified Command Line Interface
 
 Usage:
-    trader start [OPTIONS]      Start the trading daemon
-    trader stop                 Stop the trading daemon
-    trader status               Check daemon status
-    trader gui [OPTIONS]        Launch GUI trading application
-    trader preflight [OPTIONS]  Run pre-flight checks
-    trader token COMMAND        Token management commands
-    trader test [OPTIONS]       Run test suite
-    trader logs [OPTIONS]       View logs
+    amsterdam start [OPTIONS]      Start the trading daemon
+    amsterdam stop                 Stop the trading daemon
+    amsterdam status               Check daemon status
+    amsterdam gui [OPTIONS]        Launch GUI trading application
+    amsterdam preflight [OPTIONS]  Run pre-flight checks
+    amsterdam token COMMAND        Token management commands
+    amsterdam test [OPTIONS]       Run test suite
+    amsterdam logs [OPTIONS]       View logs
 """
 
 import sys
@@ -30,17 +30,17 @@ load_dotenv(ROOT / ".env")
 
 
 @click.group()
-@click.version_option(version="1.0.0", prog_name="trader")
+@click.version_option(version="1.0.0", prog_name="amsterdam")
 def cli():
-    """Schwab Trader - Algorithmic Trading Platform
+    """Amsterdam - Algorithmic Trading Platform
 
     A comprehensive trading system with support for Schwab and Alpaca brokers.
 
     \b
     Quick Start:
-        trader preflight        # Check system readiness
-        trader gui              # Launch simulation GUI
-        trader start            # Start autonomous trading
+        amsterdam preflight        # Check system readiness
+        amsterdam gui              # Launch simulation GUI
+        amsterdam start            # Start autonomous trading
 
     \b
     Documentation:
@@ -63,15 +63,15 @@ def start(symbols, broker, dry_run, daemon):
 
     \b
     Examples:
-        trader start                           # Start with defaults
-        trader start -s AAPL,MSFT              # Specific symbols
-        trader start --broker schwab           # Use Schwab
-        trader start --dry-run                 # No real trades
-        trader start --daemon                  # Background mode
+        amsterdam start                           # Start with defaults
+        amsterdam start -s AAPL,MSFT              # Specific symbols
+        amsterdam start --broker schwab           # Use Schwab
+        amsterdam start --dry-run                 # No real trades
+        amsterdam start --daemon                  # Background mode
     """
     import subprocess
 
-    cmd = [sys.executable, str(ROOT / "autotrader.py")]
+    cmd = [sys.executable, str(ROOT / "autoamsterdam.py")]
 
     if symbols:
         cmd.extend(['--symbols'] + symbols.split(','))
@@ -82,17 +82,17 @@ def start(symbols, broker, dry_run, daemon):
 
     if daemon:
         # Run as background process
-        click.echo(f"Starting trader daemon...")
+        click.echo(f"Starting amsterdam daemon...")
         subprocess.Popen(
             cmd,
-            stdout=open(ROOT / "logs" / "autotrader_stdout.log", 'a'),
+            stdout=open(ROOT / "logs" / "autoamsterdam_stdout.log", 'a'),
             stderr=subprocess.STDOUT,
             start_new_session=True
         )
-        click.echo("Daemon started. Use 'trader status' to check.")
+        click.echo("Daemon started. Use 'amsterdam status' to check.")
     else:
         # Run in foreground
-        click.echo(f"Starting trader (broker={broker})...")
+        click.echo(f"Starting amsterdam (broker={broker})...")
         os.execv(sys.executable, cmd)
 
 
@@ -105,7 +105,7 @@ def stop():
     """Stop the trading daemon."""
     import subprocess
     result = subprocess.run(
-        [sys.executable, str(ROOT / "autotrader_ctl.py"), "stop"],
+        [sys.executable, str(ROOT / "autoamsterdam_ctl.py"), "stop"],
         capture_output=True,
         text=True
     )
@@ -123,7 +123,7 @@ def status():
     """Check trading daemon status."""
     import subprocess
     result = subprocess.run(
-        [sys.executable, str(ROOT / "autotrader_ctl.py"), "status"],
+        [sys.executable, str(ROOT / "autoamsterdam_ctl.py"), "status"],
         capture_output=True,
         text=True
     )
@@ -153,9 +153,9 @@ def gui(mode, symbols, speed, steps):
 
     \b
     Examples:
-        trader gui                             # Simulation mode
-        trader gui --mode alpaca               # Alpaca trading
-        trader gui -s AAPL,GOOGL,TSLA          # Custom symbols
+        amsterdam gui                             # Simulation mode
+        amsterdam gui --mode alpaca               # Alpaca trading
+        amsterdam gui -s AAPL,GOOGL,TSLA          # Custom symbols
     """
     cmd = [
         sys.executable, str(ROOT / "run_trading.py"),
@@ -188,9 +188,9 @@ def preflight(verbose, update_data, reauth_schwab):
 
     \b
     Examples:
-        trader preflight                       # Quick check
-        trader preflight -v                    # Verbose output
-        trader preflight --update-data         # Update stale data
+        amsterdam preflight                       # Quick check
+        amsterdam preflight -v                    # Verbose output
+        amsterdam preflight --update-data         # Update stale data
     """
     cmd = [sys.executable, str(ROOT / "preflight.py")]
 
@@ -214,9 +214,9 @@ def token():
 
     \b
     Commands:
-        trader token status     Check token status
-        trader token refresh    Refresh tokens
-        trader token keeper     Run token keeper service
+        amsterdam token status     Check token status
+        amsterdam token refresh    Refresh tokens
+        amsterdam token keeper     Run token keeper service
     """
     pass
 
@@ -261,8 +261,8 @@ def token_refresh(force):
 
     \b
     Examples:
-        trader token refresh           # Refresh if needed
-        trader token refresh --force   # Force browser login
+        amsterdam token refresh           # Refresh if needed
+        amsterdam token refresh --force   # Force browser login
     """
     cmd = [sys.executable, str(ROOT / "refresh_schwab_token.py")]
     if force:
@@ -281,9 +281,9 @@ def token_keeper(interval, daemon):
 
     \b
     Examples:
-        trader token keeper                    # Run in foreground
-        trader token keeper --daemon           # Background mode
-        trader token keeper -i 300             # Check every 5 minutes
+        amsterdam token keeper                    # Run in foreground
+        amsterdam token keeper --daemon           # Background mode
+        amsterdam token keeper -i 300             # Check every 5 minutes
     """
     cmd = [sys.executable, str(ROOT / "token_keeper.py"), '--interval', str(interval)]
 
@@ -308,10 +308,10 @@ def test(coverage, verbose, unit, integration, path):
 
     \b
     Examples:
-        trader test                            # Run all tests
-        trader test -v                         # Verbose output
-        trader test --coverage                 # With coverage report
-        trader test tests/test_autotrader.py   # Specific file
+        amsterdam test                            # Run all tests
+        amsterdam test -v                         # Verbose output
+        amsterdam test --coverage                 # With coverage report
+        amsterdam test tests/test_autoamsterdam.py   # Specific file
     """
     cmd = [sys.executable, '-m', 'pytest']
 
@@ -336,7 +336,7 @@ def test(coverage, verbose, unit, integration, path):
 @cli.command()
 @click.option('--follow', '-f', is_flag=True, help='Follow log output')
 @click.option('--lines', '-n', type=int, default=50, help='Number of lines to show')
-@click.option('--file', '-l', type=click.Choice(['app', 'trades', 'autotrader', 'preflight']),
+@click.option('--file', '-l', type=click.Choice(['app', 'trades', 'autoamsterdam', 'preflight']),
               default='app', help='Log file to view')
 def logs(follow, lines, file):
     """View application logs.
@@ -345,21 +345,21 @@ def logs(follow, lines, file):
     Log files:
         app         - Main application log
         trades      - Trade execution log
-        autotrader  - Daemon operations
+        autoamsterdam  - Daemon operations
         preflight   - Pre-flight checks
 
     \b
     Examples:
-        trader logs                            # Last 50 lines of app.log
-        trader logs -f                         # Follow in real-time
-        trader logs -l trades -n 100           # Last 100 trade entries
+        amsterdam logs                            # Last 50 lines of app.log
+        amsterdam logs -f                         # Follow in real-time
+        amsterdam logs -l trades -n 100           # Last 100 trade entries
     """
     import subprocess
 
     log_files = {
         'app': 'app.log',
         'trades': 'trades.log',
-        'autotrader': 'autotrader.log',
+        'autoamsterdam': 'autoamsterdam.log',
         'preflight': 'preflight.log'
     }
 
@@ -398,10 +398,10 @@ def stats(summary, by_day, by_symbol, by_hour, by_strategy, worst):
 
     \b
     Examples:
-        trader stats                   # Full analysis
-        trader stats --summary         # Quick summary only
-        trader stats --by-day          # Daily breakdown
-        trader stats --worst 10        # Show 10 worst trades
+        amsterdam stats                   # Full analysis
+        amsterdam stats --summary         # Quick summary only
+        amsterdam stats --by-day          # Daily breakdown
+        amsterdam stats --worst 10        # Show 10 worst trades
     """
     import subprocess
 
@@ -433,10 +433,10 @@ def symbols():
 
     \b
     Commands:
-        trader symbols list         Show all symbols
-        trader symbols add          Add symbol to list
-        trader symbols remove       Remove symbol
-        trader symbols move         Move between lists
+        amsterdam symbols list         Show all symbols
+        amsterdam symbols add          Add symbol to list
+        amsterdam symbols remove       Remove symbol
+        amsterdam symbols move         Move between lists
     """
     pass
 
@@ -448,7 +448,7 @@ def symbols_list(trade, watch):
     """List configured symbols."""
     import subprocess
 
-    cmd = [sys.executable, str(ROOT / "autotrader_ctl.py"), "list"]
+    cmd = [sys.executable, str(ROOT / "autoamsterdam_ctl.py"), "list"]
     if trade:
         cmd.append('--trade')
     if watch:
@@ -466,7 +466,7 @@ def symbols_add(symbol, trade, watch):
     """Add a symbol to trade or watch list."""
     import subprocess
 
-    cmd = [sys.executable, str(ROOT / "autotrader_ctl.py"), "add", symbol.upper()]
+    cmd = [sys.executable, str(ROOT / "autoamsterdam_ctl.py"), "add", symbol.upper()]
     if trade:
         cmd.append('--trade')
     elif watch:
@@ -484,7 +484,7 @@ def symbols_remove(symbol):
     """Remove a symbol from all lists."""
     import subprocess
 
-    cmd = [sys.executable, str(ROOT / "autotrader_ctl.py"), "remove", symbol.upper()]
+    cmd = [sys.executable, str(ROOT / "autoamsterdam_ctl.py"), "remove", symbol.upper()]
     result = subprocess.run(cmd, capture_output=True, text=True)
     click.echo(result.stdout)
 
@@ -499,8 +499,8 @@ def data():
 
     \b
     Commands:
-        trader data update      Update historical data
-        trader data status      Check data freshness
+        amsterdam data update      Update historical data
+        amsterdam data status      Check data freshness
     """
     pass
 
@@ -589,9 +589,9 @@ def strategy():
 
     \b
     Commands:
-        trader strategy select      Evaluate and select best strategies
-        trader strategy list        List available strategies
-        trader strategy show        Show current routing configuration
+        amsterdam strategy select      Evaluate and select best strategies
+        amsterdam strategy list        List available strategies
+        amsterdam strategy show        Show current routing configuration
     """
     pass
 
@@ -615,10 +615,10 @@ def strategy_select(symbol, days, top, metric, no_walk_forward, regime, save, ca
 
     \b
     Examples:
-        trader strategy select AAPL                    # Evaluate strategies for AAPL
-        trader strategy select AAPL --save             # Save best to config
-        trader strategy select MSFT -d 180 --save      # 180 days of data
-        trader strategy select TSLA --regime high_volatility --save
+        amsterdam strategy select AAPL                    # Evaluate strategies for AAPL
+        amsterdam strategy select AAPL --save             # Save best to config
+        amsterdam strategy select MSFT -d 180 --save      # 180 days of data
+        amsterdam strategy select TSLA --regime high_volatility --save
     """
     import asyncio
     import logging
@@ -685,7 +685,7 @@ def strategy_select(symbol, days, top, metric, no_walk_forward, regime, save, ca
             click.echo(f"  Routing: {routing_path}")
             click.echo(f"  Params:  {params_path}")
             click.echo()
-            click.echo("Run 'trader strategy show' to view current routing.")
+            click.echo("Run 'amsterdam strategy show' to view current routing.")
 
     except Exception as e:
         click.secho(f"Error during strategy selection: {e}", fg='red')
@@ -721,7 +721,7 @@ def strategy_show(symbol):
 
     if not routing_path.exists():
         click.echo("No strategy routing configured.")
-        click.echo("Run 'trader strategy select <SYMBOL> --save' to create one.")
+        click.echo("Run 'amsterdam strategy select <SYMBOL> --save' to create one.")
         return
 
     with open(routing_path) as f:
@@ -791,9 +791,9 @@ def backtest():
 
     \b
     Commands:
-        trader backtest run         Run single strategy backtest
-        trader backtest compare     Compare strategies
-        trader backtest hybrid      Compare hybrid vs standard sizing
+        amsterdam backtest run         Run single strategy backtest
+        amsterdam backtest compare     Compare strategies
+        amsterdam backtest hybrid      Compare hybrid vs standard sizing
     """
     pass
 
@@ -810,9 +810,9 @@ def backtest_run(symbol, strategy, days, capital, hybrid, verbose):
 
     \b
     Examples:
-        trader backtest run AAPL -s sma
-        trader backtest run MSFT -s macd --hybrid
-        trader backtest run TSLA -s rsi -d 180 --capital 50000
+        amsterdam backtest run AAPL -s sma
+        amsterdam backtest run MSFT -s macd --hybrid
+        amsterdam backtest run TSLA -s rsi -d 180 --capital 50000
     """
     import asyncio
     from core.unified_data_pipeline import UnifiedDataPipeline
@@ -906,8 +906,8 @@ def backtest_compare(symbol, strategies, days, metric, capital):
 
     \b
     Examples:
-        trader backtest compare AAPL -s sma,ema,macd,rsi
-        trader backtest compare MSFT -s momentum,breakout -m total_return
+        amsterdam backtest compare AAPL -s sma,ema,macd,rsi
+        amsterdam backtest compare MSFT -s momentum,breakout -m total_return
     """
     # Delegate to compare_strategies tool
     cmd = [
@@ -933,8 +933,8 @@ def backtest_hybrid(symbol, strategies, days, capital):
 
     \b
     Examples:
-        trader backtest hybrid AAPL -s sma,macd,rsi
-        trader backtest hybrid MSFT -s momentum,ema,bollinger
+        amsterdam backtest hybrid AAPL -s sma,macd,rsi
+        amsterdam backtest hybrid MSFT -s momentum,ema,bollinger
     """
     # Delegate to compare_strategies tool with hybrid flag
     cmd = [
@@ -966,8 +966,8 @@ def backtest_categories(symbol, categories, days, capital):
 
     \b
     Examples:
-        trader backtest categories AAPL
-        trader backtest categories MSFT -c trend_following,momentum
+        amsterdam backtest categories AAPL
+        amsterdam backtest categories MSFT -c trend_following,momentum
     """
     # Delegate to compare_strategies tool
     cmd = [
@@ -992,9 +992,9 @@ def backtest_full(symbol, strategies, days, output, capital):
 
     \b
     Examples:
-        trader backtest full AAPL
-        trader backtest full MSFT -o reports/msft_analysis.md
-        trader backtest full TSLA -s sma,macd,rsi,momentum --days 180
+        amsterdam backtest full AAPL
+        amsterdam backtest full MSFT -o reports/msft_analysis.md
+        amsterdam backtest full TSLA -s sma,macd,rsi,momentum --days 180
     """
     cmd = [
         sys.executable, str(ROOT / "tools" / "compare_strategies.py"),
@@ -1026,10 +1026,10 @@ def backtest_optimize(symbols, days, strategies, dry_run):
 
     \b
     Examples:
-        trader backtest optimize                    # All symbols
-        trader backtest optimize -s AAPL,MSFT      # Specific symbols
-        trader backtest optimize -d 180            # Use 180 days
-        trader backtest optimize --dry-run         # Don't save
+        amsterdam backtest optimize                    # All symbols
+        amsterdam backtest optimize -s AAPL,MSFT      # Specific symbols
+        amsterdam backtest optimize -d 180            # Use 180 days
+        amsterdam backtest optimize --dry-run         # Don't save
     """
     cmd = [
         sys.executable, str(ROOT / "tools" / "optimize_routing.py"),
