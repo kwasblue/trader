@@ -37,9 +37,9 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parent
-PID_FILE = ROOT / "logs" / "autotrader.pid"
-LOG_FILE = ROOT / "logs" / "autotrader.log"
-STDOUT_LOG = ROOT / "logs" / "autotrader_stdout.log"
+PID_FILE = ROOT / "logs" / "autoamsterdam.pid"
+LOG_FILE = ROOT / "logs" / "autoamsterdam.log"
+STDOUT_LOG = ROOT / "logs" / "autoamsterdam_stdout.log"
 
 ET = ZoneInfo("America/New_York")
 
@@ -61,12 +61,12 @@ def get_pid() -> int | None:
 
 
 def is_running() -> bool:
-    """Check if autotrader is running."""
+    """Check if auto trader is running."""
     return get_pid() is not None
 
 
 def start(args) -> int:
-    """Start the autotrader daemon."""
+    """Start the auto trader daemon."""
     if is_running():
         print(f"AutoTrader is already running (PID: {get_pid()})")
         return 1
@@ -75,7 +75,7 @@ def start(args) -> int:
     (ROOT / "logs").mkdir(exist_ok=True)
 
     # Build command
-    cmd = [sys.executable, str(ROOT / "autotrader.py")]
+    cmd = [sys.executable, str(ROOT / "autoamsterdam.py")]
 
     if args.symbols:
         cmd.extend(["--symbols"] + args.symbols)
@@ -121,7 +121,7 @@ def start(args) -> int:
     print(f"\nAutoTrader started (PID: {process.pid})")
     print(f"  Log file: {LOG_FILE}")
     print(f"  Stdout: {STDOUT_LOG}")
-    print(f"\nMonitor with: python autotrader_ctl.py logs -f")
+    print(f"\nMonitor with: python amsterdam_ctl.py logs -f")
 
     return 0
 
@@ -198,7 +198,7 @@ def status(args) -> int:
         print(f"  PID: {pid}")
 
     # Show market status
-    from autotrader import MarketScheduler
+    from autoamsterdam import MarketScheduler
     scheduler = MarketScheduler()
     now = scheduler.now_et()
 

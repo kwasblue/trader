@@ -105,7 +105,7 @@ def stop():
     """Stop the trading daemon."""
     import subprocess
     result = subprocess.run(
-        [sys.executable, str(ROOT / "autoamsterdam_ctl.py"), "stop"],
+        [sys.executable, str(ROOT / "autoatrader_ctl.py"), "stop"],
         capture_output=True,
         text=True
     )
@@ -123,7 +123,7 @@ def status():
     """Check trading daemon status."""
     import subprocess
     result = subprocess.run(
-        [sys.executable, str(ROOT / "autoamsterdam_ctl.py"), "status"],
+        [sys.executable, str(ROOT / "amsterdam_ctl.py"), "status"],
         capture_output=True,
         text=True
     )
