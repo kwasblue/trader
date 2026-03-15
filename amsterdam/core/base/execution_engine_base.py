@@ -365,7 +365,7 @@ class ExecutionEngineBase(ABC):
         Shared implementation that:
         1. Calls _update_portfolio_after_execution hook
         2. Updates state.last_trade_time
-        3. Logs trade to performance tracker
+        3. Logs trade to performance tracker with full data
         4. Resets state on exit/reversal
 
         Args:
@@ -376,11 +376,44 @@ class ExecutionEngineBase(ABC):
             regime: Market regime
             strategy_name: Strategy that generated signal
         """
+        # Capture state BEFORE portfolio update
+        cash_before = self.portfolio.cash
+        position_before = self.portfolio.positions.get(symbol)
+        position_qty_before = position_before.qty if position_before else 0
+        position_avg_price = position_before.avg_price if position_before else None
+
         # Hook for subclasses to handle portfolio updates
         self._update_portfolio_after_execution(symbol, result)
 
+        # Capture state AFTER portfolio update
+        cash_after = self.portfolio.cash
+        position_after = self.portfolio.positions.get(symbol)
+        position_qty_after = position_after.qty if position_after else 0
+
+        # Calculate P&L for closing trades (exits, partial exits, reversals)
+        pnl = None
+        if action_type in ("exit", "partial_exit", "reversal") and position_avg_price is not None:
+            # For exits: calculate realized P&L
+            filled_qty = result.filled_qty
+            if result.side == OrderSide.SELL:
+                # Closing long: (exit_price - entry_price) * qty
+                pnl = (result.avg_price - position_avg_price) * filled_qty
+            else:
+                # Closing short: (entry_price - exit_price) * qty
+                pnl = (position_avg_price - result.avg_price) * filled_qty
+
+        # Extract commission from result (if broker provides it)
+        commission = getattr(result, 'commission', None)
+
+        # Calculate slippage (difference between expected and actual fill price)
+        expected_price = getattr(result, 'limit_price', None)
+        slippage = None
+        if expected_price:
+            slippage = abs(result.avg_price - expected_price)
+
         state.last_trade_time = datetime.now(timezone.utc)
 
+        # Log trade with complete data
         self.performance_tracker.log_trade(
             symbol=symbol,
             action=result.side,
@@ -391,6 +424,13 @@ class ExecutionEngineBase(ABC):
             regime=regime,
             sl=getattr(state, 'stop_loss', None),
             tp=getattr(state, 'take_profit', None),
+            commission=commission,
+            slippage=slippage,
+            cash_before=cash_before,
+            cash_after=cash_after,
+            position_before=position_qty_before,
+            position_after=position_qty_after,
+            pnl=pnl,
             notes=f"action={action_type}, bars_held={getattr(state, 'bars_held', 0)}"
         )
 
