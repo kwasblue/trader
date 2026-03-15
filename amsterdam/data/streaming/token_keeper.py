@@ -174,13 +174,16 @@ async def token_keeper(interval: int = 60):
                             if handler_script.exists() and venv_python.exists():
                                 # Start in background, output to log
                                 log_file = project_root / "logs" / "slack_auth.log"
-                                with open(log_file, 'a') as f:
-                                    subprocess.Popen(
-                                        [str(venv_python), str(handler_script)],
-                                        stdout=f,
-                                        stderr=f,
-                                        start_new_session=True  # Detach from parent
-                                    )
+                                # Open file for subprocess (don't use 'with' - it closes before subprocess writes)
+                                log_f = open(log_file, 'a')
+                                subprocess.Popen(
+                                    [str(venv_python), str(handler_script)],
+                                    stdout=log_f,
+                                    stderr=log_f,
+                                    start_new_session=True,  # Detach from parent
+                                    cwd=str(project_root)  # Ensure correct working directory
+                                )
+                                # Don't close log_f - let subprocess inherit it
                                 logger.info("Started Slack auth handler to monitor for response")
                                 print(f"[{datetime.now().strftime('%H:%M:%S')}] Started Slack auth monitor")
                         except Exception as e:
