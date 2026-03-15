@@ -342,7 +342,7 @@ class CredentialValidator:
         """
         Determine the best data source based on validation results.
 
-        Prefers Alpaca (simpler auth) over Schwab.
+        Prefers Schwab (more historical data) over Alpaca.
 
         Args:
             results: Validation results from validate_all()
@@ -353,12 +353,12 @@ class CredentialValidator:
         alpaca = results.get('alpaca')
         schwab = results.get('schwab')
 
-        # Prefer Alpaca (no token expiry issues)
-        if alpaca and alpaca.can_fetch_data:
-            return 'alpaca'
-
+        # Prefer Schwab (provides 20 years of data vs Alpaca's 9 months)
         if schwab and schwab.can_fetch_data:
             return 'schwab'
+
+        if alpaca and alpaca.can_fetch_data:
+            return 'alpaca'
 
         return 'none'
 

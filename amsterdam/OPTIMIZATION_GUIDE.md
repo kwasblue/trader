@@ -4,10 +4,10 @@ This guide explains the two optimization approaches available in Amsterdam.
 
 ## Two Versions
 
-### Version 1: Daily Optimization (Simple)
+### Version 1: Simple Optimization (NOT RECOMMENDED FOR PRODUCTION)
 **File:** `core/backtest/daily_optimize.py`
 **Script:** `bin/daily-optimize`
-**Schedule:** Daily at 9:00 AM ET
+**Schedule:** ❌ DO NOT USE DAILY - Too frequent, causes overfitting
 
 **Approach:**
 - Uses 90 days of data
@@ -15,25 +15,21 @@ This guide explains the two optimization approaches available in Amsterdam.
 - Picks best strategy per regime by Sharpe ratio
 - Fast (~5 seconds)
 
-**Pros:**
-- Simple and fast
-- Adapts quickly to market changes
-- Easy to understand
-
-**Cons:**
+**Why NOT to use daily:**
 - ⚠️ High overfitting risk (only 90 days)
 - ⚠️ No validation - might pick lucky winners
-- ⚠️ Daily updates may cause excessive strategy switching
+- ⚠️ Daily updates cause excessive strategy switching
 - ⚠️ Unreliable Sharpe ratios on short periods
+- ⚠️ Market conditions don't change daily - optimization is pointless
 
-**Recommendation:** Use for rapid experimentation, but be aware of overfitting risks.
+**Recommendation:** Only use for quick one-off testing, never in production.
 
 ---
 
-### Version 2: Walk-Forward Optimization (Robust) ⭐ RECOMMENDED
+### Version 2: Walk-Forward Optimization ⭐ PRODUCTION RECOMMENDED
 **File:** `core/backtest/daily_optimize_v2.py`
 **Script:** `bin/weekly-optimize`
-**Schedule:** Weekly (Sunday 2:00 AM)
+**Schedule:** Weekly (Sunday 2:00 AM) or Monthly (1st Sunday 2:00 AM)
 
 **Approach:**
 - Uses 365 days of data (1 year)
@@ -102,30 +98,26 @@ MIN_TRADES_PER_REGIME = 3  # Fewer trades required
 
 ## Scheduling
 
-### Current Setup (Raspberry Pi)
+### Recommended Schedules (Raspberry Pi)
 
-**Daily optimization (v1):**
+**Weekly optimization - RECOMMENDED:**
 ```bash
-0 9 * * 1-5 /home/kwasi/trader/amsterdam/bin/daily-optimize
-```
-
-**Switch to weekly optimization (v2) - RECOMMENDED:**
-```bash
-# Remove daily optimization from cron:
-crontab -e
-# Comment out or remove the daily-optimize line
-
-# Add weekly optimization:
+# Every Sunday at 2:00 AM
 0 2 * * 0 /home/kwasi/trader/amsterdam/bin/weekly-optimize
 ```
 
 This runs every Sunday at 2:00 AM, giving fresh optimized strategies for the week ahead.
 
-### Monthly Schedule (Even More Conservative)
+**Monthly optimization (More Conservative):**
 ```bash
 # First Sunday of each month at 2:00 AM
 0 2 1-7 * 0 /home/kwasi/trader/amsterdam/bin/weekly-optimize
 ```
+
+Good for slower-moving strategies or when you want maximum stability.
+
+**❌ DO NOT USE DAILY:**
+Daily optimization is excessive - market regimes don't change that quickly, and you'll just overfit to noise.
 
 ---
 
