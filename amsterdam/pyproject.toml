@@ -52,6 +52,7 @@ dev = [
 ml = [
     "xgboost>=2.0.0",
     "transformers>=4.35.0",
+    "imbalanced-learn>=0.12.0",
 ]
 charts = [
     "matplotlib>=3.8.0",

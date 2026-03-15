@@ -1,0 +1,20 @@
+[Unit]
+Description=Amsterdam Algorithmic Trading Bot
+After=network.target amsterdam-token-keeper.service
+Wants=amsterdam-token-keeper.service
+
+[Service]
+Type=simple
+User=kwasi
+WorkingDirectory=/home/kwasi/amsterdam
+Environment="PATH=/home/kwasi/amsterdam/venv/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/home/kwasi/amsterdam/venv/bin/python /home/kwasi/amsterdam/autoamsterdam.py --broker alpaca
+Restart=always
+RestartSec=60
+
+# Restart if it crashes, but not too frequently
+StartLimitInterval=300
+StartLimitBurst=5
+
+[Install]
+WantedBy=multi-user.target

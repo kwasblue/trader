@@ -5,9 +5,19 @@ ML Training Pipeline - Train trade quality prediction model.
 This script trains a model to predict whether a trade will be profitable
 based on entry conditions (features logged by MetaTradeLogger).
 
+Handles severe class imbalance using:
+- Class weighting (automatic)
+- SMOTE resampling (optional, recommended)
+
+Prerequisites:
+    pip install imbalanced-learn  # For SMOTE support
+
 Usage:
-    # Train from all available data
+    # Train from all available data (with SMOTE)
     python tools/train_trade_model.py
+
+    # Train without SMOTE (class weights only)
+    python tools/train_trade_model.py --no-smote
 
     # Train from specific parquet file
     python tools/train_trade_model.py --input data/trades_full.parquet
@@ -22,6 +32,11 @@ Output:
     - models/trade_quality_model.joblib (trained model)
     - models/model_metrics.json (performance metrics)
     - models/feature_importance.json (feature rankings)
+
+Data Requirements:
+    - Minimum: 200 winning trades (will warn if less)
+    - Recommended: 500+ winning trades for good performance
+    - Ideal: 1000+ winning trades for reliable predictions
 """
 
 from __future__ import annotations
@@ -40,10 +55,18 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.metrics import (
     accuracy_score, precision_score, recall_score, f1_score,
-    roc_auc_score, classification_report, confusion_matrix
+    roc_auc_score, classification_report, confusion_matrix,
+    balanced_accuracy_score
 )
 from sklearn.preprocessing import StandardScaler
 import joblib
+
+# Optional: SMOTE for synthetic oversampling
+try:
+    from imblearn.over_sampling import SMOTE
+    SMOTE_AVAILABLE = True
+except ImportError:
+    SMOTE_AVAILABLE = False
 
 # Add project root to path
 ROOT = Path(__file__).resolve().parents[1]
@@ -199,8 +222,41 @@ class TradeQualityTrainer:
         # Create binary target (profitable = 1, unprofitable = 0)
         y = (df[target_col] > 0).astype(int)
 
-        print(f"Target distribution: {y.value_counts().to_dict()}")
-        print(f"Win rate: {y.mean():.1%}")
+        n_wins = y.sum()
+        n_losses = len(y) - n_wins
+        win_rate = y.mean()
+
+        print(f"Target distribution: {{0: {n_losses}, 1: {n_wins}}}")
+        print(f"Win rate: {win_rate:.1%}")
+
+        # Data quality warnings
+        print("\n" + "="*60)
+        print("DATA QUALITY CHECK")
+        print("="*60)
+
+        if n_wins < 200:
+            print(f"⚠️  WARNING: Only {n_wins} winning trades")
+            print(f"   Recommended minimum: 200 wins for reliable training")
+            print(f"   Current status: INSUFFICIENT DATA")
+        elif n_wins < 500:
+            print(f"⚠️  CAUTION: {n_wins} winning trades")
+            print(f"   Recommended minimum: 500 wins for good performance")
+            print(f"   Current status: MARGINAL - Model may not generalize well")
+        else:
+            print(f"✓  Good: {n_wins} winning trades (sufficient for training)")
+
+        # Check class imbalance ratio
+        imbalance_ratio = n_losses / max(n_wins, 1)
+        if imbalance_ratio > 10:
+            print(f"⚠️  SEVERE class imbalance: {imbalance_ratio:.1f}:1 (loss:win)")
+            print(f"   Will use class balancing and SMOTE to compensate")
+        elif imbalance_ratio > 5:
+            print(f"⚠️  Moderate class imbalance: {imbalance_ratio:.1f}:1 (loss:win)")
+            print(f"   Will use class balancing to compensate")
+        else:
+            print(f"✓  Acceptable balance: {imbalance_ratio:.1f}:1 (loss:win)")
+
+        print("="*60 + "\n")
 
         return X.values, y.values, available_features
 
@@ -212,6 +268,7 @@ class TradeQualityTrainer:
         model_type: str = 'random_forest',
         test_size: float = 0.2,
         cv_folds: int = 5,
+        use_smote: bool = True,
     ) -> Dict[str, Any]:
         """
         Train the model.
@@ -236,17 +293,37 @@ class TradeQualityTrainer:
         X_train_scaled = self.scaler.fit_transform(X_train)
         X_test_scaled = self.scaler.transform(X_test)
 
-        # Select model
+        # Apply SMOTE to training data if requested and available
+        if use_smote and SMOTE_AVAILABLE:
+            # Check if we have enough minority class samples
+            minority_count = min(np.bincount(y_train))
+            if minority_count >= 6:  # SMOTE needs at least 6 samples
+                print(f"Applying SMOTE to balance training data...")
+                smote = SMOTE(random_state=42, k_neighbors=min(5, minority_count-1))
+                X_train_scaled, y_train = smote.fit_resample(X_train_scaled, y_train)
+                print(f"After SMOTE: {np.bincount(y_train)[1]} wins, {np.bincount(y_train)[0]} losses")
+            else:
+                print(f"⚠️  Too few minority samples ({minority_count}) for SMOTE, skipping")
+                use_smote = False
+        elif use_smote and not SMOTE_AVAILABLE:
+            print("⚠️  SMOTE requested but imblearn not installed. Using class weights only.")
+            print("   Install with: pip install imbalanced-learn")
+            use_smote = False
+
+        # Select model with class balancing
         if model_type == 'random_forest':
             self.model = RandomForestClassifier(
                 n_estimators=100,
                 max_depth=10,
                 min_samples_split=5,
                 min_samples_leaf=2,
+                class_weight='balanced',  # Handle class imbalance
                 random_state=42,
                 n_jobs=-1,
             )
         elif model_type == 'gradient_boosting':
+            # Note: GradientBoostingClassifier doesn't support class_weight
+            # We rely on SMOTE for balancing if available
             self.model = GradientBoostingClassifier(
                 n_estimators=100,
                 max_depth=5,
@@ -256,18 +333,27 @@ class TradeQualityTrainer:
         elif model_type == 'logistic':
             self.model = LogisticRegression(
                 max_iter=1000,
+                class_weight='balanced',  # Handle class imbalance
                 random_state=42,
             )
         else:
             raise ValueError(f"Unknown model type: {model_type}")
 
         print(f"\nTraining {model_type} model...")
+        if use_smote:
+            print("(With SMOTE resampling for class balance)")
+        else:
+            print("(With class_weight='balanced' for class balance)")
 
-        # Cross-validation
-        cv_scores = cross_val_score(
-            self.model, X_train_scaled, y_train, cv=cv_folds, scoring='accuracy'
+        # Cross-validation using ROC-AUC (better for imbalanced data)
+        cv_scores_auc = cross_val_score(
+            self.model, X_train_scaled, y_train, cv=cv_folds, scoring='roc_auc'
         )
-        print(f"CV Accuracy: {cv_scores.mean():.3f} (+/- {cv_scores.std()*2:.3f})")
+        cv_scores_f1 = cross_val_score(
+            self.model, X_train_scaled, y_train, cv=cv_folds, scoring='f1'
+        )
+        print(f"CV ROC-AUC: {cv_scores_auc.mean():.3f} (+/- {cv_scores_auc.std()*2:.3f})")
+        print(f"CV F1:      {cv_scores_f1.mean():.3f} (+/- {cv_scores_f1.std()*2:.3f})")
 
         # Train final model
         self.model.fit(X_train_scaled, y_train)
@@ -276,18 +362,43 @@ class TradeQualityTrainer:
         y_pred = self.model.predict(X_test_scaled)
         y_prob = self.model.predict_proba(X_test_scaled)[:, 1]
 
+        # Calculate per-class metrics
+        # Precision/recall/f1 for the positive class (profits) is what matters
+        precision_profit = precision_score(y_test, y_pred, pos_label=1, zero_division=0)
+        recall_profit = recall_score(y_test, y_pred, pos_label=1, zero_division=0)
+        f1_profit = f1_score(y_test, y_pred, pos_label=1, zero_division=0)
+
+        # Also track loss class metrics
+        precision_loss = precision_score(y_test, y_pred, pos_label=0, zero_division=0)
+        recall_loss = recall_score(y_test, y_pred, pos_label=0, zero_division=0)
+        f1_loss = f1_score(y_test, y_pred, pos_label=0, zero_division=0)
+
         self.metrics = {
             'model_type': model_type,
             'n_train': len(X_train),
             'n_test': len(X_test),
-            'cv_accuracy_mean': float(cv_scores.mean()),
-            'cv_accuracy_std': float(cv_scores.std()),
+            'used_smote': use_smote,
+            # CV scores (more important than test for small datasets)
+            'cv_roc_auc_mean': float(cv_scores_auc.mean()),
+            'cv_roc_auc_std': float(cv_scores_auc.std()),
+            'cv_f1_mean': float(cv_scores_f1.mean()),
+            'cv_f1_std': float(cv_scores_f1.std()),
+            # Overall test metrics
             'test_accuracy': float(accuracy_score(y_test, y_pred)),
-            'test_precision': float(precision_score(y_test, y_pred, zero_division=0)),
-            'test_recall': float(recall_score(y_test, y_pred, zero_division=0)),
-            'test_f1': float(f1_score(y_test, y_pred, zero_division=0)),
+            'test_balanced_accuracy': float(balanced_accuracy_score(y_test, y_pred)),
             'test_roc_auc': float(roc_auc_score(y_test, y_prob)),
+            # Profit class (the one we care about)
+            'test_profit_precision': float(precision_profit),
+            'test_profit_recall': float(recall_profit),
+            'test_profit_f1': float(f1_profit),
+            # Loss class (for reference)
+            'test_loss_precision': float(precision_loss),
+            'test_loss_recall': float(recall_loss),
+            'test_loss_f1': float(f1_loss),
+            # Baselines
             'baseline_accuracy': float(max(y.mean(), 1 - y.mean())),
+            'win_rate': float(y.mean()),
+            # Metadata
             'trained_at': datetime.now().isoformat(),
             'features': feature_names,
         }
@@ -303,15 +414,60 @@ class TradeQualityTrainer:
         print("\n" + "="*60)
         print("MODEL PERFORMANCE")
         print("="*60)
-        print(f"Test Accuracy:  {self.metrics['test_accuracy']:.3f}")
-        print(f"Test Precision: {self.metrics['test_precision']:.3f}")
-        print(f"Test Recall:    {self.metrics['test_recall']:.3f}")
-        print(f"Test F1:        {self.metrics['test_f1']:.3f}")
-        print(f"Test ROC-AUC:   {self.metrics['test_roc_auc']:.3f}")
-        print(f"Baseline:       {self.metrics['baseline_accuracy']:.3f}")
+
+        # Overall metrics
+        print("\nOverall Metrics:")
+        print(f"  Test Accuracy:          {self.metrics['test_accuracy']:.3f} (baseline: {self.metrics['baseline_accuracy']:.3f})")
+        print(f"  Test Balanced Accuracy: {self.metrics['test_balanced_accuracy']:.3f}")
+        print(f"  Test ROC-AUC:           {self.metrics['test_roc_auc']:.3f}")
+
+        # Per-class metrics (what really matters)
+        print("\nProfit Prediction (Minority Class - What We Care About):")
+        print(f"  Precision: {self.metrics['test_profit_precision']:.3f} (of trades predicted profitable, % that actually were)")
+        print(f"  Recall:    {self.metrics['test_profit_recall']:.3f} (of actual profitable trades, % we caught)")
+        print(f"  F1-Score:  {self.metrics['test_profit_f1']:.3f} (harmonic mean of precision & recall)")
+
+        print("\nLoss Prediction (Majority Class - For Reference):")
+        print(f"  Precision: {self.metrics['test_loss_precision']:.3f}")
+        print(f"  Recall:    {self.metrics['test_loss_recall']:.3f}")
+        print(f"  F1-Score:  {self.metrics['test_loss_f1']:.3f}")
+
+        # Interpretation
+        print("\n" + "-"*60)
+        print("INTERPRETATION:")
+        print("-"*60)
+        roc_auc = self.metrics['test_roc_auc']
+        profit_f1 = self.metrics['test_profit_f1']
+
+        if roc_auc < 0.6:
+            print("❌ ROC-AUC < 0.6: Model is barely better than random guessing")
+            print("   Action: Collect more data (especially wins) before using")
+        elif roc_auc < 0.7:
+            print("⚠️  ROC-AUC 0.6-0.7: Model has weak predictive power")
+            print("   Action: Use with caution, needs more data")
+        elif roc_auc < 0.8:
+            print("✓  ROC-AUC 0.7-0.8: Model has acceptable predictive power")
+            print("   Action: Can use, but monitor performance")
+        else:
+            print("✓✓ ROC-AUC > 0.8: Model has strong predictive power")
+            print("   Action: Ready for production use")
+
+        if profit_f1 == 0:
+            print("\n❌ CRITICAL: Profit F1 = 0 (never predicts profits)")
+            print("   The model is useless - it just predicts all losses")
+            print("   Root cause: Insufficient profitable trades in training data")
+        elif profit_f1 < 0.3:
+            print(f"\n⚠️  WARNING: Profit F1 = {profit_f1:.3f} (very low)")
+            print("   Model rarely predicts profitable trades correctly")
+        elif profit_f1 < 0.5:
+            print(f"\n⚠️  CAUTION: Profit F1 = {profit_f1:.3f} (marginal)")
+            print("   Model has weak profit prediction capability")
+        else:
+            print(f"\n✓  Profit F1 = {profit_f1:.3f} (acceptable)")
+
         print()
-        print("Classification Report:")
-        print(classification_report(y_test, y_pred, target_names=['Loss', 'Profit']))
+        print("Detailed Classification Report:")
+        print(classification_report(y_test, y_pred, target_names=['Loss', 'Profit'], zero_division=0))
 
         if 'feature_importance' in self.metrics:
             print("\nFeature Importance:")
@@ -431,6 +587,11 @@ def main():
         action='store_true',
         help='Combine all available parquet files for training'
     )
+    parser.add_argument(
+        '--no-smote',
+        action='store_true',
+        help='Disable SMOTE resampling (use class weights only)'
+    )
 
     args = parser.parse_args()
 
@@ -483,6 +644,7 @@ def main():
             X, y, features,
             model_type=args.model_type,
             test_size=args.test_size,
+            use_smote=not args.no_smote,
         )
         trainer.save_model(args.model_name)
 

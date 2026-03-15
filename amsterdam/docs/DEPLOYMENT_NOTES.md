@@ -68,6 +68,32 @@ sudo systemctl status amsterdam-token-keeper
 journalctl -u amsterdam-token-keeper -f
 ```
 
+**New: Install Trading Service (for continuous data collection)**
+
+The trading service runs the bot continuously and logs all trades for ML training:
+
+```bash
+ssh raspi
+cd ~/amsterdam
+
+# Copy service file to systemd
+sudo cp amsterdam-trader.service /etc/systemd/system/
+
+# Enable and start the service
+sudo systemctl daemon-reload
+sudo systemctl enable amsterdam-trader
+sudo systemctl start amsterdam-trader
+sudo systemctl status amsterdam-trader
+
+# View logs
+journalctl -u amsterdam-trader -f
+
+# Check trade data collection
+tail -f logs/meta_trades_live.jsonl
+```
+
+**Note:** See [ML_DATA_COLLECTION.md](ML_DATA_COLLECTION.md) for complete guide on collecting and using training data.
+
 ### 2. Update Cron Jobs
 
 Current cron references old paths. Update with:
@@ -171,10 +197,14 @@ amsterdam/
 - [ ] Pull latest code on Pi
 - [ ] Update dashboard systemd service file
 - [ ] Install token keeper systemd service
-- [ ] Update cron jobs
+- [ ] Install trading bot systemd service (for ML data collection)
+- [ ] Update cron jobs (weekly optimization)
 - [ ] Restart dashboard service
 - [ ] Start token keeper service
+- [ ] Start trading bot service
 - [ ] Test all scripts
 - [ ] Verify cron jobs run successfully
 - [ ] Check dashboard at http://100.101.141.79:8080
 - [ ] Verify token keeper is running: `sudo systemctl status amsterdam-token-keeper`
+- [ ] Verify trading bot is running: `sudo systemctl status amsterdam-trader`
+- [ ] Verify trade data logging: `tail logs/meta_trades_live.jsonl`
