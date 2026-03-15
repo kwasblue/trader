@@ -120,6 +120,19 @@ class DataStore:
         self._ensure_connected()
         table_name = self._sanitize_table_name(table_name)
 
+        # Validate input
+        if not isinstance(dataframe, pd.DataFrame):
+            raise TypeError(f"Expected pandas DataFrame, got {type(dataframe)}")
+
+        if dataframe.empty:
+            self.logger.warning(f"Received empty DataFrame for table '{table_name}'")
+            return
+
+        self.logger.debug(
+            f"Creating table '{table_name}' with {len(dataframe)} rows, "
+            f"{len(dataframe.columns)} columns: {list(dataframe.columns)}"
+        )
+
         try:
             type_mapping = {
                 'object': 'TEXT',
@@ -137,7 +150,23 @@ class DataStore:
 
             for col in dataframe.columns:
                 sanitized_col = self.sanitize_column_name(col)
-                dtype = str(dataframe[col].dtype)
+
+                # Handle both Series and DataFrame columns
+                try:
+                    col_data = dataframe[col]
+                    # If it's a Series, get dtype directly
+                    if hasattr(col_data, 'dtype'):
+                        dtype = str(col_data.dtype)
+                    # If somehow it's a DataFrame (shouldn't happen but handle it)
+                    elif hasattr(col_data, 'dtypes'):
+                        dtype = str(col_data.dtypes.iloc[0])
+                    else:
+                        # Fallback
+                        dtype = 'object'
+                except Exception as e:
+                    self.logger.warning(f"Could not determine dtype for column '{col}': {e}, using TEXT")
+                    dtype = 'object'
+
                 sql_type = type_mapping.get(dtype, 'TEXT')
                 columns_definition.append(f"{sanitized_col} {sql_type}")
 

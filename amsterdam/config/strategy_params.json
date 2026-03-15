@@ -1,38 +1,21 @@
 {
-  "AAPL": {
-    "low_volatility": {
-      "params": {
-        "fast": 10,
-        "slow": 30
-      }
-    },
-    "normal": {
-      "params": {
-        "lookback": 20
-      }
-    },
-    "high_volatility": {
-      "params": {
-        "window": 14
-      }
-    }
-  },
-  "MSFT": {
-    "low_volatility": {
-      "params": {
-        "fast": 10,
-        "slow": 30
-      }
-    },
-    "normal": {
-      "params": {
-        "lookback": 20
-      }
-    },
-    "high_volatility": {
-      "params": {
-        "window": 14
-      }
-    }
-  }
+  "AAPL": {},
+  "ABBV": {},
+  "AMZN": {},
+  "AVGO": {},
+  "COST": {},
+  "GOOGL": {},
+  "HD": {},
+  "JNJ": {},
+  "JPM": {},
+  "MA": {},
+  "META": {},
+  "MSFT": {},
+  "NVDA": {},
+  "PG": {},
+  "TSLA": {},
+  "UNH": {},
+  "V": {},
+  "WMT": {},
+  "XOM": {}
 }

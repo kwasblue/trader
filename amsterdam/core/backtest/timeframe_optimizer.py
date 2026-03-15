@@ -35,6 +35,7 @@ import pandas as pd
 
 from loggers.logger import Logger
 from core.unified_data_pipeline import UnifiedDataPipeline
+from core.backtest.regime_backtest import calculate_atr, classify_regime
 
 
 @dataclass
@@ -124,7 +125,8 @@ class TimeframeOptimizer:
     async def run_optimization(
         self,
         days: int = 750,
-        min_bars: int = 100
+        min_bars: int = 100,
+        regime_aware: bool = True
     ) -> List[BacktestResult]:
         """
         Run optimization across all combinations.
@@ -132,6 +134,7 @@ class TimeframeOptimizer:
         Args:
             days: Number of days of historical data to use
             min_bars: Minimum bars required for valid backtest
+            regime_aware: If True, also test strategies per regime
 
         Returns:
             List of BacktestResult objects
@@ -361,21 +364,27 @@ class TimeframeOptimizer:
             # Sort by score
             symbol_results.sort(key=lambda r: r.score, reverse=True)
 
-            # For each regime, assign strategies based on characteristics
-            # This is a heuristic - could be improved with regime-specific backtesting
+            # For each regime, assign strategies based on volatility characteristics
+            # IMPORTANT: Match timeframe to regime behavior:
+            # - High volatility → SHORT timeframes (fast reaction to rapid changes)
+            # - Low volatility → LONG timeframes (avoid noise/whipsaws)
 
-            # Low volatility: Best overall strategy with shorter timeframe
-            low_vol_candidates = [r for r in symbol_results if r.timeframe in ['5min', '15min']]
-            if low_vol_candidates:
-                best_low_vol = low_vol_candidates[0]
-                config[symbol]['low_volatility'] = {
-                    'strategy': best_low_vol.strategy,
-                    'timeframe': best_low_vol.timeframe
+            # High volatility: Best strategy with SHORTER timeframe (fast reaction)
+            high_vol_candidates = [r for r in symbol_results if r.timeframe in ['5min', '15min']]
+            if high_vol_candidates:
+                best_high_vol = high_vol_candidates[0]
+                config[symbol]['high_volatility'] = {
+                    'strategy': best_high_vol.strategy,
+                    'timeframe': best_high_vol.timeframe
                 }
 
-            # Normal: Best overall strategy
-            if symbol_results[0].sharpe_ratio >= min_sharpe:
-                best_normal = symbol_results[0]
+            # Normal: Best overall strategy (medium timeframes)
+            normal_candidates = [r for r in symbol_results if r.timeframe in ['15min', '30min']]
+            if not normal_candidates:
+                normal_candidates = symbol_results  # Fallback to any
+
+            if normal_candidates and normal_candidates[0].sharpe_ratio >= min_sharpe:
+                best_normal = normal_candidates[0]
                 config[symbol]['normal'] = {
                     'strategy': best_normal.strategy,
                     'timeframe': best_normal.timeframe
@@ -387,22 +396,22 @@ class TimeframeOptimizer:
                     'timeframe': best_normal.timeframe
                 }
 
-            # High volatility: Best strategy with longer timeframe
-            high_vol_candidates = [r for r in symbol_results if r.timeframe in ['30min', '1hour']]
-            if high_vol_candidates:
-                best_high_vol = high_vol_candidates[0]
-                config[symbol]['high_volatility'] = {
-                    'strategy': best_high_vol.strategy,
-                    'timeframe': best_high_vol.timeframe
+            # Low volatility: Best strategy with LONGER timeframe (avoid whipsaws)
+            low_vol_candidates = [r for r in symbol_results if r.timeframe in ['30min', '1hour']]
+            if low_vol_candidates:
+                best_low_vol = low_vol_candidates[0]
+                config[symbol]['low_volatility'] = {
+                    'strategy': best_low_vol.strategy,
+                    'timeframe': best_low_vol.timeframe
                 }
 
             # Add use_hybrid flag (could be optimized separately)
             config[symbol]['use_hybrid'] = False
 
             self.logger.info(
-                f"{symbol}: normal={config[symbol].get('normal', {}).get('timeframe', 'N/A')}, "
-                f"low_vol={config[symbol].get('low_volatility', {}).get('timeframe', 'N/A')}, "
-                f"high_vol={config[symbol].get('high_volatility', {}).get('timeframe', 'N/A')}"
+                f"{symbol}: high_vol={config[symbol].get('high_volatility', {}).get('timeframe', 'N/A')} (fast), "
+                f"normal={config[symbol].get('normal', {}).get('timeframe', 'N/A')}, "
+                f"low_vol={config[symbol].get('low_volatility', {}).get('timeframe', 'N/A')} (slow)"
             )
 
         # Add global default

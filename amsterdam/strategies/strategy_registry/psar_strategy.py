@@ -24,8 +24,14 @@ class PSARStrategy(BaseStrategy):
         psar_indicator = PSARIndicator(high, low, close)
         psar = psar_indicator.psar()
 
+        # Ensure PSAR values match input length (ta library may return different length)
+        n = len(close)
+        if len(psar) != n:
+            psar = psar.iloc[:n] if len(psar) > n else psar.reindex(close.index, fill_value=close.iloc[0])
+
         # Generate signals: buy when price above PSAR, sell when below
-        signals = np.where(close > psar, 1, -1)
+        # Use .values to avoid index mismatch issues
+        signals = np.where(close.values > psar.values, 1, -1)
 
         # No signal during initial periods (PSAR needs some warmup)
         signals[:5] = 0

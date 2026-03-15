@@ -28,6 +28,7 @@ from strategies.strategy_registry import STRATEGY_MAP, load_strategy, list_strat
 from core.backtest.backtester import VectorizedBacktester
 from core.backtest.optimization import grid_search, OptimizationResult
 from core.backtest.walk_forward import walk_forward_analysis
+from core.backtest.regime_backtest import RegimeBacktester, RegimeAnalysisResult, REGIME_TYPES
 
 logger = logging.getLogger(__name__)
 
@@ -283,6 +284,53 @@ class StrategySelector:
 
         return result
 
+    def select_best_strategies_by_regime(
+        self,
+        symbol: str,
+        top_n: int = 3,
+        metric: str = "sharpe_ratio",
+        verbose: bool = True,
+    ) -> RegimeAnalysisResult:
+        """
+        Evaluate all strategies with regime-aware backtesting.
+
+        This uses ATR-based regime detection to test strategies separately
+        during low/normal/high volatility periods. This better matches live
+        trading where strategies are selected based on current regime.
+
+        Args:
+            symbol: Stock symbol (for logging/config)
+            top_n: Number of top strategies to return (not used, all regimes tested)
+            metric: Ranking metric (sharpe_ratio, total_return, win_rate)
+            verbose: Print progress
+
+        Returns:
+            RegimeAnalysisResult with best strategies per regime
+        """
+        if verbose:
+            logger.info(f"Running regime-aware strategy selection for {symbol}")
+            logger.info(f"Testing {len(self._available_strategies)} strategies across {len(REGIME_TYPES)} regimes")
+
+        # Use RegimeBacktester for regime-aware evaluation
+        tester = RegimeBacktester(
+            data=self.data,
+            symbol=symbol,
+            initial_capital=self.initial_capital,
+            transaction_cost=self.transaction_cost,
+            strategies=self._available_strategies,
+        )
+
+        # Run regime analysis
+        result = tester.run_regime_analysis(
+            metric=metric,
+            verbose=verbose,
+        )
+
+        if verbose:
+            tester.print_results(result)
+
+        return result
+
     def _evaluate_strategy(
         self,
         strategy_name: str,
@@ -522,6 +570,78 @@ class StrategySelector:
 
         return routing_path, params_path
 
+    def save_regime_result_to_config(
+        self,
+        result: RegimeAnalysisResult,
+        config_dir: str = None,
+        add_timeframes: bool = False,
+        default_timeframe: str = "day"
+    ) -> Path:
+        """
+        Save regime analysis result to strategy routing config.
+
+        Args:
+            result: Regime analysis result
+            config_dir: Config directory (default: config/)
+            add_timeframes: Whether to add timeframe specifications
+            default_timeframe: Default timeframe for all regimes
+
+        Returns:
+            Path to routing config file
+        """
+        if config_dir is None:
+            config_dir = Path(__file__).resolve().parents[2] / "config"
+        else:
+            config_dir = Path(config_dir)
+
+        routing_path = config_dir / "strategy_routing.json"
+
+        # Load existing config
+        routing = {}
+        if routing_path.exists():
+            with open(routing_path) as f:
+                routing = json.load(f)
+
+        symbol = result.symbol
+
+        # Initialize symbol entry if needed
+        if symbol not in routing:
+            routing[symbol] = {}
+
+        # Save best strategy for each regime
+        for regime in REGIME_TYPES:
+            best_strategy = result.best_strategies.get(regime, "momentum")
+
+            if add_timeframes:
+                routing[symbol][regime] = {
+                    "strategy": best_strategy,
+                    "timeframe": default_timeframe
+                }
+            else:
+                routing[symbol][regime] = best_strategy
+
+        # Add default (use normal regime)
+        if "normal" in result.best_strategies:
+            if add_timeframes:
+                routing[symbol]["default"] = {
+                    "strategy": result.best_strategies["normal"],
+                    "timeframe": default_timeframe
+                }
+            else:
+                routing[symbol]["default"] = result.best_strategies["normal"]
+
+        # Add use_hybrid flag if it doesn't exist
+        if "use_hybrid" not in routing[symbol]:
+            routing[symbol]["use_hybrid"] = False
+
+        # Write config
+        with open(routing_path, "w") as f:
+            json.dump(routing, f, indent=2)
+
+        logger.info(f"Saved regime-aware routing config to {routing_path}")
+
+        return routing_path
+
 
 def select_best_strategies(
     symbol: str,
@@ -572,7 +692,9 @@ if __name__ == "__main__":
     parser.add_argument("--save", action="store_true", help="Save results to config files")
     parser.add_argument("--regime", type=str, default="normal",
                        choices=["low_volatility", "normal", "high_volatility"],
-                       help="Market regime to save for")
+                       help="Market regime to save for (legacy mode only)")
+    parser.add_argument("--regime-aware", action="store_true",
+                       help="Use regime-aware backtesting (tests strategies per regime)")
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
 
     args = parser.parse_args()
@@ -625,19 +747,39 @@ if __name__ == "__main__":
     # Run strategy selection
     selector = StrategySelector(data, initial_capital=args.capital)
 
-    result = selector.select_best_strategies(
-        symbol=args.symbol,
-        top_n=args.top,
-        metric=args.metric,
-        use_walk_forward=not args.no_walk_forward,
-        verbose=True
-    )
+    if args.regime_aware:
+        # Use regime-aware backtesting
+        result = selector.select_best_strategies_by_regime(
+            symbol=args.symbol,
+            top_n=args.top,
+            metric=args.metric,
+            verbose=True
+        )
 
-    # Save to config if requested
-    if args.save:
-        routing_path, params_path = selector.save_to_config(result, regime=args.regime)
-        print(f"\nSaved to:")
-        print(f"  {routing_path}")
-        print(f"  {params_path}")
+        # Save to config if requested
+        if args.save:
+            routing_path = selector.save_regime_result_to_config(
+                result,
+                add_timeframes=True,
+                default_timeframe="day"
+            )
+            print(f"\nSaved to:")
+            print(f"  {routing_path}")
+    else:
+        # Use legacy overall backtesting
+        result = selector.select_best_strategies(
+            symbol=args.symbol,
+            top_n=args.top,
+            metric=args.metric,
+            use_walk_forward=not args.no_walk_forward,
+            verbose=True
+        )
+
+        # Save to config if requested
+        if args.save:
+            routing_path, params_path = selector.save_to_config(result, regime=args.regime)
+            print(f"\nSaved to:")
+            print(f"  {routing_path}")
+            print(f"  {params_path}")
 
     print("\nDone!")
