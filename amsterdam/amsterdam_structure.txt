@@ -1,10 +1,40 @@
 ================================================================================
 📂 PROJECT STRUCTURE
-Generated: 2026-02-27 15:15:36
-Total Files: 215
+Generated: 2026-03-15 17:55:53
+Total Files: 250
 ================================================================================
 
-📄 autotrader.py
+📄 amsterdam_ctl.py
+   ⚙️  def get_pid()
+   ⚙️  def is_running()
+   ⚙️  def start(self, args)
+   ⚙️  def stop(self, args)
+   ⚙️  def restart(self, args)
+   ⚙️  def status(self, args)
+   ⚙️  def logs(self, args)
+   ⚙️  def list_symbols(self, args)
+   ⚙️  def add_symbol(self, args)
+   ⚙️  def move_symbol(self, args)
+   ⚙️  def remove_symbol(self, args)
+   ⚙️  def export_lists(self, args)
+   ⚙️  def import_lists(self, args)
+   ⚙️  def _show_positions()
+   ⚙️  def _show_lists_summary()
+   ⚙️  def main()
+
+📄 app/bootstrap.py
+   🧱 class AppContext
+      (no methods)
+   ⚙️  def bootstrap_app(self, mode, symbols, broker, trading_mode, operation, log_level, console_logging)
+
+📄 app/container.py
+   🧱 class AppContainer
+      ├── def __init__(self, context)
+      ├── def get_runner(self)
+      ├── def get_event_handler(self)
+      └── def cleanup(self)
+
+📄 autoamsterdam.py
    🧱 class InstanceLock
       ├── def __init__(self, name)
       ├── def acquire(self)
@@ -25,27 +55,10 @@ Total Files: 215
    🧱 class AutoTrader
       ├── def __init__(self, symbols, broker, dry_run, update_data_days, day_trade)
       ├── def _set_state(self, new_state)
+      ├── def _check_network_connectivity_sync(self)
       ├── def stop(self)
       └── def get_status(self)
    ⚙️  def signal_handler()
-
-📄 autotrader_ctl.py
-   ⚙️  def get_pid()
-   ⚙️  def is_running()
-   ⚙️  def start(self, args)
-   ⚙️  def stop(self, args)
-   ⚙️  def restart(self, args)
-   ⚙️  def status(self, args)
-   ⚙️  def logs(self, args)
-   ⚙️  def list_symbols(self, args)
-   ⚙️  def add_symbol(self, args)
-   ⚙️  def move_symbol(self, args)
-   ⚙️  def remove_symbol(self, args)
-   ⚙️  def export_lists(self, args)
-   ⚙️  def import_lists(self, args)
-   ⚙️  def _show_positions()
-   ⚙️  def _show_lists_summary()
-   ⚙️  def main()
 
 📄 cache/cache.py
    🧱 class CacheManager
@@ -78,10 +91,11 @@ Total Files: 215
    ⚙️  def symbols_add(self, symbol, trade, watch)
    ⚙️  def symbols_remove(self, symbol)
    ⚙️  def data()
-   ⚙️  def data_update(self, symbols, days, source)
+   ⚙️  def data_update(self, symbols, days, source, timeframes)
    ⚙️  def data_status(self, symbols)
    ⚙️  def strategy()
    ⚙️  def strategy_select(self, symbol, days, top, metric, no_walk_forward, regime, save, capital)
+   ⚙️  def strategy_optimize_multitf(self, symbols, timeframes, strategies, days, metric, dry_run)
    ⚙️  def strategy_list()
    ⚙️  def strategy_show(self, symbol)
    ⚙️  def strategy_refresh()
@@ -91,7 +105,7 @@ Total Files: 215
    ⚙️  def backtest_hybrid(self, symbol, strategies, days, capital)
    ⚙️  def backtest_categories(self, symbol, categories, days, capital)
    ⚙️  def backtest_full(self, symbol, strategies, days, output, capital)
-   ⚙️  def backtest_optimize(self, symbols, days, strategies, dry_run)
+   ⚙️  def backtest_optimize(self, mode, symbols, days, strategies, timeframes, dry_run)
    ⚙️  def main()
 
 📄 core/alpaca_runner.py
@@ -142,6 +156,11 @@ Total Files: 215
    ⚙️  def compare_to_benchmark(self, strategy_returns, benchmark_returns, risk_free_rate)
    ⚙️  def calculate_rolling_metrics(self, strategy_returns, benchmark_returns, window, risk_free_rate)
    ⚙️  def calculate_drawdown_analysis(self, returns)
+
+📄 core/backtest/daily_optimize.py
+   ⚙️  def calculate_trade_score(self, num_trades)
+   ⚙️  def calculate_confidence_score(self, train_result, validation_result, regime_stats)
+   ⚙️  def run_optimization(self, symbols, days, existing_routing)
 
 📄 core/backtest/monte_carlo.py
    🧱 class MonteCarloResult
@@ -205,11 +224,24 @@ Total Files: 215
       ├── def __init__(self, data, initial_capital, transaction_cost)
       ├── def _get_available_strategies(self)
       ├── def select_best_strategies(self, symbol, top_n, metric, use_walk_forward, walk_forward_train_size, walk_forward_test_size, parallel, n_jobs, verbose)
+      ├── def select_best_strategies_by_regime(self, symbol, top_n, metric, verbose)
       ├── def _evaluate_strategy(self, strategy_name, use_walk_forward, walk_forward_train_size, walk_forward_test_size, verbose)
       ├── def _calculate_composite_score(self, metrics, weights)
       ├── def _print_results(self, result)
-      └── def save_to_config(self, result, config_dir, regime)
+      ├── def save_to_config(self, result, config_dir, regime)
+      └── def save_regime_result_to_config(self, result, config_dir, add_timeframes, default_timeframe)
    ⚙️  def select_best_strategies(self, symbol, data, top_n)
+
+📄 core/backtest/timeframe_optimizer.py
+   🧱 class BacktestResult
+      └── def __post_init__(self)
+   🧱 class TimeframeOptimizer
+      ├── def __init__(self, symbols, timeframes, strategies, regimes, data_pipeline)
+      ├── def find_best_timeframe(self, symbol, strategy, regime)
+      ├── def generate_routing_config(self, results, min_sharpe)
+      ├── def save_config(self, config, path)
+      ├── def save_results(self, path)
+      └── def print_summary(self)
 
 📄 core/backtest/unified_backtest_runner.py
    ⚙️  def get_strategy_category(self, strategy_name)
@@ -247,6 +279,30 @@ Total Files: 215
       (no methods)
    ⚙️  def walk_forward_analysis(self, data, strategy_name, param_grid, train_size, test_size, step_size, metric, initial_capital, verbose)
    ⚙️  def anchored_walk_forward(self, data, strategy_name, param_grid, initial_train_size, test_size, metric, initial_capital, verbose)
+
+📄 core/bar_aggregator.py
+   🧱 class Bar
+      └── def to_dict(self)
+   🧱 class TimeframeWindow
+      ├── def __init__(self, symbol, timeframe, logger)
+      ├── def _parse_timeframe(self, timeframe)
+      ├── def _get_window_start(self, timestamp)
+      ├── def add_bar(self, bar)
+      ├── def _complete_window(self)
+      └── def force_complete(self)
+   🧱 class BarAggregator
+      ├── def __init__(self, logger)
+      ├── def set_timeframe(self, symbol, timeframe)
+      ├── def process_bar(self, bar)
+      ├── def _emit_bar(self, bar)
+      ├── def register_callback(self, callback)
+      ├── def get_stats(self)
+      ├── def force_complete_all(self)
+      ├── def remove_symbol(self, symbol)
+      ├── def clear_all(self)
+      ├── def get_configured_symbols(self)
+      └── def get_timeframe(self, symbol)
+   ⚙️  def on_bar(self, bar)
 
 📄 core/base/base_broker_interface.py
    🧱 class BaseBrokerInterface
@@ -437,7 +493,7 @@ Total Files: 215
    ⚙️  def _map_side(self, side)
    ⚙️  def _map_tif(self, tif)
    🧱 class AlpacaBroker
-      ├── def __init__(self, api_key, api_secret, event_handler, paper)
+      ├── def __init__(self, api_key, api_secret, event_handler, paper, poll_timeout)
       ├── def connect_sync(self)
       ├── def disconnect(self)
       ├── def subscribe_bars(self, callback, symbol)
@@ -458,6 +514,7 @@ Total Files: 215
    ⚙️  def _submit()
    ⚙️  def _cancel()
    ⚙️  def _submit()
+   ⚙️  def _fetch()
    ⚙️  def _submit()
    ⚙️  def _get()
    ⚙️  def _get_all()
@@ -572,6 +629,31 @@ Total Files: 215
    ⚙️  def create_drawdown_monitor(self, config)
    ⚙️  def create_trade_approver(self, config, event_handler)
    ⚙️  def create_position_manager(self, config)
+
+📄 core/continuous_metrics.py
+   🧱 class RiskMetrics
+      (no methods)
+   🧱 class ContinuousMetrics
+      ├── def __init__(self, logger, config)
+      ├── def calculate_atr(self, bars, period)
+      ├── def calculate_atr_percentile(self, symbol, bars, current_period, lookback)
+      ├── def calculate_rolling_sharpe(self, symbol, strategy, recent_trades, lookback_days, use_bayesian_shrinkage, use_smoothing)
+      ├── def normalize_atr_percentile(self, atr_percentile)
+      ├── def normalize_sharpe(self, sharpe, max_sharpe)
+      └── def get_risk_metrics(self, symbol, bars, strategy, recent_trades, atr_lookback, sharpe_lookback_days)
+   ⚙️  def main()
+
+📄 core/continuous_position_sizer.py
+   🧱 class PositionSizeResult
+      (no methods)
+   🧱 class ContinuousPositionSizer
+      ├── def __init__(self, config, logger)
+      ├── def calculate_discrete_multiplier(self, metrics)
+      ├── def get_effective_ceiling(self, trade_count)
+      ├── def calculate_continuous_multiplier(self, metrics, trade_count)
+      ├── def calculate_position_size(self, symbol, strategy, base_capital, max_position_pct, bars, recent_trades, atr_lookback, sharpe_lookback_days)
+      └── def should_skip_trade(self, result, min_size_threshold)
+   ⚙️  def main()
 
 📄 core/contracts/events.py
    🧱 class BarPayload
@@ -765,46 +847,6 @@ Total Files: 215
    ⚙️  def parse_order_side(self, value)
    ⚙️  def parse_order_type(self, value)
    ⚙️  def parse_time_in_force(self, value)
-
-📄 core/events/event_models.py
-   🧱 class OrderStatusEvent
-      ├── def validate_side(self, cls, v)
-      ├── def validate_status(self, cls, v)
-      └── def validate_filled_qty(self, cls, v, info)
-   🧱 class Config
-      (no methods)
-   🧱 class TradeEvent
-      ├── def validate_side(self, cls, v)
-      ├── def trade_value(self)
-      └── def net_value(self)
-   🧱 class Config
-      (no methods)
-   🧱 class PnLUpdateEvent
-      ├── def total_pnl(self)
-      └── def drawdown_pct(self)
-   🧱 class Config
-      (no methods)
-   🧱 class PositionUpdateEvent
-      ├── def market_value(self)
-      ├── def is_long(self)
-      ├── def is_short(self)
-      └── def is_flat(self)
-   🧱 class Config
-      (no methods)
-   🧱 class SignalEvent
-      └── def validate_side(self, cls, v)
-   🧱 class Config
-      (no methods)
-   🧱 class RiskAlertEvent
-      ├── def breach_amount(self)
-      └── def breach_pct(self)
-   🧱 class Config
-      (no methods)
-   🧱 class SystemEvent
-      (no methods)
-   🧱 class Config
-      (no methods)
-   ⚙️  def validate_event(self, event_cls, data)
 
 📄 core/events/eventhandler.py
    🧱 class EventHandler
@@ -1026,9 +1068,15 @@ Total Files: 215
       ├── def reset(self)
       └── def __repr__(self)
 
+📄 core/logic/position_aware_sharpe_filter.py
+   🧱 class PositionAwareSharpeFilter
+      ├── def __init__(self, min_sharpe)
+      ├── def should_trade(self, symbol, regime, is_in_position)
+      └── def get_sharpe(self, symbol, regime)
+
 📄 core/logic/position_manager.py
    🧱 class PositionManager
-      ├── def __init__(self, tp_mults, sl_mults, exit_fraction, min_bars_to_hold, swing_mode, min_hold_days)
+      ├── def __init__(self, tp_mults, sl_mults, exit_fraction, min_bars_to_hold, swing_mode, min_hold_days, signal_based_exits)
       ├── def calculate_levels(self, state, price, atr, condition, side)
       ├── def update_trailing_stop(self, state, price, atr, condition)
       ├── def update_excursions(self, state, current_price, avg_price)
@@ -1039,19 +1087,32 @@ Total Files: 215
       └── def get_exit_quantity(self, current_position, is_partial)
    ⚙️  def get_position_manager()
 
+📄 core/logic/sharpe_filter.py
+   🧱 class SharpeFilter
+      ├── def __init__(self, min_sharpe, config_path)
+      ├── def _load_sharpe_data(self)
+      ├── def should_trade(self, symbol, regime)
+      ├── def get_sharpe(self, symbol, regime)
+      ├── def get_blocked_regimes(self)
+      └── def print_summary(self)
+
 📄 core/logic/strategy_routing_manager.py
    🧱 class StrategyRoutingManager
-      ├── def __init__(self, config_path, auto_create)
+      ├── def __init__(self, config_path, auto_create, min_sharpe)
       ├── def get_strategy(self, symbol, regime)
       ├── def get_strategy_name(self, symbol, regime)
-      ├── def set_strategy(self, symbol, regime, strategy_name, persist)
+      ├── def get_routing(self, symbol, regime)
+      ├── def set_strategy(self, symbol, regime, strategy_name, timeframe, persist)
       ├── def remove_strategy(self, symbol, regime, persist)
       ├── def _load_config(self)
+      ├── def _load_params_config(self)
       ├── def _create_default_config(self)
       ├── def refresh(self)
       ├── def save(self)
+      ├── def _resolve_timeframe(self, symbol, regime)
+      ├── def _resolve_use_hybrid(self, symbol)
       ├── def _resolve_strategy_name(self, symbol, regime)
-      ├── def _instantiate_strategy(self, strategy_name)
+      ├── def _instantiate_strategy(self, strategy_name, symbol, regime)
       ├── def _get_strategy_registry(self)
       ├── def _create_noop_strategy(self)
       ├── def list_symbols(self)
@@ -1151,6 +1212,21 @@ Total Files: 215
       ├── def _place_order(self, symbol, qty, side, price)
       └── def _emit_alert(self, level, message, symbol)
 
+📄 core/multi_timeframe_integration.py
+   🧱 class MultiTimeframeManager
+      ├── def __init__(self, symbols, routing_config_path, initial_regime)
+      ├── def _configure_initial_timeframes(self)
+      ├── def register_bar_callback(self, callback)
+      ├── def process_websocket_data(self, raw_data)
+      ├── def _convert_to_bar(self, raw_data)
+      ├── def update_regime(self, symbol, new_regime)
+      ├── def force_complete_all(self)
+      ├── def get_statistics(self)
+      ├── def get_timeframe(self, symbol)
+      ├── def get_regime(self, symbol)
+      └── def get_routing(self, symbol)
+   ⚙️  def on_aggregated_bar(self, bar)
+
 📄 core/order_registry.py
    🧱 class TrackedOrder
       ├── def is_open(self)
@@ -1232,6 +1308,11 @@ Total Files: 215
       └── def _create_quote_callback(self, symbol)
    ⚙️  def _ensure_live_config(self, dir_path)
 
+📄 core/schwab_runner_multitf.py
+   🧱 class SchwabLiveRunnerMultiTF
+      └── def __init__(self, symbols, client, config, routing_config_path)
+   ⚙️  def register_with_factory()
+
 📄 core/simulator/gbm_simulator.py
    🧱 class GBMSimulator
       ├── def __init__(self, symbols, base_price, log_prices)
@@ -1280,6 +1361,23 @@ Total Files: 215
       ├── def _df_from_history(self, symbol)
       ├── def _classify_regime(self, indicators_row, atr_history)
       └── def _seed(self)
+
+📄 core/stable_regime_detector.py
+   🧱 class RegimeState
+      (no methods)
+   🧱 class StableRegimeDetector
+      ├── def __init__(self, config, logger)
+      ├── def _calculate_hysteresis_thresholds(self, current_regime)
+      ├── def _classify_regime(self, atr_percentile, current_regime)
+      ├── def _smooth_atr_percentile(self, symbol, new_percentile)
+      ├── def _calculate_regime_strength(self, atr_percentile, regime)
+      ├── def _check_cooldown(self, symbol)
+      ├── def _check_persistence(self, symbol, new_regime)
+      ├── def update_regime(self, symbol, bars, atr_percentile)
+      ├── def get_current_regime(self, symbol)
+      ├── def regime_changed(self, symbol)
+      └── def get_regime_info(self, symbol)
+   ⚙️  def main()
 
 📄 core/state_reconciler.py
    🧱 class ReconcileAction
@@ -1348,20 +1446,22 @@ Total Files: 215
    🧱 class UnifiedDataPipeline
       ├── def __init__(self, data_path, raw_data_path, database, store_to_db, store_to_files)
       ├── def datastore(self)
-      ├── def get_data_from_db(self, symbol)
-      ├── def get_data_from_file(self, symbol)
-      ├── def get_data(self, symbol, prefer_db)
-      ├── def load_symbol_data(self, symbol, prefer_db)
-      ├── def list_available_symbols(self, source)
+      ├── def get_data_from_db(self, symbol, timeframe)
+      ├── def get_data_from_file(self, symbol, timeframe)
+      ├── def get_data(self, symbol, timeframe, prefer_db)
+      ├── def load_symbol_data(self, symbol, timeframe, prefer_db)
+      ├── def list_available_symbols(self, source, timeframe)
+      ├── def list_available_timeframes(self, symbol, source)
       ├── def get_cache_info(self, symbol)
-      ├── def _save_raw_data(self, symbol, bars)
-      ├── def _load_all_raw_data(self, symbol)
-      ├── def _get_last_processed_timestamp(self, symbol)
-      ├── def _get_last_raw_timestamp(self, symbol)
-      ├── def _is_processed_data_current(self, symbol)
-      ├── def _save_processed_data_file(self, symbol, df)
-      ├── def _save_processed_data_db(self, symbol, df)
-      └── def _update_cache(self, symbol, bars)
+      ├── def _select_source_for_timeframe(self, timeframe)
+      ├── def _save_raw_data(self, symbol, bars, timeframe)
+      ├── def _load_all_raw_data(self, symbol, timeframe)
+      ├── def _get_last_processed_timestamp(self, symbol, timeframe)
+      ├── def _get_last_raw_timestamp(self, symbol, timeframe)
+      ├── def _is_processed_data_current(self, symbol, timeframe)
+      ├── def _save_processed_data_file(self, symbol, df, timeframe)
+      ├── def _save_processed_data_db(self, symbol, df, timeframe)
+      └── def _update_cache(self, symbol, bars, timeframe)
    ⚙️  def _do_fetch()
    ⚙️  def _do_fetch()
 
@@ -1578,7 +1678,7 @@ Total Files: 215
       ├── def place_orders(self, account_number, order_data)
       ├── def quote(self, symbol)
       ├── def daily_price_history(self, symbol, start, end)
-      ├── def custom_price_history(self, symbol, start, end, periodType, frequencyType, period, frequency)
+      ├── def custom_price_history(self, symbol, start, end, startDate, endDate, periodType, frequencyType, period, frequency)
       ├── def get_order_by_id(self, account_number, order_id)
       ├── def cancel_order(self, account_number, order_id)
       ├── def replace_order(self, account_number, order_id, new_order_data)
@@ -1593,6 +1693,14 @@ Total Files: 215
       ├── def __init__(self, apikey, secretkey)
       ├── def set_quote_callback(self, callback)
       └── def get_quote(self, symbol)
+
+📄 data/streaming/token_keeper.py
+   ⚙️  def setup_logging()
+   ⚙️  def load_slack_config()
+   ⚙️  def send_slack_alert(self, slack_config, title, message, auth_url)
+   ⚙️  def daemonize()
+   ⚙️  def main()
+   ⚙️  def signal_handler(self, sig, frame)
 
 📄 examples/01_basic_backtest.py
    ⚙️  def generate_sample_data(self, days)
@@ -1626,6 +1734,28 @@ Total Files: 215
    ⚙️  def generate_sample_data(self, days)
    ⚙️  def test_strategy(self, data, strategy, name)
    ⚙️  def main()
+
+📄 examples/continuous_adaptation_integration.py
+   🧱 class AdaptiveTrader
+      ├── def __init__(self, config_path)
+      ├── def detect_regime(self, symbol, bars)
+      ├── def get_strategy_for_regime(self, symbol, regime)
+      ├── def calculate_adaptive_position_size(self, symbol, strategy, base_capital, max_position_pct)
+      ├── def generate_trading_signal(self, symbol, bars)
+      └── def execute_trade_decision(self, symbol, base_capital)
+   ⚙️  def main()
+
+📄 examples/multi_timeframe_integration.py
+   🧱 class MultiTimeframeTrader
+      ├── def __init__(self, symbols, routing_config_path)
+      ├── def configure_timeframes(self, regime_detector)
+      ├── def on_aggregated_bar(self, bar)
+      ├── def _generate_signal(self, strategy, bar)
+      ├── def _execute_trade(self, symbol, signal)
+      ├── def check_regime_changes(self, regime_detector)
+      ├── def _handle_regime_change(self, symbol, old_regime, new_regime)
+      ├── def on_market_close(self)
+      └── def get_statistics(self)
 
 📄 indicators/atr.py
    🧱 class ATRIndicator
@@ -1837,6 +1967,42 @@ Total Files: 215
       ├── def data(self, index, role)
       └── def replace_rows(self, rows)
 
+📄 monitoring/scripts/daily_summary.py
+   ⚙️  def load_slack_webhook()
+   ⚙️  def parse_todays_logs()
+   ⚙️  def get_current_status()
+   ⚙️  def format_slack_message(self, data)
+   ⚙️  def send_to_slack(self, webhook_url, message)
+   ⚙️  def main()
+
+📄 monitoring/scripts/dashboard.py
+   ⚙️  def get_status()
+   ⚙️  def get_current_state()
+   ⚙️  def get_next_market_open()
+   ⚙️  def get_recent_logs(self, n)
+   ⚙️  def parse_log_line(self, line)
+   ⚙️  def index()
+   ⚙️  def api_status()
+
+📄 monitoring/scripts/event_monitor.py
+   ⚙️  def load_slack_webhook()
+   ⚙️  def load_state()
+   ⚙️  def save_state(self, state)
+   ⚙️  def send_alert(self, webhook_url, title, message, severity)
+   ⚙️  def check_process_status(self, state, webhook_url)
+   ⚙️  def parse_new_log_entries(self, state)
+   ⚙️  def check_critical_events(self, new_logs, state, webhook_url)
+   ⚙️  def main()
+
+📄 monitoring/scripts/slack_auth_handler.py
+   ⚙️  def load_state()
+   ⚙️  def save_state(self, state)
+   ⚙️  def get_slack_token()
+   ⚙️  def get_slack_channel()
+   ⚙️  def send_slack_message(self, token, channel, message)
+   ⚙️  def get_recent_messages(self, token, channel, since_ts)
+   ⚙️  def extract_auth_code(self, url)
+
 📄 monitoring/theme.py
    ⚙️  def apply_dark_palette(self, app)
 
@@ -1953,6 +2119,9 @@ Total Files: 215
       ├── def _is_token_keeper_running(self)
       ├── def _start_token_keeper(self)
       └── def _print_summary(self)
+
+📄 refresh_schwab_token.py
+   ⚙️  def main()
 
 📄 run_trading.py
    🧱 class TradingMode
@@ -2074,6 +2243,9 @@ Total Files: 215
    🧱 class VWAPStrategy
       ├── def generate_signal(self, data)
       └── def generate_signals_vectorized(self, data)
+
+📄 test_optimization_workflow.py
+   ⚙️  def test_regime_aware_strategy_selection()
 
 📄 tests/conftest.py
    ⚙️  def event_loop()
@@ -2241,6 +2413,32 @@ Total Files: 215
    🧱 class TestSortino
       └── def test_sortino_ratio(self)
 
+📄 tests/test_bar_aggregator.py
+   🧱 class TestBar
+      ├── def test_bar_creation(self)
+      └── def test_bar_to_dict(self)
+   🧱 class TestTimeframeWindow
+      ├── def test_parse_timeframe(self)
+      ├── def test_parse_invalid_timeframe(self)
+      ├── def test_window_alignment_5min(self)
+      ├── def test_window_alignment_15min(self)
+      ├── def test_5min_aggregation(self)
+      └── def test_force_complete(self)
+   🧱 class TestBarAggregator
+      ├── def setUp(self)
+      ├── def test_single_symbol_5min(self)
+      ├── def test_multiple_symbols_different_timeframes(self)
+      ├── def test_timeframe_switch(self)
+      ├── def test_unknown_symbol_ignored(self)
+      ├── def test_remove_symbol(self)
+      ├── def test_get_stats(self)
+      ├── def test_clear_all(self)
+      └── def test_get_timeframe(self)
+   ⚙️  def callback(self, bar)
+   🧱 class TestEdgeCases
+      ├── def test_market_close_force_complete(self)
+      └── def test_empty_window_force_complete(self)
+
 📄 tests/test_broker_interface_parity.py
    🧱 class TestMockBrokerInterface
       └── def mock_broker(self)
@@ -2314,6 +2512,24 @@ Total Files: 215
       └── def test_reload_config(self)
    🧱 class TestConfigProxy
       └── def test_proxy_access(self)
+
+📄 tests/test_continuous_adaptation.py
+   🧱 class TestContinuousMetrics
+      ├── def setUp(self)
+      ├── def _create_test_bars(self, n_bars)
+      ├── def test_atr_calculation(self)
+      ├── def test_atr_percentile(self)
+      ├── def test_rolling_sharpe(self)
+      ├── def test_normalize_atr_percentile(self)
+      └── def test_normalize_sharpe(self)
+   🧱 class TestContinuousPositionSizer
+      ├── def setUp(self)
+      ├── def _create_test_bars(self, n_bars)
+      ├── def _create_test_trades(self, n_trades, win_rate)
+      ├── def test_calculate_position_size(self)
+      ├── def test_continuous_vs_discrete_multiplier(self)
+      └── def test_should_skip_trade(self)
+   ⚙️  def run_tests()
 
 📄 tests/test_core_utils.py
    🧱 class TestRetryDecorator
@@ -2745,6 +2961,15 @@ Total Files: 215
       ├── def setUp(self)
       ├── def test_bollinger_band_calculation(self)
       └── def test_bollinger_contains_most_prices(self)
+
+📄 tests/test_integration_e2e.py
+   ⚙️  def test_existing_config_backward_compatibility()
+   ⚙️  def test_routing_to_aggregator_integration()
+   ⚙️  def test_end_to_end_bar_flow()
+   ⚙️  def on_bar(self, bar)
+   ⚙️  def test_regime_change_timeframe_switch()
+   ⚙️  def test_multiple_symbols_different_timeframes()
+   ⚙️  def run_all_tests()
 
 📄 tests/test_live_execution_engine.py
    ⚙️  def mock_broker()
@@ -3644,6 +3869,26 @@ Total Files: 215
       ├── def test_is_processed_data_current_no_proc(self, pipeline, tmp_path)
       └── def test_load_all_raw_data(self, pipeline, tmp_path)
 
+📄 tests/test_unified_pipeline_multitf.py
+   🧱 class TestMultiTimeframeSupport
+      ├── def setUp(self)
+      ├── def tearDown(self)
+      ├── def test_supported_timeframes(self)
+      ├── def test_timeframe_validation(self)
+      ├── def test_raw_data_storage_with_timeframe(self)
+      ├── def test_load_raw_data_with_timeframe(self)
+      ├── def test_backward_compatibility_old_format(self)
+      ├── def test_get_data_with_timeframe(self)
+      ├── def test_list_available_timeframes(self)
+      └── def test_list_symbols_filtered_by_timeframe(self)
+   🧱 class TestMultiTimeframeFetching
+      ├── def setUp(self)
+      └── def tearDown(self)
+   🧱 class TestCacheWithTimeframes
+      ├── def setUp(self)
+      ├── def tearDown(self)
+      └── def test_cache_key_includes_timeframe(self)
+
 📄 tests/test_writer.py
    🧱 class TestJsonWriter
       ├── def setUp(self)
@@ -3675,11 +3920,9 @@ Total Files: 215
       ├── def test_symbol_file_naming(self)
       └── def test_timestamp_in_filename(self)
 
-📄 token_keeper.py
-   ⚙️  def setup_logging()
-   ⚙️  def daemonize()
+📄 tools/analyze_sharpe_filter.py
+   ⚙️  def analyze_thresholds()
    ⚙️  def main()
-   ⚙️  def signal_handler(self, sig, frame)
 
 📄 tools/analyze_trades.py
    ⚙️  def load_and_match_trades(self, csv_path)
@@ -3691,6 +3934,32 @@ Total Files: 215
    ⚙️  def print_by_hold_time(self, trades_df)
    ⚙️  def print_worst_trades(self, trades_df, n)
    ⚙️  def print_open_positions(self, positions)
+   ⚙️  def fetch_live_positions()
+   ⚙️  def print_live_positions()
+   ⚙️  def main()
+
+📄 tools/backtest_adaptive_features.py
+   🧱 class BacktestMetrics
+      (no methods)
+   🧱 class Trade
+      (no methods)
+   🧱 class AdaptiveBacktester
+      ├── def __init__(self, symbol, bars, logger)
+      ├── def _detect_regime_unstable(self, bar_idx)
+      ├── def _detect_regime_stable(self, detector, bar_idx)
+      ├── def _get_strategy_for_regime(self, regime)
+      ├── def _precompute_signals_vectorized(self)
+      ├── def _generate_signal(self, strategy, bar_idx, signals_cache)
+      ├── def _calculate_position_size_fixed(self, capital, max_pct)
+      ├── def _calculate_position_size_continuous(self, sizer, strategy, capital, max_pct, bar_idx)
+      ├── def run_backtest(self, regime_method, sizing_method, initial_capital, max_position_pct, regime_config, sizing_config)
+      └── def _calculate_metrics(self, equity_curve, regime_history, regime_method, sizing_method)
+   ⚙️  def compare_configurations(self, symbol, bars)
+   ⚙️  def main()
+
+📄 tools/backtest_adaptive_features_fixed.py
+   ⚙️  def normalize_data(self, df)
+   ⚙️  def simple_backtest(self, symbol, bars, regime_stable, sizing_continuous)
    ⚙️  def main()
 
 📄 tools/backtest_hybrid.py
@@ -3710,6 +3979,12 @@ Total Files: 215
       └── def run_comparison(self, bars_limit)
    ⚙️  def main()
 
+📄 tools/compare_exit_modes.py
+   ⚙️  def load_data(self, symbol, days)
+   ⚙️  def run_comparison(self, symbols, strategies, days)
+   ⚙️  def print_results(self, results, symbols)
+   ⚙️  def main()
+
 📄 tools/compare_strategies.py
    ⚙️  def load_data(self, symbol, days)
    ⚙️  def list_strategies_cmd()
@@ -3726,9 +4001,34 @@ Total Files: 215
    ⚙️  def get_stats(self, df)
    ⚙️  def main()
 
+📄 tools/migrate_database_schema.py
+   ⚙️  def migrate_stock_table(self, db_path, create_backup)
+   ⚙️  def main()
+
 📄 tools/optimize_routing.py
    ⚙️  def should_use_hybrid(self, strategy)
    ⚙️  def determine_hybrid_config(self, routing)
+   ⚙️  def main()
+
+📄 tools/optimize_routing_multitf.py
+   ⚙️  def should_use_hybrid(self, strategy)
+   ⚙️  def determine_hybrid_config(self, routing)
+   ⚙️  def optimize_symbol_with_timeframes(self, symbol, pipeline, strategies, timeframes, days, metric, verbose)
+   ⚙️  def main()
+   ⚙️  def format_regime(self, regime_data)
+
+📄 tools/optimize_strategy_params.py
+   🧱 class ParamOptResult
+      (no methods)
+   🧱 class StrategyParamOptimizer
+      ├── def __init__(self, symbols, data_pipeline)
+      ├── def _load_routing(self)
+      └── def save_params(self, output_path)
+
+📄 tools/refresh_schwab_token_with_alert.py
+   ⚙️  def load_slack_webhook()
+   ⚙️  def send_slack_alert(self, webhook_url, title, message, auth_url)
+   ⚙️  def get_auth_url()
    ⚙️  def main()
 
 📄 tools/reprocess_raw_data.py
@@ -3752,17 +4052,62 @@ Total Files: 215
    ⚙️  def generate_tree_view(self, structure)
    ⚙️  def main()
 
+📄 tools/test_hybrid_sizing.py
+   🧱 class HybridComparisonResult
+      (no methods)
+   🧱 class HybridSizingTester
+      ├── def __init__(self, symbols, data_pipeline)
+      ├── def _load_routing(self)
+      ├── def save_recommendations(self, output_path)
+      └── def print_summary(self)
+
 📄 tools/train_trade_model.py
    🧱 class TradeQualityTrainer
       ├── def __init__(self, model_dir, features)
       ├── def load_data(self, data_path)
       ├── def _load_jsonl(self, path)
       ├── def prepare_data(self, df, target_col, min_trades)
-      ├── def train(self, X, y, feature_names, model_type, test_size, cv_folds)
+      ├── def train(self, X, y, feature_names, model_type, test_size, cv_folds, use_smote)
       ├── def save_model(self, model_name)
       ├── def load_model(self, model_name)
       └── def predict(self, features)
    ⚙️  def find_data_files(self, data_dir)
+   ⚙️  def main()
+
+📄 tools/tune_adaptive_sizing.py
+   🧱 class TuningResult
+      (no methods)
+   🧱 class AdaptiveSizingTuner
+      ├── def __init__(self, symbol, bars, train_fraction, n_windows, logger)
+      ├── def _define_search_space(self)
+      ├── def _params_to_config(self, params)
+      ├── def _calculate_objective(self, sharpe, max_drawdown, win_rate, num_trades, params)
+      ├── def _walk_forward_split(self, window_idx)
+      ├── def evaluate_params(self, params, train_bars, test_bars)
+      ├── def objective_function(self, param_values)
+      ├── def tune_bayesian(self, n_trials)
+      ├── def tune_random(self, n_trials)
+      ├── def _convert_numpy_types(self, obj)
+      └── def save_results(self, output_path)
+   ⚙️  def main()
+
+📄 tools/unified_optimizer.py
+   🧱 class UnifiedOptimizationResult
+      (no methods)
+   🧱 class UnifiedOptimizer
+      ├── def __init__(self, symbols, strategies, timeframes, data_pipeline)
+      ├── def _build_unified_config(self, symbol, regime_analysis, timeframe_results)
+      ├── def save_config(self, config_path, merge)
+      └── def print_summary(self)
+
+📄 tools/visualize_tuning_results.py
+   ⚙️  def load_results(self, json_path)
+   ⚙️  def plot_convergence(self, results, output_dir)
+   ⚙️  def plot_parameter_importance(self, results, output_dir)
+   ⚙️  def plot_parameter_distributions(self, results, best_params, output_dir)
+   ⚙️  def plot_parameter_correlations(self, results, output_dir)
+   ⚙️  def plot_2d_slices(self, results, best_params, output_dir)
+   ⚙️  def generate_report(self, data, output_dir)
    ⚙️  def main()
 
 📄 utils/framemanager.py
@@ -3791,7 +4136,7 @@ Total Files: 215
 ================================================================================
 📊 STATISTICS
 ================================================================================
-Total Classes:    655
-Total Functions:  344
-Total Methods:    2199
+Total Classes:    680
+Total Functions:  430
+Total Methods:    2361
 ================================================================================

@@ -30,15 +30,9 @@ ROOT = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from dotenv import load_dotenv
-load_dotenv(ROOT / ".venv" / ".env")
-
-# Initialize root logger with proper file handler
-# This ensures all component logs with propagate=True end up in app.log
-from loggers.bootstrap import init_root_logger
-init_root_logger(log_dir="logs", root_file="app.log", level=logging.DEBUG, console=True)
-
-logger = logging.getLogger("TradingApp")
+# Bootstrap will be initialized in main() after parsing args
+# This allows us to pass symbols and mode to bootstrap_app()
+logger = None  # Will be set in main()
 
 
 class TradingMode(Enum):
@@ -334,10 +328,24 @@ class TradingApplication:
 
 
 def main():
+    global logger
+
     args = parse_args()
 
     mode = TradingMode(args.mode)
     symbols = [s.strip().upper() for s in args.symbols.split(",") if s.strip()]
+
+    # Use unified bootstrap for initialization
+    from app.bootstrap import bootstrap_app
+
+    ctx = bootstrap_app(
+        mode='gui',
+        symbols=symbols,
+        trading_mode=mode.value,
+        log_level=logging.DEBUG,
+        console_logging=True
+    )
+    logger = ctx.logger
 
     logger.info(f"Mode: {mode.value}")
     logger.info(f"Symbols: {symbols}")

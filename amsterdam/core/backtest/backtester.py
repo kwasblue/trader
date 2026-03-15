@@ -2,6 +2,9 @@
 Vectorized Backtester Module
 
 High-performance vectorized backtesting engine.
+
+NOTE: This module is used internally by optimization utilities (grid_search, walk_forward_analysis).
+For user-facing backtests, use core.backtest.unified_backtest_runner instead.
 """
 
 import numpy as np

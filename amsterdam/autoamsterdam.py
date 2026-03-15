@@ -301,6 +301,7 @@ class AutoTrader:
         update_data_days: int = 5,
         day_trade: bool = False,
     ):
+        # Store parameters
         self.symbols = symbols
         self.broker = broker
         self.dry_run = dry_run
@@ -322,7 +323,8 @@ class AutoTrader:
             "errors": [],
         }
 
-        # Setup logging
+        # Setup logging (DEPRECATED - use bootstrap_app)
+        # Kept for backwards compatibility
         self.logger = Logger(
             "autotrader.log",
             "AutoTrader",

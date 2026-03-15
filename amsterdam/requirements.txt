@@ -1,5 +1,5 @@
-# Schwab Trader Requirements
-# Generated: 2026-01-31
+# Amsterdam Trader Requirements
+# Last updated: 2026-03-15
 
 # Core Dependencies
 numpy>=2.0.0
@@ -17,6 +17,8 @@ websockets>=12.0
 
 # GUI (Qt)
 PySide6>=6.6.0
+qasync>=0.28.0  # Qt + asyncio event loop bridge
+pyqtgraph>=0.13.0  # Charts and plots for Qt GUI
 
 # Machine Learning (optional - for ML strategies)
 scikit-learn>=1.4.0
@@ -40,8 +42,7 @@ statsmodels>=0.14.0
 watchdog>=4.0.0
 
 # Trading APIs (optional - install based on broker)
-# alpaca-py>=0.21.0        # For Alpaca trading
-# schwab-py>=1.0.0         # For Schwab trading (when available)
+alpaca-py>=0.21.0        # For Alpaca trading
 
 # Deep Learning (optional - for advanced ML strategies)
 # transformers>=4.35.0
