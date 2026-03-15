@@ -38,11 +38,11 @@ from loggers.logger import Logger
 logger = Logger("daily_optimize.log", "DailyOptimize", propagate=True).get_logger()
 
 # Configuration
-TRAIN_DAYS = 365  # Use 1 year of data for training
+TRAIN_DAYS = 750  # Use 3 years of data for training (more trades per regime)
 VALIDATION_SPLIT = 0.8  # Train on 80%, validate on 20%
-MIN_TRADES_PER_REGIME = 5  # Minimum trades required for statistical significance
+MIN_TRADES_PER_REGIME = 4  # Minimum trades required (adjusted for conservative strategies)
 MIN_SHARPE_IMPROVEMENT = 0.3  # Minimum Sharpe improvement to justify switching strategies
-CONFIDENCE_THRESHOLD = 0.6  # Minimum confidence score to update routing
+CONFIDENCE_THRESHOLD = 0.45  # Minimum avg confidence to update routing (adjusted for strategy trade frequency)
 
 
 async def update_data(symbols, days=TRAIN_DAYS):
@@ -57,6 +57,7 @@ async def update_data(symbols, days=TRAIN_DAYS):
         results = await pipeline.update_symbols(
             symbols=symbols,
             days=days,
+            source='schwab',  # Use Schwab for more historical data
             force_reprocess=True,  # Force reprocessing to ensure fresh data
             process_data=True,
         )

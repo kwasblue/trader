@@ -47,6 +47,7 @@ async def update_data(symbols, days=90):
         results = await pipeline.update_symbols(
             symbols=symbols,
             days=days,
+            source='schwab',  # Use Schwab for more historical data
             force_reprocess=False,
             process_data=True,
         )
