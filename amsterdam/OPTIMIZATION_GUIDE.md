@@ -5,7 +5,7 @@ This guide explains the two optimization approaches available in Amsterdam.
 ## Two Versions
 
 ### Version 1: Daily Optimization (Simple)
-**File:** `daily_optimize.py`
+**File:** `core/backtest/daily_optimize.py`
 **Script:** `bin/daily-optimize`
 **Schedule:** Daily at 9:00 AM ET
 
@@ -31,7 +31,7 @@ This guide explains the two optimization approaches available in Amsterdam.
 ---
 
 ### Version 2: Walk-Forward Optimization (Robust) ⭐ RECOMMENDED
-**File:** `daily_optimize_v2.py`
+**File:** `core/backtest/daily_optimize_v2.py`
 **Script:** `bin/weekly-optimize`
 **Schedule:** Weekly (Sunday 2:00 AM)
 
@@ -135,16 +135,16 @@ This runs every Sunday at 2:00 AM, giving fresh optimized strategies for the wee
 ```bash
 cd ~/trader/amsterdam
 source venv/bin/activate
-python daily_optimize_v2.py
+python core/backtest/daily_optimize_v2.py
 ```
 
 ### Compare both approaches:
 ```bash
 # Run v1 (simple)
-python daily_optimize.py > /tmp/v1_results.txt
+python core/backtest/daily_optimize.py > /tmp/v1_results.txt
 
 # Run v2 (walk-forward)
-python daily_optimize_v2.py > /tmp/v2_results.txt
+python core/backtest/daily_optimize_v2.py > /tmp/v2_results.txt
 
 # Compare confidence levels and strategy selections
 diff /tmp/v1_results.txt /tmp/v2_results.txt

@@ -22,7 +22,7 @@ set -euo pipefail
 
 AMSTERDAM_DIR="/home/kwasi/trader/amsterdam"
 VENV_PYTHON="$AMSTERDAM_DIR/venv/bin/python"
-SCRIPT="$AMSTERDAM_DIR/daily_optimize_v2.py"
+SCRIPT="$AMSTERDAM_DIR/core/backtest/daily_optimize_v2.py"
 LOG_FILE="$AMSTERDAM_DIR/logs/weekly_optimize.log"
 
 # Ensure logs directory exists
