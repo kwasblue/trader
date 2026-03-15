@@ -62,6 +62,14 @@ class RunnerFactory:
         except ImportError:
             pass  # Multi-timeframe dependencies not installed
 
+        try:
+            from core.alpaca_schwab_hybrid_runner import AlpacaSchwabHybridRunner
+            cls._registry["alpaca-schwab"] = AlpacaSchwabHybridRunner
+            cls._registry["alpaca_schwab"] = AlpacaSchwabHybridRunner  # Alias
+            cls._registry["hybrid"] = AlpacaSchwabHybridRunner  # Alias
+        except ImportError:
+            pass  # Hybrid dependencies not installed
+
         cls._loaded = True
 
     @classmethod
