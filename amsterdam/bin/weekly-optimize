@@ -1,0 +1,75 @@
+#!/bin/bash
+#
+# Weekly Strategy Optimization (Walk-Forward Validated)
+#
+# This script runs weekly to optimize strategy routing based on 1 year of data
+# with proper walk-forward validation.
+#
+# What it does:
+# 1. Update historical data for all symbols (365 days)
+# 2. Run walk-forward optimization:
+#    - Train on 80% of data (292 days)
+#    - Validate on 20% of data (73 days)
+#    - Only update routing for high-confidence results
+# 3. Update strategy_routing.json with validated strategies
+# 4. Restart amsterdam service to pick up new configuration
+#
+# Schedule via cron:
+#   0 2 * * 0 /home/kwasi/trader/amsterdam/bin/weekly-optimize
+#   (Runs at 2:00 AM every Sunday)
+
+set -euo pipefail
+
+AMSTERDAM_DIR="/home/kwasi/trader/amsterdam"
+VENV_PYTHON="$AMSTERDAM_DIR/venv/bin/python"
+SCRIPT="$AMSTERDAM_DIR/daily_optimize_v2.py"
+LOG_FILE="$AMSTERDAM_DIR/logs/weekly_optimize.log"
+
+# Ensure logs directory exists
+mkdir -p "$AMSTERDAM_DIR/logs"
+
+echo "================================================================" | tee -a "$LOG_FILE"
+echo "Weekly Strategy Optimization - $(date)" | tee -a "$LOG_FILE"
+echo "================================================================" | tee -a "$LOG_FILE"
+echo "" | tee -a "$LOG_FILE"
+
+# Change to amsterdam directory
+cd "$AMSTERDAM_DIR"
+
+# Run optimization
+echo "Running walk-forward optimization (365 days, 80/20 split)..." | tee -a "$LOG_FILE"
+if "$VENV_PYTHON" "$SCRIPT" 2>&1 | tee -a "$LOG_FILE"; then
+    echo "" | tee -a "$LOG_FILE"
+    echo "✓ Optimization successful" | tee -a "$LOG_FILE"
+
+    # Restart amsterdam service to pick up new config
+    echo "Restarting amsterdam service..." | tee -a "$LOG_FILE"
+    if sudo systemctl restart amsterdam; then
+        echo "✓ Service restarted successfully" | tee -a "$LOG_FILE"
+
+        # Wait a moment and check status
+        sleep 2
+        if sudo systemctl is-active --quiet amsterdam; then
+            echo "✓ Service is running" | tee -a "$LOG_FILE"
+        else
+            echo "✗ Service failed to start!" | tee -a "$LOG_FILE"
+            sudo systemctl status amsterdam | tee -a "$LOG_FILE"
+            exit 1
+        fi
+    else
+        echo "✗ Failed to restart service!" | tee -a "$LOG_FILE"
+        exit 1
+    fi
+else
+    echo "" | tee -a "$LOG_FILE"
+    echo "✗ Optimization failed - service NOT restarted" | tee -a "$LOG_FILE"
+    exit 1
+fi
+
+echo "" | tee -a "$LOG_FILE"
+echo "================================================================" | tee -a "$LOG_FILE"
+echo "Weekly optimization complete - $(date)" | tee -a "$LOG_FILE"
+echo "================================================================" | tee -a "$LOG_FILE"
+echo "" | tee -a "$LOG_FILE"
+
+exit 0
