@@ -158,7 +158,10 @@ async def token_keeper(interval: int = 60):
                         "1. Click the authentication link below\n"
                         "2. Log into your Schwab account\n"
                         "3. Approve the application\n"
-                        "4. Trading will resume automatically"
+                        "4. Copy the redirect URL from your browser\n"
+                        "5. *Paste the URL back in this Slack channel*\n"
+                        "6. System will auto-process and confirm\n\n"
+                        "_The redirect URL will look like: https://127.0.0.1/?code=..._"
                     )
 
                     if send_slack_alert(webhook_url, "Schwab Token Expired - Action Required", message, auth_url):
