@@ -19,12 +19,14 @@ import os
 import sys
 import signal
 import time
+import requests
 from datetime import datetime
+from pathlib import Path
 
 # Load .env from project root before any other imports
 from dotenv import load_dotenv
-project_root = os.path.dirname(os.path.abspath(__file__))
-load_dotenv(os.path.join(project_root, ".env"))
+project_root = Path(__file__).resolve().parents[2]  # Go up to amsterdam root
+load_dotenv(project_root / ".env")
 
 
 def setup_logging():
@@ -35,6 +37,54 @@ def setup_logging():
         logger_name="TokenKeeper",
         propagate=True
     ).get_logger()
+
+
+def load_slack_webhook():
+    """Load Slack webhook URL from .env"""
+    return os.getenv('SLACK_WEBHOOK_URL')
+
+
+def send_slack_alert(webhook_url, title, message, auth_url=None):
+    """Send alert to Slack"""
+    if not webhook_url:
+        return False
+
+    payload = {
+        "text": f"🔐 *{title}*",
+        "blocks": [
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"🔐 *{title}*\n\n{message}"
+                }
+            }
+        ]
+    }
+
+    if auth_url:
+        payload["blocks"].append({
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f"*Re-authentication Required:*\n<{auth_url}|Click here to authenticate>"
+            }
+        })
+
+    try:
+        response = requests.post(webhook_url, json=payload, timeout=10)
+        return response.status_code == 200
+    except Exception as e:
+        print(f"Slack notification error: {e}")
+        return False
+
+
+# Track if we've already sent alerts (avoid spam)
+_alert_state = {
+    'refresh_expiring_sent': False,
+    'refresh_expired_sent': False,
+    'last_alert_day': None
+}
 
 
 async def token_keeper(interval: int = 60):
@@ -48,8 +98,11 @@ async def token_keeper(interval: int = 60):
 
     logger = setup_logging()
     auth = Authenticator()
+    webhook_url = load_slack_webhook()
 
     logger.info(f"Token keeper started. Checking every {interval} seconds.")
+    if webhook_url:
+        logger.info("Slack notifications enabled")
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Token keeper started (interval: {interval}s)")
 
     while True:
@@ -78,13 +131,62 @@ async def token_keeper(interval: int = 60):
                     print(f"[{datetime.now().strftime('%H:%M:%S')}] Renewal failed - run refresh_schwab_token.py manually")
 
             # Check refresh token (warn if getting close to expiration)
+            today = datetime.now().date()
+
             if auth._is_refresh_token_expired(token_data):
                 logger.warning("Refresh token expired! Manual re-authentication required.")
                 print(f"[{datetime.now().strftime('%H:%M:%S')}] REFRESH TOKEN EXPIRED - run refresh_schwab_token.py --force")
+
+                # Send Slack alert (once per day)
+                if webhook_url and (_alert_state['last_alert_day'] != today or not _alert_state['refresh_expired_sent']):
+                    auth_url = "https://developer.schwab.com"  # Fallback URL
+                    try:
+                        auth_url = (
+                            f"https://api.schwabapi.com/v1/oauth/authorize"
+                            f"?client_id={auth.apikey}"
+                            f"&redirect_uri={auth.redirect_url}"
+                        )
+                    except:
+                        pass
+
+                    message = (
+                        "*Your Schwab refresh token has expired!*\n\n"
+                        "This happens every 7 days for security.\n\n"
+                        "*Action Required:*\n"
+                        "1. Click the authentication link below\n"
+                        "2. Log into your Schwab account\n"
+                        "3. Approve the application\n"
+                        "4. Trading will resume automatically"
+                    )
+
+                    if send_slack_alert(webhook_url, "Schwab Token Expired - Action Required", message, auth_url):
+                        logger.info("Slack alert sent for expired refresh token")
+                        _alert_state['refresh_expired_sent'] = True
+                        _alert_state['last_alert_day'] = today
+
             elif auth._is_refresh_token_expired(token_data, refresh_interval_days=5):
                 # Warn 2 days before expiration (6-day default minus 5-day check)
                 logger.warning("Refresh token expiring soon. Consider manual refresh.")
                 print(f"[{datetime.now().strftime('%H:%M:%S')}] Refresh token expiring soon - consider running refresh_schwab_token.py --force")
+
+                # Send Slack warning (once per day)
+                if webhook_url and (_alert_state['last_alert_day'] != today or not _alert_state['refresh_expiring_sent']):
+                    message = (
+                        "*Schwab refresh token expires in ~2 days*\n\n"
+                        "You'll receive another alert when it expires.\n"
+                        "Or you can refresh it now using:\n"
+                        "`ssh raspi 'cd ~/trader/amsterdam && source venv/bin/activate && python refresh_schwab_token.py'`"
+                    )
+
+                    if send_slack_alert(webhook_url, "Schwab Token Expiring Soon", message):
+                        logger.info("Slack warning sent for expiring refresh token")
+                        _alert_state['refresh_expiring_sent'] = True
+                        _alert_state['last_alert_day'] = today
+            else:
+                # Reset alert state when token is fresh
+                if _alert_state['last_alert_day'] != today:
+                    _alert_state['refresh_expiring_sent'] = False
+                    _alert_state['refresh_expired_sent'] = False
 
             # Check for errors in token file
             if auth._contains_error(token_data):
