@@ -1094,13 +1094,14 @@ def backtest_full(symbol, strategies, days, output, capital):
 
 
 @backtest.command('optimize')
+@click.argument('mode', required=False, default=None)
 @click.option('--symbols', '-s', default=None, help='Comma-separated symbols (default: all)')
 @click.option('--days', '-d', type=int, default=365, help='Days of data')
 @click.option('--strategies', default=None, help='Comma-separated strategies to test')
 @click.option('--timeframes', '-t', default=None,
               help='Comma-separated timeframes (e.g., 15min,30min,1hour) - enables multi-TF optimization')
 @click.option('--dry-run', is_flag=True, help="Don't save config")
-def backtest_optimize(symbols, days, strategies, timeframes, dry_run):
+def backtest_optimize(mode, symbols, days, strategies, timeframes, dry_run):
     """Optimize strategy routing for all symbols.
 
     Runs regime-aware backtests on all symbols and updates strategy_routing.json
@@ -1108,14 +1109,37 @@ def backtest_optimize(symbols, days, strategies, timeframes, dry_run):
 
     With --timeframes, also optimizes the timeframe for each symbol/regime.
 
+    Use 'all' mode for comprehensive optimization with all strategies and timeframes.
+
     \b
     Examples:
         amsterdam backtest optimize                          # All symbols, single TF
+        amsterdam backtest optimize all                      # All strategies + timeframes
         amsterdam backtest optimize -s AAPL,MSFT            # Specific symbols
         amsterdam backtest optimize -d 180                  # Use 180 days
         amsterdam backtest optimize -t 15min,30min,1hour    # Multi-timeframe
         amsterdam backtest optimize --dry-run               # Don't save
     """
+    # Handle 'all' mode - comprehensive optimization
+    if mode == 'all':
+        # Default to all strategies
+        if not strategies:
+            strategies = 'adx,bollinger,breakout,combined,donchian,ema,ichimoku,logisticregression,macd,meanreversion,momentum,psar,rsi,sma,stochastic,vwap'
+
+        # Default to all timeframes
+        if not timeframes:
+            timeframes = '15min,30min,1hour,day'
+
+        # Default to 750 days for comprehensive backtest
+        if days == 365:  # If using default value
+            days = 750
+
+        click.echo("Running comprehensive optimization:")
+        click.echo(f"  • All 16 strategies")
+        click.echo(f"  • All 4 timeframes (15min, 30min, 1hour, day)")
+        click.echo(f"  • {days} days of data")
+        click.echo()
+
     # Determine which optimizer to use based on timeframes option
     if timeframes:
         # Use multi-timeframe optimizer
