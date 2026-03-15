@@ -3,10 +3,40 @@ Strategy Routing Manager - Routes symbols to appropriate strategies
 
 Maps (symbol, regime) pairs to strategy instances with:
 - JSON-based configuration
+- Multi-timeframe support
 - Strategy instance caching
 - Dynamic routing updates
 - Fallback strategies
 - Hot reloading
+
+Configuration Format (JSON):
+
+Simple format (backward compatible):
+{
+    "AAPL": {
+        "trending": "momentum_strategy",
+        "ranging": "mean_reversion_strategy"
+    }
+}
+
+Extended format (with timeframes):
+{
+    "AAPL": {
+        "trending": {
+            "strategy": "momentum_strategy",
+            "timeframe": "15min"
+        },
+        "ranging": {
+            "strategy": "mean_reversion_strategy",
+            "timeframe": "5min"
+        },
+        "default": {
+            "strategy": "sma_strategy",
+            "timeframe": "5min"
+        },
+        "use_hybrid": false
+    }
+}
 """
 
 from __future__ import annotations
@@ -32,33 +62,44 @@ class StrategyRoutingManager:
     - Fallback/default strategies
     
     Configuration Format (JSON):
+    Simple format (backward compatible):
     {
         "AAPL": {
             "trending": "momentum_strategy",
             "ranging": "mean_reversion_strategy",
-            "volatile": "defensive_strategy",
-            "default": "momentum_strategy"
-        },
-        "TSLA": {
-            "trending": "breakout_strategy",
-            "default": "momentum_strategy"
-        },
-        "default": {
             "default": "momentum_strategy"
         }
     }
-    
+
+    Extended format (with timeframes):
+    {
+        "AAPL": {
+            "trending": {
+                "strategy": "momentum_strategy",
+                "timeframe": "15min"
+            },
+            "ranging": {
+                "strategy": "mean_reversion_strategy",
+                "timeframe": "5min"
+            },
+            "use_hybrid": false
+        }
+    }
+
     Example:
         router = StrategyRoutingManager("config/strategy_routing.json")
-        
+
         # Get strategy for symbol/regime
         strategy = router.get_strategy("AAPL", "trending")
         signal = strategy.generate_signal(df)
-        
-        # Update routing
-        router.set_strategy("AAPL", "ranging", "scalping_strategy")
-        router.save()
-        
+
+        # Get full routing decision (strategy + timeframe)
+        routing = router.get_routing("AAPL", "trending")
+        # Returns: {'strategy': 'momentum_strategy', 'timeframe': '15min', 'use_hybrid': False}
+
+        # Update routing with timeframe
+        router.set_strategy("AAPL", "ranging", "scalping_strategy", timeframe="5min", persist=True)
+
         # Hot reload config
         router.refresh()
     """
@@ -164,48 +205,109 @@ class StrategyRoutingManager:
     ) -> str:
         """
         Get strategy name without instantiating.
-        
+
         Useful for logging or validation.
-        
+
         Args:
             symbol: Trading symbol
             regime: Market regime
-            
+
         Returns:
             Strategy name
         """
         return self._resolve_strategy_name(symbol, regime)
+
+    def get_routing(
+        self,
+        symbol: str,
+        regime: str
+    ) -> Dict[str, Any]:
+        """
+        Get full routing decision for symbol-regime pair.
+
+        Returns strategy name, timeframe, and other routing parameters.
+
+        Args:
+            symbol: Trading symbol
+            regime: Market regime
+
+        Returns:
+            Dict containing:
+            - strategy: Strategy name
+            - timeframe: Target timeframe (default: '5min')
+            - use_hybrid: Whether to use hybrid sizing (default: False)
+
+        Example:
+            routing = router.get_routing("AAPL", "trending")
+            # Returns: {'strategy': 'momentum', 'timeframe': '5min', 'use_hybrid': False}
+
+            # Use in bar aggregator
+            aggregator.set_timeframe(symbol, routing['timeframe'])
+        """
+        # Resolve strategy name
+        strategy_name = self._resolve_strategy_name(symbol, regime)
+
+        # Get timeframe and other parameters
+        timeframe = self._resolve_timeframe(symbol, regime)
+        use_hybrid = self._resolve_use_hybrid(symbol)
+
+        return {
+            'strategy': strategy_name,
+            'timeframe': timeframe,
+            'use_hybrid': use_hybrid,
+        }
     
     def set_strategy(
         self,
         symbol: str,
         regime: str,
         strategy_name: str,
+        timeframe: Optional[str] = None,
         persist: bool = False
     ) -> None:
         """
-        Set strategy for symbol-regime pair.
-        
+        Set strategy for symbol-regime pair with optional timeframe.
+
         Args:
             symbol: Trading symbol
             regime: Market regime
             strategy_name: Strategy to use
+            timeframe: Optional timeframe (e.g., '5min', '15min')
             persist: Whether to save to disk immediately
-            
+
         Example:
+            # Simple format (backward compatible)
             router.set_strategy("AAPL", "ranging", "scalping", persist=True)
+
+            # With timeframe (new format)
+            router.set_strategy("AAPL", "trending", "momentum", timeframe="15min", persist=True)
         """
         # Ensure symbol exists in map
         if symbol not in self.routing_map:
             self.routing_map[symbol] = {}
-        
+
+        # Create routing config (dict format if timeframe specified, else string)
+        if timeframe:
+            routing_config = {
+                'strategy': strategy_name,
+                'timeframe': timeframe,
+            }
+        else:
+            # Backward compatible: just store strategy name as string
+            routing_config = strategy_name
+
         # Update mapping
-        self.routing_map[symbol][regime] = strategy_name
-        
-        self.logger.info(
-            f"Set strategy for {symbol} in '{regime}' to '{strategy_name}'"
-        )
-        
+        self.routing_map[symbol][regime] = routing_config
+
+        if timeframe:
+            self.logger.info(
+                f"Set strategy for {symbol} in '{regime}' to '{strategy_name}' @ {timeframe}"
+            )
+        else:
+            self.logger.info(
+                f"Set strategy for {symbol} in '{regime}' to '{strategy_name}'"
+            )
+
         # Clear cache for this symbol-regime
         cache_keys_to_remove = [
             key for key in self._strategy_cache.keys()
@@ -213,7 +315,7 @@ class StrategyRoutingManager:
         ]
         for key in cache_keys_to_remove:
             del self._strategy_cache[key]
-        
+
         # Persist if requested
         if persist:
             self.save()
@@ -343,6 +445,85 @@ class StrategyRoutingManager:
     # STRATEGY RESOLUTION & INSTANTIATION
     # ========================================================================
     
+    def _resolve_timeframe(
+        self,
+        symbol: str,
+        regime: str
+    ) -> str:
+        """
+        Resolve timeframe for symbol-regime pair.
+
+        Resolution order (checks for 'timeframe' key):
+        1. symbol -> regime -> timeframe
+        2. symbol -> default -> timeframe
+        3. default -> regime -> timeframe
+        4. default -> default -> timeframe
+        5. '5min' (hardcoded fallback)
+
+        Args:
+            symbol: Trading symbol
+            regime: Market regime
+
+        Returns:
+            Timeframe string (e.g., '5min', '15min')
+        """
+        # Ensure regime is a string
+        if not isinstance(regime, str):
+            regime = "normal"
+
+        result = None
+
+        # Try symbol-specific regime timeframe
+        if symbol in self.routing_map:
+            symbol_map = self.routing_map[symbol]
+            if isinstance(symbol_map, dict):
+                # Check regime-specific timeframe
+                if regime in symbol_map and isinstance(symbol_map[regime], dict):
+                    result = symbol_map[regime].get('timeframe')
+                # Check symbol default timeframe
+                elif "default" in symbol_map and isinstance(symbol_map["default"], dict):
+                    result = symbol_map["default"].get('timeframe')
+
+        # Try global regime timeframe
+        if result is None and "default" in self.routing_map:
+            default_map = self.routing_map["default"]
+            if isinstance(default_map, dict):
+                if regime in default_map and isinstance(default_map[regime], dict):
+                    result = default_map[regime].get('timeframe')
+                elif "default" in default_map and isinstance(default_map["default"], dict):
+                    result = default_map["default"].get('timeframe')
+
+        # Final fallback
+        if result is None:
+            result = '5min'
+
+        return result
+
+    def _resolve_use_hybrid(self, symbol: str) -> bool:
+        """
+        Resolve use_hybrid flag for a symbol.
+
+        Checks symbol-level use_hybrid setting.
+
+        Args:
+            symbol: Trading symbol
+
+        Returns:
+            Boolean indicating whether to use hybrid sizing
+        """
+        if symbol in self.routing_map:
+            symbol_map = self.routing_map[symbol]
+            if isinstance(symbol_map, dict):
+                return symbol_map.get('use_hybrid', False)
+
+        # Check global default
+        if "default" in self.routing_map:
+            default_map = self.routing_map["default"]
+            if isinstance(default_map, dict):
+                return default_map.get('use_hybrid', False)
+
+        return False
+
     def _resolve_strategy_name(
         self,
         symbol: str,
@@ -352,11 +533,14 @@ class StrategyRoutingManager:
         Resolve strategy name for symbol-regime pair.
 
         Resolution order:
-        1. symbol -> regime
-        2. symbol -> default
-        3. default -> regime
-        4. default -> default
-        5. "default" (hardcoded fallback)
+        1. symbol -> regime -> strategy (or direct string)
+        2. symbol -> default -> strategy (or direct string)
+        3. default -> regime -> strategy (or direct string)
+        4. default -> default -> strategy (or direct string)
+        5. "momentum_strategy" (hardcoded fallback)
+
+        Note: Config values can be either strings (strategy names) or dicts
+        containing 'strategy', 'timeframe', etc.
         """
         # Ensure regime is a string
         if not isinstance(regime, str):
@@ -387,9 +571,13 @@ class StrategyRoutingManager:
         if result is None:
             result = "momentum_strategy"
 
-        # Ensure result is a string
-        if not isinstance(result, str):
-            self.logger.warning(f"Strategy resolved to non-string: {type(result).__name__}, using default")
+        # Extract strategy name if result is a dict
+        if isinstance(result, dict):
+            # New format: {'strategy': 'name', 'timeframe': '5min', ...}
+            result = result.get('strategy', 'momentum_strategy')
+        elif not isinstance(result, str):
+            # Unexpected type
+            self.logger.warning(f"Strategy resolved to unexpected type: {type(result).__name__}, using default")
             result = "momentum_strategy"
 
         return result

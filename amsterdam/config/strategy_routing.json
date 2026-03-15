@@ -1,142 +1,381 @@
 {
   "AAPL": {
-    "low_volatility": "meanreversion",
-    "normal": "rsi",
-    "high_volatility": "rsi",
-    "default": "rsi",
-    "use_hybrid": false
+    "low_volatility": {
+      "strategy": "meanreversion",
+      "timeframe": "day"
+    },
+    "normal": {
+      "strategy": "psar",
+      "timeframe": "day"
+    },
+    "high_volatility": {
+      "strategy": "psar",
+      "timeframe": "day"
+    },
+    "default": {
+      "strategy": "psar",
+      "timeframe": "day"
+    },
+    "use_hybrid": true
   },
   "ABBV": {
-    "low_volatility": "macd",
-    "normal": "meanreversion",
-    "high_volatility": "rsi",
-    "default": "meanreversion",
+    "low_volatility": {
+      "strategy": "macd",
+      "timeframe": "day"
+    },
+    "normal": {
+      "strategy": "rsi",
+      "timeframe": "30min"
+    },
+    "high_volatility": {
+      "strategy": "rsi",
+      "timeframe": "1hour"
+    },
+    "default": {
+      "strategy": "rsi",
+      "timeframe": "30min"
+    },
     "use_hybrid": false
   },
   "AMZN": {
-    "low_volatility": "sma",
-    "normal": "sma",
-    "high_volatility": "rsi",
-    "default": "sma",
+    "low_volatility": {
+      "strategy": "sma",
+      "timeframe": "day"
+    },
+    "normal": {
+      "strategy": "sma",
+      "timeframe": "day"
+    },
+    "high_volatility": {
+      "strategy": "rsi",
+      "timeframe": "day"
+    },
+    "default": {
+      "strategy": "sma",
+      "timeframe": "day"
+    },
     "use_hybrid": true
   },
   "AVGO": {
-    "low_volatility": "rsi",
-    "normal": "meanreversion",
-    "high_volatility": "macd",
-    "default": "meanreversion",
-    "use_hybrid": false
+    "low_volatility": {
+      "strategy": "momentum",
+      "timeframe": "day"
+    },
+    "normal": {
+      "strategy": "psar",
+      "timeframe": "day"
+    },
+    "high_volatility": {
+      "strategy": "stochastic",
+      "timeframe": "day"
+    },
+    "default": {
+      "strategy": "psar",
+      "timeframe": "day"
+    },
+    "use_hybrid": true
   },
   "COST": {
-    "low_volatility": "bollinger",
-    "normal": "meanreversion",
-    "high_volatility": "stochastic",
-    "default": "meanreversion",
-    "use_hybrid": false
+    "low_volatility": {
+      "strategy": "adx",
+      "timeframe": "day"
+    },
+    "normal": {
+      "strategy": "meanreversion",
+      "timeframe": "day"
+    },
+    "high_volatility": {
+      "strategy": "ema",
+      "timeframe": "day"
+    },
+    "default": {
+      "strategy": "meanreversion",
+      "timeframe": "day"
+    },
+    "use_hybrid": true
   },
   "GOOGL": {
-    "low_volatility": "ema",
-    "normal": "bollinger",
-    "high_volatility": "macd",
-    "default": "bollinger",
+    "low_volatility": {
+      "strategy": "sma",
+      "timeframe": "day"
+    },
+    "normal": {
+      "strategy": "bollinger",
+      "timeframe": "day"
+    },
+    "high_volatility": {
+      "strategy": "psar",
+      "timeframe": "day"
+    },
+    "default": {
+      "strategy": "bollinger",
+      "timeframe": "day"
+    },
     "use_hybrid": true
   },
   "HD": {
-    "low_volatility": "macd",
-    "normal": "meanreversion",
-    "high_volatility": "stochastic",
-    "default": "meanreversion",
-    "use_hybrid": false
-  },
-  "JNJ": {
-    "low_volatility": "bollinger",
-    "normal": "ema",
-    "high_volatility": "momentum",
-    "default": "ema",
+    "low_volatility": {
+      "strategy": "bollinger",
+      "timeframe": "1hour"
+    },
+    "normal": {
+      "strategy": "macd",
+      "timeframe": "30min"
+    },
+    "high_volatility": {
+      "strategy": "adx",
+      "timeframe": "day"
+    },
+    "default": {
+      "strategy": "macd",
+      "timeframe": "30min"
+    },
     "use_hybrid": true
   },
+  "JNJ": {
+    "low_volatility": {
+      "strategy": "bollinger",
+      "timeframe": "day"
+    },
+    "normal": {
+      "strategy": "breakout",
+      "timeframe": "1hour"
+    },
+    "high_volatility": {
+      "strategy": "bollinger",
+      "timeframe": "1hour"
+    },
+    "default": {
+      "strategy": "breakout",
+      "timeframe": "1hour"
+    },
+    "use_hybrid": false
+  },
   "JPM": {
-    "low_volatility": "ema",
-    "normal": "macd",
-    "high_volatility": "rsi",
-    "default": "macd",
+    "low_volatility": {
+      "strategy": "macd",
+      "timeframe": "day"
+    },
+    "normal": {
+      "strategy": "macd",
+      "timeframe": "day"
+    },
+    "high_volatility": {
+      "strategy": "rsi",
+      "timeframe": "day"
+    },
+    "default": {
+      "strategy": "macd",
+      "timeframe": "day"
+    },
     "use_hybrid": true
   },
   "MA": {
-    "low_volatility": "macd",
-    "normal": "bollinger",
-    "high_volatility": "sma",
-    "default": "bollinger",
-    "use_hybrid": true
-  },
-  "META": {
-    "low_volatility": "sma",
-    "normal": "bollinger",
-    "high_volatility": "meanreversion",
-    "default": "bollinger",
+    "low_volatility": {
+      "strategy": "breakout",
+      "timeframe": "day"
+    },
+    "normal": {
+      "strategy": "bollinger",
+      "timeframe": "day"
+    },
+    "high_volatility": {
+      "strategy": "vwap",
+      "timeframe": "day"
+    },
+    "default": {
+      "strategy": "bollinger",
+      "timeframe": "day"
+    },
     "use_hybrid": false
   },
+  "META": {
+    "low_volatility": {
+      "strategy": "adx",
+      "timeframe": "day"
+    },
+    "normal": {
+      "strategy": "adx",
+      "timeframe": "day"
+    },
+    "high_volatility": {
+      "strategy": "bollinger",
+      "timeframe": "day"
+    },
+    "default": {
+      "strategy": "adx",
+      "timeframe": "day"
+    },
+    "use_hybrid": true
+  },
   "MSFT": {
-    "low_volatility": "meanreversion",
-    "normal": "meanreversion",
-    "high_volatility": "rsi",
-    "default": "meanreversion",
+    "low_volatility": {
+      "strategy": "vwap",
+      "timeframe": "day"
+    },
+    "normal": {
+      "strategy": "meanreversion",
+      "timeframe": "day"
+    },
+    "high_volatility": {
+      "strategy": "momentum",
+      "timeframe": "day"
+    },
+    "default": {
+      "strategy": "meanreversion",
+      "timeframe": "day"
+    },
     "use_hybrid": false
   },
   "NVDA": {
-    "low_volatility": "rsi",
-    "normal": "meanreversion",
-    "high_volatility": "meanreversion",
-    "default": "meanreversion",
-    "use_hybrid": false
+    "low_volatility": {
+      "strategy": "psar",
+      "timeframe": "day"
+    },
+    "normal": {
+      "strategy": "psar",
+      "timeframe": "day"
+    },
+    "high_volatility": {
+      "strategy": "psar",
+      "timeframe": "day"
+    },
+    "default": {
+      "strategy": "psar",
+      "timeframe": "day"
+    },
+    "use_hybrid": true
   },
   "PG": {
-    "low_volatility": "rsi",
-    "normal": "rsi",
-    "high_volatility": "rsi",
-    "default": "rsi",
+    "low_volatility": {
+      "strategy": "stochastic",
+      "timeframe": "30min"
+    },
+    "normal": {
+      "strategy": "bollinger",
+      "timeframe": "30min"
+    },
+    "high_volatility": {
+      "strategy": "vwap",
+      "timeframe": "day"
+    },
+    "default": {
+      "strategy": "bollinger",
+      "timeframe": "30min"
+    },
     "use_hybrid": false
   },
   "TSLA": {
-    "low_volatility": "macd",
-    "normal": "bollinger",
-    "high_volatility": "meanreversion",
-    "default": "bollinger",
+    "low_volatility": {
+      "strategy": "vwap",
+      "timeframe": "day"
+    },
+    "normal": {
+      "strategy": "bollinger",
+      "timeframe": "day"
+    },
+    "high_volatility": {
+      "strategy": "meanreversion",
+      "timeframe": "1hour"
+    },
+    "default": {
+      "strategy": "bollinger",
+      "timeframe": "day"
+    },
     "use_hybrid": false
   },
   "UNH": {
-    "low_volatility": "ema",
-    "normal": "bollinger",
-    "high_volatility": "meanreversion",
-    "default": "bollinger",
+    "low_volatility": {
+      "strategy": "meanreversion",
+      "timeframe": "15min"
+    },
+    "normal": {
+      "strategy": "bollinger",
+      "timeframe": "1hour"
+    },
+    "high_volatility": {
+      "strategy": "stochastic",
+      "timeframe": "30min"
+    },
+    "default": {
+      "strategy": "bollinger",
+      "timeframe": "1hour"
+    },
     "use_hybrid": false
   },
   "V": {
-    "low_volatility": "meanreversion",
-    "normal": "stochastic",
-    "high_volatility": "sma",
-    "default": "stochastic",
-    "use_hybrid": false
+    "low_volatility": {
+      "strategy": "ichimoku",
+      "timeframe": "day"
+    },
+    "normal": {
+      "strategy": "bollinger",
+      "timeframe": "day"
+    },
+    "high_volatility": {
+      "strategy": "sma",
+      "timeframe": "day"
+    },
+    "default": {
+      "strategy": "bollinger",
+      "timeframe": "day"
+    },
+    "use_hybrid": true
   },
   "WMT": {
-    "low_volatility": "meanreversion",
-    "normal": "stochastic",
-    "high_volatility": "macd",
-    "default": "stochastic",
-    "use_hybrid": false
+    "low_volatility": {
+      "strategy": "breakout",
+      "timeframe": "day"
+    },
+    "normal": {
+      "strategy": "bollinger",
+      "timeframe": "day"
+    },
+    "high_volatility": {
+      "strategy": "psar",
+      "timeframe": "day"
+    },
+    "default": {
+      "strategy": "bollinger",
+      "timeframe": "day"
+    },
+    "use_hybrid": true
   },
   "XOM": {
-    "low_volatility": "macd",
-    "normal": "meanreversion",
-    "high_volatility": "meanreversion",
-    "default": "meanreversion",
+    "low_volatility": {
+      "strategy": "sma",
+      "timeframe": "1hour"
+    },
+    "normal": {
+      "strategy": "meanreversion",
+      "timeframe": "1hour"
+    },
+    "high_volatility": {
+      "strategy": "vwap",
+      "timeframe": "day"
+    },
+    "default": {
+      "strategy": "meanreversion",
+      "timeframe": "1hour"
+    },
     "use_hybrid": false
   },
   "default": {
-    "low_volatility": "macd",
-    "normal": "meanreversion",
-    "high_volatility": "rsi",
-    "default": "momentum",
-    "use_hybrid": true
+    "low_volatility": {
+      "strategy": "macd",
+      "timeframe": "day"
+    },
+    "normal": {
+      "strategy": "bollinger",
+      "timeframe": "day"
+    },
+    "high_volatility": {
+      "strategy": "psar",
+      "timeframe": "day"
+    },
+    "default": {
+      "strategy": "bollinger",
+      "timeframe": "day"
+    }
   }
 }

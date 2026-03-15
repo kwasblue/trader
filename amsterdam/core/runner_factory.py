@@ -55,6 +55,13 @@ class RunnerFactory:
         except ImportError:
             pass  # Schwab dependencies not installed
 
+        try:
+            from core.schwab_runner_multitf import SchwabLiveRunnerMultiTF
+            cls._registry["schwab_multitf"] = SchwabLiveRunnerMultiTF
+            cls._registry["schwab-mtf"] = SchwabLiveRunnerMultiTF  # Alias
+        except ImportError:
+            pass  # Multi-timeframe dependencies not installed
+
         cls._loaded = True
 
     @classmethod

@@ -5,6 +5,7 @@ Unified Data Pipeline - Fetches and processes historical data from multiple sour
 Features:
 - Supports Alpaca and Schwab as data sources
 - Automatic fallback if one source is unavailable
+- Multi-timeframe support (1min, 5min, 15min, 30min, 1hour, day)
 - Same processing pipeline for both sources
 - Stores to both JSON files AND SQLite database
 - Updates cache for tracking processed dates
@@ -15,6 +16,12 @@ Usage:
 
     # Auto-select best source
     await pipeline.update_symbols(['AAPL', 'MSFT'])
+
+    # Multi-timeframe fetch
+    await pipeline.update_symbols(
+        ['AAPL', 'TSLA'],
+        timeframes=['1min', '5min', '15min', '30min', '1hour']
+    )
 
     # Force specific source
     await pipeline.update_symbols(['AAPL'], source='alpaca')
@@ -51,10 +58,24 @@ class UnifiedDataPipeline:
     and processes through the same pipeline.
 
     Storage:
-    - JSON files (proc_{SYMBOL}_file.json, raw_{SYMBOL}_file.json)
-    - SQLite database (stock_base.db)
+    - JSON files (proc_{SYMBOL}_{TIMEFRAME}.json, raw_{SYMBOL}_{TIMEFRAME}.json)
+    - SQLite database (stock_base.db with timeframe column)
     - Cache tracking (cache/system_cache.json)
+
+    Supported Timeframes:
+    - 1min, 5min, 15min, 30min, 1hour (intraday)
+    - day (daily)
     """
+
+    # Supported timeframes mapping
+    SUPPORTED_TIMEFRAMES = {
+        '1min': ('Minute', 1),
+        '5min': ('Minute', 5),
+        '15min': ('Minute', 15),
+        '30min': ('Minute', 30),
+        '1hour': ('Hour', 1),
+        'day': ('Day', 1),
+    }
 
     def __init__(
         self,
@@ -208,38 +229,90 @@ class UnifiedDataPipeline:
         source: Optional[str] = None,
         force_reprocess: bool = False,
         process_data: bool = True,
+        timeframes: Optional[List[str]] = None,
     ) -> Dict[str, int]:
         """
-        Update historical data for multiple symbols.
+        Update historical data for multiple symbols at specified timeframes.
+
+        Data Source Hierarchy (when source=None or 'auto'):
+        - Daily data: Schwab (primary) → Alpaca (fallback)
+        - Intraday data: Alpaca (primary) → Schwab (fallback)
+
+        Rationale:
+        - Schwab: Excellent daily data (years of history)
+        - Alpaca: Excellent intraday data (750+ days vs Schwab's 10 days)
+        - Automatic fallback ensures reliability
 
         Args:
             symbols: List of stock symbols
             days: Number of days of history
-            source: 'alpaca', 'schwab', or None (auto-select)
+            source: Data source selection:
+                   - None or 'auto': Use intelligent hierarchy (recommended)
+                   - 'alpaca': Force Alpaca only
+                   - 'schwab': Force Schwab only
             force_reprocess: Force reprocessing even if data is up-to-date
             process_data: Whether to process through ML pipeline
+            timeframes: List of timeframes to fetch (e.g., ['15min', '30min', '1hour', 'day'])
+                       If None, defaults to ['day'] for backward compatibility
 
         Returns:
-            Dict of symbol -> bars fetched
+            Dict of (symbol, timeframe) -> bars fetched
+
+        Example:
+            # Intelligent auto-selection (recommended)
+            await pipeline.update_symbols(
+                ['AAPL', 'TSLA'],
+                timeframes=['15min', '30min', '1hour', 'day']
+            )
+            # → Daily from Schwab, intraday from Alpaca
+
+            # Force specific source
+            await pipeline.update_symbols(
+                ['AAPL'],
+                source='alpaca',
+                timeframes=['day']
+            )
+            # → All from Alpaca, no fallback
         """
+        # Default to daily data for backward compatibility
+        if timeframes is None:
+            timeframes = ['day']
+        # Validate timeframes
+        valid_timeframes = [tf for tf in timeframes if tf in self.SUPPORTED_TIMEFRAMES]
+        if not valid_timeframes:
+            self.logger.error(f"No valid timeframes in {timeframes}. Supported: {list(self.SUPPORTED_TIMEFRAMES.keys())}")
+            return {}
+
+        invalid_timeframes = set(timeframes) - set(valid_timeframes)
+        if invalid_timeframes:
+            self.logger.warning(f"Skipping unsupported timeframes: {invalid_timeframes}")
+
         self.logger.info("=" * 60)
         self.logger.info(f"UPDATE SYMBOLS: {symbols}")
+        self.logger.info(f"Timeframes: {valid_timeframes}")
         self.logger.info(f"Parameters: days={days}, source={source}, force_reprocess={force_reprocess}, process_data={process_data}")
 
         # Check credentials and warn about expiring tokens
         await self.check_and_warn_credentials()
 
-        # Determine source
+        # Determine source mode
         if source is None:
-            self.logger.debug("Auto-selecting data source...")
-            source = await self._select_best_source()
-            self.logger.info(f"Auto-selected source: {source}")
+            source = 'auto'
+            self.logger.info("Source mode: AUTO (intelligent hierarchy per timeframe)")
+        else:
+            self.logger.info(f"Source mode: {source.upper()} (user-specified, no fallback)")
 
-        if source == 'none':
-            self.logger.error("FATAL: No valid data source available. Check credentials.")
-            return {s: 0 for s in symbols}
+        # Display hierarchy being used
+        if source == 'auto':
+            daily_primary, daily_fallback = self._select_source_for_timeframe('day')
+            intraday_primary, intraday_fallback = self._select_source_for_timeframe('15min')
+            self.logger.info(
+                f"Data source hierarchy:\n"
+                f"  Daily:    {daily_primary.upper()} → {daily_fallback.upper()}\n"
+                f"  Intraday: {intraday_primary.upper()} → {intraday_fallback.upper()}"
+            )
 
-        self.logger.info(f"Updating {len(symbols)} symbols from {source.upper()}")
+        self.logger.info(f"Updating {len(symbols)} symbols × {len(valid_timeframes)} timeframes")
 
         results = {}
         start_time = datetime.now(timezone.utc)
@@ -247,32 +320,31 @@ class UnifiedDataPipeline:
         # Parallel updates with rate limiting (increased for scaling)
         semaphore = asyncio.Semaphore(20)  # Max 20 concurrent API requests
 
-        async def update_with_limit(symbol: str) -> tuple[str, int]:
-            """Update a single symbol with rate limiting."""
+        async def update_with_limit(symbol: str, timeframe: str) -> tuple[str, str, int]:
+            """Update a single symbol at specific timeframe with rate limiting."""
             async with semaphore:
-                self.logger.info(f"[{symbol}] Processing...")
+                self.logger.info(f"[{symbol}/{timeframe}] Processing...")
                 try:
-                    count = await self._update_symbol(
-                        symbol, days, source, force_reprocess, process_data
+                    count = await self._update_symbol_at_timeframe(
+                        symbol, timeframe, days, source, force_reprocess, process_data
                     )
-                    self.logger.info(f"[{symbol}] SUCCESS: {count} bars fetched")
-                    return (symbol, count)
+                    self.logger.info(f"[{symbol}/{timeframe}] SUCCESS: {count} bars fetched")
+                    return (symbol, timeframe, count)
                 except Exception as e:
-                    self.logger.exception(f"[{symbol}] FAILED: {e}")
-                    return (symbol, 0)
+                    self.logger.exception(f"[{symbol}/{timeframe}] FAILED: {e}")
+                    return (symbol, timeframe, 0)
 
         # Run all updates in parallel with exception handling
-        tasks = [update_with_limit(s) for s in symbols]
+        tasks = [update_with_limit(s, tf) for s in symbols for tf in valid_timeframes]
         task_results = await asyncio.gather(*tasks, return_exceptions=True)
 
         # Process results
-        for i, result in enumerate(task_results):
-            symbol = symbols[i]
+        for result in task_results:
             if isinstance(result, Exception):
-                self.logger.exception(f"[{symbol}] Task failed: {result}")
-                results[symbol] = 0
+                self.logger.exception(f"Task failed: {result}")
             else:
-                results[symbol] = result[1]
+                symbol, timeframe, count = result
+                results[f"{symbol}_{timeframe}"] = count
 
         elapsed = (datetime.now(timezone.utc) - start_time).total_seconds()
         total = sum(results.values())
@@ -280,7 +352,7 @@ class UnifiedDataPipeline:
 
         self.logger.info("=" * 60)
         self.logger.info(f"UPDATE COMPLETE in {elapsed:.1f}s")
-        self.logger.info(f"Total bars: {total}, Success: {success_count}/{len(symbols)}")
+        self.logger.info(f"Total bars: {total}, Success: {success_count}/{len(results)}")
         self.logger.info("=" * 60)
 
         return results
@@ -338,41 +410,49 @@ class UnifiedDataPipeline:
             'recommended': self.validator.get_best_data_source(results),
         }
 
-    def get_data_from_db(self, symbol: str) -> pd.DataFrame:
+    def get_data_from_db(self, symbol: str, timeframe: str = 'day') -> pd.DataFrame:
         """
-        Retrieve processed data from database for a symbol.
+        Retrieve processed data from database for a symbol at specific timeframe.
 
         Args:
             symbol: Stock symbol
+            timeframe: Timeframe identifier
 
         Returns:
             DataFrame with processed data
         """
         try:
             with self.datastore as store:
+                # Get all data for symbol, then filter by timeframe
                 df = store.get_data_by_symbol(self.table_name, symbol)
+                if not df.empty and 'timeframe' in df.columns:
+                    df = df[df['timeframe'] == timeframe]
                 if not df.empty:
-                    self.logger.debug(f"[{symbol}] Retrieved {len(df)} rows from database")
+                    self.logger.debug(f"[{symbol}/{timeframe}] Retrieved {len(df)} rows from database")
                 return df
         except Exception as e:
-            self.logger.error(f"[{symbol}] Failed to retrieve from database: {e}")
+            self.logger.error(f"[{symbol}/{timeframe}] Failed to retrieve from database: {e}")
             return pd.DataFrame()
 
-    def get_data_from_file(self, symbol: str) -> pd.DataFrame:
+    def get_data_from_file(self, symbol: str, timeframe: str = 'day') -> pd.DataFrame:
         """
-        Retrieve processed data from JSON file for a symbol.
+        Retrieve processed data from JSON file for a symbol at specific timeframe.
 
         Args:
             symbol: Stock symbol
+            timeframe: Timeframe identifier
 
         Returns:
             DataFrame with processed data
         """
-        file_path = self.data_path / f"proc_{symbol}_file.json"
+        if timeframe == 'day':
+            file_path = self.data_path / f"proc_{symbol}_file.json"
+        else:
+            file_path = self.data_path / f"proc_{symbol}_{timeframe}.json"
 
         try:
             if not file_path.exists():
-                self.logger.warning(f"[{symbol}] File not found: {file_path}")
+                self.logger.warning(f"[{symbol}/{timeframe}] File not found: {file_path}")
                 return pd.DataFrame()
 
             with open(file_path, 'r') as f:
@@ -382,71 +462,88 @@ class UnifiedDataPipeline:
             records = data.get('bars', data) if isinstance(data, dict) else data
 
             df = pd.DataFrame(records)
-            self.logger.debug(f"[{symbol}] Retrieved {len(df)} rows from file")
+            self.logger.debug(f"[{symbol}/{timeframe}] Retrieved {len(df)} rows from file")
             return df
 
         except Exception as e:
-            self.logger.error(f"[{symbol}] Failed to retrieve from file: {e}")
+            self.logger.error(f"[{symbol}/{timeframe}] Failed to retrieve from file: {e}")
             return pd.DataFrame()
 
-    def get_data(self, symbol: str, prefer_db: bool = False) -> pd.DataFrame:
+    def get_data(self, symbol: str, timeframe: str = 'day', prefer_db: bool = False) -> pd.DataFrame:
         """
-        Retrieve processed data from best available source.
+        Retrieve processed data from best available source for specific timeframe.
 
         Args:
             symbol: Stock symbol
+            timeframe: Timeframe identifier ('1min', '5min', '15min', '30min', '1hour', 'day')
             prefer_db: If True, prefer database over files
 
         Returns:
             DataFrame with processed data
+
+        Example:
+            # Get 5-minute bars for AAPL
+            bars_5min = pipeline.get_data('AAPL', timeframe='5min')
+
+            # Get daily bars (default)
+            bars_daily = pipeline.get_data('AAPL')
         """
         if prefer_db:
-            df = self.get_data_from_db(symbol)
+            df = self.get_data_from_db(symbol, timeframe)
             if not df.empty:
                 return df
-            return self.get_data_from_file(symbol)
+            return self.get_data_from_file(symbol, timeframe)
         else:
-            df = self.get_data_from_file(symbol)
+            df = self.get_data_from_file(symbol, timeframe)
             if not df.empty:
                 return df
-            return self.get_data_from_db(symbol)
+            return self.get_data_from_db(symbol, timeframe)
 
-    def load_symbol_data(self, symbol: str, prefer_db: bool = False) -> pd.DataFrame:
+    def load_symbol_data(self, symbol: str, timeframe: str = 'day', prefer_db: bool = False) -> pd.DataFrame:
         """
-        Alias for get_data() - Load processed data for a symbol.
+        Alias for get_data() - Load processed data for a symbol at specific timeframe.
 
         This method exists for backward compatibility with code that uses
         load_symbol_data() instead of get_data().
 
         Args:
             symbol: Stock symbol
+            timeframe: Timeframe identifier
             prefer_db: If True, prefer database over files
 
         Returns:
             DataFrame with processed data
         """
-        return self.get_data(symbol, prefer_db=prefer_db)
+        return self.get_data(symbol, timeframe=timeframe, prefer_db=prefer_db)
 
-    def list_available_symbols(self, source: str = 'file') -> List[str]:
+    def list_available_symbols(self, source: str = 'file', timeframe: Optional[str] = None) -> List[str]:
         """
-        List symbols with available data.
+        List symbols with available data, optionally filtered by timeframe.
 
         Args:
             source: 'file' or 'db'
+            timeframe: Optional timeframe filter (e.g., '5min', '15min')
 
         Returns:
             List of symbol names
         """
         if source == 'file':
-            files = list(self.data_path.glob("proc_*_file.json"))
-            # Extract symbol from filename: proc_AAPL_file.json -> AAPL
+            if timeframe:
+                # Look for specific timeframe files
+                pattern = f"proc_*_{timeframe}.json"
+            else:
+                # Look for all processed files
+                pattern = "proc_*.json"
+
+            files = list(self.data_path.glob(pattern))
             symbols = []
             for f in files:
-                name = f.stem  # proc_AAPL_file
+                name = f.stem  # proc_AAPL_5min or proc_AAPL_file
                 parts = name.split('_')
                 if len(parts) >= 2:
+                    # Extract symbol (second part)
                     symbols.append(parts[1])
-            return sorted(symbols)
+            return sorted(set(symbols))  # Remove duplicates
 
         elif source == 'db':
             try:
@@ -455,10 +552,57 @@ class UnifiedDataPipeline:
                         return []
                     df = store.get_data_base(self.table_name)
                     if 'symbol' in df.columns:
+                        if timeframe and 'timeframe' in df.columns:
+                            df = df[df['timeframe'] == timeframe]
                         return sorted(df['symbol'].unique().tolist())
                     return []
             except Exception as e:
                 self.logger.error(f"Failed to list symbols from database: {e}")
+                return []
+
+        return []
+
+    def list_available_timeframes(self, symbol: str, source: str = 'file') -> List[str]:
+        """
+        List available timeframes for a specific symbol.
+
+        Args:
+            symbol: Stock symbol
+            source: 'file' or 'db'
+
+        Returns:
+            List of timeframe identifiers
+
+        Example:
+            timeframes = pipeline.list_available_timeframes('AAPL')
+            # Returns: ['1min', '5min', '15min', 'day']
+        """
+        if source == 'file':
+            files = list(self.data_path.glob(f"proc_{symbol}_*.json"))
+            timeframes = []
+            for f in files:
+                name = f.stem  # proc_AAPL_5min or proc_AAPL_file
+                parts = name.split('_')
+                if len(parts) >= 3:
+                    # Extract timeframe (third part onwards, excluding 'file')
+                    tf = '_'.join(parts[2:])
+                    if tf != 'file':  # Skip old format
+                        timeframes.append(tf)
+                    else:
+                        timeframes.append('day')  # Old format is daily
+            return sorted(set(timeframes))
+
+        elif source == 'db':
+            try:
+                with self.datastore as store:
+                    if not store.table_exists(self.table_name):
+                        return []
+                    df = store.get_data_by_symbol(self.table_name, symbol)
+                    if 'timeframe' in df.columns:
+                        return sorted(df['timeframe'].unique().tolist())
+                    return []
+            except Exception as e:
+                self.logger.error(f"Failed to list timeframes from database: {e}")
                 return []
 
         return []
@@ -501,6 +645,27 @@ class UnifiedDataPipeline:
         results = await self.validator.validate_all()
         return self.validator.get_best_data_source(results)
 
+    def _select_source_for_timeframe(self, timeframe: str) -> tuple[str, str]:
+        """
+        Select optimal data source based on timeframe hierarchy.
+
+        Hierarchy:
+        - Daily data: Schwab (primary), Alpaca (fallback)
+        - Intraday data: Alpaca (primary), Schwab (fallback)
+
+        Args:
+            timeframe: Timeframe to fetch (e.g., 'day', '15min', '1hour')
+
+        Returns:
+            Tuple of (primary_source, fallback_source)
+        """
+        if timeframe == 'day':
+            # Daily: Schwab has excellent history, Alpaca as backup
+            return ('schwab', 'alpaca')
+        else:
+            # Intraday: Alpaca has 750+ days, Schwab only has 10 days
+            return ('alpaca', 'schwab')
+
     # ========================================================================
     # PRIVATE METHODS - DATA FETCHING
     # ========================================================================
@@ -513,35 +678,118 @@ class UnifiedDataPipeline:
         force_reprocess: bool,
         process_data: bool,
     ) -> int:
-        """Update data for a single symbol."""
+        """Update data for a single symbol (backward compatibility - uses 'day' timeframe)."""
+        return await self._update_symbol_at_timeframe(
+            symbol, 'day', days, source, force_reprocess, process_data
+        )
 
-        if source == 'alpaca':
-            raw_bars = await self._fetch_alpaca(symbol, days)
-        elif source == 'schwab':
-            raw_bars = await self._fetch_schwab(symbol, days)
+    async def _update_symbol_at_timeframe(
+        self,
+        symbol: str,
+        timeframe: str,
+        days: int,
+        source: str,
+        force_reprocess: bool,
+        process_data: bool,
+    ) -> int:
+        """
+        Update data for a single symbol at specific timeframe.
+
+        Uses intelligent source hierarchy with automatic fallback:
+        - Daily: Schwab (primary) → Alpaca (fallback)
+        - Intraday: Alpaca (primary) → Schwab (fallback)
+        """
+
+        # Determine source hierarchy
+        if source in ['auto', None]:
+            primary_source, fallback_source = self._select_source_for_timeframe(timeframe)
+            self.logger.info(
+                f"[{symbol}/{timeframe}] Using source hierarchy: "
+                f"{primary_source.upper()} (primary) → {fallback_source.upper()} (fallback)"
+            )
         else:
-            raise ValueError(f"Unknown source: {source}")
+            # User explicitly specified source - use it without fallback
+            primary_source = source
+            fallback_source = None
+            self.logger.info(f"[{symbol}/{timeframe}] Using user-specified source: {source.upper()}")
 
-        if not raw_bars:
-            self.logger.warning(f"[{symbol}] No bars fetched from {source}")
+        # Try primary source
+        raw_bars = None
+        try:
+            if primary_source == 'alpaca':
+                raw_bars = await self._fetch_alpaca(symbol, days, timeframe)
+            elif primary_source == 'schwab':
+                raw_bars = await self._fetch_schwab(symbol, days, timeframe)
+            else:
+                raise ValueError(f"Unknown source: {primary_source}")
+
+            if raw_bars and len(raw_bars) > 0:
+                self.logger.info(
+                    f"[{symbol}/{timeframe}] ✓ Fetched {len(raw_bars)} bars from {primary_source.upper()}"
+                )
+            else:
+                self.logger.warning(
+                    f"[{symbol}/{timeframe}] {primary_source.upper()} returned no data"
+                )
+                raw_bars = None
+
+        except Exception as e:
+            self.logger.error(
+                f"[{symbol}/{timeframe}] {primary_source.upper()} fetch failed: {e}"
+            )
+            raw_bars = None
+
+        # Try fallback source if primary failed and fallback is available
+        if not raw_bars and fallback_source:
+            self.logger.warning(
+                f"[{symbol}/{timeframe}] Trying fallback source: {fallback_source.upper()}"
+            )
+            try:
+                if fallback_source == 'alpaca':
+                    raw_bars = await self._fetch_alpaca(symbol, days, timeframe)
+                elif fallback_source == 'schwab':
+                    raw_bars = await self._fetch_schwab(symbol, days, timeframe)
+
+                if raw_bars and len(raw_bars) > 0:
+                    self.logger.info(
+                        f"[{symbol}/{timeframe}] ✓ Fallback successful! "
+                        f"Fetched {len(raw_bars)} bars from {fallback_source.upper()}"
+                    )
+                else:
+                    self.logger.error(
+                        f"[{symbol}/{timeframe}] Fallback {fallback_source.upper()} also returned no data"
+                    )
+
+            except Exception as e:
+                self.logger.error(
+                    f"[{symbol}/{timeframe}] Fallback {fallback_source.upper()} also failed: {e}"
+                )
+
+        # Final check
+        if not raw_bars or len(raw_bars) == 0:
+            self.logger.error(
+                f"[{symbol}/{timeframe}] ✗ All sources failed - no data available"
+            )
             return 0
 
-        # Save raw data
-        self._save_raw_data(symbol, raw_bars)
+        # Save raw data with timeframe
+        self._save_raw_data(symbol, raw_bars, timeframe)
 
         # Process data if requested
         if process_data:
-            await self._process_and_save(symbol, raw_bars, force_reprocess=force_reprocess)
+            await self._process_and_save(symbol, raw_bars, timeframe, force_reprocess=force_reprocess)
 
-        self.logger.info(f"[{symbol}] Updated with {len(raw_bars)} bars from {source}")
+        self.logger.info(
+            f"[{symbol}/{timeframe}] ✓ COMPLETE: {len(raw_bars)} bars saved and processed"
+        )
         return len(raw_bars)
 
-    async def _fetch_alpaca(self, symbol: str, days: int) -> List[Dict[str, Any]]:
-        """Fetch historical bars from Alpaca."""
+    async def _fetch_alpaca(self, symbol: str, days: int, timeframe: str = 'day') -> List[Dict[str, Any]]:
+        """Fetch historical bars from Alpaca at specified timeframe."""
         try:
             from alpaca.data.historical.stock import StockHistoricalDataClient
             from alpaca.data.requests import StockBarsRequest
-            from alpaca.data.timeframe import TimeFrame
+            from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
             from alpaca.data.enums import DataFeed
 
             if self._alpaca_data_client is None:
@@ -552,10 +800,21 @@ class UnifiedDataPipeline:
             start = datetime.now(timezone.utc) - timedelta(days=days)
             end = datetime.now(timezone.utc)
 
+            # Convert timeframe string to Alpaca TimeFrame
+            tf_unit, tf_amount = self.SUPPORTED_TIMEFRAMES[timeframe]
+            if tf_unit == 'Day':
+                alpaca_tf = TimeFrame.Day
+            elif tf_unit == 'Hour':
+                alpaca_tf = TimeFrame.Hour
+            elif tf_unit == 'Minute':
+                alpaca_tf = TimeFrame(tf_amount, TimeFrameUnit.Minute)
+            else:
+                raise ValueError(f"Unsupported timeframe unit: {tf_unit}")
+
             def _do_fetch():
                 request = StockBarsRequest(
                     symbol_or_symbols=symbol,
-                    timeframe=TimeFrame.Day,  # Daily bars for processing
+                    timeframe=alpaca_tf,
                     start=start,
                     end=end,
                     feed=DataFeed.IEX,  # Use IEX feed (free tier compatible)
@@ -580,41 +839,102 @@ class UnifiedDataPipeline:
             return await asyncio.to_thread(_do_fetch)
 
         except Exception as e:
-            self.logger.exception(f"[{symbol}] Alpaca fetch failed: {e}")
+            self.logger.exception(f"[{symbol}/{timeframe}] Alpaca fetch failed: {e}")
             return []
 
-    async def _fetch_schwab(self, symbol: str, days: int) -> List[Dict[str, Any]]:
-        """Fetch historical bars from Schwab."""
+    async def _fetch_schwab(self, symbol: str, days: int, timeframe: str = 'day') -> List[Dict[str, Any]]:
+        """Fetch historical bars from Schwab at specified timeframe."""
         try:
             from data.streaming.schwab_client import SchwabClient
             from data.streaming.authenticator import Authenticator
 
             auth = Authenticator()
 
+            # Ensure token is fresh (auto-refresh if needed)
+            token = auth.access_token()
+            if not token:
+                self.logger.error("Failed to get valid Schwab access token")
+                return []
+
             if self._schwab_client is None:
                 self._schwab_client = SchwabClient(auth.apikey, auth.secret)
 
             def _do_fetch():
-                # Calculate start date (epoch ms)
-                start_dt = datetime.now(timezone.utc) - timedelta(days=days)
+                # Calculate start and end dates (epoch ms)
+                end_dt = datetime.now(timezone.utc)
+                start_dt = end_dt - timedelta(days=days)
                 start_ms = int(start_dt.timestamp() * 1000)
+                end_ms = int(end_dt.timestamp() * 1000)
 
-                data = self._schwab_client.daily_price_history(symbol, start=start_ms)
+                # Map timeframe to Schwab API parameters
+                if timeframe == 'day':
+                    data = self._schwab_client.daily_price_history(symbol, start=start_ms, end=end_ms)
+
+                elif timeframe in ['1min', '5min', '10min', '15min', '30min']:
+                    # Extract minute value
+                    minutes = int(timeframe.replace('min', ''))
+
+                    # Schwab API limits for minute data:
+                    # - Can only request up to 31 days of intraday data
+                    # - frequencyType: 'minute', frequency: 1, 5, 10, 15, or 30
+                    # - periodType: 'day', period: 1, 2, 3, 4, 5, or 10
+
+                    # Limit days for intraday requests (Schwab API allows 1-10 days)
+                    actual_days = min(days, 10)
+
+                    if actual_days < days:
+                        self.logger.info(
+                            f"[{symbol}/{timeframe}] Schwab intraday limited to {actual_days} days "
+                            f"(requested {days})"
+                        )
+
+                    # Use period-based approach (NOT date-based) per Schwab API docs
+                    data = self._schwab_client.custom_price_history(
+                        symbol=symbol,
+                        periodType='day',
+                        period=actual_days,
+                        frequencyType='minute',
+                        frequency=minutes
+                    )
+
+                elif timeframe == '1hour':
+                    # For hourly data, use 60-minute frequency (Schwab allows 1-10 days)
+                    actual_days = min(days, 10)
+
+                    if actual_days < days:
+                        self.logger.info(
+                            f"[{symbol}/{timeframe}] Schwab hourly limited to {actual_days} days "
+                            f"(requested {days})"
+                        )
+
+                    # Use period-based approach (NOT date-based) per Schwab API docs
+                    data = self._schwab_client.custom_price_history(
+                        symbol=symbol,
+                        periodType='day',
+                        period=actual_days,
+                        frequencyType='minute',
+                        frequency=60
+                    )
+
+                else:
+                    self.logger.error(f"[{symbol}/{timeframe}] Unsupported timeframe: {timeframe}")
+                    return []
+
                 return data.get('candles', [])
 
             return await asyncio.to_thread(_do_fetch)
 
         except Exception as e:
-            self.logger.exception(f"[{symbol}] Schwab fetch failed: {e}")
+            self.logger.exception(f"[{symbol}/{timeframe}] Schwab fetch failed: {e}")
             return []
 
     # ========================================================================
     # PRIVATE METHODS - DATA STORAGE
     # ========================================================================
 
-    def _save_raw_data(self, symbol: str, bars: List[Dict[str, Any]]) -> None:
-        """Save raw bar data to JSON file."""
-        file_path = self.raw_data_path / f"raw_{symbol}_file.json"
+    def _save_raw_data(self, symbol: str, bars: List[Dict[str, Any]], timeframe: str = 'day') -> None:
+        """Save raw bar data to JSON file with timeframe identifier."""
+        file_path = self.raw_data_path / f"raw_{symbol}_{timeframe}.json"
 
         try:
             # Load existing data if present
@@ -639,47 +959,57 @@ class UnifiedDataPipeline:
 
             # Save
             with open(file_path, 'w') as f:
-                json.dump({'candles': unique_bars}, f, indent=2)
+                json.dump({'candles': unique_bars, 'timeframe': timeframe}, f, indent=2)
 
-            self.logger.debug(f"[{symbol}] Raw data saved: {len(unique_bars)} bars")
+            self.logger.debug(f"[{symbol}/{timeframe}] Raw data saved: {len(unique_bars)} bars")
 
         except Exception as e:
-            self.logger.exception(f"[{symbol}] Failed to save raw data: {e}")
+            self.logger.exception(f"[{symbol}/{timeframe}] Failed to save raw data: {e}")
 
-    def _load_all_raw_data(self, symbol: str) -> List[Dict[str, Any]]:
+    def _load_all_raw_data(self, symbol: str, timeframe: str = 'day') -> List[Dict[str, Any]]:
         """
-        Load ALL raw data for a symbol from the raw data file.
+        Load ALL raw data for a symbol at specific timeframe from the raw data file.
 
         Args:
             symbol: Stock symbol
+            timeframe: Timeframe identifier
 
         Returns:
             List of all raw bar dictionaries
         """
-        file_path = self.raw_data_path / f"raw_{symbol}_file.json"
+        file_path = self.raw_data_path / f"raw_{symbol}_{timeframe}.json"
 
         if not file_path.exists():
-            return []
+            # Try backward compatibility with old format (no timeframe suffix)
+            old_file_path = self.raw_data_path / f"raw_{symbol}_file.json"
+            if old_file_path.exists() and timeframe == 'day':
+                file_path = old_file_path
+            else:
+                return []
 
         try:
             with open(file_path, 'r') as f:
                 data = json.load(f)
                 return data.get('candles', [])
         except Exception as e:
-            self.logger.error(f"[{symbol}] Failed to load raw data: {e}")
+            self.logger.error(f"[{symbol}/{timeframe}] Failed to load raw data: {e}")
             return []
 
-    def _get_last_processed_timestamp(self, symbol: str) -> Optional[int]:
+    def _get_last_processed_timestamp(self, symbol: str, timeframe: str = 'day') -> Optional[int]:
         """
-        Get the latest timestamp from processed data file.
+        Get the latest timestamp from processed data file for specific timeframe.
 
         Args:
             symbol: Stock symbol
+            timeframe: Timeframe identifier
 
         Returns:
             Latest timestamp (epoch ms) or None if no processed data
         """
-        file_path = self.data_path / f"proc_{symbol}_file.json"
+        if timeframe == 'day':
+            file_path = self.data_path / f"proc_{symbol}_file.json"
+        else:
+            file_path = self.data_path / f"proc_{symbol}_{timeframe}.json"
 
         if not file_path.exists():
             return None
@@ -705,23 +1035,29 @@ class UnifiedDataPipeline:
             return None
 
         except Exception as e:
-            self.logger.debug(f"[{symbol}] Could not read processed timestamp: {e}")
+            self.logger.debug(f"[{symbol}/{timeframe}] Could not read processed timestamp: {e}")
             return None
 
-    def _get_last_raw_timestamp(self, symbol: str) -> Optional[int]:
+    def _get_last_raw_timestamp(self, symbol: str, timeframe: str = 'day') -> Optional[int]:
         """
-        Get the latest timestamp from raw data file.
+        Get the latest timestamp from raw data file for specific timeframe.
 
         Args:
             symbol: Stock symbol
+            timeframe: Timeframe identifier
 
         Returns:
             Latest timestamp (epoch ms) or None if no raw data
         """
-        file_path = self.raw_data_path / f"raw_{symbol}_file.json"
+        file_path = self.raw_data_path / f"raw_{symbol}_{timeframe}.json"
 
         if not file_path.exists():
-            return None
+            # Try backward compatibility
+            old_file_path = self.raw_data_path / f"raw_{symbol}_file.json"
+            if old_file_path.exists() and timeframe == 'day':
+                file_path = old_file_path
+            else:
+                return None
 
         try:
             with open(file_path, 'r') as f:
@@ -735,21 +1071,22 @@ class UnifiedDataPipeline:
             return max(c.get('datetime', 0) for c in candles)
 
         except Exception as e:
-            self.logger.debug(f"[{symbol}] Could not read raw timestamp: {e}")
+            self.logger.debug(f"[{symbol}/{timeframe}] Could not read raw timestamp: {e}")
             return None
 
-    def _is_processed_data_current(self, symbol: str) -> bool:
+    def _is_processed_data_current(self, symbol: str, timeframe: str = 'day') -> bool:
         """
-        Check if processed data is up-to-date with raw data.
+        Check if processed data is up-to-date with raw data for specific timeframe.
 
         Args:
             symbol: Stock symbol
+            timeframe: Timeframe identifier
 
         Returns:
             True if processed data contains the latest raw data
         """
-        raw_ts = self._get_last_raw_timestamp(symbol)
-        proc_ts = self._get_last_processed_timestamp(symbol)
+        raw_ts = self._get_last_raw_timestamp(symbol, timeframe)
+        proc_ts = self._get_last_processed_timestamp(symbol, timeframe)
 
         if raw_ts is None:
             return True  # No raw data, nothing to process
@@ -764,6 +1101,7 @@ class UnifiedDataPipeline:
         self,
         symbol: str,
         bars: List[Dict[str, Any]],
+        timeframe: str = 'day',
         force_reprocess: bool = False,
     ) -> None:
         """
@@ -776,36 +1114,37 @@ class UnifiedDataPipeline:
         Args:
             symbol: Stock symbol
             bars: Newly fetched bars (used for cache update)
+            timeframe: Timeframe identifier
             force_reprocess: If True, reprocess even if data appears current
 
         Storage targets:
-        - JSON file (proc_{SYMBOL}_file.json)
-        - SQLite database (stock_table)
+        - JSON file (proc_{SYMBOL}_{TIMEFRAME}.json)
+        - SQLite database (stock_table with timeframe column)
         - Cache update (system_cache.json)
         """
         try:
             from data.processor import Processor
 
             # Check if processed data is already current (unless forced)
-            if not force_reprocess and self._is_processed_data_current(symbol):
-                self.logger.info(f"[{symbol}] Processed data is up-to-date, skipping reprocess")
+            if not force_reprocess and self._is_processed_data_current(symbol, timeframe):
+                self.logger.info(f"[{symbol}/{timeframe}] Processed data is up-to-date, skipping reprocess")
                 return
 
             # Load ALL raw data from file (not just the passed-in bars)
             # This ensures indicators like SMA_200 are computed correctly
-            all_bars = self._load_all_raw_data(symbol)
+            all_bars = self._load_all_raw_data(symbol, timeframe)
 
             if not all_bars:
-                self.logger.warning(f"[{symbol}] No raw data to process")
+                self.logger.warning(f"[{symbol}/{timeframe}] No raw data to process")
                 return
 
-            self.logger.info(f"[{symbol}] Processing {len(all_bars)} total bars (new data detected)")
+            self.logger.info(f"[{symbol}/{timeframe}] Processing {len(all_bars)} total bars (new data detected)")
 
             # Convert bars to DataFrame
             df = pd.DataFrame(all_bars)
 
             if df.empty:
-                self.logger.warning(f"[{symbol}] No data to process")
+                self.logger.warning(f"[{symbol}/{timeframe}] No data to process")
                 return
 
             # Rename columns for processor (expects lowercase)
@@ -821,7 +1160,7 @@ class UnifiedDataPipeline:
 
             # Ensure datetime column exists
             if 'datetime' not in df.columns:
-                self.logger.error(f"[{symbol}] Missing datetime column")
+                self.logger.error(f"[{symbol}/{timeframe}] Missing datetime column")
                 return
 
             # Process using the Processor
@@ -837,31 +1176,36 @@ class UnifiedDataPipeline:
             )
 
             if processed_df is None or processed_df.empty:
-                self.logger.warning(f"[{symbol}] Processing returned empty DataFrame")
+                self.logger.warning(f"[{symbol}/{timeframe}] Processing returned empty DataFrame")
                 return
 
             # Save to JSON files
             if self.store_to_files:
-                self._save_processed_data_file(symbol, processed_df)
+                self._save_processed_data_file(symbol, processed_df, timeframe)
 
             # Save to database
             if self.store_to_db:
-                self._save_processed_data_db(symbol, processed_df)
+                self._save_processed_data_db(symbol, processed_df, timeframe)
 
             # Update cache with latest timestamp
-            self._update_cache(symbol, bars)
+            self._update_cache(symbol, bars, timeframe)
 
             self.logger.info(
-                f"[{symbol}] Data saved: {len(processed_df)} rows "
+                f"[{symbol}/{timeframe}] Data saved: {len(processed_df)} rows "
                 f"(files={self.store_to_files}, db={self.store_to_db})"
             )
 
         except Exception as e:
-            self.logger.exception(f"[{symbol}] Processing failed: {e}")
+            self.logger.exception(f"[{symbol}/{timeframe}] Processing failed: {e}")
 
-    def _save_processed_data_file(self, symbol: str, df: pd.DataFrame) -> None:
-        """Save processed DataFrame to JSON file."""
-        file_path = self.data_path / f"proc_{symbol}_file.json"
+    def _save_processed_data_file(self, symbol: str, df: pd.DataFrame, timeframe: str = 'day') -> None:
+        """Save processed DataFrame to JSON file with timeframe identifier."""
+        # Use new format with timeframe, with backward compatibility for 'day'
+        if timeframe == 'day':
+            # For backward compatibility, also save to old filename format
+            file_path = self.data_path / f"proc_{symbol}_file.json"
+        else:
+            file_path = self.data_path / f"proc_{symbol}_{timeframe}.json"
 
         try:
             # Make a copy to avoid modifying original
@@ -888,21 +1232,22 @@ class UnifiedDataPipeline:
             # Convert to records
             data = df_copy.to_dict(orient='records')
 
-            # Save
+            # Save with timeframe metadata
             with open(file_path, 'w') as f:
-                json.dump({'bars': data}, f)
+                json.dump({'bars': data, 'timeframe': timeframe}, f)
 
-            self.logger.debug(f"[{symbol}] Saved to file: {len(data)} rows")
+            self.logger.debug(f"[{symbol}/{timeframe}] Saved to file: {len(data)} rows")
 
         except Exception as e:
-            self.logger.exception(f"[{symbol}] Failed to save to file: {e}")
+            self.logger.exception(f"[{symbol}/{timeframe}] Failed to save to file: {e}")
 
-    def _save_processed_data_db(self, symbol: str, df: pd.DataFrame) -> None:
-        """Save processed DataFrame to SQLite database."""
+    def _save_processed_data_db(self, symbol: str, df: pd.DataFrame, timeframe: str = 'day') -> None:
+        """Save processed DataFrame to SQLite database with timeframe column."""
         try:
-            # Make a copy and add symbol column
+            # Make a copy and add symbol and timeframe columns
             df_copy = df.copy()
             df_copy['symbol'] = symbol
+            df_copy['timeframe'] = timeframe
 
             # Handle NaN and infinity values
             df_copy = df_copy.where(df_copy.notna(), None)
@@ -910,24 +1255,24 @@ class UnifiedDataPipeline:
 
             # Use context manager for database operations
             with self.datastore as store:
-                # Use upsert to avoid duplicates (key on symbol + Date)
+                # Use upsert to avoid duplicates (key on symbol + Date + timeframe)
                 if 'Date' in df_copy.columns:
                     store.upsert_data(
                         self.table_name,
                         df_copy,
-                        key_columns=['symbol', 'Date']
+                        key_columns=['symbol', 'Date', 'timeframe']
                     )
                 else:
                     # Fallback to regular insert
                     store.fill_database(self.table_name, df_copy)
 
-            self.logger.debug(f"[{symbol}] Saved to database: {len(df_copy)} rows")
+            self.logger.debug(f"[{symbol}/{timeframe}] Saved to database: {len(df_copy)} rows")
 
         except Exception as e:
-            self.logger.exception(f"[{symbol}] Failed to save to database: {e}")
+            self.logger.exception(f"[{symbol}/{timeframe}] Failed to save to database: {e}")
 
-    def _update_cache(self, symbol: str, bars: List[Dict[str, Any]]) -> None:
-        """Update cache with latest processed timestamp."""
+    def _update_cache(self, symbol: str, bars: List[Dict[str, Any]], timeframe: str = 'day') -> None:
+        """Update cache with latest processed timestamp for specific timeframe."""
         if self.cache is None or not bars:
             return
 
@@ -936,11 +1281,13 @@ class UnifiedDataPipeline:
             latest_ts = max(bar.get('datetime', 0) for bar in bars)
 
             if latest_ts > 0:
-                self.cache.update('stock_files', symbol, latest_ts)
-                self.logger.debug(f"[{symbol}] Cache updated: {latest_ts}")
+                # Use composite key for cache: symbol_timeframe
+                cache_key = f"{symbol}_{timeframe}"
+                self.cache.update('stock_files', cache_key, latest_ts)
+                self.logger.debug(f"[{symbol}/{timeframe}] Cache updated: {latest_ts}")
 
         except Exception as e:
-            self.logger.warning(f"[{symbol}] Failed to update cache: {e}")
+            self.logger.warning(f"[{symbol}/{timeframe}] Failed to update cache: {e}")
 
 
 # ============================================================================
@@ -962,6 +1309,12 @@ Examples:
   # Update symbols with auto-source selection
   python -m core.unified_data_pipeline --symbols AAPL MSFT
 
+  # Fetch multiple timeframes
+  python -m core.unified_data_pipeline --symbols AAPL TSLA --timeframes 5min 15min 30min
+
+  # Fetch intraday data for optimization
+  python -m core.unified_data_pipeline --symbols AAPL --timeframes 5min 15min 30min 1hour --days 750
+
   # Force Alpaca as source
   python -m core.unified_data_pipeline --symbols AAPL --source alpaca
 
@@ -979,6 +1332,8 @@ Examples:
                         help='Symbols to update')
     parser.add_argument('--days', type=int, default=30,
                         help='Days of history to fetch')
+    parser.add_argument('--timeframes', nargs='+', default=None,
+                        help='Timeframes to fetch (e.g., 5min 15min 30min 1hour day)')
     parser.add_argument('--source', choices=['alpaca', 'schwab', 'auto'],
                         default='auto', help='Data source')
     parser.add_argument('--check', action='store_true',
@@ -1076,6 +1431,7 @@ Examples:
             source,
             force_reprocess=args.force_reprocess,
             process_data=not args.no_process,
+            timeframes=args.timeframes,
         )
 
         print("\n=== Update Results ===")

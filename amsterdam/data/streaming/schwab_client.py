@@ -153,21 +153,21 @@ class SchwabClient:
     def _set_headers_params(self, endpoint: str, **kwargs) -> tuple:
         """
         Sets headers and parameters for API requests.
-        
+
         Args:
             endpoint (str): API endpoint.
             **kwargs: Additional parameters for the request.
-        
+
         Returns:
             tuple: (endpoint, headers, params)
         """
+        # Don't set Content-Type for GET requests (only Authorization)
         headers = {
-            'Content-Type': 'application/json',
             'Authorization': f'Bearer {self.authenticator.access_token()}'
         }
 
-        params = {}
-        params.update(kwargs)
+        # Filter out empty string parameters (Schwab API rejects them)
+        params = {k: v for k, v in kwargs.items() if v != ''}
         self.logger.info(f'Setting headers and params for {endpoint} with {params}')
         return endpoint, headers, params
 
@@ -275,17 +275,25 @@ class SchwabClient:
         return self._get(endpoint, headers, params)
     
     def custom_price_history(self, symbol: str, start: int = '', end: int = '',
-                             periodType: int = '', frequencyType: str = '',
+                             startDate: int = '', endDate: int = '',
+                             periodType: str = '', frequencyType: str = '',
                              period: int = '', frequency: int = '') -> dict:
         endpoint = f"{self._market_url}/pricehistory"
+
+        # Map start/end to startDate/endDate for API compatibility
+        if startDate == '' and start != '':
+            startDate = start
+        if endDate == '' and end != '':
+            endDate = end
+
         endpoint, headers, params = self._set_headers_params(
             endpoint=endpoint,
             periodType=periodType,
             frequencyType=frequencyType,
             frequency=frequency,
             period=period,
-            start=start,
-            end=end,
+            startDate=startDate,
+            endDate=endDate,
             symbol=symbol
         )
         self.logger.info(f'Retrieving custom price history for {symbol}')

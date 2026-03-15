@@ -510,8 +510,17 @@ def data():
 @click.option('--days', '-d', type=int, default=30, help='Days of history to fetch')
 @click.option('--source', type=click.Choice(['alpaca', 'schwab', 'auto']), default='auto',
               help='Data source')
-def data_update(symbols, days, source):
-    """Update historical data for symbols."""
+@click.option('--timeframes', '-t', default=None,
+              help='Comma-separated timeframes (e.g., 15min,30min,1hour)')
+def data_update(symbols, days, source, timeframes):
+    """Update historical data for symbols.
+
+    \b
+    Examples:
+        amsterdam data update -s AAPL,TSLA                    # Default timeframe
+        amsterdam data update -s AAPL -t 15min,30min,1hour    # Multiple timeframes
+        amsterdam data update -d 750 -t 1hour --source alpaca # 2 years hourly
+    """
     import asyncio
     from core.unified_data_pipeline import UnifiedDataPipeline
 
@@ -531,10 +540,21 @@ def data_update(symbols, days, source):
             else:
                 symbol_list = ['AAPL', 'MSFT']
 
-        click.echo(f"Updating data for: {', '.join(symbol_list)}")
+        # Parse timeframes
+        timeframe_list = None
+        if timeframes:
+            timeframe_list = [t.strip() for t in timeframes.split(',')]
+            click.echo(f"Updating data for: {', '.join(symbol_list)} at {', '.join(timeframe_list)}")
+        else:
+            click.echo(f"Updating data for: {', '.join(symbol_list)}")
 
         src = None if source == 'auto' else source
-        results = await pipeline.update_symbols(symbol_list, days=days, source=src)
+        results = await pipeline.update_symbols(
+            symbol_list,
+            days=days,
+            source=src,
+            timeframes=timeframe_list
+        )
 
         for sym, count in results.items():
             if count > 0:
@@ -589,9 +609,10 @@ def strategy():
 
     \b
     Commands:
-        amsterdam strategy select      Evaluate and select best strategies
-        amsterdam strategy list        List available strategies
-        amsterdam strategy show        Show current routing configuration
+        amsterdam strategy select          Evaluate and select best strategies
+        amsterdam strategy optimize-multitf Optimize across timeframes (multi-TF)
+        amsterdam strategy list            List available strategies
+        amsterdam strategy show            Show current routing configuration
     """
     pass
 
@@ -691,6 +712,65 @@ def strategy_select(symbol, days, top, metric, no_walk_forward, regime, save, ca
         click.secho(f"Error during strategy selection: {e}", fg='red')
         import traceback
         traceback.print_exc()
+
+
+@strategy.command('optimize-multitf')
+@click.option('--symbols', '-s', required=True, help='Comma-separated symbols (e.g., AAPL,TSLA,MSFT)')
+@click.option('--timeframes', '-t', default='15min,30min,1hour',
+              help='Comma-separated timeframes to test')
+@click.option('--strategies', default='rsi,sma,meanreversion,bollinger',
+              help='Comma-separated strategies to test')
+@click.option('--days', '-d', type=int, default=750, help='Days of historical data')
+@click.option('--metric', type=click.Choice(['composite', 'sharpe_ratio', 'sortino_ratio', 'total_return']),
+              default='sharpe_ratio', help='Optimization metric')
+@click.option('--dry-run', is_flag=True, help='Preview without saving config')
+def strategy_optimize_multitf(symbols, timeframes, strategies, days, metric, dry_run):
+    """Optimize strategies across multiple timeframes.
+
+    Tests all combinations of symbols × timeframes × strategies × regimes
+    to find the optimal configuration. Results are saved to strategy_routing.json.
+
+    \b
+    Examples:
+        amsterdam strategy optimize-multitf -s AAPL,TSLA,MSFT
+        amsterdam strategy optimize-multitf -s AAPL -t 5min,15min,30min
+        amsterdam strategy optimize-multitf -s AAPL,TSLA -d 365 --metric composite
+        amsterdam strategy optimize-multitf -s AAPL --dry-run  # Preview without saving
+    """
+    import sys
+    import subprocess
+
+    # Build command
+    cmd = [
+        sys.executable,
+        str(ROOT / "tools" / "optimize_routing_multitf.py"),
+        '--symbols', symbols,
+        '--timeframes', timeframes,
+        '--strategies', strategies,
+        '--days', str(days),
+        '--metric', metric
+    ]
+
+    if dry_run:
+        cmd.append('--dry-run')
+
+    click.echo(f"Running multi-timeframe optimization...")
+    click.echo(f"  Symbols: {symbols}")
+    click.echo(f"  Timeframes: {timeframes}")
+    click.echo(f"  Strategies: {strategies}")
+    click.echo(f"  Days: {days}")
+    click.echo(f"  Metric: {metric}")
+    click.echo()
+
+    # Run optimization
+    result = subprocess.run(cmd)
+
+    if result.returncode == 0 and not dry_run:
+        click.echo()
+        click.secho("Optimization complete!", fg='green')
+        click.echo("Run 'amsterdam strategy show' to view routing configuration.")
+    elif result.returncode != 0:
+        click.secho(f"Optimization failed with exit code {result.returncode}", fg='red')
 
 
 @strategy.command('list')
@@ -1017,24 +1097,39 @@ def backtest_full(symbol, strategies, days, output, capital):
 @click.option('--symbols', '-s', default=None, help='Comma-separated symbols (default: all)')
 @click.option('--days', '-d', type=int, default=365, help='Days of data')
 @click.option('--strategies', default=None, help='Comma-separated strategies to test')
+@click.option('--timeframes', '-t', default=None,
+              help='Comma-separated timeframes (e.g., 15min,30min,1hour) - enables multi-TF optimization')
 @click.option('--dry-run', is_flag=True, help="Don't save config")
-def backtest_optimize(symbols, days, strategies, dry_run):
+def backtest_optimize(symbols, days, strategies, timeframes, dry_run):
     """Optimize strategy routing for all symbols.
 
     Runs regime-aware backtests on all symbols and updates strategy_routing.json
     with the optimal strategy for each (symbol, regime) combination.
 
+    With --timeframes, also optimizes the timeframe for each symbol/regime.
+
     \b
     Examples:
-        amsterdam backtest optimize                    # All symbols
-        amsterdam backtest optimize -s AAPL,MSFT      # Specific symbols
-        amsterdam backtest optimize -d 180            # Use 180 days
-        amsterdam backtest optimize --dry-run         # Don't save
+        amsterdam backtest optimize                          # All symbols, single TF
+        amsterdam backtest optimize -s AAPL,MSFT            # Specific symbols
+        amsterdam backtest optimize -d 180                  # Use 180 days
+        amsterdam backtest optimize -t 15min,30min,1hour    # Multi-timeframe
+        amsterdam backtest optimize --dry-run               # Don't save
     """
-    cmd = [
-        sys.executable, str(ROOT / "tools" / "optimize_routing.py"),
-        "-d", str(days),
-    ]
+    # Determine which optimizer to use based on timeframes option
+    if timeframes:
+        # Use multi-timeframe optimizer
+        cmd = [
+            sys.executable, str(ROOT / "tools" / "optimize_routing_multitf.py"),
+            "-d", str(days),
+            "--timeframes", timeframes,
+        ]
+    else:
+        # Use single-timeframe optimizer (backward compatible)
+        cmd = [
+            sys.executable, str(ROOT / "tools" / "optimize_routing.py"),
+            "-d", str(days),
+        ]
 
     if symbols:
         cmd.extend(["-s", symbols])
