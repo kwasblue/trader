@@ -183,6 +183,21 @@ Examples:
     else:
         symbols = pipeline.list_available_symbols()
 
+        # If no symbols found, try loading from existing routing config
+        if not symbols:
+            routing_path = ROOT / "config" / "strategy_routing.json"
+            if routing_path.exists():
+                with open(routing_path, "r") as f:
+                    existing_routing = json.load(f)
+                symbols = [s for s in existing_routing.keys() if s != "default"]
+                if symbols:
+                    print(f"  (Loaded {len(symbols)} symbols from existing routing config)")
+
+        if not symbols:
+            print("\nERROR: No symbols found. Please specify symbols with -s flag.")
+            print("Example: amsterdam backtest optimize -s AAPL,MSFT,GOOGL")
+            sys.exit(1)
+
     # Get strategies
     if args.strategies:
         strategies = [s.strip() for s in args.strategies.split(",")]
@@ -248,6 +263,16 @@ Examples:
             "normal": Counter(normal_strats).most_common(1)[0][0] if normal_strats else "bollinger",
             "high_volatility": Counter(high_vol_strats).most_common(1)[0][0] if high_vol_strats else "rsi",
             "default": "momentum",
+            "use_hybrid": True,
+        }
+    else:
+        # No results - create basic default
+        combined_routing["default"] = {
+            "low_volatility": "sma",
+            "normal": "bollinger",
+            "high_volatility": "rsi",
+            "default": "momentum",
+            "use_hybrid": True,
         }
 
     # Determine hybrid sizing for each symbol
@@ -257,9 +282,6 @@ Examples:
     for symbol in combined_routing:
         if symbol != "default" and symbol in hybrid_config:
             combined_routing[symbol]["use_hybrid"] = hybrid_config[symbol]["enabled"]
-
-    # Default hybrid setting
-    combined_routing["default"]["use_hybrid"] = True
 
     # Print summary
     print()
