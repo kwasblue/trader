@@ -348,7 +348,7 @@ class StrategyParamOptimizer:
             try:
                 # Generate signals with these params
                 from strategies.strategy_registry import load_strategy
-                strategy = load_strategy(strategy_name, **params)
+                strategy = load_strategy(strategy_name, params=params)
 
                 signals = []
                 for i in range(len(data)):

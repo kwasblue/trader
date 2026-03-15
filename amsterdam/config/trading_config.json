@@ -62,6 +62,11 @@
     "lot_size": 1
   },
 
+  "strategy_quality_filter": {
+    "enabled": true,
+    "min_sharpe": 0.5
+  },
+
   "trade_logic": {
     "cooldown_mode": "bars",
     "cooldown_bars": 5,

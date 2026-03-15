@@ -16,8 +16,7 @@
       "strategy": "psar",
       "timeframe": "30min"
     },
-    "use_hybrid": true,
-    "_hybrid_test_sharpe_improvement": 0.09363916119183024
+    "use_hybrid": false
   },
   "ABBV": {
     "low_volatility": {
@@ -36,8 +35,7 @@
       "strategy": "meanreversion",
       "timeframe": "30min"
     },
-    "use_hybrid": true,
-    "_hybrid_test_sharpe_improvement": 0.16476573185264565
+    "use_hybrid": false
   },
   "AMZN": {
     "low_volatility": {
@@ -56,8 +54,7 @@
       "strategy": "sma",
       "timeframe": "30min"
     },
-    "use_hybrid": true,
-    "_hybrid_test_sharpe_improvement": 0.1251133678741123
+    "use_hybrid": false
   },
   "AVGO": {
     "low_volatility": {
@@ -76,8 +73,7 @@
       "strategy": "psar",
       "timeframe": "30min"
     },
-    "use_hybrid": true,
-    "_hybrid_test_sharpe_improvement": 0.21290457331498502
+    "use_hybrid": false
   },
   "COST": {
     "low_volatility": {
@@ -96,8 +92,7 @@
       "strategy": "ema",
       "timeframe": "30min"
     },
-    "use_hybrid": true,
-    "_hybrid_test_sharpe_improvement": 0.1360990637255448
+    "use_hybrid": false
   },
   "GOOGL": {
     "low_volatility": {
@@ -116,8 +111,7 @@
       "strategy": "bollinger",
       "timeframe": "30min"
     },
-    "use_hybrid": true,
-    "_hybrid_test_sharpe_improvement": 0.3013257382341852
+    "use_hybrid": false
   },
   "HD": {
     "low_volatility": {
@@ -136,8 +130,7 @@
       "strategy": "meanreversion",
       "timeframe": "30min"
     },
-    "use_hybrid": false,
-    "_hybrid_test_sharpe_improvement": 0.07751889597716577
+    "use_hybrid": false
   },
   "JNJ": {
     "low_volatility": {
@@ -156,8 +149,7 @@
       "strategy": "ichimoku",
       "timeframe": "30min"
     },
-    "use_hybrid": true,
-    "_hybrid_test_sharpe_improvement": 0.30260270006696777
+    "use_hybrid": false
   },
   "JPM": {
     "low_volatility": {
@@ -176,8 +168,7 @@
       "strategy": "macd",
       "timeframe": "30min"
     },
-    "use_hybrid": true,
-    "_hybrid_test_sharpe_improvement": 0.16385306899652763
+    "use_hybrid": false
   },
   "MA": {
     "low_volatility": {
@@ -196,8 +187,7 @@
       "strategy": "bollinger",
       "timeframe": "30min"
     },
-    "use_hybrid": true,
-    "_hybrid_test_sharpe_improvement": 0.15430516014626017
+    "use_hybrid": false
   },
   "META": {
     "low_volatility": {
@@ -216,8 +206,7 @@
       "strategy": "adx",
       "timeframe": "30min"
     },
-    "use_hybrid": true,
-    "_hybrid_test_sharpe_improvement": 0.14280664519254294
+    "use_hybrid": false
   },
   "MSFT": {
     "low_volatility": {
@@ -236,8 +225,7 @@
       "strategy": "meanreversion",
       "timeframe": "30min"
     },
-    "use_hybrid": true,
-    "_hybrid_test_sharpe_improvement": 0.18483757998641304
+    "use_hybrid": false
   },
   "NVDA": {
     "low_volatility": {
@@ -256,8 +244,7 @@
       "strategy": "psar",
       "timeframe": "30min"
     },
-    "use_hybrid": true,
-    "_hybrid_test_sharpe_improvement": 0.2385251807529556
+    "use_hybrid": false
   },
   "PG": {
     "low_volatility": {
@@ -276,8 +263,7 @@
       "strategy": "rsi",
       "timeframe": "30min"
     },
-    "use_hybrid": true,
-    "_hybrid_test_sharpe_improvement": 0.12558099479756113
+    "use_hybrid": false
   },
   "TSLA": {
     "low_volatility": {
@@ -296,8 +282,7 @@
       "strategy": "bollinger",
       "timeframe": "30min"
     },
-    "use_hybrid": true,
-    "_hybrid_test_sharpe_improvement": 0.17333743465411233
+    "use_hybrid": false
   },
   "UNH": {
     "low_volatility": {
@@ -316,8 +301,7 @@
       "strategy": "bollinger",
       "timeframe": "30min"
     },
-    "use_hybrid": false,
-    "_hybrid_test_sharpe_improvement": 0.05238005861698891
+    "use_hybrid": false
   },
   "V": {
     "low_volatility": {
@@ -336,8 +320,7 @@
       "strategy": "bollinger",
       "timeframe": "30min"
     },
-    "use_hybrid": true,
-    "_hybrid_test_sharpe_improvement": 0.17495055675657278
+    "use_hybrid": false
   },
   "WMT": {
     "low_volatility": {
@@ -356,8 +339,7 @@
       "strategy": "bollinger",
       "timeframe": "30min"
     },
-    "use_hybrid": true,
-    "_hybrid_test_sharpe_improvement": 0.22001233126306974
+    "use_hybrid": false
   },
   "XOM": {
     "low_volatility": {
@@ -376,8 +358,7 @@
       "strategy": "stochastic",
       "timeframe": "30min"
     },
-    "use_hybrid": true,
-    "_hybrid_test_sharpe_improvement": 0.2478536765345154
+    "use_hybrid": false
   },
   "default": {
     "low_volatility": {

@@ -48,6 +48,7 @@ from pathlib import Path
 import logging
 
 from core.base.base_strategy import BaseStrategy
+from core.logic.sharpe_filter import SharpeFilter
 from loggers.logger import Logger
 
 
@@ -107,19 +108,25 @@ class StrategyRoutingManager:
     def __init__(
         self,
         config_path: str,
-        auto_create: bool = True
+        auto_create: bool = True,
+        min_sharpe: Optional[float] = None
     ):
         """
         Initialize strategy router.
-        
+
         Args:
             config_path: Path to JSON routing configuration
             auto_create: Create default config if not found
-            
+            min_sharpe: Minimum Sharpe ratio to allow trading (None = disabled)
+                       - 0.0: Only block losing strategies
+                       - 0.5: Block marginal strategies (recommended)
+                       - 1.0: Only trade excellent strategies
+
         Raises:
             FileNotFoundError: If config not found and auto_create=False
         """
         self.config_path = Path(config_path)
+        self.min_sharpe = min_sharpe
         # Logger - own file with propagation to app.log
         self.logger = Logger(
             log_file="strategy_routing.log",
@@ -129,13 +136,22 @@ class StrategyRoutingManager:
         
         # Routing configuration
         self.routing_map: Dict[str, Dict[str, str]] = {}
-        
+
+        # Strategy parameters configuration
+        self.params_map: Dict[str, Dict[str, Dict[str, Any]]] = {}
+
         # Strategy instance cache: (symbol, regime, strategy_name) -> instance
         self._strategy_cache: Dict[Tuple[str, str, str], BaseStrategy] = {}
-        
+
         # Strategy class registry cache
         self._registry_cache: Optional[Dict[str, Any]] = None
-        
+
+        # Sharpe filter (optional)
+        self.sharpe_filter: Optional[SharpeFilter] = None
+        if min_sharpe is not None:
+            self.sharpe_filter = SharpeFilter(min_sharpe=min_sharpe)
+            self.logger.info(f"Sharpe filter enabled with min_sharpe={min_sharpe}")
+
         # Load configuration
         if not self.config_path.exists():
             if auto_create:
@@ -144,8 +160,9 @@ class StrategyRoutingManager:
                 raise FileNotFoundError(
                     f"Strategy routing config not found: {config_path}"
                 )
-        
+
         self._load_config()
+        self._load_params_config()
     
     # ========================================================================
     # CORE ROUTING METHODS
@@ -158,29 +175,41 @@ class StrategyRoutingManager:
     ) -> BaseStrategy:
         """
         Get strategy instance for symbol and regime.
-        
+
         Resolution order:
-        1. Check symbol-specific regime mapping
-        2. Check symbol default
-        3. Check global regime mapping
-        4. Use global default
-        
+        1. Check Sharpe filter (if enabled)
+        2. Check symbol-specific regime mapping
+        3. Check symbol default
+        4. Check global regime mapping
+        5. Use global default
+
         Args:
             symbol: Trading symbol
             regime: Market regime
-            
+
         Returns:
-            Strategy instance (cached)
-            
+            Strategy instance (cached), or NoOp if blocked by filter
+
         Example:
             strategy = router.get_strategy("AAPL", "trending")
             signal = strategy.generate_signal(df)
         """
-        # Resolve strategy name
-        strategy_name = self._resolve_strategy_name(symbol, regime)
-
         # Ensure all cache key components are strings (defensive)
         regime_str = str(regime) if not isinstance(regime, str) else regime
+
+        # Check Sharpe filter first
+        if self.sharpe_filter is not None:
+            if not self.sharpe_filter.should_trade(symbol, regime_str):
+                sharpe = self.sharpe_filter.get_sharpe(symbol, regime_str)
+                self.logger.info(
+                    f"Sharpe filter blocked {symbol}/{regime_str} "
+                    f"(Sharpe: {sharpe:.2f} < {self.min_sharpe:.2f})"
+                )
+                # Return NoOp strategy that always signals 0 (hold)
+                return self._create_noop_strategy()
+
+        # Resolve strategy name
+        strategy_name = self._resolve_strategy_name(symbol, regime)
         strategy_str = str(strategy_name) if not isinstance(strategy_name, str) else strategy_name
 
         self.logger.debug(
@@ -191,11 +220,11 @@ class StrategyRoutingManager:
         cache_key = (symbol, regime_str, strategy_str)
         if cache_key in self._strategy_cache:
             return self._strategy_cache[cache_key]
-        
+
         # Instantiate and cache
-        strategy = self._instantiate_strategy(strategy_str)
+        strategy = self._instantiate_strategy(strategy_str, symbol=symbol, regime=regime_str)
         self._strategy_cache[cache_key] = strategy
-        
+
         return strategy
     
     def get_strategy_name(
@@ -368,12 +397,12 @@ class StrategyRoutingManager:
         try:
             with open(self.config_path, 'r') as f:
                 self.routing_map = json.load(f)
-            
+
             self.logger.info(
                 f"Loaded routing config from {self.config_path} "
                 f"({len(self.routing_map)} symbols)"
             )
-            
+
         except json.JSONDecodeError as e:
             self.logger.error(f"Invalid JSON in config file: {e}")
             self.routing_map = {}
@@ -381,7 +410,35 @@ class StrategyRoutingManager:
         except Exception as e:
             self.logger.error(f"Failed to load routing config: {e}")
             raise
-    
+
+    def _load_params_config(self) -> None:
+        """Load strategy parameters configuration from JSON file."""
+        params_path = self.config_path.parent / "strategy_params.json"
+
+        if not params_path.exists():
+            self.logger.info(
+                f"No strategy params config found at {params_path}, "
+                "strategies will use default parameters"
+            )
+            self.params_map = {}
+            return
+
+        try:
+            with open(params_path, 'r') as f:
+                self.params_map = json.load(f)
+
+            self.logger.info(
+                f"Loaded strategy params from {params_path} "
+                f"({len(self.params_map)} symbols)"
+            )
+
+        except json.JSONDecodeError as e:
+            self.logger.error(f"Invalid JSON in params file: {e}")
+            self.params_map = {}
+        except Exception as e:
+            self.logger.error(f"Failed to load params config: {e}")
+            self.params_map = {}
+
     def _create_default_config(self) -> None:
         """Create default routing configuration."""
         default_config = {
@@ -405,18 +462,19 @@ class StrategyRoutingManager:
     def refresh(self) -> None:
         """
         Reload configuration from disk.
-        
+
         Useful for hot-reloading changes without restarting.
         Clears strategy cache to pick up new mappings.
         """
         self.logger.info("Refreshing routing configuration...")
-        
+
         # Clear cache
         self._strategy_cache.clear()
-        
-        # Reload config
+
+        # Reload configs
         self._load_config()
-        
+        self._load_params_config()
+
         self.logger.info("Routing configuration refreshed")
     
     def save(self) -> None:
@@ -582,32 +640,39 @@ class StrategyRoutingManager:
 
         return result
     
-    def _instantiate_strategy(self, strategy_name: str) -> BaseStrategy:
+    def _instantiate_strategy(
+        self,
+        strategy_name: str,
+        symbol: Optional[str] = None,
+        regime: Optional[str] = None
+    ) -> BaseStrategy:
         """
-        Instantiate strategy from name.
-        
+        Instantiate strategy from name with optimized parameters.
+
         Args:
             strategy_name: Strategy name from config
-            
+            symbol: Trading symbol (for parameter lookup)
+            regime: Market regime (for parameter lookup)
+
         Returns:
             Strategy instance
         """
         # Get strategy registry
         registry = self._get_strategy_registry()
-        
+
         # Normalize name
         key = strategy_name.lower().strip()
-        
+
         # Look up strategy class
         strategy_class = registry.get(key)
-        
+
         if strategy_class is None:
             self.logger.warning(
                 f"Strategy '{strategy_name}' not found in registry, "
                 f"trying 'default'"
             )
             strategy_class = registry.get("default")
-        
+
         # Instantiate strategy
         if strategy_class is None:
             self.logger.error(
@@ -615,17 +680,35 @@ class StrategyRoutingManager:
                 f"and no 'default' registered; using no-op"
             )
             return self._create_noop_strategy()
-        
+
+        # Look up optimized parameters
+        params = {}
+        if symbol and regime and symbol in self.params_map:
+            regime_params = self.params_map[symbol].get(regime, {})
+            if regime_params and 'params' in regime_params:
+                params = regime_params['params']
+                self.logger.debug(
+                    f"Using optimized params for {symbol}/{regime}: {params}"
+                )
+
         try:
-            instance = strategy_class()
-            self.logger.debug(f"Instantiated strategy: {strategy_name}")
+            # Instantiate with parameters
+            instance = strategy_class(**params)
+            self.logger.debug(f"Instantiated strategy: {strategy_name} with params: {params}")
             return instance
-            
+
         except Exception as e:
             self.logger.error(
-                f"Failed to instantiate strategy '{strategy_name}': {e}"
+                f"Failed to instantiate strategy '{strategy_name}' with params {params}: {e}"
             )
-            return self._create_noop_strategy()
+            # Try without parameters as fallback
+            try:
+                instance = strategy_class()
+                self.logger.warning(f"Instantiated {strategy_name} without parameters as fallback")
+                return instance
+            except Exception as e2:
+                self.logger.error(f"Complete failure to instantiate {strategy_name}: {e2}")
+                return self._create_noop_strategy()
     
     def _get_strategy_registry(self) -> Dict[str, Any]:
         """

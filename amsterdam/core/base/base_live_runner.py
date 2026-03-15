@@ -288,7 +288,17 @@ class BaseLiveRunner(ABC):
 
         # Sizer from config
         self.sizer = create_position_sizer(self.config)
-        self.router = StrategyRoutingManager(str(ROOT / "config" / "strategy_routing.json"))
+
+        # Strategy router with optional Sharpe filter
+        min_sharpe = None
+        if self.config.get("strategy_quality_filter", {}).get("enabled", False):
+            min_sharpe = self.config.get("strategy_quality_filter", {}).get("min_sharpe", 0.5)
+            self.logger.info(f"Strategy quality filter enabled: min_sharpe={min_sharpe}")
+
+        self.router = StrategyRoutingManager(
+            str(ROOT / "config" / "strategy_routing.json"),
+            min_sharpe=min_sharpe
+        )
         self.executor = LiveExecutor(broker=self.broker)
         # Create PositionManager with config values (min_bars_to_hold, swing_mode, etc.)
         self.position_manager = create_position_manager(self.config)
