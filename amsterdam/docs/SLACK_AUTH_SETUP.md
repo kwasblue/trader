@@ -72,21 +72,14 @@ SLACK_CHANNEL_ID=C01234567890
 
 Save and exit (Ctrl+X, Y, Enter)
 
-### Step 7: Set Up Cron Job
-
-Add cron job to check Slack every minute:
+### Step 7: Pull Latest Code
 
 ```bash
-crontab -e
+ssh raspi
+cd ~/trader/amsterdam
+git pull
+sudo systemctl restart schwab-token-keeper.service
 ```
-
-Add this line:
-```bash
-# Check Slack for Schwab auth URLs every minute
-* * * * * cd /home/kwasi/trader/amsterdam && /home/kwasi/trader/amsterdam/venv/bin/python monitoring/scripts/slack_auth_handler.py >> logs/slack_auth.log 2>&1
-```
-
-Save and exit.
 
 ### Step 8: Test It
 
@@ -102,6 +95,33 @@ You should see:
 Found 0 messages since last check
 No auth URLs found
 ```
+
+---
+
+## How It Works
+
+**Smart On-Demand Monitoring:**
+
+1. **Most of the time**: No Slack monitoring (efficient!)
+
+2. **When token expires**:
+   - token_keeper detects expiration
+   - Sends Slack alert with auth link
+   - **Automatically starts slack_auth_handler in background**
+   - Handler checks Slack every 10 seconds
+
+3. **When you paste the URL**:
+   - Handler detects it immediately (within 10 seconds)
+   - Processes auth code
+   - Refreshes tokens
+   - Sends confirmation
+   - **Exits automatically**
+
+4. **If timeout** (2 hours):
+   - Handler exits
+   - You'll get another alert next time token_keeper checks
+
+**Result**: No constant polling, only monitors when needed!
 
 ---
 
