@@ -1,0 +1,19 @@
+[Unit]
+Description=Schwab Token Keeper - Auto-refresh access tokens
+After=network.target
+
+[Service]
+Type=simple
+User=kwasi
+WorkingDirectory=/home/kwasi/trader/amsterdam
+ExecStart=/home/kwasi/trader/amsterdam/venv/bin/python /home/kwasi/trader/amsterdam/data/streaming/token_keeper.py
+Restart=always
+RestartSec=60
+StandardOutput=append:/home/kwasi/trader/logs/token_keeper.log
+StandardError=append:/home/kwasi/trader/logs/token_keeper.log
+
+# Environment
+Environment="PATH=/home/kwasi/trader/amsterdam/venv/bin:/usr/local/bin:/usr/bin:/bin"
+
+[Install]
+WantedBy=multi-user.target
