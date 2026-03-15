@@ -935,9 +935,9 @@ Background:
     )
     parser.add_argument(
         '--broker', '-b',
-        choices=['alpaca', 'schwab'],
+        choices=['alpaca', 'schwab', 'hybrid', 'alpaca-schwab'],
         default='alpaca',
-        help='Broker to use (default: alpaca)'
+        help='Broker to use (default: alpaca, hybrid: Alpaca execution + Schwab data)'
     )
     parser.add_argument(
         '--dry-run',
