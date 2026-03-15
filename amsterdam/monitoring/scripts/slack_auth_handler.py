@@ -6,13 +6,14 @@ Monitors Slack channel for auth redirect URLs and automatically
 processes them to refresh Schwab tokens.
 
 Usage:
-    Run as a service or via cron every minute
+    Started automatically by token_keeper when refresh token expires.
+    Monitors Slack every 10 seconds until auth URL is received (or timeout).
 
 User flow:
-    1. User gets Slack alert: "Token expired - click to auth"
+    1. Token expires → token_keeper sends Slack alert + starts this script
     2. User clicks link, logs into Schwab
     3. User copies redirect URL and pastes in Slack
-    4. This script detects it and processes automatically
+    4. This script detects it, processes, and exits
     5. Sends confirmation back to Slack
 """
 
@@ -189,13 +190,10 @@ async def process_auth_url(url):
 
 
 async def main():
-    """Main handler loop"""
+    """Main handler loop - monitors until auth URL found or timeout"""
     print("=" * 70)
     print(f"Slack Auth Handler - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 70)
-
-    # Load state
-    state = load_state()
 
     # Get Slack credentials
     token = get_slack_token()
@@ -210,73 +208,84 @@ async def main():
         return 1
 
     print(f"✓ Slack configured (channel: {channel})")
+    print("\n👀 Monitoring Slack for auth redirect URL...")
+    print("⏱️  Will check every 10 seconds for up to 2 hours")
+    print("💡 Paste the redirect URL in Slack after authenticating\n")
 
-    # Get timestamp for "since last check"
-    # If first run, check last 10 minutes
-    since_ts = state.get('last_checked_ts', time.time() - 600)
+    # Monitor for up to 2 hours
+    timeout = time.time() + (2 * 60 * 60)  # 2 hours
+    check_interval = 10  # Check every 10 seconds
 
-    # Fetch recent messages
-    messages = get_recent_messages(token, channel, since_ts)
-    print(f"Found {len(messages)} messages since last check")
+    # Load state
+    state = load_state()
+    since_ts = time.time() - 30  # Start checking from 30 seconds ago
 
     # Look for Schwab redirect URLs
     auth_pattern = re.compile(r'https?://[^\s]*(?:127\.0\.0\.1|localhost)[^\s]*code=[^\s]+')
 
-    processed_count = 0
-    for msg in reversed(messages):  # Process oldest first
-        text = msg.get('text', '')
-        ts = msg.get('ts', '')
+    while time.time() < timeout:
+        # Fetch recent messages
+        messages = get_recent_messages(token, channel, since_ts)
 
-        # Skip if already processed
-        if ts in state.get('processed_urls', []):
-            continue
+        # Check each message
+        for msg in reversed(messages):  # Process oldest first
+            text = msg.get('text', '')
+            ts = msg.get('ts', '')
 
-        # Look for auth redirect URL
-        match = auth_pattern.search(text)
-        if match:
-            url = match.group(0)
-            print(f"\n🔐 Found auth URL in message {ts}")
+            # Skip if already processed
+            if ts in state.get('processed_urls', []):
+                continue
 
-            # Process the URL
-            success, message = await process_auth_url(url)
+            # Look for auth redirect URL
+            match = auth_pattern.search(text)
+            if match:
+                url = match.group(0)
+                print(f"\n🔐 Found auth URL!")
 
-            # Mark as processed
-            if 'processed_urls' not in state:
-                state['processed_urls'] = []
-            state['processed_urls'].append(ts)
+                # Process the URL
+                success, message = await process_auth_url(url)
 
-            # Keep only last 100 processed URLs
-            state['processed_urls'] = state['processed_urls'][-100:]
+                # Mark as processed
+                if 'processed_urls' not in state:
+                    state['processed_urls'] = []
+                state['processed_urls'].append(ts)
+                state['processed_urls'] = state['processed_urls'][-100:]
+                save_state(state)
 
-            # Send result back to Slack
-            if success:
-                response_msg = (
-                    "✅ *Schwab Authentication Successful!*\n\n"
-                    f"{message}\n\n"
-                    "Your trading system is now authenticated and ready to trade."
-                )
-            else:
-                response_msg = (
-                    "❌ *Schwab Authentication Failed*\n\n"
-                    f"{message}\n\n"
-                    "Please try again or run manually:\n"
-                    "`ssh raspi 'cd ~/trader/amsterdam && source venv/bin/activate && python refresh_schwab_token.py --force'`"
-                )
+                # Send result back to Slack
+                if success:
+                    response_msg = (
+                        "✅ *Schwab Authentication Successful!*\n\n"
+                        f"{message}\n\n"
+                        "Your trading system is now authenticated and ready to trade."
+                    )
+                    send_slack_message(token, channel, response_msg)
+                    print("\n✅ Authentication successful! Exiting.")
+                    return 0  # Success - exit
+                else:
+                    response_msg = (
+                        "❌ *Schwab Authentication Failed*\n\n"
+                        f"{message}\n\n"
+                        "Please try getting a new auth URL and paste it again."
+                    )
+                    send_slack_message(token, channel, response_msg)
+                    print(f"\n❌ Authentication failed: {message}")
+                    # Continue monitoring in case user tries again
 
-            send_slack_message(token, channel, response_msg)
-            processed_count += 1
+        # Update since timestamp for next check
+        if messages:
+            since_ts = max(float(msg.get('ts', since_ts)) for msg in messages)
 
-    # Update last checked timestamp
-    state['last_checked_ts'] = time.time()
-    save_state(state)
+        # Wait before next check
+        elapsed = int(time.time() - (timeout - 2 * 60 * 60))
+        remaining = int(timeout - time.time())
+        print(f"[{elapsed}s elapsed, {remaining}s remaining] Waiting...", end='\r')
+        await asyncio.sleep(check_interval)
 
-    if processed_count > 0:
-        print(f"\n✓ Processed {processed_count} auth URL(s)")
-    else:
-        print("No auth URLs found")
-
-    print("=" * 70)
-    return 0
+    # Timeout reached
+    print("\n\n⏱️  Timeout reached (2 hours). Exiting.")
+    print("If you still need to authenticate, the system will alert again later.")
+    return 1
 
 
 if __name__ == '__main__':

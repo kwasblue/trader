@@ -169,6 +169,27 @@ async def token_keeper(interval: int = 60):
                         _alert_state['refresh_expired_sent'] = True
                         _alert_state['last_alert_day'] = today
 
+                        # Start Slack auth handler in background to monitor for response
+                        try:
+                            import subprocess
+                            handler_script = project_root / "monitoring" / "scripts" / "slack_auth_handler.py"
+                            venv_python = project_root / "venv" / "bin" / "python"
+
+                            if handler_script.exists() and venv_python.exists():
+                                # Start in background, output to log
+                                log_file = project_root / "logs" / "slack_auth.log"
+                                with open(log_file, 'a') as f:
+                                    subprocess.Popen(
+                                        [str(venv_python), str(handler_script)],
+                                        stdout=f,
+                                        stderr=f,
+                                        start_new_session=True  # Detach from parent
+                                    )
+                                logger.info("Started Slack auth handler to monitor for response")
+                                print(f"[{datetime.now().strftime('%H:%M:%S')}] Started Slack auth monitor")
+                        except Exception as e:
+                            logger.warning(f"Could not start Slack auth handler: {e}")
+
             elif auth._is_refresh_token_expired(token_data, refresh_interval_days=5):
                 # Warn 2 days before expiration (6-day default minus 5-day check)
                 logger.warning("Refresh token expiring soon. Consider manual refresh.")
