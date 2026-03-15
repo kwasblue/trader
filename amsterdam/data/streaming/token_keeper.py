@@ -139,13 +139,15 @@ async def token_keeper(interval: int = 60):
 
                 # Send Slack alert (once per day)
                 if webhook_url and (_alert_state['last_alert_day'] != today or not _alert_state['refresh_expired_sent']):
+                    # Generate proper OAuth URL
                     auth_url = "https://developer.schwab.com"  # Fallback URL
                     try:
-                        auth_url = (
-                            f"https://api.schwabapi.com/v1/oauth/authorize"
-                            f"?client_id={auth.apikey}"
-                            f"&redirect_uri={auth.redirect_url}"
-                        )
+                        from urllib.parse import urlencode
+                        params = {
+                            'client_id': auth.apikey,
+                            'redirect_uri': auth.redirect_url
+                        }
+                        auth_url = f"https://api.schwabapi.com/v1/oauth/authorize?{urlencode(params)}"
                     except:
                         pass
 
