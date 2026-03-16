@@ -257,11 +257,16 @@ class TestMultiTimeframeFetching(unittest.TestCase):
         """Clean up."""
         shutil.rmtree(self.test_dir)
 
+    def test_update_symbols_multiple_timeframes(self):
+        """Test updating symbols with multiple timeframes."""
+        # This is a sync wrapper for the async test
+        import asyncio
+        asyncio.run(self._async_test_update_symbols_multiple_timeframes())
+
     @patch('core.unified_data_pipeline.UnifiedDataPipeline._fetch_alpaca')
     @patch('core.unified_data_pipeline.UnifiedDataPipeline._select_best_source')
     @patch('core.unified_data_pipeline.UnifiedDataPipeline.check_and_warn_credentials')
-    @pytest.mark.asyncio
-    async def test_update_symbols_multiple_timeframes(
+    async def _async_test_update_symbols_multiple_timeframes(
         self,
         mock_check_creds,
         mock_select_source,
