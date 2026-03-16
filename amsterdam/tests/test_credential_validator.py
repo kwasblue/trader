@@ -267,7 +267,8 @@ class TestCredentialValidator:
                 message="OK", can_fetch_data=True
             )
         }
-        assert validator.get_best_data_source(results) == 'alpaca'
+        # get_best_data_source prefers Schwab over Alpaca (20 years vs 9 months of data)
+        assert validator.get_best_data_source(results) == 'schwab'
 
     def test_get_best_data_source_falls_back_to_schwab(self, validator):
         """Test fallback to Schwab when Alpaca unavailable."""
