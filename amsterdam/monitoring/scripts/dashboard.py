@@ -46,16 +46,18 @@ def get_current_state():
         with open(LOG_FILE, 'r') as f:
             lines = f.readlines()
             for line in reversed(lines[-50:]):
-                if "State change:" in line or "waiting_for_market" in line:
-                    if "waiting_for_market" in line:
-                        return "Waiting for Market"
-                    elif "TRADING" in line or "trading" in line:
+                # Check for waiting state
+                if "Waiting" in line and "until pre-market" in line:
+                    return "Waiting for Market"
+                # Check for state changes
+                elif "State change:" in line or "state:" in line.lower():
+                    if "TRADING" in line or "trading" in line:
                         return "Trading"
-                    elif "PRE_FLIGHT" in line:
+                    elif "PRE_FLIGHT" in line or "pre-flight" in line.lower():
                         return "Pre-flight Checks"
-                    elif "POST_MARKET" in line:
+                    elif "POST_MARKET" in line or "post-market" in line.lower():
                         return "Post-Market"
-                    elif "UPDATING_DATA" in line:
+                    elif "UPDATING_DATA" in line or "updating" in line.lower():
                         return "Updating Data"
     except Exception:
         pass
