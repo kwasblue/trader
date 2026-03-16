@@ -10,6 +10,7 @@ Tests:
 - Timeframe validation
 """
 
+import pytest
 import unittest
 import tempfile
 import shutil
@@ -259,6 +260,7 @@ class TestMultiTimeframeFetching(unittest.TestCase):
     @patch('core.unified_data_pipeline.UnifiedDataPipeline._fetch_alpaca')
     @patch('core.unified_data_pipeline.UnifiedDataPipeline._select_best_source')
     @patch('core.unified_data_pipeline.UnifiedDataPipeline.check_and_warn_credentials')
+    @pytest.mark.asyncio
     async def test_update_symbols_multiple_timeframes(
         self,
         mock_check_creds,

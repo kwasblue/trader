@@ -53,7 +53,6 @@ def test_existing_config_backward_compatibility():
             print(f"  ✓ {symbol:6s} / {regime:15s} → {routing['strategy']:15s} @ {routing['timeframe']}")
 
     print("  ✅ Backward compatibility: OK")
-    return True
 
 
 def test_routing_to_aggregator_integration():
@@ -83,7 +82,6 @@ def test_routing_to_aggregator_integration():
         assert tf == '30min', f"Expected 30min for {symbol}, got {tf}"
 
     print("  ✅ Routing → Aggregator: OK")
-    return True
 
 
 def test_end_to_end_bar_flow():
@@ -144,7 +142,6 @@ def test_end_to_end_bar_flow():
     assert bar.volume == 300000, f"Expected 300000 volume (30 bars * 10000), got {bar.volume}"
 
     print(f"\n  ✅ End-to-End Flow: OK ({len(received_bars)} bars emitted)")
-    return True
 
 
 def test_regime_change_timeframe_switch():
@@ -220,7 +217,6 @@ def test_regime_change_timeframe_switch():
         # Cleanup
         os.unlink(test_config_path)
 
-    return True
 
 
 def test_multiple_symbols_different_timeframes():
@@ -315,7 +311,6 @@ def test_multiple_symbols_different_timeframes():
     finally:
         os.unlink(test_config_path)
 
-    return True
 
 
 def run_all_tests():
