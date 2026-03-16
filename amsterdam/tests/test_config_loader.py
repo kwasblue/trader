@@ -105,7 +105,7 @@ class TestDataclasses:
         assert config.tp_mult_normal == 2.0
         assert config.sl_mult_normal == 1.5
         assert config.trailing_stop is True
-        assert config.min_bars_to_hold == 3
+        assert config.min_bars_to_hold == 5
 
     def test_indicators_config_defaults(self):
         """Test IndicatorsConfig default values."""

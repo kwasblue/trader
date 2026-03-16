@@ -142,11 +142,13 @@ class TestAutoTrader:
 
     @pytest.fixture
     def autotrader(self):
-        with patch('autotrader.get_config') as mock_config:
+        with patch('autoamsterdam.get_config') as mock_config:
             mock_config.return_value = MagicMock(
                 autotrader=MagicMock(
                     pre_market_buffer_minutes=15,
-                    post_market_delay_minutes=5
+                    post_market_delay_minutes=5,
+                    preflight_max_retries=3,
+                    preflight_retry_delay=1
                 )
             )
             trader = AutoTrader(
@@ -192,18 +194,26 @@ class TestAutoTrader:
     @pytest.mark.asyncio
     async def test_run_preflight_success(self, autotrader):
         """Test successful preflight check."""
-        with patch('preflight.PreFlightChecker') as MockChecker:
-            mock_checker = MagicMock()
-            mock_checker.run_all_checks = AsyncMock(return_value=True)
-            MockChecker.return_value = mock_checker
+        # Set running flag so network check loop runs
+        autotrader.running = True
 
+        # Mock the PreFlightChecker import
+        mock_checker = MagicMock()
+        mock_checker.run_all_checks = AsyncMock(return_value=True)
+
+        with patch.dict('sys.modules', {'preflight': MagicMock(PreFlightChecker=MagicMock(return_value=mock_checker))}), \
+             patch.object(autotrader, '_check_network_connectivity_sync', return_value=True):
             result = await autotrader._run_preflight()
             assert result is True
 
     @pytest.mark.asyncio
     async def test_run_preflight_failure(self, autotrader):
         """Test failed preflight check."""
-        with patch('preflight.PreFlightChecker') as MockChecker:
+        # Set running flag so network check loop runs
+        autotrader.running = True
+
+        with patch('preflight.PreFlightChecker') as MockChecker, \
+             patch.object(autotrader, '_check_network_connectivity_sync', return_value=True):
             mock_checker = MagicMock()
             mock_checker.run_all_checks = AsyncMock(return_value=False)
             MockChecker.return_value = mock_checker
@@ -234,7 +244,7 @@ class TestAutoTraderIntegration:
     @pytest.mark.asyncio
     async def test_dry_run_session(self):
         """Test a complete dry run session."""
-        with patch('autotrader.get_config') as mock_config:
+        with patch('autoamsterdam.get_config') as mock_config:
             mock_config.return_value = MagicMock(
                 autotrader=MagicMock(
                     pre_market_buffer_minutes=0,
