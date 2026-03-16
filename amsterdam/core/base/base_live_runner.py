@@ -291,8 +291,9 @@ class BaseLiveRunner(ABC):
 
         # Strategy router with optional Sharpe filter
         min_sharpe = None
-        if self.config.get("strategy_quality_filter", {}).get("enabled", False):
-            min_sharpe = self.config.get("strategy_quality_filter", {}).get("min_sharpe", 0.5)
+        strategy_filter = getattr(self.config, '_raw', {}).get("strategy_quality_filter", {})
+        if strategy_filter.get("enabled", False):
+            min_sharpe = strategy_filter.get("min_sharpe", 0.5)
             self.logger.info(f"Strategy quality filter enabled: min_sharpe={min_sharpe}")
 
         self.router = StrategyRoutingManager(
