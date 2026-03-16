@@ -205,7 +205,8 @@ class TestContinuousPositionSizer(unittest.TestCase):
 
         # Test continuous
         self.sizer.config['use_continuous_formula'] = True
-        mult_continuous, _ = self.sizer.calculate_continuous_multiplier(metrics)
+        trade_count = 50  # Provide a reasonable trade count for testing
+        mult_continuous, _, _ = self.sizer.calculate_continuous_multiplier(metrics, trade_count)
 
         # Both should be in valid range
         self.assertGreaterEqual(mult_discrete, 0)
@@ -223,24 +224,27 @@ class TestContinuousPositionSizer(unittest.TestCase):
             symbol='TEST',
             strategy='rsi',
             base_size=10000,
+            raw_score=0.03,  # Below default skip_trade_threshold of 0.05
             multiplier=0.05,  # Very low
             final_size=500,
             metrics=RiskMetrics(0, 0, 0, 0, 0),
-            rationale="Test"
+            rationale="Low multiplier test"
         )
 
-        # Should skip
-        self.assertTrue(self.sizer.should_skip_trade(low_multiplier_result))
+        # Should skip (raw_score 0.03 is below default threshold of 0.05)
+        should_skip = self.sizer.should_skip_trade(low_multiplier_result)
+        self.assertTrue(should_skip, f"Expected to skip trade with raw_score={low_multiplier_result.raw_score}")
 
         # Create result with good multiplier
         good_multiplier_result = PositionSizeResult(
             symbol='TEST',
             strategy='rsi',
             base_size=10000,
+            raw_score=0.75,
             multiplier=0.75,
             final_size=7500,
             metrics=RiskMetrics(0, 0, 0, 0, 0),
-            rationale="Test"
+            rationale="Good multiplier test"
         )
 
         # Should not skip
