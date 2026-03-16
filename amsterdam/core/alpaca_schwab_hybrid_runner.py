@@ -47,7 +47,7 @@ class AlpacaSchwabHybridRunner(BaseLiveRunner):
     - Get Schwab's superior data quality
     """
 
-    BROKER_NAME = "Alpaca/Schwab"
+    BROKER_NAME = "AlpacaSchwab"
     LOG_FILE_KEY = "AlpacaSchwabHybrid"
     TRADE_LOG_FILE = "alpaca_schwab_hybrid_trades.csv"
 

@@ -1257,11 +1257,24 @@ class UnifiedDataPipeline:
             with self.datastore as store:
                 # Use upsert to avoid duplicates (key on symbol + Date + timeframe)
                 if 'Date' in df_copy.columns:
-                    store.upsert_data(
-                        self.table_name,
-                        df_copy,
-                        key_columns=['symbol', 'Date', 'timeframe']
-                    )
+                    # Try to use timeframe in key, but fall back to symbol+Date only if table doesn't support it
+                    try:
+                        store.upsert_data(
+                            self.table_name,
+                            df_copy,
+                            key_columns=['symbol', 'Date', 'timeframe']
+                        )
+                    except Exception as e:
+                        # If timeframe column doesn't exist in table, fall back to symbol+Date
+                        if 'timeframe' in str(e).lower():
+                            self.logger.warning(f"[{symbol}/{timeframe}] Table missing timeframe column, using symbol+Date key only")
+                            store.upsert_data(
+                                self.table_name,
+                                df_copy,
+                                key_columns=['symbol', 'Date']
+                            )
+                        else:
+                            raise
                 else:
                     # Fallback to regular insert
                     store.fill_database(self.table_name, df_copy)
