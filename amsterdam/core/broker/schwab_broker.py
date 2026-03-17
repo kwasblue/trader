@@ -519,6 +519,9 @@ class SchwabBroker(BaseBrokerInterface):
     # ---------------------------------------------------------------------
     def get_default_account(self) -> str:
         data = self.client.account_number()
+        # Handle both list and dict responses from Schwab API
+        if isinstance(data, list):
+            return data[0].get("accountNumber") if data else None
         return data.get("accountNumbers", [{}])[0].get("accountNumber")
 
     def get_quote(self, symbol: str, fallback_to_cache: bool = True) -> float:
