@@ -285,6 +285,15 @@ class AlpacaSchwabHybridRunner(BaseLiveRunner):
             self.logger.error(f"Reconnection failed: {e}")
             return False
 
+    async def _emit_health_status(self, status: str, details: Dict = None) -> None:
+        """Emit health status event."""
+        await self.event_handler.emit(EVENT_HEALTH_UPDATE, {
+            "broker": "hybrid",
+            "status": status,
+            "timestamp": self.scheduler.now_et().isoformat(),
+            **(details or {})
+        })
+
     async def _cleanup(self, stream_task: asyncio.Task) -> None:
         """Cleanup with health status emission."""
         await super()._cleanup(stream_task)
