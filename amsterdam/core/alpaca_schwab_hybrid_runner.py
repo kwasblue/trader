@@ -287,10 +287,12 @@ class AlpacaSchwabHybridRunner(BaseLiveRunner):
 
     async def _emit_health_status(self, status: str, details: Dict = None) -> None:
         """Emit health status event."""
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
         await self.event_handler.emit(EVENT_HEALTH_UPDATE, {
             "broker": "hybrid",
             "status": status,
-            "timestamp": self.scheduler.now_et().isoformat(),
+            "timestamp": datetime.now(ZoneInfo("America/New_York")).isoformat(),
             **(details or {})
         })
 
