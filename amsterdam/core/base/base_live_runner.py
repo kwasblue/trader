@@ -852,7 +852,7 @@ class BaseLiveRunner(ABC):
             if signal != 0:
                 self.logger.info(
                     f"[{symbol}] Entry blocked: past {cutoff_hour_et}:00 ET cutoff "
-                    f"(current ET hour: {et_hour})"
+                    f"(current ET hour: {ts_et.hour})"
                 )
                 adjusted_signal = 0
 
