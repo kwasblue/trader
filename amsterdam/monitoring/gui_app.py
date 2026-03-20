@@ -3,26 +3,22 @@
 GUI Trading Application
 =======================
 
-SECONDARY WRAPPER: This is a GUI-specific wrapper around the canonical path.
-For the canonical runtime path, see: app/bootstrap.py -> app/container.py
+GUI MODULE: This provides the Qt GUI for monitoring trading.
+Uses the canonical path for all application bootstrapping.
 
-This file is NOT the main application shell. It provides:
+This module provides:
 - Qt GUI with qasync event loop integration
 - Simulation mode (GBM price simulator) for testing
 - Visual monitoring of live trading
 
-The primary runtime path is:
-    cli/main.py -> app/bootstrap.py -> app/container.py -> RunnerFactory
-
-This GUI wrapper:
-    run_trading.py -> bootstrap_app() -> TradingApplication (GUI-specific)
+Canonical path:
+    cli/main.py -> monitoring/gui_app.py -> bootstrap_app() -> TradingApplication
 
 Usage:
-    python run_trading.py                     # Default: Simulation mode
-    python run_trading.py --mode simulation   # Explicit simulation
-    python run_trading.py --mode alpaca       # Alpaca paper trading
-    python run_trading.py --mode schwab       # Schwab live trading
-    python run_trading.py --symbols AAPL,MSFT,GOOGL
+    amsterdam gui                             # Default: Simulation mode
+    amsterdam gui --mode alpaca               # Alpaca paper trading
+    amsterdam gui --mode schwab               # Schwab live trading
+    amsterdam gui -s AAPL,MSFT,GOOGL          # Custom symbols
 """
 import sys
 import asyncio
@@ -33,8 +29,8 @@ from pathlib import Path
 from typing import Optional, List
 from enum import Enum
 
-# Project root setup
-ROOT = Path(__file__).resolve().parent
+# Project root setup (gui_app.py is in monitoring/, so parent.parent is project root)
+ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 

@@ -132,10 +132,14 @@ See [docs/index.md](docs/index.md) for the complete documentation index.
 
 ```
 amsterdam/
-├── autotrader.py           # Autonomous trading daemon
-├── autotrader_ctl.py       # Daemon control script
-├── preflight.py            # Pre-flight validation
-├── run_trading.py          # GUI trading entry point
+├── cli/main.py             # Primary entry point (all user commands)
+├── app/
+│   ├── bootstrap.py        # Canonical initialization
+│   ├── container.py        # Dependency injection
+│   └── daemon.py           # Autonomous trading daemon
+├── monitoring/
+│   ├── gui_app.py          # GUI trading application
+│   └── views/              # GUI views/widgets
 ├── core/                   # Core trading engine
 │   ├── alpaca_runner.py    # Alpaca live trading
 │   ├── schwab_runner.py    # Schwab live trading
@@ -143,7 +147,6 @@ amsterdam/
 │   ├── logic/              # Trade logic
 │   └── broker/             # Broker adapters
 ├── strategies/             # Trading strategies
-├── monitoring/             # Real-time GUI
 ├── data/                   # Data management
 ├── config/                 # Configuration files
 ├── docs/                   # Documentation

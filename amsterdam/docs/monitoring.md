@@ -19,23 +19,14 @@ The monitoring GUI is built with PySide6 (Qt) and provides:
 
 ```bash
 # Using CLI (recommended)
-trader gui
+amsterdam gui
 
 # With specific mode and symbols
-trader gui --mode simulation
-trader gui --mode alpaca -s AAPL,MSFT
+amsterdam gui --mode simulation
+amsterdam gui --mode alpaca -s AAPL,MSFT
 
-# Or directly
-python run_trading.py
-```
-
-Or programmatically:
-
-```python
-from monitoring.app import run_app
-
-if __name__ == '__main__':
-    run_app()
+# Or directly (for debugging)
+python monitoring/gui_app.py
 ```
 
 ---

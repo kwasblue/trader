@@ -1,26 +1,8 @@
 ================================================================================
 📂 PROJECT STRUCTURE
-Generated: 2026-03-20 16:38:49
-Total Files: 251
+Generated: 2026-03-20 19:30:17
+Total Files: 250
 ================================================================================
-
-📄 amsterdam_ctl.py
-   ⚙️  def get_pid()
-   ⚙️  def is_running()
-   ⚙️  def start(self, args)
-   ⚙️  def stop(self, args)
-   ⚙️  def restart(self, args)
-   ⚙️  def status(self, args)
-   ⚙️  def logs(self, args)
-   ⚙️  def list_symbols(self, args)
-   ⚙️  def add_symbol(self, args)
-   ⚙️  def move_symbol(self, args)
-   ⚙️  def remove_symbol(self, args)
-   ⚙️  def export_lists(self, args)
-   ⚙️  def import_lists(self, args)
-   ⚙️  def _show_positions()
-   ⚙️  def _show_lists_summary()
-   ⚙️  def main()
 
 📄 app/bootstrap.py
    🧱 class AppContext
@@ -34,7 +16,7 @@ Total Files: 251
       ├── def get_event_handler(self)
       └── def cleanup(self)
 
-📄 autoamsterdam.py
+📄 app/daemon.py
    🧱 class InstanceLock
       ├── def __init__(self, name)
       ├── def acquire(self)
@@ -79,10 +61,15 @@ Total Files: 251
       └── def clear_all(self)
 
 📄 cli/main.py
+   ⚙️  def _get_pid()
+   ⚙️  def _is_running()
+   ⚙️  def _show_positions()
+   ⚙️  def _show_lists_summary()
    ⚙️  def cli()
-   ⚙️  def start(self, symbols, broker, dry_run, daemon)
+   ⚙️  def start(self, symbols, broker, dry_run, daemon, foreground)
    ⚙️  def stop()
-   ⚙️  def status()
+   ⚙️  def status(self, positions, lists, show_all)
+   ⚙️  def restart(self, ctx, symbols, broker, dry_run)
    ⚙️  def gui(self, mode, symbols, speed, steps)
    ⚙️  def preflight(self, verbose, update_data, reauth_schwab)
    ⚙️  def token()
@@ -94,8 +81,11 @@ Total Files: 251
    ⚙️  def stats(self, summary, by_day, by_symbol, by_hour, by_strategy, worst)
    ⚙️  def symbols()
    ⚙️  def symbols_list(self, trade, watch)
-   ⚙️  def symbols_add(self, symbol, trade, watch)
+   ⚙️  def symbols_add(self, symbol, trade, watch, notes)
    ⚙️  def symbols_remove(self, symbol)
+   ⚙️  def symbols_move(self, symbol, to_trade, to_watch)
+   ⚙️  def symbols_export(self, file)
+   ⚙️  def symbols_import(self, file)
    ⚙️  def data()
    ⚙️  def data_update(self, symbols, days, source, timeframes)
    ⚙️  def data_status(self, symbols)
@@ -1952,6 +1942,18 @@ Total Files: 251
       ├── def _emit_snapshot(self)
       └── def _prune_inactive_symbols(self)
 
+📄 monitoring/gui_app.py
+   🧱 class TradingMode
+      (no methods)
+   ⚙️  def parse_args()
+   🧱 class TradingBackend
+      └── def __init__(self, mode, symbols)
+   🧱 class TradingApplication
+      ├── def __init__(self, mode, symbols)
+      ├── def run(self)
+      └── def _on_quit(self)
+   ⚙️  def main()
+
 📄 monitoring/models.py
    🧱 class SymbolsTableModel
       ├── def __init__(self, rows)
@@ -2144,18 +2146,6 @@ Total Files: 251
       └── def _print_summary(self)
 
 📄 refresh_schwab_token.py
-   ⚙️  def main()
-
-📄 run_trading.py
-   🧱 class TradingMode
-      (no methods)
-   ⚙️  def parse_args()
-   🧱 class TradingBackend
-      └── def __init__(self, mode, symbols)
-   🧱 class TradingApplication
-      ├── def __init__(self, mode, symbols)
-      ├── def run(self)
-      └── def _on_quit(self)
    ⚙️  def main()
 
 📄 strategies/patterns/pattern.py
@@ -4166,6 +4156,6 @@ Total Files: 251
 📊 STATISTICS
 ================================================================================
 Total Classes:    680
-Total Functions:  451
+Total Functions:  443
 Total Methods:    2367
 ================================================================================

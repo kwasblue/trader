@@ -8,27 +8,28 @@ All entry points should use bootstrap_app() to ensure consistent setup.
 CANONICAL PATH HIERARCHY
 ------------------------
 
-1. Entry Points (wrappers that delegate to canonical path):
-   - autoamsterdam.py  -> Daemon automation wrapper
-   - amsterdam_ctl.py  -> Process control wrapper
-   - cli/main.py       -> CLI dispatcher wrapper
-   - run_trading.py    -> GUI/trading launcher
+1. Primary Entry Point:
+   - cli/main.py         -> All user commands (start, stop, gui, etc.)
 
-2. Canonical Initialization (this module):
+2. Internal Modules (invoked by CLI):
+   - app/daemon.py        -> Daemon automation (invoked by 'amsterdam start')
+   - monitoring/gui_app.py -> GUI application (invoked by 'amsterdam gui')
+
+3. Canonical Initialization (this module):
    bootstrap_app(mode, symbols, broker, ...) -> AppContext
 
-3. Composition Root:
+4. Composition Root:
    AppContainer(ctx) -> Lazy-loads dependencies via factories
 
-4. Runtime Creation:
+5. Runtime Creation:
    container.get_runner() -> RunnerFactory.create() -> BaseLiveRunner
 
-5. Trading Loop:
+6. Trading Loop:
    runner.run() -> bar normalization -> regime detection -> strategy routing
                 -> trade approval -> sizing -> execution -> portfolio update
 
 The answer to "how does the app start?" is:
-    bootstrap_app() -> AppContext -> AppContainer -> RunnerFactory -> runner.run()
+    cli/main.py -> bootstrap_app() -> AppContext -> AppContainer -> runner.run()
 
 All entry points should follow this path. If you're adding a new entry point,
 import bootstrap_app() and use it as the first initialization step.
@@ -104,7 +105,7 @@ def bootstrap_app(
 
     # 2. Initialize unified logger
     log_files = {
-        'daemon': 'autoamsterdam.log',
+        'daemon': 'autotrader.log',
         'gui': 'app.log',
         'cli': 'cli.log'
     }

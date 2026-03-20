@@ -18,8 +18,8 @@ CANONICAL PATH HIERARCHY:
     Execution System - Trading loop
 
 Commands delegate to specialized scripts, but all use the same canonical path:
-    amsterdam start   -> autoamsterdam.py (daemon mode, uses bootstrap_app)
-    amsterdam gui     -> run_trading.py (GUI mode, uses bootstrap_app)
+    amsterdam start   -> app/daemon.py (daemon mode, uses bootstrap_app)
+    amsterdam gui     -> monitoring/gui_app.py (GUI mode, uses bootstrap_app)
     amsterdam preflight -> preflight.py
     amsterdam token   -> token management
 
@@ -36,7 +36,10 @@ Usage:
 
 import sys
 import os
+import signal
 from pathlib import Path
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 # Ensure project root is in path (required before imports)
 ROOT = Path(__file__).resolve().parents[1]
@@ -52,6 +55,90 @@ APP_ROOT = get_app_path()
 
 # Load environment (canonical location)
 load_dotenv(APP_ROOT / ".env")
+
+# Canonical file locations for daemon process
+PID_FILE = APP_ROOT / "logs" / "autotrader.pid"
+LOG_FILE = APP_ROOT / "logs" / "autotrader.log"
+STDOUT_LOG = APP_ROOT / "logs" / "autotrader_stdout.log"
+
+ET = ZoneInfo("America/New_York")
+
+
+# =============================================================================
+# PROCESS MANAGEMENT UTILITIES
+# =============================================================================
+
+def _get_pid() -> int | None:
+    """Get the PID of running autotrader."""
+    if not PID_FILE.exists():
+        return None
+
+    try:
+        pid = int(PID_FILE.read_text().strip())
+        # Check if process is actually running
+        os.kill(pid, 0)
+        return pid
+    except (ValueError, ProcessLookupError, PermissionError):
+        # PID file exists but process is not running
+        PID_FILE.unlink(missing_ok=True)
+        return None
+
+
+def _is_running() -> bool:
+    """Check if autotrader is running."""
+    return _get_pid() is not None
+
+
+def _show_positions():
+    """Show current positions from Alpaca."""
+    click.echo("\n  Positions & P/L:")
+
+    try:
+        api_key = os.getenv("ALPACA_API_KEY")
+        secret_key = os.getenv("ALPACA_SECRET_KEY")
+
+        if not api_key or not secret_key:
+            click.echo("    (Alpaca credentials not configured)")
+            return
+
+        from alpaca.trading.client import TradingClient
+
+        client = TradingClient(api_key, secret_key, paper=True)
+        account = client.get_account()
+        positions = client.get_all_positions()
+
+        click.echo(f"    Account Equity: ${float(account.equity):,.2f}")
+        click.echo(f"    Buying Power: ${float(account.buying_power):,.2f}")
+        click.echo(f"    Cash: ${float(account.cash):,.2f}")
+
+        if positions:
+            click.echo(f"\n    Open Positions ({len(positions)}):")
+            total_pnl = 0.0
+            for pos in positions:
+                pnl = float(pos.unrealized_pl)
+                total_pnl += pnl
+                pnl_pct = float(pos.unrealized_plpc) * 100
+                pnl_sign = "+" if pnl >= 0 else ""
+                click.echo(f"      {pos.symbol}: {pos.qty} @ ${float(pos.avg_entry_price):.2f} | P/L: {pnl_sign}${pnl:.2f} ({pnl_sign}{pnl_pct:.1f}%)")
+            click.echo(f"    Total Unrealized P/L: ${total_pnl:,.2f}")
+        else:
+            click.echo("    No open positions")
+
+    except Exception as e:
+        click.echo(f"    (Error fetching positions: {e})")
+
+
+def _show_lists_summary():
+    """Show trade/watch list summary."""
+    from core.symbol_list_manager import get_list_manager
+
+    manager = get_list_manager()
+    trade = manager.get_trade_list()
+    watch = manager.get_watch_list()
+
+    click.echo("\n  Symbol Lists:")
+    click.echo(f"    Trade ({len(trade)}): {', '.join(trade) if trade else '(empty)'}")
+    click.echo(f"    Watch ({len(watch)}): {', '.join(watch) if watch else '(empty)'}")
 
 
 @click.group()
@@ -82,21 +169,32 @@ def cli():
 @click.option('--symbols', '-s', default=None, help='Comma-separated symbols (e.g., AAPL,MSFT)')
 @click.option('--broker', '-b', type=click.Choice(['alpaca', 'schwab']), default='alpaca', help='Broker to use')
 @click.option('--dry-run', is_flag=True, help='Run without executing real trades')
-@click.option('--daemon', '-d', is_flag=True, help='Run as background daemon')
-def start(symbols, broker, dry_run, daemon):
+@click.option('--daemon', '-d', is_flag=True, default=True, help='Run as background daemon (default: True)')
+@click.option('--foreground', '-f', is_flag=True, help='Run in foreground (not as daemon)')
+def start(symbols, broker, dry_run, daemon, foreground):
     """Start the autonomous trading daemon.
 
     \b
     Examples:
-        amsterdam start                           # Start with defaults
+        amsterdam start                           # Start as daemon (default)
         amsterdam start -s AAPL,MSFT              # Specific symbols
         amsterdam start --broker schwab           # Use Schwab
         amsterdam start --dry-run                 # No real trades
-        amsterdam start --daemon                  # Background mode
+        amsterdam start --foreground              # Run in foreground
     """
     import subprocess
 
-    cmd = [sys.executable, str(APP_ROOT / "autoamsterdam.py")]
+    # Check if already running
+    if _is_running():
+        click.secho(f"AutoTrader is already running (PID: {_get_pid()})", fg='yellow')
+        click.echo("Use 'amsterdam restart' to restart, or 'amsterdam stop' first.")
+        return
+
+    # Ensure logs directory exists
+    (APP_ROOT / "logs").mkdir(exist_ok=True)
+
+    # Build command
+    cmd = [sys.executable, str(APP_ROOT / "app" / "daemon.py")]
 
     if symbols:
         cmd.extend(['--symbols'] + symbols.split(','))
@@ -105,20 +203,47 @@ def start(symbols, broker, dry_run, daemon):
     if dry_run:
         cmd.append('--dry-run')
 
-    if daemon:
-        # Run as background process
-        click.echo(f"Starting amsterdam daemon...")
-        subprocess.Popen(
-            cmd,
-            stdout=open(APP_ROOT / "logs" / "autoamsterdam_stdout.log", 'a'),
-            stderr=subprocess.STDOUT,
-            start_new_session=True
-        )
-        click.echo("Daemon started. Use 'amsterdam status' to check.")
+    # Get symbols for display
+    if symbols:
+        display_symbols = symbols.split(',')
     else:
+        from core.symbol_list_manager import get_list_manager
+        display_symbols = get_list_manager().get_trade_list() or ['(from config)']
+
+    if foreground:
         # Run in foreground
         click.echo(f"Starting amsterdam (broker={broker})...")
+        click.echo(f"  Symbols: {', '.join(display_symbols)}")
         os.execv(sys.executable, cmd)
+    else:
+        # Run as background daemon
+        click.echo("Starting AutoTrader daemon...")
+        click.echo(f"  Symbols: {', '.join(display_symbols)}")
+        click.echo(f"  Broker: {broker}")
+        click.echo(f"  Dry run: {dry_run}")
+
+        with open(STDOUT_LOG, 'a') as stdout_file:
+            stdout_file.write(f"\n{'='*60}\n")
+            stdout_file.write(f"AutoTrader started at {datetime.now(ET)}\n")
+            stdout_file.write(f"Command: {' '.join(cmd)}\n")
+            stdout_file.write(f"{'='*60}\n\n")
+            stdout_file.flush()
+
+            process = subprocess.Popen(
+                cmd,
+                stdout=stdout_file,
+                stderr=subprocess.STDOUT,
+                cwd=str(APP_ROOT),
+                start_new_session=True,
+            )
+
+        # Save PID
+        PID_FILE.write_text(str(process.pid))
+
+        click.secho(f"\nAutoTrader started (PID: {process.pid})", fg='green')
+        click.echo(f"  Log file: {LOG_FILE}")
+        click.echo(f"  Stdout: {STDOUT_LOG}")
+        click.echo("\nMonitor with: amsterdam logs -f")
 
 
 # =============================================================================
@@ -128,15 +253,40 @@ def start(symbols, broker, dry_run, daemon):
 @cli.command()
 def stop():
     """Stop the trading daemon."""
-    import subprocess
-    result = subprocess.run(
-        [sys.executable, str(APP_ROOT / "autoatrader_ctl.py"), "stop"],
-        capture_output=True,
-        text=True
-    )
-    click.echo(result.stdout)
-    if result.stderr:
-        click.echo(result.stderr, err=True)
+    import time
+
+    pid = _get_pid()
+
+    if pid is None:
+        click.echo("AutoTrader is not running")
+        return
+
+    click.echo(f"Stopping AutoTrader (PID: {pid})...")
+
+    try:
+        # Send SIGTERM for graceful shutdown
+        os.kill(pid, signal.SIGTERM)
+
+        # Wait for process to stop
+        for _ in range(30):  # Wait up to 30 seconds
+            try:
+                os.kill(pid, 0)
+                time.sleep(1)
+            except ProcessLookupError:
+                break
+        else:
+            # Force kill if still running
+            click.secho("Process didn't stop gracefully, sending SIGKILL...", fg='yellow')
+            os.kill(pid, signal.SIGKILL)
+
+        PID_FILE.unlink(missing_ok=True)
+        click.secho("AutoTrader stopped", fg='green')
+
+    except ProcessLookupError:
+        click.echo("Process already stopped")
+        PID_FILE.unlink(missing_ok=True)
+    except PermissionError:
+        click.secho(f"Permission denied stopping PID {pid}", fg='red')
 
 
 # =============================================================================
@@ -144,17 +294,82 @@ def stop():
 # =============================================================================
 
 @cli.command()
-def status():
+@click.option('--positions', '-p', is_flag=True, help='Show positions and P&L')
+@click.option('--lists', '-l', is_flag=True, help='Show trade/watch lists')
+@click.option('--all', '-a', 'show_all', is_flag=True, help='Show all info')
+def status(positions, lists, show_all):
     """Check trading daemon status."""
-    import subprocess
-    result = subprocess.run(
-        [sys.executable, str(APP_ROOT / "amsterdam_ctl.py"), "status"],
-        capture_output=True,
-        text=True
-    )
-    click.echo(result.stdout)
-    if result.stderr:
-        click.echo(result.stderr, err=True)
+    pid = _get_pid()
+
+    click.echo(f"\n{'='*50}")
+    click.echo("  AUTOTRADER STATUS")
+    click.echo(f"{'='*50}")
+
+    if pid is None:
+        click.secho("  Status: STOPPED", fg='red')
+    else:
+        click.secho("  Status: RUNNING", fg='green')
+        click.echo(f"  PID: {pid}")
+
+    # Show market status
+    try:
+        from app.daemon import MarketScheduler
+        scheduler = MarketScheduler()
+        now = scheduler.now_et()
+
+        click.echo(f"\n  Current time (ET): {now.strftime('%Y-%m-%d %H:%M:%S')}")
+        click.echo(f"  Market open: {scheduler.is_market_open()}")
+        click.echo(f"  Trading day: {scheduler.is_trading_day()}")
+
+        if not scheduler.is_market_open():
+            next_open = scheduler.get_next_market_open()
+            click.echo(f"  Next open: {next_open.strftime('%Y-%m-%d %H:%M')} ET")
+    except Exception as e:
+        click.echo(f"  (Could not get market status: {e})")
+
+    # Show positions and P&L from Alpaca
+    if positions or show_all:
+        _show_positions()
+
+    # Show trade/watch lists
+    if lists or show_all:
+        _show_lists_summary()
+
+    # Show recent log entries
+    if LOG_FILE.exists():
+        click.echo("\n  Recent log entries:")
+        try:
+            lines = LOG_FILE.read_text().splitlines()[-5:]
+            for line in lines:
+                click.echo(f"    {line}")
+        except Exception:
+            pass
+
+    click.echo(f"{'='*50}\n")
+
+
+# =============================================================================
+# RESTART COMMAND
+# =============================================================================
+
+@cli.command()
+@click.option('--symbols', '-s', default=None, help='Comma-separated symbols')
+@click.option('--broker', '-b', type=click.Choice(['alpaca', 'schwab']), default='alpaca', help='Broker to use')
+@click.option('--dry-run', is_flag=True, help='Run without executing real trades')
+@click.pass_context
+def restart(ctx, symbols, broker, dry_run):
+    """Restart the trading daemon."""
+    import time
+
+    click.echo("Restarting AutoTrader...")
+
+    # Stop if running
+    if _is_running():
+        ctx.invoke(stop)
+        time.sleep(1)  # Brief pause between stop and start
+
+    # Start with new options
+    ctx.invoke(start, symbols=symbols, broker=broker, dry_run=dry_run, daemon=True, foreground=False)
 
 
 # =============================================================================
@@ -183,7 +398,7 @@ def gui(mode, symbols, speed, steps):
         amsterdam gui -s AAPL,GOOGL,TSLA          # Custom symbols
     """
     cmd = [
-        sys.executable, str(APP_ROOT / "run_trading.py"),
+        sys.executable, str(APP_ROOT / "monitoring" / "gui_app.py"),
         "--mode", mode,
         "--symbols", symbols,
         "--speed", str(speed),
@@ -336,7 +551,7 @@ def test(coverage, verbose, unit, integration, path):
         amsterdam test                            # Run all tests
         amsterdam test -v                         # Verbose output
         amsterdam test --coverage                 # With coverage report
-        amsterdam test tests/test_autoamsterdam.py   # Specific file
+        amsterdam test tests/test_autotrader.py      # Specific file
     """
     cmd = [sys.executable, '-m', 'pytest']
 
@@ -361,7 +576,7 @@ def test(coverage, verbose, unit, integration, path):
 @cli.command()
 @click.option('--follow', '-f', is_flag=True, help='Follow log output')
 @click.option('--lines', '-n', type=int, default=50, help='Number of lines to show')
-@click.option('--file', '-l', type=click.Choice(['app', 'trades', 'autoamsterdam', 'preflight']),
+@click.option('--file', '-l', type=click.Choice(['app', 'trades', 'daemon', 'preflight']),
               default='app', help='Log file to view')
 def logs(follow, lines, file):
     """View application logs.
@@ -370,7 +585,7 @@ def logs(follow, lines, file):
     Log files:
         app         - Main application log
         trades      - Trade execution log
-        autoamsterdam  - Daemon operations
+        daemon      - Daemon operations (autotrader.log)
         preflight   - Pre-flight checks
 
     \b
@@ -384,7 +599,7 @@ def logs(follow, lines, file):
     log_files = {
         'app': 'app.log',
         'trades': 'trades.log',
-        'autoamsterdam': 'autoamsterdam.log',
+        'daemon': 'autotrader.log',
         'preflight': 'preflight.log'
     }
 
@@ -462,56 +677,186 @@ def symbols():
         amsterdam symbols add          Add symbol to list
         amsterdam symbols remove       Remove symbol
         amsterdam symbols move         Move between lists
+        amsterdam symbols export       Export lists to JSON
+        amsterdam symbols import       Import lists from JSON
     """
     pass
 
 
 @symbols.command('list')
-@click.option('--trade', is_flag=True, help='Show trade list only')
-@click.option('--watch', is_flag=True, help='Show watch list only')
+@click.option('--trade', '-t', is_flag=True, help='Show trade list only')
+@click.option('--watch', '-w', is_flag=True, help='Show watch list only')
 def symbols_list(trade, watch):
     """List configured symbols."""
-    import subprocess
+    from core.symbol_list_manager import get_list_manager
 
-    cmd = [sys.executable, str(APP_ROOT / "autoamsterdam_ctl.py"), "list"]
-    if trade:
-        cmd.append('--trade')
-    if watch:
-        cmd.append('--watch')
+    manager = get_list_manager()
 
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    click.echo(result.stdout)
+    show_trade = trade or (not trade and not watch)
+    show_watch = watch or (not trade and not watch)
+
+    click.echo(f"\n{'='*50}")
+    click.echo("  SYMBOL LISTS")
+    click.echo(f"{'='*50}")
+
+    if show_trade:
+        trade_list = manager.get_trade_list()
+        click.echo(f"\n  Trade List ({len(trade_list)} symbols):")
+        if trade_list:
+            for sym in trade_list:
+                entry = manager.get_symbol(sym)
+                notes = f" - {entry.notes}" if entry and entry.notes else ""
+                click.echo(f"    {sym}{notes}")
+        else:
+            click.echo("    (empty)")
+
+    if show_watch:
+        watch_list = manager.get_watch_list()
+        click.echo(f"\n  Watch List ({len(watch_list)} symbols):")
+        if watch_list:
+            for sym in watch_list:
+                entry = manager.get_symbol(sym)
+                notes = f" - {entry.notes}" if entry and entry.notes else ""
+                click.echo(f"    {sym}{notes}")
+        else:
+            click.echo("    (empty)")
+
+    click.echo(f"\n{'='*50}\n")
 
 
 @symbols.command('add')
 @click.argument('symbol')
-@click.option('--trade', is_flag=True, help='Add to trade list')
-@click.option('--watch', is_flag=True, help='Add to watch list')
-def symbols_add(symbol, trade, watch):
+@click.option('--trade', '-t', is_flag=True, help='Add to trade list (default)')
+@click.option('--watch', '-w', is_flag=True, help='Add to watch list')
+@click.option('--notes', '-n', default=None, help='Notes about the symbol')
+def symbols_add(symbol, trade, watch, notes):
     """Add a symbol to trade or watch list."""
-    import subprocess
+    from core.symbol_list_manager import get_list_manager
 
-    cmd = [sys.executable, str(APP_ROOT / "autoamsterdam_ctl.py"), "add", symbol.upper()]
-    if trade:
-        cmd.append('--trade')
-    elif watch:
-        cmd.append('--watch')
+    manager = get_list_manager()
+    symbol = symbol.upper()
+    notes = notes or ""
+
+    if watch:
+        if manager.add_to_watch_list(symbol, notes):
+            click.secho(f"Added {symbol} to watch list", fg='green')
+        else:
+            existing = manager.get_list_type(symbol)
+            if existing == "watch":
+                click.echo(f"{symbol} is already in the watch list")
+            else:
+                click.echo(f"Moved {symbol} from trade list to watch list")
     else:
-        cmd.append('--trade')  # Default to trade list
-
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    click.echo(result.stdout)
+        # Default to trade list
+        if manager.add_to_trade_list(symbol, notes):
+            click.secho(f"Added {symbol} to trade list", fg='green')
+        else:
+            existing = manager.get_list_type(symbol)
+            if existing == "trade":
+                click.echo(f"{symbol} is already in the trade list")
+            else:
+                click.echo(f"Moved {symbol} from watch list to trade list")
 
 
 @symbols.command('remove')
 @click.argument('symbol')
 def symbols_remove(symbol):
     """Remove a symbol from all lists."""
-    import subprocess
+    from core.symbol_list_manager import get_list_manager
 
-    cmd = [sys.executable, str(APP_ROOT / "autoamsterdam_ctl.py"), "remove", symbol.upper()]
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    click.echo(result.stdout)
+    manager = get_list_manager()
+    symbol = symbol.upper()
+
+    if manager.remove_symbol(symbol):
+        click.secho(f"Removed {symbol} from lists", fg='green')
+    else:
+        click.secho(f"Symbol {symbol} not found in any list", fg='yellow')
+
+
+@symbols.command('move')
+@click.argument('symbol')
+@click.option('--to-trade', is_flag=True, help='Move to trade list')
+@click.option('--to-watch', is_flag=True, help='Move to watch list')
+def symbols_move(symbol, to_trade, to_watch):
+    """Move a symbol between lists."""
+    from core.symbol_list_manager import get_list_manager
+
+    manager = get_list_manager()
+    symbol = symbol.upper()
+
+    if not manager.symbol_exists(symbol):
+        click.secho(f"Symbol {symbol} not found in any list", fg='red')
+        click.echo(f"Use 'amsterdam symbols add {symbol} --trade' or '--watch' first")
+        return
+
+    if to_watch:
+        if manager.move_to_watch_list(symbol):
+            click.secho(f"Moved {symbol} to watch list", fg='green')
+        else:
+            click.echo(f"{symbol} is already in the watch list")
+    elif to_trade:
+        if manager.move_to_trade_list(symbol):
+            click.secho(f"Moved {symbol} to trade list", fg='green')
+        else:
+            click.echo(f"{symbol} is already in the trade list")
+    else:
+        click.secho("Specify --to-trade or --to-watch", fg='red')
+
+
+@symbols.command('export')
+@click.argument('file', default='symbol_lists.json', required=False)
+def symbols_export(file):
+    """Export trade/watch lists to JSON file."""
+    import json
+    from core.symbol_list_manager import get_list_manager
+
+    manager = get_list_manager()
+
+    data = {
+        "trade_list": manager.get_trade_list(),
+        "watch_list": manager.get_watch_list(),
+        "exported_at": datetime.now(ET).isoformat(),
+    }
+
+    with open(file, "w") as f:
+        json.dump(data, f, indent=2)
+
+    click.secho(f"Exported lists to {file}", fg='green')
+    click.echo(f"  Trade list: {len(data['trade_list'])} symbols")
+    click.echo(f"  Watch list: {len(data['watch_list'])} symbols")
+
+
+@symbols.command('import')
+@click.argument('file')
+def symbols_import(file):
+    """Import trade/watch lists from JSON file."""
+    import json
+    from core.symbol_list_manager import get_list_manager
+
+    if not os.path.exists(file):
+        click.secho(f"File not found: {file}", fg='red')
+        return
+
+    with open(file) as f:
+        data = json.load(f)
+
+    manager = get_list_manager()
+
+    # Import trade list
+    trade_count = 0
+    for symbol in data.get("trade_list", []):
+        if manager.add_to_trade_list(symbol):
+            trade_count += 1
+
+    # Import watch list
+    watch_count = 0
+    for symbol in data.get("watch_list", []):
+        if manager.add_to_watch_list(symbol):
+            watch_count += 1
+
+    click.secho(f"Imported from {file}", fg='green')
+    click.echo(f"  Trade list: {trade_count} symbols added")
+    click.echo(f"  Watch list: {watch_count} symbols added")
 
 
 # =============================================================================

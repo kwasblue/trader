@@ -3,36 +3,33 @@
 AutoTrader - Autonomous Trading Daemon
 =======================================
 
-ORCHESTRATION WRAPPER: This is a scheduling/lifecycle wrapper around the canonical path.
-It does NOT define application composition - that lives in app/bootstrap.py and app/container.py.
+DAEMON MODULE: This is the autonomous trading daemon that runs continuously.
+Invoked via: amsterdam start
 
-What this file does:
-- Schedule trading around market hours (MarketScheduler)
-- Run daily trading cycle (wait -> preflight -> trade -> update -> sleep)
-- Handle daemon lifecycle (start/stop/status)
+This module provides:
+- Market hour scheduling (MarketScheduler)
+- Daily trading cycle (wait -> preflight -> trade -> update -> sleep)
+- Daemon lifecycle management (start/stop/status)
 
-What this file does NOT do:
-- Define how components are wired (app/container.py does that)
-- Create brokers, strategies, or execution engines directly
-- Own the core trading logic (runners do that)
+It does NOT define application composition - that lives in app/bootstrap.py.
 
-Canonical path this wraps:
-    autoamsterdam.py -> bootstrap_app() -> AppContext
-                     -> RunnerFactory.create() -> runner.run()
+Canonical path:
+    cli/main.py -> app/daemon.py -> bootstrap_app() -> AppContext
+                                 -> RunnerFactory.create() -> runner.run()
 
 The AutoTrader class receives an AppContext from bootstrap_app(), ensuring
 all automation uses the same composition root as CLI and GUI modes.
 
 Usage (via CLI - recommended):
-    trader start                           # Start with defaults
-    trader start -s AAPL,MSFT              # Specific symbols
-    trader start --broker schwab           # Use Schwab
-    trader start --dry-run                 # No real trades
-    trader start --daemon                  # Background mode
+    amsterdam start                        # Start with defaults
+    amsterdam start -s AAPL,MSFT           # Specific symbols
+    amsterdam start --broker schwab        # Use Schwab
+    amsterdam start --dry-run              # No real trades
+    amsterdam start --foreground           # Run in foreground
 
 Usage (direct - for debugging):
-    python autoamsterdam.py --symbols AAPL MSFT TSLA
-    python autoamsterdam.py --broker alpaca --dry-run
+    python app/daemon.py --symbols AAPL MSFT TSLA
+    python app/daemon.py --broker alpaca --dry-run
 """
 
 from __future__ import annotations
@@ -57,8 +54,8 @@ if TYPE_CHECKING:
 # Suppress sklearn warnings for small sample sizes
 warnings.filterwarnings("ignore", category=RuntimeWarning, module="sklearn")
 
-# Add project root to path (required before imports)
-ROOT = Path(__file__).resolve().parent
+# Add project root to path (daemon.py is in app/, so parent is project root)
+ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
@@ -923,14 +920,15 @@ async def main():
         description='Autonomous trading daemon (wrapper around canonical path)',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Examples:
-  python autoamsterdam.py                       # Run with defaults
-  python autoamsterdam.py --symbols AAPL TSLA   # Specific symbols
-  python autoamsterdam.py --broker schwab       # Use Schwab broker
-  python autoamsterdam.py --dry-run             # No actual trading
+Examples (via CLI - recommended):
+  amsterdam start                               # Start as daemon
+  amsterdam start -s AAPL TSLA                  # Specific symbols
+  amsterdam start --broker schwab               # Use Schwab broker
+  amsterdam start --dry-run                     # No actual trading
 
-Background:
-  nohup python autoamsterdam.py > logs/autotrader_stdout.log 2>&1 &
+Examples (direct - for debugging):
+  python app/daemon.py                          # Run with defaults
+  python app/daemon.py --symbols AAPL TSLA      # Specific symbols
 
 Canonical Path:
   This script uses: bootstrap_app() -> AppContext -> RunnerFactory
