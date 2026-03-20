@@ -1,7 +1,7 @@
 ================================================================================
 📂 PROJECT STRUCTURE
-Generated: 2026-03-15 17:55:53
-Total Files: 250
+Generated: 2026-03-20 16:38:49
+Total Files: 251
 ================================================================================
 
 📄 amsterdam_ctl.py
@@ -53,12 +53,18 @@ Total Files: 250
       ├── def seconds_until_market_open(self)
       └── def seconds_until_market_close(self)
    🧱 class AutoTrader
-      ├── def __init__(self, symbols, broker, dry_run, update_data_days, day_trade)
+      ├── def __init__(self, ctx, dry_run, update_data_days, day_trade)
       ├── def _set_state(self, new_state)
       ├── def _check_network_connectivity_sync(self)
       ├── def stop(self)
       └── def get_status(self)
    ⚙️  def signal_handler()
+
+📄 backfill_trades_from_alpaca.py
+   ⚙️  def fetch_all_alpaca_orders()
+   ⚙️  def match_trades(self, orders)
+   ⚙️  def write_to_log_file(self, completed_trades, output_file)
+   ⚙️  def main()
 
 📄 cache/cache.py
    🧱 class CacheManager
@@ -115,6 +121,16 @@ Total Files: 250
       ├── def _canonicalize_bar(self, raw_bar)
       └── def _subscribe_to_data(self)
    ⚙️  def _ensure_live_config(self, dir_path)
+
+📄 core/alpaca_schwab_hybrid_runner.py
+   🧱 class AlpacaSchwabHybridRunner
+      ├── def __init__(self, symbols, config)
+      ├── def _create_broker(self)
+      ├── def _canonicalize_bar(self, raw_data)
+      ├── def _subscribe_to_data(self)
+      ├── def _canonicalize_schwab_quote(self, quote, symbol)
+      ├── def _aggregate_quote_to_bar(self, symbol, price, volume, bar_id)
+      └── def _create_quote_callback(self, symbol)
 
 📄 core/backtest/backtest_comparison.py
    🧱 class StrategyComparisonResult
@@ -1583,11 +1599,6 @@ Total Files: 250
       ├── def fetch_data(self, stock, start_date, end_date)
       └── def dataframes(self)
 
-📄 data/data_validator.py
-   🧱 class BarValidator
-      ├── def __init__(self, max_age_sec, max_move_pct)
-      └── def is_valid(self, prev_close, bar)
-
 📄 data/datastorage.py
    🧱 class DataStore
       ├── def __init__(self, db, use_config)
@@ -1981,8 +1992,20 @@ Total Files: 250
    ⚙️  def get_next_market_open()
    ⚙️  def get_recent_logs(self, n)
    ⚙️  def parse_log_line(self, line)
+   ⚙️  def get_system_health()
+   ⚙️  def get_broker_info()
+   ⚙️  def get_active_symbols()
+   ⚙️  def get_trade_stats_from_log()
+   ⚙️  def get_alpaca_trade_stats()
+   ⚙️  def get_equity_curve()
+   ⚙️  def get_symbol_performance()
+   ⚙️  def get_daily_pnl()
+   ⚙️  def get_recent_errors(self, n)
+   ⚙️  def get_market_status()
    ⚙️  def index()
    ⚙️  def api_status()
+   ⚙️  def emergency_stop_bot()
+   ⚙️  def emergency_close_all()
 
 📄 monitoring/scripts/event_monitor.py
    ⚙️  def load_slack_webhook()
@@ -2244,8 +2267,13 @@ Total Files: 250
       ├── def generate_signal(self, data)
       └── def generate_signals_vectorized(self, data)
 
-📄 test_optimization_workflow.py
-   ⚙️  def test_regime_aware_strategy_selection()
+📄 sync_trades_from_alpaca.py
+   ⚙️  def get_alpaca_client()
+   ⚙️  def load_existing_trades()
+   ⚙️  def fetch_recent_alpaca_orders(self, since_hours)
+   ⚙️  def match_orders_to_trades(self, orders)
+   ⚙️  def append_new_trades(self, new_trades)
+   ⚙️  def main()
 
 📄 tests/conftest.py
    ⚙️  def event_loop()
@@ -3883,7 +3911,8 @@ Total Files: 250
       └── def test_list_symbols_filtered_by_timeframe(self)
    🧱 class TestMultiTimeframeFetching
       ├── def setUp(self)
-      └── def tearDown(self)
+      ├── def tearDown(self)
+      └── def test_update_symbols_multiple_timeframes(self)
    🧱 class TestCacheWithTimeframes
       ├── def setUp(self)
       ├── def tearDown(self)
@@ -4137,6 +4166,6 @@ Total Files: 250
 📊 STATISTICS
 ================================================================================
 Total Classes:    680
-Total Functions:  430
-Total Methods:    2361
+Total Functions:  451
+Total Methods:    2367
 ================================================================================

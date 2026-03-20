@@ -1,6 +1,27 @@
 #!/usr/bin/env python3
 """
-Amsterdam CLI - Unified Command Line Interface
+Amsterdam CLI - Primary User Interface
+======================================
+
+PRIMARY ENTRYPOINT: This is the main user interface for the Amsterdam trading system.
+Users interact with the system through this CLI.
+
+CANONICAL PATH HIERARCHY:
+    cli/main.py (this file) - User commands
+         ↓
+    app/bootstrap.py - Creates AppContext (canonical initialization)
+         ↓
+    app/container.py - Creates AppContainer (composition root)
+         ↓
+    RunnerFactory - Creates runners
+         ↓
+    Execution System - Trading loop
+
+Commands delegate to specialized scripts, but all use the same canonical path:
+    amsterdam start   -> autoamsterdam.py (daemon mode, uses bootstrap_app)
+    amsterdam gui     -> run_trading.py (GUI mode, uses bootstrap_app)
+    amsterdam preflight -> preflight.py
+    amsterdam token   -> token management
 
 Usage:
     amsterdam start [OPTIONS]      Start the trading daemon
@@ -17,7 +38,7 @@ import sys
 import os
 from pathlib import Path
 
-# Ensure project root is in path
+# Ensure project root is in path (required before imports)
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -25,8 +46,12 @@ if str(ROOT) not in sys.path:
 import click
 from dotenv import load_dotenv
 
-# Load environment
-load_dotenv(ROOT / ".env")
+# Use canonical path helper for root path resolution
+from core.config_loader import get_app_path
+APP_ROOT = get_app_path()
+
+# Load environment (canonical location)
+load_dotenv(APP_ROOT / ".env")
 
 
 @click.group()
@@ -71,7 +96,7 @@ def start(symbols, broker, dry_run, daemon):
     """
     import subprocess
 
-    cmd = [sys.executable, str(ROOT / "autoamsterdam.py")]
+    cmd = [sys.executable, str(APP_ROOT / "autoamsterdam.py")]
 
     if symbols:
         cmd.extend(['--symbols'] + symbols.split(','))
@@ -85,7 +110,7 @@ def start(symbols, broker, dry_run, daemon):
         click.echo(f"Starting amsterdam daemon...")
         subprocess.Popen(
             cmd,
-            stdout=open(ROOT / "logs" / "autoamsterdam_stdout.log", 'a'),
+            stdout=open(APP_ROOT / "logs" / "autoamsterdam_stdout.log", 'a'),
             stderr=subprocess.STDOUT,
             start_new_session=True
         )
@@ -105,7 +130,7 @@ def stop():
     """Stop the trading daemon."""
     import subprocess
     result = subprocess.run(
-        [sys.executable, str(ROOT / "autoatrader_ctl.py"), "stop"],
+        [sys.executable, str(APP_ROOT / "autoatrader_ctl.py"), "stop"],
         capture_output=True,
         text=True
     )
@@ -123,7 +148,7 @@ def status():
     """Check trading daemon status."""
     import subprocess
     result = subprocess.run(
-        [sys.executable, str(ROOT / "amsterdam_ctl.py"), "status"],
+        [sys.executable, str(APP_ROOT / "amsterdam_ctl.py"), "status"],
         capture_output=True,
         text=True
     )
@@ -158,7 +183,7 @@ def gui(mode, symbols, speed, steps):
         amsterdam gui -s AAPL,GOOGL,TSLA          # Custom symbols
     """
     cmd = [
-        sys.executable, str(ROOT / "run_trading.py"),
+        sys.executable, str(APP_ROOT / "run_trading.py"),
         "--mode", mode,
         "--symbols", symbols,
         "--speed", str(speed),
@@ -192,7 +217,7 @@ def preflight(verbose, update_data, reauth_schwab):
         amsterdam preflight -v                    # Verbose output
         amsterdam preflight --update-data         # Update stale data
     """
-    cmd = [sys.executable, str(ROOT / "preflight.py")]
+    cmd = [sys.executable, str(APP_ROOT / "preflight.py")]
 
     if verbose:
         cmd.append('-v')
@@ -264,7 +289,7 @@ def token_refresh(force):
         amsterdam token refresh           # Refresh if needed
         amsterdam token refresh --force   # Force browser login
     """
-    cmd = [sys.executable, str(ROOT / "refresh_schwab_token.py")]
+    cmd = [sys.executable, str(APP_ROOT / "refresh_schwab_token.py")]
     if force:
         cmd.append('--force')
 
@@ -285,7 +310,7 @@ def token_keeper(interval, daemon):
         amsterdam token keeper --daemon           # Background mode
         amsterdam token keeper -i 300             # Check every 5 minutes
     """
-    cmd = [sys.executable, str(ROOT / "token_keeper.py"), '--interval', str(interval)]
+    cmd = [sys.executable, str(APP_ROOT / "token_keeper.py"), '--interval', str(interval)]
 
     if daemon:
         cmd.append('--daemon')
@@ -363,7 +388,7 @@ def logs(follow, lines, file):
         'preflight': 'preflight.log'
     }
 
-    log_path = ROOT / "logs" / log_files[file]
+    log_path = APP_ROOT / "logs" / log_files[file]
 
     if not log_path.exists():
         click.echo(f"Log file not found: {log_path}")
@@ -405,7 +430,7 @@ def stats(summary, by_day, by_symbol, by_hour, by_strategy, worst):
     """
     import subprocess
 
-    cmd = [sys.executable, str(ROOT / "tools" / "analyze_trades.py")]
+    cmd = [sys.executable, str(APP_ROOT / "tools" / "analyze_trades.py")]
 
     if summary:
         cmd.append('--summary')
@@ -448,7 +473,7 @@ def symbols_list(trade, watch):
     """List configured symbols."""
     import subprocess
 
-    cmd = [sys.executable, str(ROOT / "autoamsterdam_ctl.py"), "list"]
+    cmd = [sys.executable, str(APP_ROOT / "autoamsterdam_ctl.py"), "list"]
     if trade:
         cmd.append('--trade')
     if watch:
@@ -466,7 +491,7 @@ def symbols_add(symbol, trade, watch):
     """Add a symbol to trade or watch list."""
     import subprocess
 
-    cmd = [sys.executable, str(ROOT / "autoamsterdam_ctl.py"), "add", symbol.upper()]
+    cmd = [sys.executable, str(APP_ROOT / "autoamsterdam_ctl.py"), "add", symbol.upper()]
     if trade:
         cmd.append('--trade')
     elif watch:
@@ -484,7 +509,7 @@ def symbols_remove(symbol):
     """Remove a symbol from all lists."""
     import subprocess
 
-    cmd = [sys.executable, str(ROOT / "autoamsterdam_ctl.py"), "remove", symbol.upper()]
+    cmd = [sys.executable, str(APP_ROOT / "autoamsterdam_ctl.py"), "remove", symbol.upper()]
     result = subprocess.run(cmd, capture_output=True, text=True)
     click.echo(result.stdout)
 
@@ -532,7 +557,7 @@ def data_update(symbols, days, source, timeframes):
         else:
             # Load from config
             import json
-            config_path = ROOT / "config" / "symbols.json"
+            config_path = APP_ROOT / "config" / "symbols.json"
             if config_path.exists():
                 with open(config_path) as f:
                     cfg = json.load(f)
@@ -743,7 +768,7 @@ def strategy_optimize_multitf(symbols, timeframes, strategies, days, metric, dry
     # Build command
     cmd = [
         sys.executable,
-        str(ROOT / "tools" / "optimize_routing_multitf.py"),
+        str(APP_ROOT / "tools" / "optimize_routing_multitf.py"),
         '--symbols', symbols,
         '--timeframes', timeframes,
         '--strategies', strategies,
@@ -840,7 +865,7 @@ def strategy_refresh():
     """
     from core.logic.strategy_routing_manager import StrategyRoutingManager
 
-    config_path = ROOT / "config" / "strategy_routing.json"
+    config_path = APP_ROOT / "config" / "strategy_routing.json"
 
     if not config_path.exists():
         click.secho("No routing config found.", fg='yellow')
@@ -991,7 +1016,7 @@ def backtest_compare(symbol, strategies, days, metric, capital):
     """
     # Delegate to compare_strategies tool
     cmd = [
-        sys.executable, str(ROOT / "tools" / "compare_strategies.py"),
+        sys.executable, str(APP_ROOT / "tools" / "compare_strategies.py"),
         symbol.upper(),
         "-s", strategies,
         "-d", str(days),
@@ -1018,7 +1043,7 @@ def backtest_hybrid(symbol, strategies, days, capital):
     """
     # Delegate to compare_strategies tool with hybrid flag
     cmd = [
-        sys.executable, str(ROOT / "tools" / "compare_strategies.py"),
+        sys.executable, str(APP_ROOT / "tools" / "compare_strategies.py"),
         symbol.upper(),
         "-s", strategies,
         "-d", str(days),
@@ -1051,7 +1076,7 @@ def backtest_categories(symbol, categories, days, capital):
     """
     # Delegate to compare_strategies tool
     cmd = [
-        sys.executable, str(ROOT / "tools" / "compare_strategies.py"),
+        sys.executable, str(APP_ROOT / "tools" / "compare_strategies.py"),
         symbol.upper(),
         "--categories", categories,
         "-d", str(days),
@@ -1077,7 +1102,7 @@ def backtest_full(symbol, strategies, days, output, capital):
         amsterdam backtest full TSLA -s sma,macd,rsi,momentum --days 180
     """
     cmd = [
-        sys.executable, str(ROOT / "tools" / "compare_strategies.py"),
+        sys.executable, str(APP_ROOT / "tools" / "compare_strategies.py"),
         symbol.upper(),
         "-d", str(days),
         "--capital", str(capital),
@@ -1144,14 +1169,14 @@ def backtest_optimize(mode, symbols, days, strategies, timeframes, dry_run):
     if timeframes:
         # Use multi-timeframe optimizer
         cmd = [
-            sys.executable, str(ROOT / "tools" / "optimize_routing_multitf.py"),
+            sys.executable, str(APP_ROOT / "tools" / "optimize_routing_multitf.py"),
             "-d", str(days),
             "--timeframes", timeframes,
         ]
     else:
         # Use single-timeframe optimizer (backward compatible)
         cmd = [
-            sys.executable, str(ROOT / "tools" / "optimize_routing.py"),
+            sys.executable, str(APP_ROOT / "tools" / "optimize_routing.py"),
             "-d", str(days),
         ]
 

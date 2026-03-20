@@ -1,7 +1,25 @@
-"""Dependency injection container for lazy component initialization
+"""
+Amsterdam Canonical Path - Composition Root
+============================================
 
-This module provides a DI container that lazily initializes components
-only when needed, reducing startup time and resource usage.
+This module is the COMPOSITION ROOT for the Amsterdam application.
+It lazily initializes components only when needed.
+
+CANONICAL PATH HIERARCHY
+------------------------
+    bootstrap_app() -> AppContext -> AppContainer -> RunnerFactory -> runner
+
+Usage:
+    from app.bootstrap import bootstrap_app
+    from app.container import AppContainer
+
+    ctx = bootstrap_app(mode='daemon', broker='alpaca', symbols=['AAPL'])
+    container = AppContainer(ctx)
+    runner = container.get_runner()  # Lazy-loaded via RunnerFactory
+    await runner.run()
+
+This module is part of the canonical path. Do not create runners or other
+core components directly - always go through the container.
 """
 
 from typing import TYPE_CHECKING, Optional

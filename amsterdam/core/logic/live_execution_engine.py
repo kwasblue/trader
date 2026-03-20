@@ -41,7 +41,6 @@ from core.contracts.events import (
     EVENT_MANUAL_ORDER, EVENT_FLATTEN_ALL, EVENT_FLATTEN_SYMBOL, EVENT_CANCEL_ALL,
 )
 from core.contracts.meta_types import TradeEntryContext, TradeExitContext
-from core.exceptions import DailyLossLimitExceededError
 from loggers.meta_trade_logger import MetaTradeLogger, generate_trade_id
 
 # Import the router we created

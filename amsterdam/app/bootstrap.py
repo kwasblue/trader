@@ -1,7 +1,37 @@
-"""Unified application bootstrap for all Amsterdam entrypoints
+"""
+Amsterdam Canonical Path - Application Bootstrap
+=================================================
 
-This module provides the canonical initialization path for daemon, GUI, and CLI modes.
-All entrypoints should use bootstrap_app() to ensure consistent setup.
+This module is the CANONICAL ENTRY POINT for all Amsterdam initialization.
+All entry points should use bootstrap_app() to ensure consistent setup.
+
+CANONICAL PATH HIERARCHY
+------------------------
+
+1. Entry Points (wrappers that delegate to canonical path):
+   - autoamsterdam.py  -> Daemon automation wrapper
+   - amsterdam_ctl.py  -> Process control wrapper
+   - cli/main.py       -> CLI dispatcher wrapper
+   - run_trading.py    -> GUI/trading launcher
+
+2. Canonical Initialization (this module):
+   bootstrap_app(mode, symbols, broker, ...) -> AppContext
+
+3. Composition Root:
+   AppContainer(ctx) -> Lazy-loads dependencies via factories
+
+4. Runtime Creation:
+   container.get_runner() -> RunnerFactory.create() -> BaseLiveRunner
+
+5. Trading Loop:
+   runner.run() -> bar normalization -> regime detection -> strategy routing
+                -> trade approval -> sizing -> execution -> portfolio update
+
+The answer to "how does the app start?" is:
+    bootstrap_app() -> AppContext -> AppContainer -> RunnerFactory -> runner.run()
+
+All entry points should follow this path. If you're adding a new entry point,
+import bootstrap_app() and use it as the first initialization step.
 """
 
 from dataclasses import dataclass
@@ -12,7 +42,9 @@ from dotenv import load_dotenv
 from loggers.bootstrap import init_root_logger
 from core.config_loader import get_config, TradingConfig
 
-ROOT = Path(__file__).resolve().parents[1]
+# Canonical app root path - use get_app_path() from config_loader for consistency
+from core.config_loader import get_app_path
+ROOT = get_app_path()
 
 
 @dataclass

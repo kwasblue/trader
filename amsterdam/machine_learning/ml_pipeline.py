@@ -39,7 +39,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import (
     accuracy_score, precision_score, recall_score, f1_score,
     classification_report, roc_auc_score, precision_recall_curve,
-    auc, confusion_matrix
+    auc,
 )
 
 # Project root

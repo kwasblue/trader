@@ -3,13 +3,25 @@
 AutoTrader - Autonomous Trading Daemon
 =======================================
 
-Runs the trading system automatically:
-1. Waits for market open
-2. Runs pre-flight checks
-3. Executes trading strategies during market hours
-4. Stops at market close
-5. Updates historical data
-6. Sleeps until next trading day
+ORCHESTRATION WRAPPER: This is a scheduling/lifecycle wrapper around the canonical path.
+It does NOT define application composition - that lives in app/bootstrap.py and app/container.py.
+
+What this file does:
+- Schedule trading around market hours (MarketScheduler)
+- Run daily trading cycle (wait -> preflight -> trade -> update -> sleep)
+- Handle daemon lifecycle (start/stop/status)
+
+What this file does NOT do:
+- Define how components are wired (app/container.py does that)
+- Create brokers, strategies, or execution engines directly
+- Own the core trading logic (runners do that)
+
+Canonical path this wraps:
+    autoamsterdam.py -> bootstrap_app() -> AppContext
+                     -> RunnerFactory.create() -> runner.run()
+
+The AutoTrader class receives an AppContext from bootstrap_app(), ensuring
+all automation uses the same composition root as CLI and GUI modes.
 
 Usage (via CLI - recommended):
     trader start                           # Start with defaults
@@ -19,8 +31,8 @@ Usage (via CLI - recommended):
     trader start --daemon                  # Background mode
 
 Usage (direct - for debugging):
-    python autotrader.py --symbols AAPL MSFT TSLA
-    python autotrader.py --broker alpaca --dry-run
+    python autoamsterdam.py --symbols AAPL MSFT TSLA
+    python autoamsterdam.py --broker alpaca --dry-run
 """
 
 from __future__ import annotations
@@ -35,14 +47,17 @@ import fcntl
 import warnings
 from pathlib import Path
 from datetime import datetime, time, timedelta
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, TYPE_CHECKING
 from enum import Enum
 from zoneinfo import ZoneInfo
+
+if TYPE_CHECKING:
+    from app.bootstrap import AppContext
 
 # Suppress sklearn warnings for small sample sizes
 warnings.filterwarnings("ignore", category=RuntimeWarning, module="sklearn")
 
-# Add project root to path
+# Add project root to path (required before imports)
 ROOT = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -130,11 +145,8 @@ class InstanceLock:
     def __exit__(self, *args):
         self.release()
 
-from dotenv import load_dotenv
-load_dotenv(ROOT / ".venv" / ".env")
-load_dotenv()
-
-from loggers.logger import Logger
+# Canonical path imports - all initialization goes through bootstrap
+from app.bootstrap import bootstrap_app, AppContext
 from core.config_loader import get_config
 
 
@@ -290,20 +302,22 @@ class AutoTrader:
     - Post-market data updates
     - Sleep until next session
 
+    Uses the canonical path: bootstrap_app() -> AppContext -> RunnerFactory
+
     Logs to: logs/autotrader.log
     """
 
     def __init__(
         self,
-        symbols: List[str],
-        broker: str = "alpaca",
+        ctx: AppContext,
         dry_run: bool = False,
         update_data_days: int = 5,
         day_trade: bool = False,
     ):
-        # Store parameters
-        self.symbols = symbols
-        self.broker = broker
+        # Store AppContext - single source of truth
+        self.ctx = ctx
+        self.symbols = ctx.symbols
+        self.broker = ctx.metadata.get('broker', 'alpaca')
         self.dry_run = dry_run
         self.update_data_days = update_data_days
         self.day_trade = day_trade
@@ -323,16 +337,9 @@ class AutoTrader:
             "errors": [],
         }
 
-        # Setup logging (DEPRECATED - use bootstrap_app)
-        # Kept for backwards compatibility
-        self.logger = Logger(
-            "autotrader.log",
-            "AutoTrader",
-            propagate=True
-        ).get_logger()
-
-        # Config
-        self.config = get_config()
+        # Use logger and config from canonical AppContext
+        self.logger = ctx.logger
+        self.config = ctx.config
 
         # Override swing mode if day trading is enabled
         if day_trade:
@@ -345,9 +352,9 @@ class AutoTrader:
         self.post_market_delay = self.config.autotrader.post_market_delay_minutes
 
         self.logger.info("=" * 60)
-        self.logger.info("AUTOTRADER INITIALIZED")
-        self.logger.info(f"Symbols: {symbols}")
-        self.logger.info(f"Broker: {broker}")
+        self.logger.info("AUTOTRADER INITIALIZED (via canonical path)")
+        self.logger.info(f"Symbols: {self.symbols}")
+        self.logger.info(f"Broker: {self.broker}")
         self.logger.info(f"Dry run: {dry_run}")
         self.logger.info(f"Day trade: {day_trade}")
         self.logger.info("=" * 60)
@@ -913,17 +920,21 @@ class AutoTrader:
 
 async def main():
     parser = argparse.ArgumentParser(
-        description='Autonomous trading daemon',
+        description='Autonomous trading daemon (wrapper around canonical path)',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python autotrader.py                          # Run with defaults
-  python autotrader.py --symbols AAPL TSLA      # Specific symbols
-  python autotrader.py --broker schwab          # Use Schwab broker
-  python autotrader.py --dry-run                # No actual trading
+  python autoamsterdam.py                       # Run with defaults
+  python autoamsterdam.py --symbols AAPL TSLA   # Specific symbols
+  python autoamsterdam.py --broker schwab       # Use Schwab broker
+  python autoamsterdam.py --dry-run             # No actual trading
 
 Background:
-  nohup python autotrader.py > logs/autotrader_stdout.log 2>&1 &
+  nohup python autoamsterdam.py > logs/autotrader_stdout.log 2>&1 &
+
+Canonical Path:
+  This script uses: bootstrap_app() -> AppContext -> RunnerFactory
+  See app/bootstrap.py for the canonical initialization path.
         """
     )
 
@@ -964,16 +975,25 @@ Background:
         symbols = get_list_manager().get_trade_list()
         if not symbols:
             print("Error: No symbols in trade list. Add symbols with:")
-            print("  python autotrader_ctl.py add AAPL --trade")
+            print("  trader add AAPL --trade")
             sys.exit(1)
         print(f"Using trade list: {symbols}")
     else:
         symbols = args.symbols
 
-    # Create autotrader
-    trader = AutoTrader(
+    # =========================================================================
+    # CANONICAL PATH: Use bootstrap_app() for all initialization
+    # =========================================================================
+    ctx = bootstrap_app(
+        mode='daemon',
         symbols=symbols,
         broker=args.broker,
+        trading_mode='live' if not args.dry_run else 'dry_run',
+    )
+
+    # Create autotrader with canonical AppContext
+    trader = AutoTrader(
+        ctx=ctx,
         dry_run=args.dry_run,
         update_data_days=args.update_days,
         day_trade=args.day_trade,

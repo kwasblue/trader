@@ -1,28 +1,42 @@
 #!/usr/bin/env python
 """
-AutoTrader Control Script
+AutoTrader Process Control
+==========================
+
+PROCESS MANAGER: This is NOT an application shell.
+This script only manages the autotrader daemon process (start/stop/status).
+It does NOT define application wiring or create runtime objects.
+
+For the canonical runtime path, see: app/bootstrap.py -> app/container.py
+
+What this file does:
+- Start/stop the autotrader daemon process
+- Check daemon status via PID file
+- View logs
+- Manage symbol lists
+
+What this file does NOT do:
+- Define application composition
+- Create runners, brokers, or trading components
+- Own the runtime lifecycle (autoamsterdam.py does that)
 
 Manage the autotrader daemon and symbol lists:
-- Start/stop the daemon
-- Check status
-- View logs
-- Manage trade and watch lists
 
 Usage:
-    python autotrader_ctl.py start [--symbols AAPL MSFT] [--dry-run]
-    python autotrader_ctl.py stop
-    python autotrader_ctl.py status
-    python autotrader_ctl.py logs [-n 50]
+    python amsterdam_ctl.py start [--symbols AAPL MSFT] [--dry-run]
+    python amsterdam_ctl.py stop
+    python amsterdam_ctl.py status
+    python amsterdam_ctl.py logs [-n 50]
 
 Symbol List Management:
-    python autotrader_ctl.py list                    # Show all symbols
-    python autotrader_ctl.py list --trade            # Show trade list only
-    python autotrader_ctl.py list --watch            # Show watch list only
-    python autotrader_ctl.py add TSLA --trade        # Add to trade list
-    python autotrader_ctl.py add NVDA --watch        # Add to watch list
-    python autotrader_ctl.py move TSLA --to-watch    # Move to watch list
-    python autotrader_ctl.py move NVDA --to-trade    # Move to trade list
-    python autotrader_ctl.py remove AAPL             # Remove from all lists
+    python amsterdam_ctl.py list                    # Show all symbols
+    python amsterdam_ctl.py list --trade            # Show trade list only
+    python amsterdam_ctl.py list --watch            # Show watch list only
+    python amsterdam_ctl.py add TSLA --trade        # Add to trade list
+    python amsterdam_ctl.py add NVDA --watch        # Add to watch list
+    python amsterdam_ctl.py move TSLA --to-watch    # Move to watch list
+    python amsterdam_ctl.py move NVDA --to-trade    # Move to trade list
+    python amsterdam_ctl.py remove AAPL             # Remove from all lists
 """
 
 from __future__ import annotations
@@ -36,10 +50,19 @@ from pathlib import Path
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+# Add project root to path (required before imports)
 ROOT = Path(__file__).resolve().parent
-PID_FILE = ROOT / "logs" / "autoamsterdam.pid"
-LOG_FILE = ROOT / "logs" / "autoamsterdam.log"
-STDOUT_LOG = ROOT / "logs" / "autoamsterdam_stdout.log"
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+# Use canonical path helper
+from core.config_loader import get_app_path
+APP_ROOT = get_app_path()
+
+# Canonical file locations
+PID_FILE = APP_ROOT / "logs" / "autotrader.pid"
+LOG_FILE = APP_ROOT / "logs" / "autotrader.log"
+STDOUT_LOG = APP_ROOT / "logs" / "autotrader_stdout.log"
 
 ET = ZoneInfo("America/New_York")
 
@@ -72,10 +95,10 @@ def start(args) -> int:
         return 1
 
     # Ensure logs directory exists
-    (ROOT / "logs").mkdir(exist_ok=True)
+    (APP_ROOT / "logs").mkdir(exist_ok=True)
 
     # Build command
-    cmd = [sys.executable, str(ROOT / "autoamsterdam.py")]
+    cmd = [sys.executable, str(APP_ROOT / "autoamsterdam.py")]
 
     if args.symbols:
         cmd.extend(["--symbols"] + args.symbols)
@@ -111,7 +134,7 @@ def start(args) -> int:
             cmd,
             stdout=stdout_file,
             stderr=subprocess.STDOUT,
-            cwd=str(ROOT),
+            cwd=str(APP_ROOT),
             start_new_session=True,  # Detach from terminal
         )
 

@@ -142,22 +142,37 @@ class TestAutoTrader:
 
     @pytest.fixture
     def autotrader(self):
-        with patch('autoamsterdam.get_config') as mock_config:
-            mock_config.return_value = MagicMock(
-                autotrader=MagicMock(
-                    pre_market_buffer_minutes=15,
-                    post_market_delay_minutes=5,
-                    preflight_max_retries=3,
-                    preflight_retry_delay=1
-                )
+        """Create AutoTrader with mocked AppContext (canonical path)."""
+        from app.bootstrap import AppContext
+        import logging
+
+        # Create mock config
+        mock_config = MagicMock(
+            autotrader=MagicMock(
+                pre_market_buffer_minutes=15,
+                post_market_delay_minutes=5,
+                preflight_max_retries=3,
+                preflight_retry_delay=1
             )
-            trader = AutoTrader(
-                symbols=['AAPL', 'MSFT'],
-                broker='alpaca',
-                dry_run=True,
-                update_data_days=5
-            )
-            return trader
+        )
+
+        # Create mock AppContext (canonical path)
+        mock_ctx = AppContext(
+            config=mock_config,
+            logger=logging.getLogger('test'),
+            mode='daemon',
+            symbols=['AAPL', 'MSFT'],
+            root_path=ROOT,
+            metadata={'broker': 'alpaca'}
+        )
+
+        # Create AutoTrader with canonical AppContext
+        trader = AutoTrader(
+            ctx=mock_ctx,
+            dry_run=True,
+            update_data_days=5
+        )
+        return trader
 
     def test_init(self, autotrader):
         """Test AutoTrader initialization."""
@@ -244,30 +259,43 @@ class TestAutoTraderIntegration:
     @pytest.mark.asyncio
     async def test_dry_run_session(self):
         """Test a complete dry run session."""
-        with patch('autoamsterdam.get_config') as mock_config:
-            mock_config.return_value = MagicMock(
-                autotrader=MagicMock(
-                    pre_market_buffer_minutes=0,
-                    post_market_delay_minutes=0
-                )
+        from app.bootstrap import AppContext
+        import logging
+
+        # Create mock config
+        mock_config = MagicMock(
+            autotrader=MagicMock(
+                pre_market_buffer_minutes=0,
+                post_market_delay_minutes=0
             )
-            trader = AutoTrader(
-                symbols=['AAPL'],
-                broker='alpaca',
-                dry_run=True
-            )
+        )
 
-            # Mock scheduler to say market is open briefly then closes
-            call_count = [0]
+        # Create mock AppContext (canonical path)
+        mock_ctx = AppContext(
+            config=mock_config,
+            logger=logging.getLogger('test'),
+            mode='daemon',
+            symbols=['AAPL'],
+            root_path=ROOT,
+            metadata={'broker': 'alpaca'}
+        )
 
-            def mock_is_open():
-                call_count[0] += 1
-                return call_count[0] < 3
+        trader = AutoTrader(
+            ctx=mock_ctx,
+            dry_run=True
+        )
 
-            trader.scheduler.is_market_open = mock_is_open
-            trader.running = True
+        # Mock scheduler to say market is open briefly then closes
+        call_count = [0]
 
-            with patch('asyncio.sleep', new_callable=AsyncMock):
-                await trader._run_trading_session()
+        def mock_is_open():
+            call_count[0] += 1
+            return call_count[0] < 3
 
-            assert trader.stats['sessions_completed'] == 1
+        trader.scheduler.is_market_open = mock_is_open
+        trader.running = True
+
+        with patch('asyncio.sleep', new_callable=AsyncMock):
+            await trader._run_trading_session()
+
+        assert trader.stats['sessions_completed'] == 1

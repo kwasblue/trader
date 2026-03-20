@@ -7,7 +7,6 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import Any, Callable, Awaitable, Dict, List, Set
-import weakref
 
 from core.base.event_handler_base import Event, EventHandlerBase
 from core.contracts.events import EVENT_SCHEMA_MAP, GuardrailPayload, EVENT_GUARDRAIL_TRIGGERED

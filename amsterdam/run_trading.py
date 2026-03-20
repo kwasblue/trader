@@ -1,13 +1,21 @@
 #!/usr/bin/env python3
 """
-Unified Trading Application
----------------------------
-Runs the trading system with GUI and choice of backend:
-- Simulation (GBM price simulator)
-- Alpaca (paper or live)
-- Schwab (live trading)
+GUI Trading Application
+=======================
 
-The GUI connects to the backend via a shared EventHandler bus.
+SECONDARY WRAPPER: This is a GUI-specific wrapper around the canonical path.
+For the canonical runtime path, see: app/bootstrap.py -> app/container.py
+
+This file is NOT the main application shell. It provides:
+- Qt GUI with qasync event loop integration
+- Simulation mode (GBM price simulator) for testing
+- Visual monitoring of live trading
+
+The primary runtime path is:
+    cli/main.py -> app/bootstrap.py -> app/container.py -> RunnerFactory
+
+This GUI wrapper:
+    run_trading.py -> bootstrap_app() -> TradingApplication (GUI-specific)
 
 Usage:
     python run_trading.py                     # Default: Simulation mode

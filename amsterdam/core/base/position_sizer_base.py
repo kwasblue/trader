@@ -15,8 +15,6 @@ from abc import ABC, abstractmethod
 from typing import Optional, Dict, Any
 import logging
 
-from core.enums import PositionSizingMethod
-
 logger = logging.getLogger(__name__)
 
 

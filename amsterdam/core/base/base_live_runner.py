@@ -52,7 +52,7 @@ from core.contracts.events import (
     EVENT_HEALTH_UPDATE,
 )
 from core.config_loader import get_config, create_position_sizer, create_drawdown_monitor, create_position_manager, TradingConfig
-from core.simulator.simulation import compute_atr, classify_regime, IncrementalATR
+from core.simulator.simulation import classify_regime, IncrementalATR
 from core.logic.live_execution_engine import LiveExecutionEngine
 from core.logic.trade_logic_manager import DynamicTradeLogicManager
 from core.app_types import SignalContext
