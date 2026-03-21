@@ -21,6 +21,7 @@ from __future__ import annotations
 from typing import Optional, Dict, Union, TYPE_CHECKING
 from core.base.trade_logic_manager_base import TradeApprover
 from loggers.logger import Logger
+from core.tracing import trace
 
 if TYPE_CHECKING:
     from core.logic.trade_logic_manager import DynamicTradeLogicManager
@@ -94,6 +95,7 @@ class TradeApproverRouter:
         self.approver_by_regime[regime] = approver
         logger.debug(f"Registered regime approver for {regime}: {approver.__class__.__name__}")
 
+    @trace
     def get_approver(
         self,
         symbol: str,

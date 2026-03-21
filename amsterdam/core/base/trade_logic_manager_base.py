@@ -24,6 +24,7 @@ from datetime import datetime, timedelta, timezone
 import logging
 
 from core.enums import OrderSide
+from core.tracing import trace
 
 if TYPE_CHECKING:
     from core.contracts.types import SignalContext

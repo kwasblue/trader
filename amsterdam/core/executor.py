@@ -21,6 +21,7 @@ from core.base.base_broker_interface import BaseBrokerInterface
 from core.enums import OrderSide, OrderType, OrderStatus
 from core.app_types import OrderResult
 from loggers.logger import Logger
+from core.tracing import trace
 
 
 class LiveExecutor(BaseExecutor):
@@ -70,6 +71,7 @@ class LiveExecutor(BaseExecutor):
     # ORDER PLACEMENT
     # ========================================================================
 
+    @trace
     def place_order(
         self,
         symbol: str,

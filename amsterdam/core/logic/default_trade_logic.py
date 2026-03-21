@@ -28,6 +28,7 @@ from core.enums import OrderSide
 from core.logic.symbol_state import SymbolState
 from core.events.eventhandler import EventHandler
 from core.contracts.events import EVENT_STRATEGY_SIGNAL, StrategySignalPayload
+from core.tracing import trace
 from loggers.logger import Logger
 import asyncio
 
@@ -145,6 +146,7 @@ class StandardTradeApprover(TradeApprover):
     # MAIN GATING LOGIC
     # ========================================================================
 
+    @trace
     def should_trade(
         self,
         context: "SignalContext",

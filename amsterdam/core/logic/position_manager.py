@@ -113,6 +113,7 @@ class PositionManager:
     # ENTRY LEVEL CALCULATION
     # ========================================================================
 
+    @trace
     def calculate_levels(
         self,
         state: SymbolState,
@@ -167,6 +168,7 @@ class PositionManager:
     # TRAILING STOP
     # ========================================================================
 
+    @trace
     def update_trailing_stop(
         self,
         state: SymbolState,

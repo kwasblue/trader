@@ -58,6 +58,7 @@ from core.logic.trade_logic_manager import DynamicTradeLogicManager
 from core.app_types import SignalContext
 from core.executor import LiveExecutor
 from core.state_reconciler import StateReconciler, ReconcilerConfig
+from core.tracing import trace
 
 if TYPE_CHECKING:
     from core.base.base_broker_interface import BaseBrokerInterface
@@ -702,6 +703,7 @@ class BaseLiveRunner(ABC):
         self._last_daily_refresh = datetime.now(timezone.utc).date()
         self.logger.info(f"Seeded {len(self.symbols)} symbols with up to {lookback_bars} bars.")
 
+    @trace
     async def _process_bar(self, bar: Dict) -> None:
         """
         Process a canonicalized bar through the strategy pipeline.
@@ -793,7 +795,8 @@ class BaseLiveRunner(ABC):
         strategy = self.router.get_strategy(symbol, regime)
         strategy_name = type(strategy).__name__
         try:
-            raw_signal = strategy.generate_signal(df)
+            # Use traced wrapper for full execution tracing
+            raw_signal = strategy.generate_signal_traced(df)
             signal = int(raw_signal if isinstance(raw_signal, (int, float)) else getattr(raw_signal, "signal", 0))
         except Exception as e:
             self.logger.exception(f"[{symbol}] Strategy error in {strategy_name}: {e}")

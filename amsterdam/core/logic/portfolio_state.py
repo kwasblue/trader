@@ -19,6 +19,7 @@ from loggers.logger import Logger
 
 from core.app_types import BrokerSnapshot, OrderResult
 from core.enums import OrderSide, PositionState
+from core.tracing import trace
 
 
 
@@ -261,6 +262,7 @@ class PortfolioState:
         # Mark as updated
         self.mark_updated()
     
+    @trace
     def apply_fill(
         self,
         symbol: str,

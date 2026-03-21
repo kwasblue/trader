@@ -1,7 +1,7 @@
 ================================================================================
 📂 PROJECT STRUCTURE
-Generated: 2026-03-20 19:44:16
-Total Files: 249
+Generated: 2026-03-20 21:02:08
+Total Files: 250
 ================================================================================
 
 📄 app/bootstrap.py
@@ -383,7 +383,7 @@ Total Files: 249
       ├── def _get_or_create_state(self, symbol)
       ├── def _check_trade_approval(self, trade_approver, context, state)
       ├── def _get_exit_quantity(self, symbol, action_type, trade_logic)
-      ├── def _post_execution(self, symbol, state, result, action_type, regime, strategy_name)
+      ├── def _post_execution(self, symbol, state, result, action_type, regime, strategy_name, pre_state)
       ├── def _update_portfolio_after_execution(self, symbol, result)
       ├── def on_market_open(self)
       ├── def on_market_close(self)
@@ -589,6 +589,8 @@ Total Files: 249
    🧱 class SchwabConfig
       (no methods)
    🧱 class RiskConfig
+      (no methods)
+   🧱 class ExecutionConfig
       (no methods)
    🧱 class DrawdownMonitorConfig
       (no methods)
@@ -1019,11 +1021,11 @@ Total Files: 249
       ├── def _log_meta_entry(self, context, state, result, qty)
       ├── def _log_meta_exit(self, symbol, state, result, action_type)
       ├── def set_atr_hist_reference(self, atr_hist)
-      └── def _post_execution(self, symbol, state, result, action_type, regime, strategy_name)
+      └── def _post_execution(self, symbol, state, result, action_type, regime, strategy_name, pre_state)
 
 📄 core/logic/mock_execution_engine.py
    🧱 class MockExecutionEngine
-      ├── def __init__(self, broker, executor, sizer, performance_tracker, trade_logic_manager, portfolio, drawdown_monitor, event_handler, position_manager, meta_logger)
+      ├── def __init__(self, broker, executor, sizer, performance_tracker, trade_logic_manager, portfolio, drawdown_monitor, event_handler, position_manager, meta_logger, slippage_pct, commission)
       ├── def _execute_mock_trade(self, symbol, state, side, qty, price, action_type)
       ├── def _update_mock_portfolio(self, symbol, side, qty, price)
       ├── def _calculate_quantity(self, symbol, state, action_type, price, atr, regime, trade_logic)
@@ -1434,6 +1436,23 @@ Total Files: 249
       └── def close(self)
    ⚙️  def get_list_manager(self, db_path)
    ⚙️  def reset_list_manager()
+
+📄 core/tracing.py
+   🧱 class Tracer
+      ├── def __init__(self)
+      ├── def get_instance(self, cls)
+      ├── def configure(self, enabled, log_path)
+      ├── def _write_event(self, event)
+      ├── def enter(self, func_name, args_dict)
+      ├── def exit(self, func_name, result, elapsed_ms, error)
+      ├── def span(self, name)
+      └── def close(self)
+   ⚙️  def get_tracer()
+   ⚙️  def trace(self, func)
+   ⚙️  def decorator(self, fn)
+   ⚙️  def sync_wrapper()
+   ⚙️  def _build_args_dict(self, fn, args, kwargs, param_names, extract_params)
+   ⚙️  def configure_tracing_from_config()
 
 📄 core/trade_validator.py
    🧱 class ValidationResult
@@ -3249,6 +3268,8 @@ Total Files: 249
       ├── def test_not_in_position_returns_false(self, pm)
       ├── def test_stop_loss_hit_long(self, pm)
       ├── def test_stop_loss_hit_short(self, pm)
+      ├── def test_same_bar_exit_blocked(self, pm)
+      ├── def test_catastrophic_stop_allowed_on_same_bar(self, pm)
       ├── def test_take_profit_hit_after_min_hold(self, pm)
       ├── def test_take_profit_blocked_before_min_hold(self, pm)
       ├── def test_signal_reversal_triggers_exit(self, pm)
@@ -4152,7 +4173,7 @@ Total Files: 249
 ================================================================================
 📊 STATISTICS
 ================================================================================
-Total Classes:    680
-Total Functions:  442
-Total Methods:    2367
+Total Classes:    682
+Total Functions:  448
+Total Methods:    2377
 ================================================================================

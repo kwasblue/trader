@@ -36,6 +36,7 @@ import threading
 from core.base.position_sizer_base import PositionSizerBase
 from core.logic.portfolio_state import PortfolioState
 from loggers.logger import Logger
+from core.tracing import trace
 from typing import Optional
 import math
 
@@ -85,6 +86,7 @@ class SimplePositionSizer(PositionSizerBase):
             return min(self.max_risk_percentage, self.risk_per_trade * 1.25)
         return self.risk_per_trade
 
+    @trace
     def calculate_position_size(
         self,
         symbol: str = None,
@@ -263,6 +265,7 @@ class KellyPositionSizer(PositionSizerBase):
             return min(self.max_risk_percentage, self.risk_per_trade * 1.25)
         return self.risk_per_trade
 
+    @trace
     def calculate_position_size(
         self,
         symbol: str,

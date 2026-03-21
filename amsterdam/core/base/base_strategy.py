@@ -12,6 +12,8 @@ from typing import Union, Dict, Any, Optional, List
 import pandas as pd
 import logging
 
+from core.tracing import trace
+
 logger = logging.getLogger(__name__)
 
 
@@ -156,21 +158,38 @@ class BaseStrategy(ABC):
         """
         pass
     
+    @trace
     def on_bar(self, bar: Dict[str, Any]) -> int:
         """
         Process a single bar and generate signal.
-        
+
         This is a convenience method that wraps generate_signal for
         real-time bar-by-bar processing. Override if you need special
         handling for streaming data.
-        
+
         Args:
             bar: Single bar data dict with OHLCV fields
-            
+
         Returns:
             Signal as integer (1, -1, or 0)
         """
         return self.generate_signal(bar)
+
+    @trace
+    def generate_signal_traced(self, data: Union[pd.DataFrame, Dict[str, Any]]) -> int:
+        """
+        Traced wrapper for generate_signal.
+
+        Use this method when you want execution tracing for signal generation.
+        Calls the abstract generate_signal method with tracing enabled.
+
+        Args:
+            data: Market data (DataFrame or dict)
+
+        Returns:
+            Signal as integer (1, -1, or 0)
+        """
+        return self.generate_signal(data)
     
     def on_data(self, data: pd.DataFrame, vectorized: bool = True) -> pd.DataFrame:
         """
