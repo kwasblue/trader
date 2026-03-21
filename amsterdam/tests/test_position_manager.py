@@ -213,12 +213,12 @@ class TestCheckExitConditions:
         assert reason is None
 
     def test_stop_loss_hit_long(self, pm):
-        """Stop loss hit should trigger exit for long."""
+        """Stop loss hit should trigger exit for long (after first bar)."""
         state = SymbolState(symbol="AAPL")
         state.side = "long"
         state.current_position = 100  # Must set to be "in position"
         state.stop_loss = 145.0
-        state.bars_held = 0  # Immediate - SL always triggers
+        state.bars_held = 1  # After first bar - SL triggers normally
 
         should_exit, reason = pm.check_exit_conditions(state, price=144.0, signal=0)
 
@@ -226,17 +226,47 @@ class TestCheckExitConditions:
         assert "Stop loss" in reason
 
     def test_stop_loss_hit_short(self, pm):
-        """Stop loss hit should trigger exit for short."""
+        """Stop loss hit should trigger exit for short (after first bar)."""
         state = SymbolState(symbol="AAPL")
         state.side = "short"
         state.current_position = -100  # Negative for short
         state.stop_loss = 155.0
-        state.bars_held = 0
+        state.bars_held = 1  # After first bar - SL triggers normally
 
         should_exit, reason = pm.check_exit_conditions(state, price=156.0, signal=0)
 
         assert should_exit is True
         assert "Stop loss" in reason
+
+    def test_same_bar_exit_blocked(self, pm):
+        """Same-bar exits (bars_held=0) should be blocked to prevent churn."""
+        state = SymbolState(symbol="AAPL")
+        state.side = "long"
+        state.current_position = 100
+        state.entry_price = 150.0
+        state.stop_loss = 145.0
+        state.bars_held = 0  # Same bar as entry
+
+        # Normal stop-loss hit should be blocked on bar 0
+        should_exit, reason = pm.check_exit_conditions(state, price=144.0, signal=0)
+
+        assert should_exit is False
+        assert "Same-bar exit blocked" in reason
+
+    def test_catastrophic_stop_allowed_on_same_bar(self, pm):
+        """Catastrophic price moves (>2x SL distance) should allow same-bar exit."""
+        state = SymbolState(symbol="AAPL")
+        state.side = "long"
+        state.current_position = 100
+        state.entry_price = 150.0
+        state.stop_loss = 145.0  # 5 points away
+        state.bars_held = 0
+
+        # Price crashes 15 points (3x the SL distance of 5)
+        should_exit, reason = pm.check_exit_conditions(state, price=135.0, signal=0)
+
+        assert should_exit is True
+        assert "catastrophic" in reason.lower()
 
     def test_take_profit_hit_after_min_hold(self, pm):
         """Take profit should trigger exit after min hold period."""
@@ -314,7 +344,7 @@ class TestSwingMode:
         assert "Swing mode" in reason
 
     def test_swing_mode_allows_stop_loss_same_day(self):
-        """Swing mode should still allow stop loss (protection)."""
+        """Swing mode should still allow stop loss (protection) after first bar."""
         pm = PositionManager(swing_mode=True, min_hold_days=1)
 
         state = SymbolState(symbol="AAPL")
@@ -322,9 +352,9 @@ class TestSwingMode:
         state.current_position = 100
         state.entry_date = datetime.now(timezone.utc)  # Entered today
         state.stop_loss = 145.0
-        state.bars_held = 0
+        state.bars_held = 1  # After first bar (same-bar guard passed)
 
-        # SL hit same day - should still trigger
+        # SL hit same day - should still trigger (swing mode allows SL)
         should_exit, reason = pm.check_exit_conditions(state, price=144.0, signal=0)
 
         assert should_exit is True

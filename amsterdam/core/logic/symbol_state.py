@@ -102,6 +102,7 @@ class SymbolState:
     
     # Strategy tracking
     strategy_name: Optional[str] = None
+    entry_regime: Optional[str] = None  # Regime when position was opened
     
     # Legacy/optional fields
     portfolio_value: float = 0.0  # For reference if needed
@@ -217,7 +218,10 @@ class SymbolState:
         self.position_state = PositionState.NONE
         self.pending_order_id = None
         self.trade_id = None  # Clear trade_id for meta logging
-        # Note: strategy_name preserved (may use same strategy next time)
+        # Clear strategy ownership - allows other strategies to manage next position
+        # The cooldown mechanism (in TradeApprover) prevents rapid re-entry
+        self.strategy_name = None
+        self.entry_regime = None
 
         logger.debug(f"[{self.symbol}] State reset")
     

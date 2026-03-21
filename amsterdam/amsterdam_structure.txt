@@ -1,7 +1,7 @@
 ================================================================================
 📂 PROJECT STRUCTURE
-Generated: 2026-03-20 19:30:17
-Total Files: 250
+Generated: 2026-03-20 19:44:16
+Total Files: 249
 ================================================================================
 
 📄 app/bootstrap.py
@@ -1893,9 +1893,6 @@ Total Files: 250
       ├── def _load_stock_data(self, symbols)
       └── def load_best_model(self, model, primary)
    ⚙️  def json_default(self, o)
-   ⚙️  def main()
-
-📄 monitoring/app.py
    ⚙️  def main()
 
 📄 monitoring/bus.py
@@ -4156,6 +4153,6 @@ Total Files: 250
 📊 STATISTICS
 ================================================================================
 Total Classes:    680
-Total Functions:  443
+Total Functions:  442
 Total Methods:    2367
 ================================================================================

@@ -22,6 +22,7 @@ from core.logic.position_manager import PositionManager
 from core.logic.symbol_state import SymbolState
 from core.app_types import OrderResult, SignalContext
 from core.enums import OrderSide
+from core.tracing import trace
 
 logger = logging.getLogger(__name__)
 
@@ -200,6 +201,7 @@ class ExecutionEngineBase(ABC):
     # SHARED IMPLEMENTATIONS
     # ========================================================================
 
+    @trace
     def _determine_action(
         self,
         symbol: str,
@@ -280,6 +282,7 @@ class ExecutionEngineBase(ABC):
             self.symbol_states[symbol] = SymbolState(symbol=symbol)
         return self.symbol_states[symbol]
 
+    @trace
     def _check_trade_approval(
         self,
         trade_approver: TradeApprover,
@@ -290,8 +293,9 @@ class ExecutionEngineBase(ABC):
         Check if trade should be executed using approver.
 
         Shared implementation that:
-        1. Syncs state with portfolio position
-        2. Delegates approval decision to trade_approver
+        1. Enforces strategy lock (position owned by one strategy)
+        2. Syncs state with portfolio position
+        3. Delegates approval decision to trade_approver
 
         Args:
             trade_approver: TradeApprover instance for gating decisions
@@ -301,6 +305,48 @@ class ExecutionEngineBase(ABC):
         Returns:
             Tuple of (should_trade, reason)
         """
+        # STRATEGY LOCK CHECK: Prevent strategy churn (with regime-based override)
+        # If in position and a strategy owns it, only that strategy can manage
+        # UNLESS the regime has changed (regime-based strategy switching)
+        if hasattr(state, 'is_in_position') and state.is_in_position:
+            locked_strategy = getattr(state, 'strategy_name', None)
+            incoming_strategy = context.strategy_name
+            entry_regime = getattr(state, 'entry_regime', None)
+            current_regime = context.regime
+
+            # Only enforce if both strategies are known (non-None)
+            if locked_strategy and incoming_strategy and locked_strategy != incoming_strategy:
+                # Check for regime change - allow switch if regime changed
+                regime_changed = (
+                    entry_regime is not None and
+                    current_regime is not None and
+                    entry_regime != current_regime
+                )
+
+                # Get regime persistence from metadata if available
+                # (set by runner/strategy via context.metadata['regime_persist'])
+                regime_persist = context.metadata.get('regime_persist', 0)
+                min_regime_persist = context.metadata.get('min_regime_persist', 3)
+
+                if regime_changed and regime_persist >= min_regime_persist:
+                    # Regime changed and persisted - allow strategy switch
+                    logger.info(
+                        f"[{context.symbol}] Strategy switch allowed: {locked_strategy} -> {incoming_strategy} "
+                        f"(regime: {entry_regime} -> {current_regime}, persisted {regime_persist} bars)"
+                    )
+                    # Update strategy ownership to new strategy
+                    state.strategy_name = incoming_strategy
+                    state.entry_regime = current_regime
+                else:
+                    # Block - either same regime or not persisted enough
+                    reason = (
+                        f"Strategy lock: position owned by {locked_strategy}"
+                        if not regime_changed else
+                        f"Regime change not persisted ({regime_persist}/{min_regime_persist} bars)"
+                    )
+                    logger.debug(f"[{context.symbol}] {reason}")
+                    return (False, reason)
+
         # Sync state with portfolio
         self._setup_approval_state(context.symbol, state)
 
@@ -357,7 +403,8 @@ class ExecutionEngineBase(ABC):
         result: OrderResult,
         action_type: str,
         regime: str,
-        strategy_name: Optional[str]
+        strategy_name: Optional[str],
+        pre_state: Optional[Dict[str, Any]] = None
     ) -> None:
         """
         Post-execution logging and state updates.
@@ -375,12 +422,23 @@ class ExecutionEngineBase(ABC):
             action_type: Type of action taken
             regime: Market regime
             strategy_name: Strategy that generated signal
+            pre_state: Optional dict with pre-trade state captured before execution:
+                       {'cash': float, 'position_qty': int, 'avg_price': float}
+                       If provided, uses these values for before-state logging.
+                       Required for LiveExecutionEngine where portfolio is updated
+                       before this method is called.
         """
-        # Capture state BEFORE portfolio update
-        cash_before = self.portfolio.cash
-        position_before = self.portfolio.positions.get(symbol)
-        position_qty_before = position_before.qty if position_before else 0
-        position_avg_price = position_before.avg_price if position_before else None
+        # Use pre_state if provided (LiveExecutionEngine), otherwise capture now
+        if pre_state:
+            cash_before = pre_state.get('cash', 0.0)
+            position_qty_before = pre_state.get('position_qty', 0)
+            position_avg_price = pre_state.get('avg_price')
+        else:
+            # Capture state BEFORE portfolio update (for MockExecutionEngine)
+            cash_before = self.portfolio.cash
+            position_before = self.portfolio.positions.get(symbol)
+            position_qty_before = position_before.qty if position_before else 0
+            position_avg_price = position_before.avg_price if position_before else None
 
         # Hook for subclasses to handle portfolio updates
         self._update_portfolio_after_execution(symbol, result)
@@ -391,16 +449,18 @@ class ExecutionEngineBase(ABC):
         position_qty_after = position_after.qty if position_after else 0
 
         # Calculate P&L for closing trades (exits, partial exits, reversals)
+        # Use state.entry_price as primary source (more reliable than position avg_price)
         pnl = None
-        if action_type in ("exit", "partial_exit", "reversal") and position_avg_price is not None:
-            # For exits: calculate realized P&L
+        entry_price = getattr(state, 'entry_price', None) or position_avg_price
+        if action_type in ("exit", "partial_exit", "reversal") and entry_price is not None:
+            # For exits: calculate realized P&L from entry price
             filled_qty = result.filled_qty
             if result.side == OrderSide.SELL:
                 # Closing long: (exit_price - entry_price) * qty
-                pnl = (result.avg_price - position_avg_price) * filled_qty
+                pnl = (result.avg_price - entry_price) * filled_qty
             else:
                 # Closing short: (entry_price - exit_price) * qty
-                pnl = (position_avg_price - result.avg_price) * filled_qty
+                pnl = (entry_price - result.avg_price) * filled_qty
 
         # Extract commission from result (if broker provides it)
         commission = getattr(result, 'commission', None)

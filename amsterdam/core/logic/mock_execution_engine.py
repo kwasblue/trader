@@ -12,10 +12,14 @@ Simulates trade execution without real broker:
 from __future__ import annotations
 
 from typing import Optional, Dict, Any
-from datetime import datetime, timezone
+from datetime import datetime, timezone, time
+from zoneinfo import ZoneInfo
 import asyncio
 import logging
 import math
+
+# US Eastern timezone for market hours calculations
+ET = ZoneInfo("America/New_York")
 
 from core.base.execution_engine_base import ExecutionEngineBase
 from core.base.executor_base import BaseExecutor
@@ -40,25 +44,27 @@ from core.contracts.events import (
     TradePayload, PositionPayload, PnLPayload, AlertPayload, OrderStatusPayload
 )
 from core.logic.trade_logic_router import TradeApproverRouter
+from core.tracing import trace
 
 
 class MockExecutionEngine(ExecutionEngineBase):
     """
     Mock execution engine for simulation and testing.
-    
+
     Features:
     - Simulated fills (no real broker)
+    - Configurable slippage and commission
     - Drawdown monitoring with trade locks
     - Event-driven signal subscription
     - Portfolio state tracking
     - Event emission for monitoring
-    
+
     Use Cases:
     - Backtesting
     - Paper trading
     - Strategy development
     - Testing without risk
-    
+
     Example:
         # Setup
         broker = MockBroker()
@@ -69,7 +75,7 @@ class MockExecutionEngine(ExecutionEngineBase):
         portfolio = PortfolioState(initial_cash=100000)
         drawdown_monitor = DrawdownMonitor(max_drawdown=0.10)
         event_handler = EventHandler()  # Singleton
-        
+
         engine = MockExecutionEngine(
             broker=broker,
             executor=executor,
@@ -78,12 +84,14 @@ class MockExecutionEngine(ExecutionEngineBase):
             trade_logic_manager=logic,
             portfolio=portfolio,
             drawdown_monitor=drawdown_monitor,
-            event_handler=event_handler
+            event_handler=event_handler,
+            slippage_pct=0.001,      # 0.1% slippage
+            commission=1.0            # $1 per trade
         )
-        
+
         # Subscribe to signals
         await engine.subscribe_signals()
-        
+
         # Signals will be handled automatically via events
     """
     
@@ -99,6 +107,8 @@ class MockExecutionEngine(ExecutionEngineBase):
         event_handler: Optional[EventHandler] = None,
         position_manager: Optional["PositionManager"] = None,
         meta_logger: Optional[MetaTradeLogger] = None,
+        slippage_pct: Optional[float] = None,
+        commission: Optional[float] = None,
     ):
         """
         Initialize mock execution engine.
@@ -114,6 +124,8 @@ class MockExecutionEngine(ExecutionEngineBase):
             event_handler: Optional event bus for signal subscription
             position_manager: Optional position manager for exit logic
             meta_logger: Optional meta trade logger for ML training data
+            slippage_pct: Slippage percentage (0.001 = 0.1%). If None, loads from config.
+            commission: Commission per trade in dollars. If None, loads from config.
         """
         # Import here to avoid circular imports
         from core.logic.position_manager import PositionManager as PM
@@ -133,6 +145,24 @@ class MockExecutionEngine(ExecutionEngineBase):
             self.approver_router = trade_logic_manager
         else:
             self.approver_router = TradeApproverRouter(trade_logic_manager)
+
+        # Setup execution friction (slippage and commission)
+        # Load from config if not provided
+        if slippage_pct is None or commission is None:
+            try:
+                from core.config_loader import get_config
+                cfg = get_config()
+                exec_cfg = getattr(cfg, 'execution', None)
+                if exec_cfg:
+                    if slippage_pct is None:
+                        slippage_pct = getattr(exec_cfg, 'slippage_pct', 0.001)
+                    if commission is None:
+                        commission = getattr(exec_cfg, 'commission_per_trade', 0.0)
+            except Exception:
+                pass  # Use defaults
+
+        self.slippage_pct = slippage_pct if slippage_pct is not None else 0.001
+        self.commission = commission if commission is not None else 0.0
 
         # Setup drawdown monitor
         self.drawdown_monitor = drawdown_monitor
@@ -164,9 +194,13 @@ class MockExecutionEngine(ExecutionEngineBase):
         # Halt state for GUI control
         self._halted = False
 
+        friction_info = ""
+        if self.slippage_pct > 0 or self.commission > 0:
+            friction_info = f", slippage={self.slippage_pct:.3%}, commission=${self.commission:.2f}"
+
         self.logger.info(
             f"MockExecutionEngine initialized "
-            f"(meta_logging={'enabled' if meta_logger else 'disabled'})"
+            f"(meta_logging={'enabled' if meta_logger else 'disabled'}{friction_info})"
         )
     
     # ========================================================================
@@ -176,6 +210,7 @@ class MockExecutionEngine(ExecutionEngineBase):
     # Minimum confidence threshold for signal processing
     min_signal_confidence: float = 0.0
 
+    @trace
     async def handle_signal_context(
         self,
         context: SignalContext
@@ -282,8 +317,8 @@ class MockExecutionEngine(ExecutionEngineBase):
             )
 
             if result:
-                # 5. Update portfolio
-                self._update_mock_portfolio(context.symbol, side, qty, context.price)
+                # 5. Update portfolio (use slippage-adjusted price from result)
+                self._update_mock_portfolio(context.symbol, side, qty, result.avg_price)
 
                 # 5.5. Update state for entries (needed for P&L calculation on exit)
                 if action_type == "entry":
@@ -291,6 +326,7 @@ class MockExecutionEngine(ExecutionEngineBase):
                     state.side = "long" if side == OrderSide.BUY else "short"
                     state.current_position = qty
                     state.bars_held = 0
+                    state.entry_regime = context.regime  # Track regime for strategy switching
                     # Log entry for meta-model training
                     self._log_meta_entry(context, state, result, qty)
 
@@ -339,7 +375,8 @@ class MockExecutionEngine(ExecutionEngineBase):
     # ========================================================================
     # MOCK-SPECIFIC METHODS
     # ========================================================================
-    
+
+    @trace
     def _execute_mock_trade(
         self,
         symbol: str,
@@ -351,12 +388,13 @@ class MockExecutionEngine(ExecutionEngineBase):
     ) -> OrderResult:
         """
         Execute mock trade with instant fill.
-        
+
         Simulates:
         - Instant execution
-        - Fill at market price (no slippage by default)
+        - Configurable slippage (adverse price movement)
+        - Commission deduction from portfolio cash
         - Order ID generation
-        
+
         Returns:
             OrderResult with mock fill details
         """
@@ -364,21 +402,47 @@ class MockExecutionEngine(ExecutionEngineBase):
             f"[MOCK EXECUTION] [{symbol}] Simulating {side.value} order: "
             f"{qty} shares @ ${price:.2f}"
         )
-        
-        # Create mock order result (instant fill)
+
+        # Apply slippage (always adverse to trader)
+        fill_price = price
+        if self.slippage_pct > 0:
+            if side == OrderSide.BUY:
+                # Slippage increases buy price (adverse)
+                fill_price = price * (1 + self.slippage_pct)
+            else:
+                # Slippage decreases sell price (adverse)
+                fill_price = price * (1 - self.slippage_pct)
+
+        # Apply commission to portfolio cash
+        if self.commission > 0:
+            self.portfolio.cash -= self.commission
+
+        # Create mock order result
         result = OrderResult(
             success=True,
             order_id=f"MOCK_{symbol}_{datetime.now(timezone.utc).timestamp()}",
             symbol=symbol,
             side=side,
             filled_qty=qty,
-            avg_price=price,  # Perfect fill at market price
+            avg_price=fill_price,
+            commission=self.commission,
         )
-        
+
+        # Log with friction details
+        slippage_info = ""
+        if self.slippage_pct > 0:
+            slippage_amount = abs(fill_price - price)
+            slippage_info = f" (slippage: ${slippage_amount:.4f})"
+
+        commission_info = ""
+        if self.commission > 0:
+            commission_info = f" (commission: ${self.commission:.2f})"
+
         self.logger.info(
-            f"[MOCK] [{symbol}] Order filled: {side.value} {qty}@${price:.2f}"
+            f"[MOCK] [{symbol}] Order filled: {side.value} {qty}@${fill_price:.2f}"
+            f"{slippage_info}{commission_info}"
         )
-        
+
         return result
     
     def _update_mock_portfolio(
@@ -631,17 +695,21 @@ class MockExecutionEngine(ExecutionEngineBase):
                 delta = context.timestamp - state.last_trade_time
                 hours_since_last_trade = delta.total_seconds() / 3600
 
-            # Calculate minutes since market open (9:30 ET = 14:30 UTC)
-            market_open = context.timestamp.replace(hour=14, minute=30, second=0, microsecond=0)
-            if context.timestamp >= market_open:
-                minutes_since_open = int((context.timestamp - market_open).total_seconds() / 60)
+            # Convert timestamp to ET for market-aware calculations
+            ts_utc = context.timestamp if context.timestamp.tzinfo else context.timestamp.replace(tzinfo=timezone.utc)
+            ts_et = ts_utc.astimezone(ET)
+
+            # Calculate minutes since market open (9:30 ET)
+            market_open_et = ts_et.replace(hour=9, minute=30, second=0, microsecond=0)
+            if ts_et >= market_open_et:
+                minutes_since_open = int((ts_et - market_open_et).total_seconds() / 60)
             else:
                 minutes_since_open = 0
 
             # Get bars in regime
             bars_in_regime = getattr(state, 'regime_persist', 1)
 
-            # Build entry context
+            # Build entry context (use ET hour/day for market-aware features)
             entry_context = TradeEntryContext(
                 trade_id=trade_id,
                 timestamp=context.timestamp,
@@ -656,8 +724,8 @@ class MockExecutionEngine(ExecutionEngineBase):
                 drawdown_portfolio_pct=portfolio_dd,
                 drawdown_symbol_pct=symbol_dd,
                 position_size_pct=position_size_pct,
-                hour_of_day=context.timestamp.hour,
-                day_of_week=context.timestamp.weekday(),
+                hour_of_day=ts_et.hour,  # ET hour for US market relevance
+                day_of_week=ts_et.weekday(),
                 minutes_since_open=minutes_since_open,
                 bars_in_regime=bars_in_regime,
                 hours_since_last_trade=hours_since_last_trade,

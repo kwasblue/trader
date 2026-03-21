@@ -12,8 +12,12 @@ from __future__ import annotations
 
 from typing import Optional, Dict, Any, TYPE_CHECKING, Union
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timezone, time
+from zoneinfo import ZoneInfo
 import logging
+
+# US Eastern timezone for market hours calculations
+ET = ZoneInfo("America/New_York")
 
 from core.base.execution_engine_base import ExecutionEngineBase
 from core.base.executor_base import BaseExecutor
@@ -45,6 +49,7 @@ from loggers.meta_trade_logger import MetaTradeLogger, generate_trade_id
 
 # Import the router we created
 from core.logic.trade_logic_router import TradeApproverRouter
+from core.tracing import trace
 
 if TYPE_CHECKING:
     from core.state_reconciler import StateReconciler
@@ -350,6 +355,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
     # Minimum confidence threshold for signal processing
     min_signal_confidence: float = 0.0
 
+    @trace
     async def handle_signal_context(
         self,
         context: SignalContext
@@ -450,6 +456,12 @@ class LiveExecutionEngine(ExecutionEngineBase):
                 self._state_sync.register_symbol(context.symbol, new_state)
             state = self.symbol_states[context.symbol]
 
+        # Track bar for bar-based cooldown (call on every signal = every bar)
+        if hasattr(self, 'trade_logic_manager') and self.trade_logic_manager:
+            trade_logic = self.trade_logic_manager.get(context.symbol, context.regime)
+            if hasattr(trade_logic, 'on_bar'):
+                trade_logic.on_bar(context.symbol)
+
         # Set strategy name
         state.strategy_name = context.strategy_name
 
@@ -548,10 +560,15 @@ class LiveExecutionEngine(ExecutionEngineBase):
 
                 # Determine exit type from reason
                 reason = exit_reason
-                if "partial" in exit_reason.lower():
+                exit_reason_lower = exit_reason.lower()
+                if "partial" in exit_reason_lower:
                     action_type = "partial_exit"
-                elif "reversal" in exit_reason.lower():
+                elif "reversal" in exit_reason_lower:
                     action_type = "reversal"
+                elif "stop" in exit_reason_lower or "stop loss" in exit_reason_lower:
+                    action_type = "stop_loss"
+                elif "take profit" in exit_reason_lower or "profit" in exit_reason_lower:
+                    action_type = "take_profit"
                 else:
                     action_type = "exit"
 
@@ -644,6 +661,16 @@ class LiveExecutionEngine(ExecutionEngineBase):
                 )
             )
 
+            # 6.5 CAPTURE PRE-TRADE STATE (before portfolio is updated)
+            # This is critical for accurate trade logging - portfolio will be
+            # updated inside _execute_live_trade before _post_execution runs
+            position_before = self.portfolio.positions.get(context.symbol)
+            pre_state = {
+                'cash': self.portfolio.cash,
+                'position_qty': position_before.qty if position_before else 0,
+                'avg_price': position_before.avg_price if position_before else None,
+            }
+
             # 7. Execute trade (LIVE) - order registration happens inside
             result = await self._execute_live_trade(
                 context.symbol, state, side, qty, context.price, context.atr, action_type,
@@ -664,6 +691,9 @@ class LiveExecutionEngine(ExecutionEngineBase):
 
                 # 9. For entries, calculate SL/TP levels via PositionManager
                 if action_type == "entry":
+                    # Track entry regime for strategy switching logic
+                    state.entry_regime = context.regime
+
                     self.position_manager.calculate_levels(
                         state=state,
                         price=result.avg_price,
@@ -682,10 +712,15 @@ class LiveExecutionEngine(ExecutionEngineBase):
                     # Log entry for meta-model training
                     self._log_meta_entry(context, state, result, qty)
 
-                # 10. Post-execution tasks
+                # 10. Post-execution tasks (pass pre_state for accurate logging)
                 self._post_execution(
-                    context.symbol, state, result, action_type, context.regime, context.strategy_name
+                    context.symbol, state, result, action_type, context.regime, context.strategy_name,
+                    pre_state=pre_state
                 )
+
+                # 11. Reset bar-based cooldown after trade
+                if hasattr(trade_logic, 'on_trade'):
+                    trade_logic.on_trade(context.symbol)
 
                 self.logger.info(
                     format_log_message(
@@ -993,7 +1028,8 @@ class LiveExecutionEngine(ExecutionEngineBase):
         except Exception as e:
             self.logger.error(f"Validation error: {e}")
             return False
-    
+
+    @trace
     async def _execute_live_trade(
         self,
         symbol: str,
@@ -1450,17 +1486,21 @@ class LiveExecutionEngine(ExecutionEngineBase):
                 delta = context.timestamp - state.last_trade_time
                 hours_since_last_trade = delta.total_seconds() / 3600
 
+            # Convert timestamp to ET for market-aware calculations
+            ts_utc = context.timestamp if context.timestamp.tzinfo else context.timestamp.replace(tzinfo=timezone.utc)
+            ts_et = ts_utc.astimezone(ET)
+
             # Calculate minutes since market open (9:30 ET)
-            market_open = context.timestamp.replace(hour=14, minute=30, second=0, microsecond=0)  # 9:30 ET = 14:30 UTC
-            if context.timestamp >= market_open:
-                minutes_since_open = int((context.timestamp - market_open).total_seconds() / 60)
+            market_open_et = ts_et.replace(hour=9, minute=30, second=0, microsecond=0)
+            if ts_et >= market_open_et:
+                minutes_since_open = int((ts_et - market_open_et).total_seconds() / 60)
             else:
                 minutes_since_open = 0
 
             # Get bars in regime from trade gate if available
             bars_in_regime = getattr(state, 'regime_persist', 1)
 
-            # Build entry context
+            # Build entry context (use ET hour/day for market-aware features)
             entry_context = TradeEntryContext(
                 trade_id=trade_id,
                 timestamp=context.timestamp,
@@ -1475,8 +1515,8 @@ class LiveExecutionEngine(ExecutionEngineBase):
                 drawdown_portfolio_pct=portfolio_dd,
                 drawdown_symbol_pct=symbol_dd,
                 position_size_pct=position_size_pct,
-                hour_of_day=context.timestamp.hour,
-                day_of_week=context.timestamp.weekday(),
+                hour_of_day=ts_et.hour,  # ET hour for US market relevance
+                day_of_week=ts_et.weekday(),
                 minutes_since_open=minutes_since_open,
                 bars_in_regime=bars_in_regime,
                 hours_since_last_trade=hours_since_last_trade,
@@ -1581,14 +1621,15 @@ class LiveExecutionEngine(ExecutionEngineBase):
         """
         self._atr_hist_ref = atr_hist
 
-    def _post_execution(self, symbol, state, result, action_type, regime, strategy_name):
+    def _post_execution(self, symbol, state, result, action_type, regime, strategy_name, pre_state=None):
         """Post-execution logging and state updates with Live-specific logging."""
         # Log exit for meta-model training (before base class resets state)
         if action_type in ("exit", "partial_exit", "reversal"):
             self._log_meta_exit(symbol, state, result, action_type)
 
         # Use base class implementation for common logic
-        super()._post_execution(symbol, state, result, action_type, regime, strategy_name)
+        # Pass pre_state for accurate before/after logging
+        super()._post_execution(symbol, state, result, action_type, regime, strategy_name, pre_state=pre_state)
 
         # Record realized P&L for daily loss tracking (on exits/closes)
         if action_type in ("exit", "partial_exit", "reversal"):

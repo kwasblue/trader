@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 from core.logic.symbol_state import SymbolState
 from core.enums import OrderSide
 from loggers.logger import Logger
+from core.tracing import trace
 
 # Logger - own file with propagation to app.log
 _logger_instance = Logger(
@@ -237,6 +238,7 @@ class PositionManager:
     # EXIT CONDITION CHECKS
     # ========================================================================
 
+    @trace
     def check_exit_conditions(
         self,
         state: SymbolState,
@@ -267,6 +269,29 @@ class PositionManager:
         """
         if not state.is_in_position:
             return False, None
+
+        # SAME-BAR EXIT GUARD: Prevent any exit on bars_held=0
+        # This stops churn where entry and exit happen in same processing cycle.
+        # Stop-loss is only allowed on bar 0 if it's a catastrophic move (>2x SL distance).
+        if state.bars_held == 0:
+            # Check for catastrophic stop (emergency protection only)
+            if self._check_stop_loss_hit(state, price):
+                # Only allow if it's a big move (catastrophic)
+                if state.entry_price and state.stop_loss:
+                    sl_distance = abs(state.entry_price - state.stop_loss)
+                    price_move = abs(state.entry_price - price)
+                    # Catastrophic = price moved more than 2x the stop distance
+                    if price_move > sl_distance * 2:
+                        logger.warning(
+                            f"[{state.symbol}] CATASTROPHIC STOP: Same-bar exit allowed "
+                            f"(move={price_move:.4f}, sl_dist={sl_distance:.4f})"
+                        )
+                        return True, "Stop loss hit (catastrophic)"
+            # Block all other same-bar exits
+            logger.debug(
+                f"[{state.symbol}] Same-bar exit blocked (bars_held=0)"
+            )
+            return False, "Same-bar exit blocked"
 
         # Swing mode check - prevent same-day exits (except stop loss)
         if self.swing_mode and state.entry_date:

@@ -79,6 +79,14 @@ class RiskConfig:
 
 
 @dataclass
+class ExecutionConfig:
+    """Configuration for execution friction (slippage, commission)."""
+    slippage_pct: float = 0.001  # 0.1% slippage
+    commission_per_trade: float = 0.0  # Commission per trade in dollars
+    apply_friction_in_simulation: bool = True  # Apply friction in simulation mode
+
+
+@dataclass
 class DrawdownMonitorConfig:
     enabled: bool = False
     max_symbol_drawdown: float = 0.30
@@ -107,6 +115,7 @@ class TradeLogicConfig:
     cooldown_mode: str = "bars"  # "bars", "time", or "both"
     cooldown_bars: int = 5
     cooldown_seconds: int = 300
+    min_regime_persist_bars: int = 3  # Bars regime must persist before strategy switch allowed
     # Take profit multipliers by regime
     tp_mult_low: float = 1.5  # Low volatility regime
     tp_mult_normal: float = 2.0  # Normal regime
@@ -164,6 +173,8 @@ class LoggingConfig:
     file_enabled: bool = True
     propagate_to_app_log: bool = True
     debug_print_enabled: bool = True
+    trace_enabled: bool = False  # Enable execution tracing (writes to trace_file)
+    trace_file: str = "logs/trace.log"  # Path to trace log
 
 
 @dataclass
@@ -252,6 +263,7 @@ class TradingConfig:
     alpaca: AlpacaConfig = field(default_factory=AlpacaConfig)
     schwab: SchwabConfig = field(default_factory=SchwabConfig)
     risk: RiskConfig = field(default_factory=RiskConfig)
+    execution: ExecutionConfig = field(default_factory=ExecutionConfig)
     drawdown_monitor: DrawdownMonitorConfig = field(default_factory=DrawdownMonitorConfig)
     position_sizer: PositionSizerConfig = field(default_factory=PositionSizerConfig)
     trade_logic: TradeLogicConfig = field(default_factory=TradeLogicConfig)
@@ -440,6 +452,7 @@ def load_config(config_path: Optional[str] = None) -> TradingConfig:
             alpaca=_dict_to_dataclass(AlpacaConfig, raw.get("alpaca")),
             schwab=_dict_to_dataclass(SchwabConfig, raw.get("schwab")),
             risk=_dict_to_dataclass(RiskConfig, raw.get("risk")),
+            execution=_dict_to_dataclass(ExecutionConfig, raw.get("execution")),
             drawdown_monitor=_dict_to_dataclass(DrawdownMonitorConfig, raw.get("drawdown_monitor")),
             position_sizer=_dict_to_dataclass(PositionSizerConfig, raw.get("position_sizer")),
             trade_logic=_dict_to_dataclass(TradeLogicConfig, raw.get("trade_logic")),

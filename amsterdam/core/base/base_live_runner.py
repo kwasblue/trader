@@ -274,12 +274,13 @@ class BaseLiveRunner(ABC):
         self.atr_calc: Dict[str, IncrementalATR] = defaultdict(IncrementalATR)
 
         risk_cfg = self.config.risk
+        trade_logic_cfg = self.config.trade_logic
 
         # Risk & gates (uses config values)
         self.trade_gate = TradeGate(
             max_layers=risk_cfg.max_pyramid_layers,
             min_bars_between_layers=risk_cfg.min_bars_between_layers,
-            regime_min_persist_bars=1,
+            regime_min_persist_bars=trade_logic_cfg.min_regime_persist_bars,
             flip_cooldown_bars=1,
         )
 
@@ -870,6 +871,8 @@ class BaseLiveRunner(ABC):
                 'state': state,
                 'daily_context': daily_ctx,
                 'past_cutoff': past_cutoff,
+                'regime_persist': gs.regime_persist,
+                'min_regime_persist': self.trade_gate.regime_min_persist_bars,
             }
         )
         await self.engine.handle_signal_context(context)

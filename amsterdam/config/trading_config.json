@@ -40,6 +40,12 @@
     "daily_loss_limit": 1000.0
   },
 
+  "execution": {
+    "slippage_pct": 0.001,
+    "commission_per_trade": 0.0,
+    "apply_friction_in_simulation": true
+  },
+
   "drawdown_monitor": {
     "enabled": false,
     "max_symbol_drawdown": 0.30,
@@ -71,6 +77,7 @@
     "cooldown_mode": "bars",
     "cooldown_bars": 5,
     "cooldown_seconds": 300,
+    "min_regime_persist_bars": 3,
     "tp_mult_low": 1.5,
     "tp_mult_normal": 2.0,
     "tp_mult_high": 3.0,
@@ -121,7 +128,9 @@
     "console_enabled": true,
     "file_enabled": true,
     "propagate_to_app_log": true,
-    "debug_print_enabled": true
+    "debug_print_enabled": true,
+    "trace_enabled": true,
+    "trace_file": "logs/trace.log"
   },
 
   "autotrader": {
