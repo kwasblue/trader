@@ -221,6 +221,54 @@ class MLTrainingConfig:
 
 
 @dataclass
+class ScannerConfig:
+    """Configuration for the stock scanner/screener."""
+    enabled: bool = True
+    universe_source: str = "sp500"
+    universe: List[str] = field(default_factory=list)
+    providers: Dict[str, Any] = field(default_factory=lambda: {
+        "technical_enabled": True,
+        "fundamental_enabled": False,
+        "sentiment_enabled": False,
+        "insider_enabled": False,
+        "lookback_bars": 200,
+    })
+    scoring: Dict[str, Any] = field(default_factory=lambda: {
+        "weights": {
+            "momentum_breakout": 0.30,
+            "relative_strength": 0.25,
+            "volume_surge": 0.20,
+            "trend_following": 0.25,
+        },
+        "trade_threshold": 0.7,
+        "watch_threshold": 0.4,
+        "max_trade_symbols": 10,
+        "max_watch_symbols": 20,
+    })
+    schedule: Dict[str, Any] = field(default_factory=lambda: {
+        "pre_market_scan_enabled": True,
+        "scan_time_minutes_before_open": 10,
+        "auto_update_lists": False,
+    })
+    criteria: List[Dict[str, Any]] = field(default_factory=lambda: [
+        {"name": "momentum_breakout", "params": {}},
+        {"name": "relative_strength", "params": {"benchmark": "SPY", "period": 20}},
+        {"name": "volume_surge", "params": {"surge_threshold": 1.5}},
+        {"name": "trend_following", "params": {}},
+    ])
+
+    def to_engine_config(self) -> Dict[str, Any]:
+        """Convert to the dict format expected by ScannerEngine."""
+        return {
+            "universe_source": self.universe_source,
+            "universe": self.universe,
+            "providers": self.providers,
+            "scoring": self.scoring,
+            "criteria": self.criteria,
+        }
+
+
+@dataclass
 class HybridSizingConfig:
     """
     Configuration for hybrid position sizing.
@@ -275,6 +323,7 @@ class TradingConfig:
     error_recovery: ErrorRecoveryConfig = field(default_factory=ErrorRecoveryConfig)
     ml_training: MLTrainingConfig = field(default_factory=MLTrainingConfig)
     hybrid_sizing: HybridSizingConfig = field(default_factory=HybridSizingConfig)
+    scanner: ScannerConfig = field(default_factory=ScannerConfig)
 
     # Raw dict for any custom/unknown fields
     _raw: Dict[str, Any] = field(default_factory=dict)
@@ -464,6 +513,7 @@ def load_config(config_path: Optional[str] = None) -> TradingConfig:
             error_recovery=_dict_to_dataclass(ErrorRecoveryConfig, raw.get("error_recovery")),
             ml_training=_dict_to_dataclass(MLTrainingConfig, raw.get("ml_training")),
             hybrid_sizing=_dict_to_dataclass(HybridSizingConfig, raw.get("hybrid_sizing")),
+            scanner=_dict_to_dataclass(ScannerConfig, raw.get("scanner")),
             _raw=raw
         )
 

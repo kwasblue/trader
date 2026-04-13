@@ -176,5 +176,41 @@
     "high_confidence_threshold": 0.7,
     "low_confidence_threshold": 0.5,
     "trend_indicators": ["RSI", "MACD", "SMA_200"]
+  },
+
+  "scanner": {
+    "enabled": true,
+    "universe_source": "sp500",
+    "universe": [],
+    "providers": {
+      "technical_enabled": true,
+      "fundamental_enabled": false,
+      "sentiment_enabled": false,
+      "insider_enabled": false,
+      "lookback_bars": 200
+    },
+    "scoring": {
+      "weights": {
+        "momentum_breakout": 0.30,
+        "relative_strength": 0.25,
+        "volume_surge": 0.20,
+        "trend_following": 0.25
+      },
+      "trade_threshold": 0.7,
+      "watch_threshold": 0.4,
+      "max_trade_symbols": 10,
+      "max_watch_symbols": 20
+    },
+    "schedule": {
+      "pre_market_scan_enabled": true,
+      "scan_time_minutes_before_open": 10,
+      "auto_update_lists": false
+    },
+    "criteria": [
+      {"name": "momentum_breakout", "params": {}},
+      {"name": "relative_strength", "params": {"benchmark": "SPY", "period": 20}},
+      {"name": "volume_surge", "params": {"surge_threshold": 1.5}},
+      {"name": "trend_following", "params": {}}
+    ]
   }
 }

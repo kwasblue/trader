@@ -67,7 +67,7 @@ Documentation = "docs/index.md"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["cli*", "core*", "strategies*", "indicators*", "monitoring*", "data*", "loggers*", "utils*", "cache*"]
+include = ["cli*", "core*", "strategies*", "indicators*", "monitoring*", "data*", "loggers*", "utils*", "cache*", "scanner*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
