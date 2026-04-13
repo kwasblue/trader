@@ -428,7 +428,13 @@ class AutoTrader:
         if not self.running:
             return
 
-        # 6. Sleep until next trading day
+        # 6. Post-market: scan for new symbols and optimize strategies
+        await self._run_scan_and_optimize()
+
+        if not self.running:
+            return
+
+        # 7. Sleep until next trading day
         await self._sleep_until_next_day()
 
     async def _wait_for_market_open(self) -> None:
@@ -847,6 +853,81 @@ class AutoTrader:
         except Exception as e:
             self.logger.exception(f"Data update error: {e}")
             self.stats["errors"].append(f"{self.scheduler.now_et()}: Data update failed - {e}")
+
+    async def _run_scan_and_optimize(self) -> None:
+        """Run stock scanner and optimize strategies for trade candidates.
+
+        Post-market step: scans for new symbols, updates trade/watch lists,
+        then runs regime backtest to assign optimal strategies.
+        Non-fatal — errors are logged and trading continues with existing config.
+        """
+        from core.config_loader import get_config
+
+        cfg = get_config()
+        if not cfg.scanner.enabled or not cfg.scanner.schedule.get("pre_market_scan_enabled", True):
+            return
+
+        self._set_state(AutoTraderState.UPDATING_DATA)
+        self.logger.info("Running post-market scan and strategy optimization...")
+        print(f"[{self.scheduler.now_et().strftime('%H:%M:%S')}] Running scanner + optimizer...")
+
+        try:
+            from scanner.engine import get_scanner
+            from core.symbol_list_manager import get_list_manager
+
+            scanner_cfg = cfg.scanner.to_engine_config()
+            scanner = get_scanner(scanner_cfg)
+            schedule_cfg = cfg.scanner.schedule
+
+            # 1. Run scan
+            auto_update = schedule_cfg.get("auto_update_lists", False)
+            report = scanner.scan(update_lists=auto_update)
+
+            self.logger.info(
+                f"Scan complete: {report.universe_size} screened, "
+                f"{len(report.trade_candidates())} trade, "
+                f"{len(report.watch_candidates())} watch"
+            )
+
+            # 2. Reload symbols if lists were updated
+            if auto_update:
+                updated_symbols = get_list_manager().get_trade_list()
+                if updated_symbols and updated_symbols != self.symbols:
+                    self.logger.info(f"Trade list updated: {len(self.symbols)} -> {len(updated_symbols)} symbols")
+                    self.symbols = updated_symbols
+
+            # 3. Optimize strategies
+            if schedule_cfg.get("optimize_after_scan", True):
+                opt_days = schedule_cfg.get("optimization_days", 365)
+                opt_metric = schedule_cfg.get("optimization_metric", "sharpe_ratio")
+
+                opt_results = scanner.optimize_strategies(
+                    symbols=self.symbols,
+                    days=opt_days,
+                    metric=opt_metric,
+                )
+
+                self.logger.info(f"Strategy optimization complete: {len(opt_results)} symbols optimized")
+
+                # 4. Reload strategy routing
+                try:
+                    from core.logic.strategy_routing_manager import StrategyRoutingManager
+                    from pathlib import Path
+
+                    routing_path = Path(__file__).resolve().parent.parent / "config" / "strategy_routing.json"
+                    if routing_path.exists():
+                        router = StrategyRoutingManager(str(routing_path))
+                        router.refresh()
+                        self.logger.info("Strategy routing reloaded")
+                except Exception as e:
+                    self.logger.warning(f"Could not reload strategy routing: {e}")
+
+            print(f"[{self.scheduler.now_et().strftime('%H:%M:%S')}] Scan + optimize complete")
+
+        except Exception as e:
+            self.logger.exception(f"Scan/optimize error: {e}")
+            self.stats["errors"].append(f"{self.scheduler.now_et()}: Scan/optimize failed - {e}")
+            print(f"[{self.scheduler.now_et().strftime('%H:%M:%S')}] Scan/optimize failed (non-fatal): {e}")
 
     async def _sleep_until_next_day(self) -> None:
         """Sleep until next trading day."""

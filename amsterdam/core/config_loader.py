@@ -249,6 +249,9 @@ class ScannerConfig:
         "pre_market_scan_enabled": True,
         "scan_time_minutes_before_open": 10,
         "auto_update_lists": False,
+        "optimize_after_scan": True,
+        "optimization_days": 365,
+        "optimization_metric": "sharpe_ratio",
     })
     criteria: List[Dict[str, Any]] = field(default_factory=lambda: [
         {"name": "momentum_breakout", "params": {}},

@@ -204,7 +204,10 @@
     "schedule": {
       "pre_market_scan_enabled": true,
       "scan_time_minutes_before_open": 10,
-      "auto_update_lists": false
+      "auto_update_lists": false,
+      "optimize_after_scan": true,
+      "optimization_days": 365,
+      "optimization_metric": "sharpe_ratio"
     },
     "criteria": [
       {"name": "momentum_breakout", "params": {}},
