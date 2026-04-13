@@ -396,5 +396,65 @@
       "strategy": "bollinger",
       "timeframe": "day"
     }
+  },
+  "FDX": {
+    "low_volatility": "meanreversion",
+    "normal": "adx",
+    "high_volatility": "adx",
+    "default": "adx"
+  },
+  "BWA": {
+    "low_volatility": "sma",
+    "normal": "rsi",
+    "high_volatility": "ema",
+    "default": "rsi"
+  },
+  "ALB": {
+    "low_volatility": "meanreversion",
+    "normal": "rsi",
+    "high_volatility": "ema",
+    "default": "rsi"
+  },
+  "CHRW": {
+    "low_volatility": "macd",
+    "normal": "ema",
+    "high_volatility": "adx",
+    "default": "ema"
+  },
+  "JCI": {
+    "low_volatility": "adx",
+    "normal": "bollinger",
+    "high_volatility": "meanreversion",
+    "default": "bollinger"
+  },
+  "MNST": {
+    "low_volatility": "sma",
+    "normal": "meanreversion",
+    "high_volatility": "ema",
+    "default": "meanreversion"
+  },
+  "SCHW": {
+    "low_volatility": "meanreversion",
+    "normal": "bollinger",
+    "high_volatility": "stochastic",
+    "default": "bollinger"
+  },
+  "FOX": {
+    "low_volatility": "meanreversion",
+    "normal": "stochastic",
+    "high_volatility": "meanreversion",
+    "default": "stochastic"
+  },
+  "IT": {
+    "low_volatility": "macd",
+    "normal": "meanreversion",
+    "high_volatility": "stochastic",
+    "default": "meanreversion"
+  },
+  "LRCX": {
+    "low_volatility": "sma",
+    "normal": "bollinger",
+    "high_volatility": "bollinger",
+    "default": "bollinger"
   }
 }
