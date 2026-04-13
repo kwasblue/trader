@@ -262,7 +262,6 @@ class ScannerEngine:
         Returns:
             Dict of symbol -> {regime -> best_strategy_name}
         """
-        from core.unified_data_pipeline import UnifiedDataPipeline
         from core.backtest.regime_backtest import RegimeBacktester
 
         if symbols is None:
@@ -278,12 +277,29 @@ class ScannerEngine:
 
         logger.info(f"Optimizing strategies for {len(symbols)} symbols (metric={metric}, days={days})")
 
-        pipeline = UnifiedDataPipeline()
+        # Reuse the technical provider's data if available, otherwise load fresh
+        tech_provider = self._providers.get("technical")
         results: Dict[str, Dict[str, str]] = {}
 
         for symbol in symbols:
             try:
-                data = pipeline.load_symbol_data(symbol, timeframe="day")
+                data = None
+
+                # Try to get data from provider cache (already fetched during scan)
+                if tech_provider:
+                    pdata = tech_provider.fetch(symbol)
+                    if pdata.dataframe is not None and not pdata.dataframe.empty:
+                        data = pdata.dataframe.copy()
+
+                # Fallback: try UnifiedDataPipeline
+                if data is None or data.empty:
+                    try:
+                        from core.unified_data_pipeline import UnifiedDataPipeline
+                        pipeline = UnifiedDataPipeline()
+                        data = pipeline.load_symbol_data(symbol, timeframe="day")
+                    except Exception:
+                        pass
+
                 if data is None or data.empty:
                     logger.warning(f"No data for {symbol}, skipping optimization")
                     continue
