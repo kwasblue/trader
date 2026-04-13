@@ -1561,13 +1561,17 @@ def scan():
               help='Universe source')
 @click.option('--apply', 'apply_results', is_flag=True, default=False,
               help='Auto-update trade/watch lists with results')
+@click.option('--optimize', is_flag=True, default=False,
+              help='Run regime backtest optimization on trade candidates')
+@click.option('-d', '--days', default=365, type=int, help='Days of data for optimization (default: 365)')
 @click.option('-n', '--top', default=20, help='Number of results to display')
 @click.option('--min-score', default=0.0, type=float, help='Minimum score filter')
 @click.option('--json-output', is_flag=True, default=False, help='Output results as JSON')
-def scan_run(symbols, universe, apply_results, top, min_score, json_output):
+def scan_run(symbols, universe, apply_results, optimize, days, top, min_score, json_output):
     """Run the stock scanner.
 
     Screens symbols using technical criteria, scores and ranks them.
+    Use --optimize to also run regime backtest and assign best strategies.
     """
     import json as json_mod
     from core.config_loader import get_config
@@ -1635,6 +1639,18 @@ def scan_run(symbols, universe, apply_results, top, min_score, json_output):
 
     if apply_results:
         click.secho(f"\nTrade/watch lists updated.", fg='green')
+
+    if optimize:
+        trade_syms = report.trade_candidates()
+        if not trade_syms:
+            click.secho("\nNo trade candidates to optimize.", fg='yellow')
+        else:
+            click.echo(f"\nOptimizing strategies for {len(trade_syms)} trade candidates ({days} days)...")
+            opt_results = scanner.optimize_strategies(symbols=trade_syms, days=days)
+            for sym, strategies in opt_results.items():
+                strat_str = ", ".join(f"{regime}={strat}" for regime, strat in strategies.items())
+                click.echo(f"  {sym}: {strat_str}")
+            click.secho(f"\nStrategy routing updated for {len(opt_results)} symbols.", fg='green')
 
 
 @scan.command('results')

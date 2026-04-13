@@ -550,5 +550,148 @@ class TestBaseDataProvider(unittest.TestCase):
         self.assertEqual(len(results), 0)  # Both failed
 
 
+# =============================================================================
+# OPTIMIZATION TESTS
+# =============================================================================
+
+class TestOptimizeStrategies(unittest.TestCase):
+    def test_optimize_no_symbols_returns_empty(self):
+        from scanner.engine import ScannerEngine
+        engine = ScannerEngine({
+            "providers": {"technical_enabled": False},
+            "criteria": [],
+        })
+        result = engine.optimize_strategies(symbols=[])
+        self.assertEqual(result, {})
+
+    def test_optimize_no_report_no_symbols_returns_empty(self):
+        from scanner.engine import ScannerEngine
+        engine = ScannerEngine({
+            "providers": {"technical_enabled": False},
+            "criteria": [],
+        })
+        # No scan run, no symbols passed
+        result = engine.optimize_strategies()
+        self.assertEqual(result, {})
+
+    @patch("core.backtest.regime_backtest.RegimeBacktester")
+    @patch("core.unified_data_pipeline.UnifiedDataPipeline")
+    def test_optimize_calls_regime_backtester(self, MockPipeline, MockBacktester):
+        """optimize_strategies should call RegimeBacktester for each symbol."""
+        from scanner.engine import ScannerEngine
+
+        # Mock pipeline
+        mock_pipeline = MockPipeline.return_value
+        mock_df = _make_ohlcv_df(200, lowercase=False)
+        mock_pipeline.load_symbol_data.return_value = mock_df
+
+        # Mock backtester
+        mock_tester = MockBacktester.return_value
+        mock_result = MagicMock()
+        mock_result.best_strategies = {"low_volatility": "sma", "normal": "momentum", "high_volatility": "rsi"}
+        mock_tester.run_regime_analysis.return_value = mock_result
+
+        engine = ScannerEngine({
+            "providers": {"technical_enabled": False},
+            "criteria": [],
+        })
+
+        result = engine.optimize_strategies(symbols=["AAPL", "MSFT"], days=365)
+
+        self.assertEqual(len(result), 2)
+        self.assertIn("AAPL", result)
+        self.assertIn("MSFT", result)
+        self.assertEqual(mock_tester.run_regime_analysis.call_count, 2)
+        self.assertEqual(mock_tester.save_routing_config.call_count, 2)
+
+    @patch("core.backtest.regime_backtest.RegimeBacktester")
+    @patch("core.unified_data_pipeline.UnifiedDataPipeline")
+    def test_optimize_uses_last_report_candidates(self, MockPipeline, MockBacktester):
+        """optimize_strategies with no symbols should use last scan's trade candidates."""
+        from scanner.engine import ScannerEngine
+        from scanner.result import ScanReport, SymbolScore
+
+        mock_pipeline = MockPipeline.return_value
+        mock_pipeline.load_symbol_data.return_value = _make_ohlcv_df(200, lowercase=False)
+
+        mock_tester = MockBacktester.return_value
+        mock_result = MagicMock()
+        mock_result.best_strategies = {"normal": "sma"}
+        mock_tester.run_regime_analysis.return_value = mock_result
+
+        engine = ScannerEngine({
+            "providers": {"technical_enabled": False},
+            "criteria": [],
+        })
+
+        # Simulate a previous scan with trade candidates
+        engine._last_report = ScanReport(
+            results=[
+                SymbolScore("FDX", 0.9, recommendation="trade"),
+                SymbolScore("BWA", 0.85, recommendation="trade"),
+                SymbolScore("GOOGL", 0.5, recommendation="watch"),
+            ]
+        )
+
+        result = engine.optimize_strategies()
+
+        # Should only optimize trade candidates (FDX, BWA), not watch (GOOGL)
+        self.assertEqual(len(result), 2)
+        self.assertIn("FDX", result)
+        self.assertIn("BWA", result)
+        self.assertNotIn("GOOGL", result)
+
+    @patch("core.backtest.regime_backtest.RegimeBacktester")
+    @patch("core.unified_data_pipeline.UnifiedDataPipeline")
+    def test_optimize_handles_missing_data(self, MockPipeline, MockBacktester):
+        """optimize_strategies should skip symbols with no data."""
+        from scanner.engine import ScannerEngine
+
+        mock_pipeline = MockPipeline.return_value
+        mock_pipeline.load_symbol_data.return_value = None  # No data
+
+        engine = ScannerEngine({
+            "providers": {"technical_enabled": False},
+            "criteria": [],
+        })
+
+        result = engine.optimize_strategies(symbols=["NODATA"])
+        self.assertEqual(result, {})
+        MockBacktester.assert_not_called()
+
+    @patch("core.backtest.regime_backtest.RegimeBacktester")
+    @patch("core.unified_data_pipeline.UnifiedDataPipeline")
+    def test_optimize_handles_backtester_error(self, MockPipeline, MockBacktester):
+        """optimize_strategies should continue if one symbol fails."""
+        from scanner.engine import ScannerEngine
+
+        mock_pipeline = MockPipeline.return_value
+        mock_pipeline.load_symbol_data.return_value = _make_ohlcv_df(200, lowercase=False)
+
+        mock_tester = MockBacktester.return_value
+        mock_tester.run_regime_analysis.side_effect = [
+            Exception("backtest failed"),  # First symbol fails
+            MagicMock(best_strategies={"normal": "sma"}),  # Second succeeds
+        ]
+
+        engine = ScannerEngine({
+            "providers": {"technical_enabled": False},
+            "criteria": [],
+        })
+
+        result = engine.optimize_strategies(symbols=["FAIL", "OK"])
+        self.assertEqual(len(result), 1)
+        self.assertIn("OK", result)
+
+
+class TestScannerConfigSchedule(unittest.TestCase):
+    def test_default_schedule_has_optimize_fields(self):
+        from core.config_loader import ScannerConfig
+        cfg = ScannerConfig()
+        self.assertTrue(cfg.schedule["optimize_after_scan"])
+        self.assertEqual(cfg.schedule["optimization_days"], 365)
+        self.assertEqual(cfg.schedule["optimization_metric"], "sharpe_ratio")
+
+
 if __name__ == "__main__":
     unittest.main()

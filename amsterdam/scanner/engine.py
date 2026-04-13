@@ -245,6 +245,68 @@ class ScannerEngine:
 
         return actions
 
+    def optimize_strategies(
+        self,
+        symbols: Optional[List[str]] = None,
+        days: int = 365,
+        metric: str = "sharpe_ratio",
+    ) -> Dict[str, Dict[str, str]]:
+        """
+        Run regime-aware backtest optimization on symbols to find best strategies.
+
+        Args:
+            symbols: Symbols to optimize (defaults to last scan's trade candidates)
+            days: Days of historical data for backtesting
+            metric: Optimization metric (sharpe_ratio, total_return, win_rate)
+
+        Returns:
+            Dict of symbol -> {regime -> best_strategy_name}
+        """
+        from core.unified_data_pipeline import UnifiedDataPipeline
+        from core.backtest.regime_backtest import RegimeBacktester
+
+        if symbols is None:
+            if self._last_report:
+                symbols = self._last_report.trade_candidates()
+            else:
+                logger.warning("No symbols to optimize — run scan first")
+                return {}
+
+        if not symbols:
+            logger.info("No trade candidates to optimize")
+            return {}
+
+        logger.info(f"Optimizing strategies for {len(symbols)} symbols (metric={metric}, days={days})")
+
+        pipeline = UnifiedDataPipeline()
+        results: Dict[str, Dict[str, str]] = {}
+
+        for symbol in symbols:
+            try:
+                data = pipeline.load_symbol_data(symbol, timeframe="day")
+                if data is None or data.empty:
+                    logger.warning(f"No data for {symbol}, skipping optimization")
+                    continue
+
+                # Trim to requested days
+                if len(data) > days:
+                    data = data.tail(days)
+
+                tester = RegimeBacktester(data=data, symbol=symbol)
+                analysis = tester.run_regime_analysis(metric=metric, verbose=False)
+
+                # Save routing config (merges with existing)
+                tester.save_routing_config(analysis, merge=True)
+
+                results[symbol] = analysis.best_strategies
+                logger.info(f"Optimized {symbol}: {analysis.best_strategies}")
+
+            except Exception as e:
+                logger.error(f"Optimization failed for {symbol}: {e}")
+
+        logger.info(f"Optimization complete: {len(results)}/{len(symbols)} symbols optimized")
+        return results
+
     @property
     def last_report(self) -> Optional[ScanReport]:
         return self._last_report
