@@ -50,6 +50,8 @@ from core.contracts.events import (
     EVENT_PNL_UPDATE, PnLPayload,
     EVENT_POSITION_UPDATE, PositionPayload,
     EVENT_HEALTH_UPDATE,
+    EVENT_REGIME_UPDATE, RegimePayload,
+    EVENT_HISTORY_UPDATE, HistoryPayload,
 )
 from core.config_loader import get_config, create_position_sizer, create_drawdown_monitor, create_position_manager, TradingConfig
 from core.simulator.simulation import classify_regime, IncrementalATR
@@ -846,6 +848,14 @@ class BaseLiveRunner(ABC):
             timestamp=ts.isoformat(),
         )
 
+        regime_payload = RegimePayload(
+            symbol=symbol,
+            volatility=regime,
+            trend="neutral",  # Could be enhanced with trend detection
+            market="neutral",
+            timestamp=ts.isoformat(),
+        )
+
         # Get daily context for hybrid sizing
         daily_ctx = self.daily_context.get(symbol, {})
 
@@ -881,12 +891,13 @@ class BaseLiveRunner(ABC):
         await self.engine.handle_signal_context(context)
 
         # Batch emit all events after critical path completes
-        # Using gather() reduces await overhead from 4 context switches to 1
+        # Using gather() reduces await overhead from 5 context switches to 1
         await asyncio.gather(
             self.event_handler.emit("BAR", bar_payload),
             self.event_handler.emit(EVENT_PNL_UPDATE, pnl_payload),
             self.event_handler.emit(EVENT_STRATEGY_SIGNAL, signal_payload),
             self.event_handler.emit(EVENT_NEW_BAR, new_bar_payload),
+            self.event_handler.emit(EVENT_REGIME_UPDATE, regime_payload),
         )
 
         # Telemetry
@@ -978,7 +989,65 @@ class BaseLiveRunner(ABC):
             f"cash=${broker_snapshot.cash:,.2f}, positions={len(broker_snapshot.positions)}"
         )
 
+        # Emit historical P&L for 30-day chart
+        await self._emit_historical_pnl()
+
         return True
+
+    async def _emit_historical_pnl(self, days: int = 30) -> None:
+        """
+        Compute and emit historical P&L by day from trade logs.
+
+        Reads live_trades.csv and aggregates realized P&L by day for the
+        dashboard's 30-day P&L calendar view.
+        """
+        import csv
+        from collections import defaultdict
+        from datetime import timedelta
+
+        trade_log = ROOT / "logs" / "live_trades.csv"
+        if not trade_log.exists():
+            self.logger.warning("No trade log found for historical P&L")
+            return
+
+        pnl_by_day: Dict[str, float] = defaultdict(float)
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat()
+
+        try:
+            with open(trade_log, 'r') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    try:
+                        ts = row.get('timestamp', '')
+                        pnl_str = row.get('pnl', '')
+
+                        if not ts or not pnl_str:
+                            continue
+
+                        pnl = float(pnl_str)
+                        day = ts[:10]  # "2026-03-20"
+
+                        # Only include recent days
+                        if day >= cutoff:
+                            pnl_by_day[day] += pnl
+                    except (ValueError, KeyError):
+                        continue
+
+            if pnl_by_day:
+                await self.event_handler.emit(EVENT_HISTORY_UPDATE, HistoryPayload(
+                    pnl_by_day=dict(pnl_by_day),
+                    timestamp=datetime.now(timezone.utc).isoformat(),
+                ))
+                total_pnl = sum(pnl_by_day.values())
+                self.logger.info(
+                    f"[GUI] Emitted {len(pnl_by_day)} days of P&L history "
+                    f"(total: ${total_pnl:,.2f})"
+                )
+            else:
+                self.logger.info("[GUI] No historical P&L data to emit")
+
+        except Exception as e:
+            self.logger.error(f"Failed to compute historical P&L: {e}")
 
     # ==========================================================================
     # TEMPLATE METHOD - The main run loop

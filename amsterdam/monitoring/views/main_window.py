@@ -312,6 +312,56 @@ class MainWindow(QtWidgets.QMainWindow):
         self._perf_timer.timeout.connect(self._periodic_perf_update)
         self._perf_timer.start(2000)  # Every 2 seconds
 
+        # Load historical P&L on startup
+        QtCore.QTimer.singleShot(500, self._load_historical_pnl)
+
+    def _load_historical_pnl(self):
+        """Load historical P&L from trade logs on GUI startup."""
+        import csv
+        from collections import defaultdict
+        from datetime import datetime, timedelta, timezone
+
+        trade_log = _PROJECT_ROOT / "logs" / "live_trades.csv"
+        if not trade_log.exists():
+            self._append_log("[HISTORY] No live_trades.csv found")
+            return
+
+        pnl_by_day = defaultdict(float)
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).date().isoformat()
+
+        try:
+            with open(trade_log, 'r') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    try:
+                        ts = row.get('timestamp', '')
+                        pnl_str = row.get('pnl', '')
+
+                        if not ts or not pnl_str:
+                            continue
+
+                        pnl = float(pnl_str)
+                        day = ts[:10]  # "2026-03-20"
+
+                        if day >= cutoff:
+                            pnl_by_day[day] += pnl
+                    except (ValueError, KeyError):
+                        continue
+
+            if pnl_by_day:
+                # Manually call the history handler
+                self._gui_on_history({'pnl_by_day': dict(pnl_by_day)})
+                total = sum(pnl_by_day.values())
+                self._append_log(
+                    f"[HISTORY] Loaded {len(pnl_by_day)} days of P&L "
+                    f"(total: ${total:,.2f})"
+                )
+            else:
+                self._append_log("[HISTORY] No P&L data in last 30 days")
+
+        except Exception as e:
+            self._append_log(f"[HISTORY] Failed to load: {e}")
+
     def _connect_feeder_signals(self):
         """Connect DataFeeder Qt signals to GUI update methods.
 

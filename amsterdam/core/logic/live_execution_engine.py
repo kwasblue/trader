@@ -43,6 +43,7 @@ from loggers.logger import Logger
 from core.contracts.events import (
     EVENT_ALERT, AlertPayload, EVENT_NEW_TRADE, TradePayload,
     EVENT_MANUAL_ORDER, EVENT_FLATTEN_ALL, EVENT_FLATTEN_SYMBOL, EVENT_CANCEL_ALL,
+    EVENT_POSITION_UPDATE, PositionPayload,
 )
 from core.contracts.meta_types import TradeEntryContext, TradeExitContext
 from loggers.meta_trade_logger import MetaTradeLogger, generate_trade_id
@@ -1271,6 +1272,24 @@ class LiveExecutionEngine(ExecutionEngineBase):
                 }
                 await self.event_handler.emit(EVENT_NEW_TRADE, trade_payload)
 
+                # Emit position update for GUI
+                pos = self.portfolio.positions.get(symbol)
+                if pos:
+                    position_payload: PositionPayload = {
+                        "symbol": symbol,
+                        "qty": pos.qty,
+                        "avg_price": pos.avg_price,
+                        "avg": pos.avg_price,
+                        "last": pos.last_price,
+                        "unrealized": pos.unrealized_pnl,
+                        "unreal": pos.unrealized_pnl,
+                        "realized": pos.realized_pnl,
+                        "market_value": abs(pos.qty) * pos.last_price,
+                        "side": "long" if pos.qty > 0 else "short" if pos.qty < 0 else "flat",
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    }
+                    await self.event_handler.emit(EVENT_POSITION_UPDATE, position_payload)
+
             return result
 
         except Exception as e:
@@ -1720,6 +1739,24 @@ class LiveExecutionEngine(ExecutionEngineBase):
                     "pnl": None,
                 }
                 await self.event_handler.emit(EVENT_NEW_TRADE, trade_payload)
+
+                # Emit position update for GUI
+                pos = self.portfolio.positions.get(symbol)
+                if pos:
+                    position_payload: PositionPayload = {
+                        "symbol": symbol,
+                        "qty": pos.qty,
+                        "avg_price": pos.avg_price,
+                        "avg": pos.avg_price,
+                        "last": pos.last_price,
+                        "unrealized": pos.unrealized_pnl,
+                        "unreal": pos.unrealized_pnl,
+                        "realized": pos.realized_pnl,
+                        "market_value": abs(pos.qty) * pos.last_price,
+                        "side": "long" if pos.qty > 0 else "short" if pos.qty < 0 else "flat",
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    }
+                    await self.event_handler.emit(EVENT_POSITION_UPDATE, position_payload)
 
         except Exception as e:
             self.logger.error(f"Manual order failed: {e}")
