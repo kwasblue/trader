@@ -1538,6 +1538,180 @@ def backtest_optimize(mode, symbols, days, strategies, timeframes, dry_run):
 
 
 # =============================================================================
+# SCANNER
+# =============================================================================
+
+@cli.group()
+def scan():
+    """Stock scanner — screen and rank symbols for trading.
+
+    \b
+    Examples:
+        amsterdam scan run                          # Scan full S&P 500
+        amsterdam scan run -s AAPL,MSFT,GOOGL       # Scan specific symbols
+        amsterdam scan run --apply                   # Scan and update trade/watch lists
+        amsterdam scan run -n 10                     # Show top 10 results
+    """
+    pass
+
+
+@scan.command('run')
+@click.option('-s', '--symbols', default=None, help='Comma-separated symbols to scan (overrides universe)')
+@click.option('-u', '--universe', default=None, type=click.Choice(['sp500', 'custom', 'watchlist', 'all']),
+              help='Universe source')
+@click.option('--apply', 'apply_results', is_flag=True, default=False,
+              help='Auto-update trade/watch lists with results')
+@click.option('-n', '--top', default=20, help='Number of results to display')
+@click.option('--min-score', default=0.0, type=float, help='Minimum score filter')
+@click.option('--json-output', is_flag=True, default=False, help='Output results as JSON')
+def scan_run(symbols, universe, apply_results, top, min_score, json_output):
+    """Run the stock scanner.
+
+    Screens symbols using technical criteria, scores and ranks them.
+    """
+    import json as json_mod
+    from core.config_loader import get_config
+    from scanner.engine import get_scanner
+
+    cfg = get_config()
+    scanner_cfg = cfg.scanner.to_engine_config()
+
+    # Override universe if specified
+    if universe:
+        scanner_cfg["universe_source"] = universe
+
+    scanner = get_scanner(scanner_cfg)
+
+    # Parse symbols
+    symbol_list = None
+    if symbols:
+        symbol_list = [s.strip().upper() for s in symbols.split(",")]
+
+    click.echo(f"Scanning {'universe: ' + (universe or cfg.scanner.universe_source) if not symbol_list else str(len(symbol_list)) + ' symbols'}...")
+
+    report = scanner.scan(symbols=symbol_list, update_lists=apply_results)
+
+    if json_output:
+        click.echo(json_mod.dumps(report.to_dict(), indent=2))
+        return
+
+    # Display results table
+    click.echo(f"\nScan completed in {report.duration_seconds}s — {report.universe_size} symbols screened")
+    if report.errors:
+        click.secho(f"  {len(report.errors)} errors encountered", fg='yellow')
+    click.echo()
+
+    results = [r for r in report.top_n(top) if r.total_score >= min_score]
+    if not results:
+        click.secho("No symbols matched the criteria.", fg='yellow')
+        return
+
+    # Header
+    click.echo(f"{'Rank':<6}{'Symbol':<10}{'Score':<10}{'Rec':<10}{'RSI':<10}{'Vol Ratio':<12}{'Criteria'}")
+    click.echo("-" * 85)
+
+    for i, r in enumerate(results, 1):
+        rec_color = {'trade': 'green', 'watch': 'yellow', 'skip': 'white'}.get(r.recommendation, 'white')
+
+        rsi = r.metadata.get('RSI')
+        rsi_str = f"{rsi:.1f}" if rsi is not None else "—"
+
+        vol = r.metadata.get('volume')
+        avg_vol = r.metadata.get('avg_volume_20')
+        vol_ratio = f"{vol / avg_vol:.1f}x" if vol and avg_vol and avg_vol > 0 else "—"
+
+        criteria_str = " | ".join(f"{k}={v:.2f}" for k, v in r.criteria_scores.items())
+
+        click.echo(f"{i:<6}{r.symbol:<10}{r.total_score:<10.4f}", nl=False)
+        click.secho(f"{r.recommendation:<10}", fg=rec_color, nl=False)
+        click.echo(f"{rsi_str:<10}{vol_ratio:<12}{criteria_str}")
+
+    # Summary
+    trade_count = len(report.trade_candidates())
+    watch_count = len(report.watch_candidates())
+    click.echo()
+    click.secho(f"Trade candidates: {trade_count}", fg='green')
+    click.secho(f"Watch candidates: {watch_count}", fg='yellow')
+
+    if apply_results:
+        click.secho(f"\nTrade/watch lists updated.", fg='green')
+
+
+@scan.command('results')
+@click.option('--json-output', is_flag=True, default=False, help='Output as JSON')
+def scan_results(json_output):
+    """Show the last scan report."""
+    import json as json_mod
+    from core.config_loader import get_config
+    from scanner.engine import get_scanner
+
+    cfg = get_config()
+    scanner = get_scanner(cfg.scanner.to_engine_config())
+
+    report = scanner.last_report
+    if not report:
+        click.secho("No scan results available. Run 'amsterdam scan run' first.", fg='yellow')
+        return
+
+    if json_output:
+        click.echo(json_mod.dumps(report.to_dict(), indent=2))
+    else:
+        click.echo(f"Last scan: {report.timestamp.isoformat()}")
+        click.echo(f"Universe: {report.universe_size} symbols")
+        click.echo(f"Trade candidates: {len(report.trade_candidates())}")
+        click.echo(f"Watch candidates: {len(report.watch_candidates())}")
+        click.echo(f"Duration: {report.duration_seconds}s")
+
+
+@scan.command('apply')
+@click.option('-t', '--trade-count', default=None, type=int, help='Max trade symbols to add')
+@click.option('-w', '--watch-count', default=None, type=int, help='Max watch symbols to add')
+@click.confirmation_option(prompt='Apply scan results to trade/watch lists?')
+def scan_apply(trade_count, watch_count):
+    """Apply last scan results to trade/watch lists."""
+    from core.config_loader import get_config
+    from core.symbol_list_manager import get_list_manager
+    from scanner.engine import get_scanner
+
+    cfg = get_config()
+    scanner = get_scanner(cfg.scanner.to_engine_config())
+
+    report = scanner.last_report
+    if not report:
+        click.secho("No scan results available. Run 'amsterdam scan run' first.", fg='yellow')
+        return
+
+    manager = get_list_manager()
+    added = {"trade": 0, "watch": 0}
+
+    for result in report.results:
+        if result.recommendation == "skip":
+            continue
+
+        note = f"scanner score={result.total_score} @ {report.timestamp.isoformat()}"
+
+        if result.recommendation == "trade":
+            if trade_count is not None and added["trade"] >= trade_count:
+                continue
+            existing = manager.get_list_type(result.symbol)
+            if existing != "trade":
+                manager.add_to_trade_list(result.symbol, notes=note)
+                added["trade"] += 1
+                click.echo(f"  + {result.symbol} -> trade (score={result.total_score})")
+
+        elif result.recommendation == "watch":
+            if watch_count is not None and added["watch"] >= watch_count:
+                continue
+            existing = manager.get_list_type(result.symbol)
+            if existing not in ("trade", "watch"):
+                manager.add_to_watch_list(result.symbol, notes=note)
+                added["watch"] += 1
+                click.echo(f"  + {result.symbol} -> watch (score={result.total_score})")
+
+    click.secho(f"\nAdded {added['trade']} to trade, {added['watch']} to watch.", fg='green')
+
+
+# =============================================================================
 # MAIN
 # =============================================================================
 
