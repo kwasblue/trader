@@ -47,6 +47,7 @@ from core.contracts.events import (
 )
 from core.contracts.meta_types import TradeEntryContext, TradeExitContext
 from loggers.meta_trade_logger import MetaTradeLogger, generate_trade_id
+from core.ml.trade_quality_filter import TradeQualityFilter
 
 # Import the router we created
 from core.logic.trade_logic_router import TradeApproverRouter
@@ -147,6 +148,11 @@ class LiveExecutionEngine(ExecutionEngineBase):
                               If provided, trades are blocked when drawdown limits are breached.
             position_manager: PositionManager for position lifecycle (SL/TP/exits).
                               If not provided, a default instance is created.
+
+        ML Filter settings are loaded from config/trading_config.json under ml_training:
+            filter_enabled: Whether ML trade quality filter is active (default: False).
+            filter_min_confidence: Minimum confidence to approve trade (0-1, default: 0.5).
+            filter_model_path: Path to trained model file.
         """
         super().__init__(
             broker=broker,
@@ -226,10 +232,31 @@ class LiveExecutionEngine(ExecutionEngineBase):
         # Uses confidence + trend alignment to adjust position sizes
         self.hybrid_sizer: Optional[HybridPositionSizer] = None
 
+        # ML Trade Quality Filter - gates entries based on predicted quality
+        # Settings loaded from config/trading_config.json under ml_training section
+        try:
+            from core.config_loader import get_config
+            ml_cfg = get_config().ml_training
+            ml_filter_enabled = getattr(ml_cfg, 'filter_enabled', False)
+            ml_filter_confidence = getattr(ml_cfg, 'filter_min_confidence', 0.5)
+            ml_filter_model_path = getattr(ml_cfg, 'filter_model_path', 'models/trade_quality_model.joblib')
+        except Exception:
+            ml_filter_enabled = False
+            ml_filter_confidence = 0.5
+            ml_filter_model_path = 'models/trade_quality_model.joblib'
+
+        self.ml_filter = TradeQualityFilter(
+            model_path=ml_filter_model_path if ml_filter_enabled else None,
+            min_confidence=ml_filter_confidence,
+            enabled=ml_filter_enabled,
+        )
+        self._ml_filter_enabled = ml_filter_enabled
+
         self.logger.info(
             f"LiveExecutionEngine initialized with order registry and validator"
             f"{f', daily_loss_limit=${daily_loss_limit:,.2f}' if daily_loss_limit else ''}"
             f"{', drawdown_monitor=enabled' if drawdown_monitor else ''}"
+            f"{f', ml_filter=enabled (confidence>={ml_filter_confidence})' if ml_filter_enabled else ''}"
         )
 
         # Sync portfolio with broker if requested
@@ -1326,9 +1353,103 @@ class LiveExecutionEngine(ExecutionEngineBase):
         context: SignalContext,
         state: SymbolState,
     ):
-        """Async wrapper for base class _check_trade_approval."""
-        # Delegate to synchronous base implementation
-        return super()._check_trade_approval(trade_logic, context, state)
+        """
+        Async wrapper for base class _check_trade_approval.
+
+        Adds ML quality filter check for entry signals when enabled.
+        """
+        # Delegate to synchronous base implementation first
+        should_trade, reason = super()._check_trade_approval(trade_logic, context, state)
+
+        if not should_trade:
+            return should_trade, reason
+
+        # ML Filter: Only check entries (not in position), skip exits
+        in_position = hasattr(state, 'is_in_position') and state.is_in_position
+        if not in_position and self._ml_filter_enabled and self.ml_filter.enabled:
+            # Build features for ML filter
+            features = self.ml_filter.build_features(
+                atr=context.atr,
+                atr_history=getattr(state, 'atr_history', []),
+                portfolio_drawdown=self.portfolio.drawdown_pct if hasattr(self.portfolio, 'drawdown_pct') else 0.0,
+                symbol_drawdown=getattr(state, 'drawdown_pct', 0.0),
+                position_size_pct=0.1,  # Estimated; actual calculated later
+                hour=context.timestamp.hour if context.timestamp else datetime.now(ET).hour,
+                day_of_week=context.timestamp.weekday() if context.timestamp else datetime.now(ET).weekday(),
+                minutes_since_open=self._minutes_since_market_open(context.timestamp),
+                bars_in_regime=getattr(state, 'bars_in_regime', 1),
+                hours_since_last_trade=getattr(state, 'hours_since_last_trade', 999.0),
+                signal_strength=context.signal,
+            )
+
+            ml_approved, score = self.ml_filter.evaluate(features, symbol=context.symbol)
+
+            if not ml_approved:
+                return False, f"ML filter rejected (score={score:.3f} < {self.ml_filter.min_confidence})"
+
+        return should_trade, reason
+
+    def _minutes_since_market_open(self, timestamp: Optional[datetime] = None) -> int:
+        """Calculate minutes since market open (9:30 AM ET)."""
+        if timestamp is None:
+            timestamp = datetime.now(ET)
+        elif timestamp.tzinfo is None:
+            timestamp = timestamp.replace(tzinfo=timezone.utc).astimezone(ET)
+        else:
+            timestamp = timestamp.astimezone(ET)
+
+        market_open = timestamp.replace(hour=9, minute=30, second=0, microsecond=0)
+        if timestamp < market_open:
+            return 0
+        return int((timestamp - market_open).total_seconds() / 60)
+
+    # ========================================================================
+    # ML FILTER RUNTIME CONFIGURATION
+    # ========================================================================
+
+    def enable_ml_filter(self, model_path: str = "models/trade_quality_model.joblib") -> bool:
+        """
+        Enable ML trade quality filter at runtime.
+
+        Args:
+            model_path: Path to trained model file
+
+        Returns:
+            True if enabled successfully, False otherwise
+        """
+        self.ml_filter = TradeQualityFilter(
+            model_path=model_path,
+            min_confidence=self.ml_filter.min_confidence,
+            enabled=True,
+        )
+        self._ml_filter_enabled = self.ml_filter.enabled
+        if self._ml_filter_enabled:
+            self.logger.info(f"ML filter enabled (model={model_path})")
+        return self._ml_filter_enabled
+
+    def disable_ml_filter(self) -> None:
+        """Disable ML trade quality filter."""
+        self._ml_filter_enabled = False
+        self.ml_filter.enabled = False
+        self.logger.info("ML filter disabled")
+
+    def set_ml_filter_confidence(self, min_confidence: float) -> None:
+        """
+        Update ML filter minimum confidence threshold.
+
+        Args:
+            min_confidence: New threshold (0-1)
+        """
+        self.ml_filter.set_min_confidence(min_confidence)
+        self.logger.info(f"ML filter confidence threshold set to {min_confidence}")
+
+    def get_ml_filter_stats(self) -> Dict[str, Any]:
+        """Get ML filter statistics."""
+        return {
+            'enabled': self._ml_filter_enabled,
+            'min_confidence': self.ml_filter.min_confidence,
+            **self.ml_filter.get_stats(),
+        }
 
     def _calculate_quantity(self, symbol, state, action_type, price, atr, regime, trade_logic, **kwargs):
         """

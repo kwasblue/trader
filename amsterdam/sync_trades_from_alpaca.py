@@ -87,7 +87,7 @@ def fetch_recent_alpaca_orders(since_hours=24):
         cutoff = datetime.now().astimezone() - timedelta(hours=since_hours)
         recent_filled = [
             o for o in orders
-            if o.status == 'filled' and o.filled_at > cutoff
+            if str(o.status.value).lower() == 'filled' and o.filled_at and o.filled_at > cutoff
         ]
 
         logger.info(f"Fetched {len(recent_filled)} filled orders from last {since_hours}h")
@@ -97,57 +97,62 @@ def fetch_recent_alpaca_orders(since_hours=24):
         logger.error(f"Failed to fetch Alpaca orders: {e}")
         return []
 
-def match_orders_to_trades(orders):
-    """Match buy/sell orders into trade pairs"""
+def match_orders_to_existing_positions(orders, existing_entries, exited_trade_ids):
+    """Match orders against existing open positions from log file"""
     orders.sort(key=lambda x: x.filled_at)
 
-    new_trades = []
-    positions = defaultdict(list)
+    # Build open positions from existing entries (entries without exits)
+    open_positions = defaultdict(list)
+    for trade_id, entry in existing_entries.items():
+        if trade_id not in exited_trade_ids:
+            symbol = entry['symbol']
+            entry_side = entry['side']
+            open_positions[symbol].append({
+                'trade_id': trade_id,
+                'entry': entry,
+                'entry_price': entry['price'],
+                'qty': entry['qty'],
+                'entry_side': entry_side,
+                'entry_time': datetime.fromisoformat(entry['timestamp'])
+            })
+
+    logger.info(f"Found {sum(len(v) for v in open_positions.values())} open positions")
+
+    exit_events = []
 
     for order in orders:
         symbol = order.symbol
-        side = order.side.value
+        side = str(order.side.value).lower()
         qty = float(order.filled_qty)
         price = float(order.filled_avg_price)
         filled_at = order.filled_at
+        order_id_str = str(order.id)
 
-        trade_id = f"{filled_at.strftime('%Y%m%d_%H%M%S')}_{symbol}_{order.id[:8]}"
+        # Check if this order closes an existing position
+        # Long positions (entry=buy) are closed by sells
+        # Short positions (entry=sell) are closed by buys
+        remaining_qty = qty
 
-        if side == 'buy':
-            # Entry
-            entry = {
-                'event': 'entry',
-                'trade_id': trade_id,
-                'timestamp': filled_at.isoformat(),
-                'symbol': symbol,
-                'side': 'buy',
-                'qty': int(qty),
-                'price': price,
-                'features': {
-                    'strategy': 'AlpacaBroker',
-                    'source': 'alpaca_sync',
-                    'order_id': order.id
-                }
-            }
+        positions = open_positions.get(symbol, [])
+        i = 0
+        while remaining_qty > 0 and i < len(positions):
+            position = positions[i]
+            entry_side = position['entry_side']
 
-            positions[symbol].append({
-                'trade_id': trade_id,
-                'entry': entry,
-                'entry_price': price,
-                'qty': qty,
-                'entry_time': filled_at
-            })
+            # Check if this order closes this position
+            closes_long = entry_side == 'buy' and side == 'sell'
+            closes_short = entry_side == 'sell' and side == 'buy'
 
-        elif side == 'sell':
-            # Exit
-            remaining_qty = qty
-
-            while remaining_qty > 0 and positions[symbol]:
-                position = positions[symbol][0]
+            if closes_long or closes_short:
                 close_qty = min(remaining_qty, position['qty'])
 
-                pnl = (price - position['entry_price']) * close_qty
-                pnl_pct = ((price - position['entry_price']) / position['entry_price'])
+                # Calculate PnL (positive = profit)
+                if closes_long:
+                    pnl = (price - position['entry_price']) * close_qty
+                else:  # closes_short
+                    pnl = (position['entry_price'] - price) * close_qty
+
+                pnl_pct = pnl / (position['entry_price'] * close_qty)
                 hold_time = (filled_at - position['entry_time']).total_seconds() / 3600
 
                 exit_event = {
@@ -161,46 +166,44 @@ def match_orders_to_trades(orders):
                         'hold_time_hours': hold_time,
                         'exit_reason': 'broker_confirmed',
                         'source': 'alpaca_sync',
-                        'order_id': order.id
+                        'order_id': order_id_str
                     }
                 }
 
-                # Add completed trade
-                new_trades.append({
-                    'entry': position['entry'],
-                    'exit': exit_event
-                })
+                exit_events.append(exit_event)
+                logger.info(f"Matched exit: {symbol} {position['trade_id']} PnL=${pnl:.2f}")
 
                 position['qty'] -= close_qty
                 remaining_qty -= close_qty
 
                 if position['qty'] <= 0:
-                    positions[symbol].pop(0)
+                    positions.pop(i)
+                else:
+                    i += 1
+            else:
+                i += 1
 
-    logger.info(f"Matched {len(new_trades)} new completed trades")
-    return new_trades
+    logger.info(f"Generated {len(exit_events)} exit events")
+    return exit_events
 
-def append_new_trades(new_trades):
-    """Append new trades to log file"""
-    if not new_trades:
-        logger.info("No new trades to append")
+def append_exit_events(exit_events):
+    """Append exit events to log file"""
+    if not exit_events:
+        logger.info("No exit events to append")
         return 0
 
     added = 0
     try:
         with open(LOG_FILE, 'a') as f:
-            for trade in new_trades:
-                # Write entry
-                f.write(json.dumps(trade['entry']) + '\n')
-                # Write exit
-                f.write(json.dumps(trade['exit']) + '\n')
+            for event in exit_events:
+                f.write(json.dumps(event) + '\n')
                 added += 1
 
-        logger.info(f"Appended {added} new trades to log")
+        logger.info(f"Appended {added} exit events to log")
         return added
 
     except Exception as e:
-        logger.error(f"Failed to append trades: {e}")
+        logger.error(f"Failed to append events: {e}")
         return 0
 
 def main():
@@ -211,7 +214,12 @@ def main():
 
     # Load existing trades
     existing_entries, all_events = load_existing_trades()
-    existing_trade_ids = set(e['trade_id'] for e in all_events)
+
+    # Find which trade_ids already have exits
+    exited_trade_ids = set()
+    for event in all_events:
+        if event['event'] == 'exit':
+            exited_trade_ids.add(event['trade_id'])
 
     # Fetch recent Alpaca orders
     orders = fetch_recent_alpaca_orders(since_hours=48)  # Last 48 hours
@@ -220,24 +228,20 @@ def main():
         logger.info("No recent orders to sync")
         return
 
-    # Match into trades
-    new_trades = match_orders_to_trades(orders)
+    # Match orders to existing open positions
+    exit_events = match_orders_to_existing_positions(orders, existing_entries, exited_trade_ids)
 
-    # Filter out trades we already have
-    fresh_trades = []
-    for trade in new_trades:
-        if trade['entry']['trade_id'] not in existing_trade_ids:
-            fresh_trades.append(trade)
-            logger.info(
-                f"New trade: {trade['entry']['symbol']} "
-                f"${trade['exit']['outcome']['pnl_dollars']:.2f}"
-            )
+    # Filter out exits we already have
+    fresh_exits = []
+    for event in exit_events:
+        if event['trade_id'] not in exited_trade_ids:
+            fresh_exits.append(event)
 
-    # Append new trades
-    added = append_new_trades(fresh_trades)
+    # Append new exit events
+    added = append_exit_events(fresh_exits)
 
     logger.info("=" * 60)
-    logger.info(f"SYNC COMPLETE - Added {added} new trades")
+    logger.info(f"SYNC COMPLETE - Added {added} exit events")
     logger.info("=" * 60)
 
 if __name__ == '__main__':

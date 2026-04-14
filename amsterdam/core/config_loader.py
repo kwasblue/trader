@@ -218,6 +218,10 @@ class MLTrainingConfig:
         "feat_bars_in_regime",
         "feat_signal_strength",
     ])
+    # ML Trade Quality Filter settings
+    filter_enabled: bool = False  # Off by default
+    filter_min_confidence: float = 0.5  # Minimum score to approve trade (0-1)
+    filter_model_path: str = "models/trade_quality_model.joblib"
 
 
 @dataclass
