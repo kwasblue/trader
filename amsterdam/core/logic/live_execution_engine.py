@@ -12,7 +12,9 @@ from __future__ import annotations
 
 from typing import Optional, Dict, Any, TYPE_CHECKING, Union
 import asyncio
+import json
 from datetime import datetime, timezone, time
+from pathlib import Path
 from zoneinfo import ZoneInfo
 import logging
 
@@ -240,17 +242,25 @@ class LiveExecutionEngine(ExecutionEngineBase):
             ml_filter_enabled = getattr(ml_cfg, 'filter_enabled', False)
             ml_filter_confidence = getattr(ml_cfg, 'filter_min_confidence', 0.5)
             ml_filter_model_path = getattr(ml_cfg, 'filter_model_path', 'models/trade_quality_model.joblib')
+            ml_filter_shadow_mode = getattr(ml_cfg, 'filter_shadow_mode', False)
         except Exception:
             ml_filter_enabled = False
             ml_filter_confidence = 0.5
             ml_filter_model_path = 'models/trade_quality_model.joblib'
+            ml_filter_shadow_mode = False
 
         self.ml_filter = TradeQualityFilter(
-            model_path=ml_filter_model_path if ml_filter_enabled else None,
+            model_path=ml_filter_model_path if (ml_filter_enabled or ml_filter_shadow_mode) else None,
             min_confidence=ml_filter_confidence,
-            enabled=ml_filter_enabled,
+            enabled=(ml_filter_enabled or ml_filter_shadow_mode),
         )
         self._ml_filter_enabled = ml_filter_enabled
+        self._ml_filter_shadow_mode = ml_filter_shadow_mode
+
+        # Shadow mode logger - logs predictions without blocking
+        self._ml_shadow_log_path = Path("logs/ml_filter_shadow.jsonl")
+        if ml_filter_shadow_mode:
+            self._ml_shadow_log_path.parent.mkdir(parents=True, exist_ok=True)
 
         self.logger.info(
             f"LiveExecutionEngine initialized with order registry and validator"
@@ -1357,6 +1367,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
         Async wrapper for base class _check_trade_approval.
 
         Adds ML quality filter check for entry signals when enabled.
+        Shadow mode logs predictions without blocking trades.
         """
         # Delegate to synchronous base implementation first
         should_trade, reason = super()._check_trade_approval(trade_logic, context, state)
@@ -1366,7 +1377,9 @@ class LiveExecutionEngine(ExecutionEngineBase):
 
         # ML Filter: Only check entries (not in position), skip exits
         in_position = hasattr(state, 'is_in_position') and state.is_in_position
-        if not in_position and self._ml_filter_enabled and self.ml_filter.enabled:
+        filter_active = self._ml_filter_enabled or self._ml_filter_shadow_mode
+
+        if not in_position and filter_active and self.ml_filter.enabled:
             # Build features for ML filter
             features = self.ml_filter.build_features(
                 atr=context.atr,
@@ -1384,10 +1397,53 @@ class LiveExecutionEngine(ExecutionEngineBase):
 
             ml_approved, score = self.ml_filter.evaluate(features, symbol=context.symbol)
 
+            # Shadow mode: log prediction but don't block
+            if self._ml_filter_shadow_mode:
+                self._log_shadow_prediction(
+                    symbol=context.symbol,
+                    score=score,
+                    approved=ml_approved,
+                    threshold=self.ml_filter.min_confidence,
+                    strategy=context.strategy_name,
+                    signal=context.signal,
+                    features=features,
+                )
+                # Don't block in shadow mode - always approve
+                return should_trade, reason
+
+            # Active mode: actually block low-quality trades
             if not ml_approved:
                 return False, f"ML filter rejected (score={score:.3f} < {self.ml_filter.min_confidence})"
 
         return should_trade, reason
+
+    def _log_shadow_prediction(
+        self,
+        symbol: str,
+        score: float,
+        approved: bool,
+        threshold: float,
+        strategy: str,
+        signal: int,
+        features: Dict[str, Any],
+    ) -> None:
+        """Log ML filter prediction to shadow log for later analysis."""
+        try:
+            record = {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "symbol": symbol,
+                "score": round(score, 4),
+                "threshold": threshold,
+                "would_approve": approved,
+                "would_reject": not approved,
+                "strategy": strategy,
+                "signal": signal,
+                "features": {k: round(v, 4) if isinstance(v, float) else v for k, v in features.items()},
+            }
+            with open(self._ml_shadow_log_path, "a") as f:
+                f.write(json.dumps(record) + "\n")
+        except Exception as e:
+            self.logger.warning(f"Failed to write shadow log: {e}")
 
     def _minutes_since_market_open(self, timestamp: Optional[datetime] = None) -> int:
         """Calculate minutes since market open (9:30 AM ET)."""

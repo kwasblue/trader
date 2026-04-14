@@ -171,7 +171,8 @@
     ],
     "filter_enabled": false,
     "filter_min_confidence": 0.5,
-    "filter_model_path": "models/trade_quality_model.joblib"
+    "filter_model_path": "models/trade_quality_model.joblib",
+    "filter_shadow_mode": false
   },
 
   "hybrid_sizing": {

@@ -222,6 +222,7 @@ class MLTrainingConfig:
     filter_enabled: bool = False  # Off by default
     filter_min_confidence: float = 0.5  # Minimum score to approve trade (0-1)
     filter_model_path: str = "models/trade_quality_model.joblib"
+    filter_shadow_mode: bool = False  # If True, log predictions but don't block trades
 
 
 @dataclass
