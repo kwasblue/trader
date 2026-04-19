@@ -1,0 +1,530 @@
+{
+  "symbol": "AAPL",
+  "n_trials": 30,
+  "n_windows": 3,
+  "best_params": {
+    "bayesian_prior_sharpe": 0.8474072401451748,
+    "bayesian_prior_weight": 4,
+    "sharpe_smoothing_alpha": 0.41187640010910787,
+    "scaling_alpha": 1.596850157946487,
+    "min_multiplier": 0.3337498258560774,
+    "max_multiplier": 1.099974915818003,
+    "skip_trade_threshold": 0.07429484487522141,
+    "ceiling_very_low_trades": 0.4334834444556087,
+    "ceiling_low_trades": 0.5714334089609704,
+    "max_sharpe_for_scaling": 2.4763327094232794
+  },
+  "best_score": -1.5,
+  "all_results": [
+    {
+      "params": {
+        "bayesian_prior_sharpe": 0.8474072401451748,
+        "bayesian_prior_weight": 4,
+        "sharpe_smoothing_alpha": 0.41187640010910787,
+        "scaling_alpha": 1.596850157946487,
+        "min_multiplier": 0.3337498258560774,
+        "max_multiplier": 1.099974915818003,
+        "skip_trade_threshold": 0.07429484487522141,
+        "ceiling_very_low_trades": 0.4334834444556087,
+        "ceiling_low_trades": 0.5714334089609704,
+        "max_sharpe_for_scaling": 2.4763327094232794
+      },
+      "objective_score": -1.5,
+      "sharpe": 0.0,
+      "max_drawdown": 0.0
+    },
+    {
+      "params": {
+        "bayesian_prior_sharpe": 0.2923086842703252,
+        "bayesian_prior_weight": 8,
+        "sharpe_smoothing_alpha": 0.4754210836063002,
+        "scaling_alpha": 1.0007787658410143,
+        "min_multiplier": 0.4976634677873653,
+        "max_multiplier": 1.6174815096277166,
+        "skip_trade_threshold": 0.09563144246835932,
+        "ceiling_very_low_trades": 0.30282652208788696,
+        "ceiling_low_trades": 0.5115312125207079,
+        "max_sharpe_for_scaling": 2.2871619903875837
+      },
+      "objective_score": -1.5,
+      "sharpe": 0.0,
+      "max_drawdown": 0.0
+    },
+    {
+      "params": {
+        "bayesian_prior_sharpe": 0.5498957287864417,
+        "bayesian_prior_weight": 3,
+        "sharpe_smoothing_alpha": 0.4895022075365838,
+        "scaling_alpha": 1.2327713404303042,
+        "min_multiplier": 0.22718193035984624,
+        "max_multiplier": 1.6183860093330873,
+        "skip_trade_threshold": 0.06354467877740279,
+        "ceiling_very_low_trades": 0.6932923543227153,
+        "ceiling_low_trades": 0.7333814466239901,
+        "max_sharpe_for_scaling": 2.789910610104481
+      },
+      "objective_score": -1.5114090348200768,
+      "sharpe": 0.0,
+      "max_drawdown": 0.0
+    },
+    {
+      "params": {
+        "bayesian_prior_sharpe": 0.7602306539408349,
+        "bayesian_prior_weight": 6,
+        "sharpe_smoothing_alpha": 0.10530598446394662,
+        "scaling_alpha": 1.942201755684853,
+        "min_multiplier": 0.36898646535366186,
+        "max_multiplier": 1.385416502539916,
+        "skip_trade_threshold": 0.012235275310829987,
+        "ceiling_very_low_trades": 0.3923575302488596,
+        "ceiling_low_trades": 0.6205127330130059,
+        "max_sharpe_for_scaling": 2.5248952782381875
+      },
+      "objective_score": -1.6211008778424265,
+      "sharpe": 0.0,
+      "max_drawdown": 0.0
+    },
+    {
+      "params": {
+        "bayesian_prior_sharpe": 0.7074974933369658,
+        "bayesian_prior_weight": 9,
+        "sharpe_smoothing_alpha": 0.16934586140310887,
+        "scaling_alpha": 1.391060607573241,
+        "min_multiplier": 0.2546708263364187,
+        "max_multiplier": 1.7553614103176527,
+        "skip_trade_threshold": 0.06952182242877426,
+        "ceiling_very_low_trades": 0.38317666514727555,
+        "ceiling_low_trades": 0.7838501639099957,
+        "max_sharpe_for_scaling": 1.546969938683338
+      },
+      "objective_score": -1.5276807051588264,
+      "sharpe": 0.0,
+      "max_drawdown": 0.0
+    },
+    {
+      "params": {
+        "bayesian_prior_sharpe": 0.8817135809462491,
+        "bayesian_prior_weight": 6,
+        "sharpe_smoothing_alpha": 0.25806009440072586,
+        "scaling_alpha": 1.9266588657937944,
+        "min_multiplier": 0.4181815987569263,
+        "max_multiplier": 1.3265407688058355,
+        "skip_trade_threshold": 0.08986215641675592,
+        "ceiling_very_low_trades": 0.5083337040103295,
+        "ceiling_low_trades": 0.9805860121746747,
+        "max_sharpe_for_scaling": 2.7668007730172275
+      },
+      "objective_score": -1.6133294328968972,
+      "sharpe": 0.0,
+      "max_drawdown": 0.0
+    },
+    {
+      "params": {
+        "bayesian_prior_sharpe": 0.8104900826030357,
+        "bayesian_prior_weight": 7,
+        "sharpe_smoothing_alpha": 0.33470046626553934,
+        "scaling_alpha": 1.965255307264138,
+        "min_multiplier": 0.3821102743060054,
+        "max_multiplier": 1.2759991820225434,
+        "skip_trade_threshold": 0.05147829079857154,
+        "ceiling_very_low_trades": 0.366106775625201,
+        "ceiling_low_trades": 0.507818203370597,
+        "max_sharpe_for_scaling": 2.1351022210595545
+      },
+      "objective_score": -1.6326276536320694,
+      "sharpe": 0.0,
+      "max_drawdown": 0.0
+    },
+    {
+      "params": {
+        "bayesian_prior_sharpe": 0.5461611386316774,
+        "bayesian_prior_weight": 5,
+        "sharpe_smoothing_alpha": 0.10563192908603379,
+        "scaling_alpha": 1.1988424040888053,
+        "min_multiplier": 0.413402585824595,
+        "max_multiplier": 1.7901755405312059,
+        "skip_trade_threshold": 0.0948343964693416,
+        "ceiling_very_low_trades": 0.6705203514053396,
+        "ceiling_low_trades": 0.8255385127509722,
+        "max_sharpe_for_scaling": 2.8724395133156717
+      },
+      "objective_score": -1.545087770265603,
+      "sharpe": 0.0,
+      "max_drawdown": 0.0
+    },
+    {
+      "params": {
+        "bayesian_prior_sharpe": 0.8875289333423496,
+        "bayesian_prior_weight": 6,
+        "sharpe_smoothing_alpha": 0.13816404659616455,
+        "scaling_alpha": 1.3708182521982664,
+        "min_multiplier": 0.4006523757990822,
+        "max_multiplier": 1.6659223566174968,
+        "skip_trade_threshold": 0.0927816902790818,
+        "ceiling_very_low_trades": 0.40988871719602565,
+        "ceiling_low_trades": 0.7806217129238506,
+        "max_sharpe_for_scaling": 2.074390312130685
+      },
+      "objective_score": -1.5,
+      "sharpe": 0.0,
+      "max_drawdown": 0.0
+    },
+    {
+      "params": {
+        "bayesian_prior_sharpe": 0.978784071541828,
+        "bayesian_prior_weight": 9,
+        "sharpe_smoothing_alpha": 0.3886918084659493,
+        "scaling_alpha": 1.2359849197489559,
+        "min_multiplier": 0.2768204968283972,
+        "max_multiplier": 1.0404335895384313,
+        "skip_trade_threshold": 0.10949280455601024,
+        "ceiling_very_low_trades": 0.3443563283247325,
+        "ceiling_low_trades": 0.7196682509328851,
+        "max_sharpe_for_scaling": 1.8025788035030943
+      },
+      "objective_score": -1.5,
+      "sharpe": 0.0,
+      "max_drawdown": 0.0
+    },
+    {
+      "params": {
+        "bayesian_prior_sharpe": 0.8996567932486466,
+        "bayesian_prior_weight": 9,
+        "sharpe_smoothing_alpha": 0.17034108326307876,
+        "scaling_alpha": 1.3094909312957317,
+        "min_multiplier": 0.20944122393138037,
+        "max_multiplier": 1.0,
+        "skip_trade_threshold": 0.13194747491252398,
+        "ceiling_very_low_trades": 0.368287543316127,
+        "ceiling_low_trades": 0.7092361933089526,
+        "max_sharpe_for_scaling": 1.9034874364980718
+      },
+      "objective_score": -1.5202793880343097,
+      "sharpe": 0.0,
+      "max_drawdown": 0.0
+    },
+    {
+      "params": {
+        "bayesian_prior_sharpe": 0.25,
+        "bayesian_prior_weight": 3,
+        "sharpe_smoothing_alpha": 0.5,
+        "scaling_alpha": 1.2609520896338209,
+        "min_multiplier": 0.2,
+        "max_multiplier": 1.4319308316545427,
+        "skip_trade_threshold": 0.01,
+        "ceiling_very_low_trades": 0.3,
+        "ceiling_low_trades": 1.0,
+        "max_sharpe_for_scaling": 1.5746025824111407
+      },
+      "objective_score": -1.5249999999999997,
+      "sharpe": 0.0,
+      "max_drawdown": 0.0
+    },
+    {
+      "params": {
+        "bayesian_prior_sharpe": 1.0,
+        "bayesian_prior_weight": 9,
+        "sharpe_smoothing_alpha": 0.4961598046346346,
+        "scaling_alpha": 1.5161388766590442,
+        "min_multiplier": 0.5,
+        "max_multiplier": 1.3328184629047342,
+        "skip_trade_threshold": 0.11510396689707694,
+        "ceiling_very_low_trades": 0.5759440710292019,
+        "ceiling_low_trades": 0.774853202017614,
+        "max_sharpe_for_scaling": 1.9077954213326391
+      },
+      "objective_score": -1.5,
+      "sharpe": 0.0,
+      "max_drawdown": 0.0
+    },
+    {
+      "params": {
+        "bayesian_prior_sharpe": 1.0,
+        "bayesian_prior_weight": 4,
+        "sharpe_smoothing_alpha": 0.27646347032304525,
+        "scaling_alpha": 1.4092154763807587,
+        "min_multiplier": 0.5,
+        "max_multiplier": 1.6600977621996307,
+        "skip_trade_threshold": 0.08715540492141258,
+        "ceiling_very_low_trades": 0.382896302740232,
+        "ceiling_low_trades": 0.7809081560535105,
+        "max_sharpe_for_scaling": 2.1394685674426794
+      },
+      "objective_score": -1.5,
+      "sharpe": 0.0,
+      "max_drawdown": 0.0
+    },
+    {
+      "params": {
+        "bayesian_prior_sharpe": 1.0,
+        "bayesian_prior_weight": 10,
+        "sharpe_smoothing_alpha": 0.5,
+        "scaling_alpha": 1.0,
+        "min_multiplier": 0.2,
+        "max_multiplier": 1.0,
+        "skip_trade_threshold": 0.070747172014252,
+        "ceiling_very_low_trades": 0.3,
+        "ceiling_low_trades": 0.5323456821775056,
+        "max_sharpe_for_scaling": 1.5
+      },
+      "objective_score": -1.5249999999999997,
+      "sharpe": 0.0,
+      "max_drawdown": 0.0
+    },
+    {
+      "params": {
+        "bayesian_prior_sharpe": 0.25,
+        "bayesian_prior_weight": 6,
+        "sharpe_smoothing_alpha": 0.1,
+        "scaling_alpha": 1.6613025519791265,
+        "min_multiplier": 0.5,
+        "max_multiplier": 1.8147403095980756,
+        "skip_trade_threshold": 0.010608902036683061,
+        "ceiling_very_low_trades": 0.5245771679293028,
+        "ceiling_low_trades": 0.7281113712996237,
+        "max_sharpe_for_scaling": 2.2305633426754112
+      },
+      "objective_score": -1.5573701547990375,
+      "sharpe": 0.0,
+      "max_drawdown": 0.0
+    },
+    {
+      "params": {
+        "bayesian_prior_sharpe": 1.0,
+        "bayesian_prior_weight": 3,
+        "sharpe_smoothing_alpha": 0.5,
+        "scaling_alpha": 1.426700645208463,
+        "min_multiplier": 0.3749267236629561,
+        "max_multiplier": 1.0,
+        "skip_trade_threshold": 0.1425582725149642,
+        "ceiling_very_low_trades": 0.4109249702061662,
+        "ceiling_low_trades": 0.5,
+        "max_sharpe_for_scaling": 2.6018299021982685
+      },
+      "objective_score": -1.5,
+      "sharpe": 0.0,
+      "max_drawdown": 0.0
+    },
+    {
+      "params": {
+        "bayesian_prior_sharpe": 1.0,
+        "bayesian_prior_weight": 3,
+        "sharpe_smoothing_alpha": 0.1,
+        "scaling_alpha": 1.559827580592965,
+        "min_multiplier": 0.5,
+        "max_multiplier": 1.0,
+        "skip_trade_threshold": 0.06135033823436254,
+        "ceiling_very_low_trades": 0.3,
+        "ceiling_low_trades": 0.5271584353486461,
+        "max_sharpe_for_scaling": 2.576398639837774
+      },
+      "objective_score": -1.5,
+      "sharpe": 0.0,
+      "max_drawdown": 0.0
+    },
+    {
+      "params": {
+        "bayesian_prior_sharpe": 1.0,
+        "bayesian_prior_weight": 3,
+        "sharpe_smoothing_alpha": 0.5,
+        "scaling_alpha": 1.322638456993339,
+        "min_multiplier": 0.5,
+        "max_multiplier": 2.0,
+        "skip_trade_threshold": 0.01,
+        "ceiling_very_low_trades": 0.4413256153768692,
+        "ceiling_low_trades": 1.0,
+        "max_sharpe_for_scaling": 3.0
+      },
+      "objective_score": -1.6499999999999997,
+      "sharpe": 0.0,
+      "max_drawdown": 0.0
+    },
+    {
+      "params": {
+        "bayesian_prior_sharpe": 0.930971244297035,
+        "bayesian_prior_weight": 9,
+        "sharpe_smoothing_alpha": 0.5,
+        "scaling_alpha": 1.1682367691224853,
+        "min_multiplier": 0.36361875338560623,
+        "max_multiplier": 1.0933311285216727,
+        "skip_trade_threshold": 0.07211162885889362,
+        "ceiling_very_low_trades": 0.343934634396989,
+        "ceiling_low_trades": 0.8190832903607755,
+        "max_sharpe_for_scaling": 1.6704122290386034
+      },
+      "objective_score": -1.5,
+      "sharpe": 0.0,
+      "max_drawdown": 0.0
+    },
+    {
+      "params": {
+        "bayesian_prior_sharpe": 1.0,
+        "bayesian_prior_weight": 3,
+        "sharpe_smoothing_alpha": 0.5,
+        "scaling_alpha": 1.2912161977467456,
+        "min_multiplier": 0.5,
+        "max_multiplier": 1.3953974044353312,
+        "skip_trade_threshold": 0.1135840851268225,
+        "ceiling_very_low_trades": 0.3,
+        "ceiling_low_trades": 0.5,
+        "max_sharpe_for_scaling": 2.8750055440289826
+      },
+      "objective_score": -1.5,
+      "sharpe": 0.0,
+      "max_drawdown": 0.0
+    },
+    {
+      "params": {
+        "bayesian_prior_sharpe": 0.9934712367346874,
+        "bayesian_prior_weight": 4,
+        "sharpe_smoothing_alpha": 0.5,
+        "scaling_alpha": 1.4098120216004746,
+        "min_multiplier": 0.5,
+        "max_multiplier": 1.1428997257086064,
+        "skip_trade_threshold": 0.15,
+        "ceiling_very_low_trades": 0.6552314290745473,
+        "ceiling_low_trades": 0.6034958445238467,
+        "max_sharpe_for_scaling": 2.6516531667784333
+      },
+      "objective_score": -1.5,
+      "sharpe": 0.0,
+      "max_drawdown": 0.0
+    },
+    {
+      "params": {
+        "bayesian_prior_sharpe": 1.0,
+        "bayesian_prior_weight": 9,
+        "sharpe_smoothing_alpha": 0.1,
+        "scaling_alpha": 1.0,
+        "min_multiplier": 0.2921402029729353,
+        "max_multiplier": 1.4514309382689976,
+        "skip_trade_threshold": 0.11080225389448897,
+        "ceiling_very_low_trades": 0.7,
+        "ceiling_low_trades": 0.9813493104362685,
+        "max_sharpe_for_scaling": 1.5
+      },
+      "objective_score": -1.5,
+      "sharpe": 0.0,
+      "max_drawdown": 0.0
+    },
+    {
+      "params": {
+        "bayesian_prior_sharpe": 1.0,
+        "bayesian_prior_weight": 6,
+        "sharpe_smoothing_alpha": 0.5,
+        "scaling_alpha": 1.4372627376747875,
+        "min_multiplier": 0.5,
+        "max_multiplier": 1.0,
+        "skip_trade_threshold": 0.01,
+        "ceiling_very_low_trades": 0.49018605138461335,
+        "ceiling_low_trades": 0.5,
+        "max_sharpe_for_scaling": 3.0
+      },
+      "objective_score": -1.5,
+      "sharpe": 0.0,
+      "max_drawdown": 0.0
+    },
+    {
+      "params": {
+        "bayesian_prior_sharpe": 1.0,
+        "bayesian_prior_weight": 3,
+        "sharpe_smoothing_alpha": 0.1,
+        "scaling_alpha": 1.4452594690756069,
+        "min_multiplier": 0.2,
+        "max_multiplier": 1.527077109329841,
+        "skip_trade_threshold": 0.15,
+        "ceiling_very_low_trades": 0.3,
+        "ceiling_low_trades": 0.5,
+        "max_sharpe_for_scaling": 3.0
+      },
+      "objective_score": -1.5249999999999997,
+      "sharpe": 0.0,
+      "max_drawdown": 0.0
+    },
+    {
+      "params": {
+        "bayesian_prior_sharpe": 1.0,
+        "bayesian_prior_weight": 6,
+        "sharpe_smoothing_alpha": 0.5,
+        "scaling_alpha": 1.413190046325902,
+        "min_multiplier": 0.5,
+        "max_multiplier": 1.0819189443492596,
+        "skip_trade_threshold": 0.08153931885646762,
+        "ceiling_very_low_trades": 0.7,
+        "ceiling_low_trades": 0.9172227604526947,
+        "max_sharpe_for_scaling": 1.5
+      },
+      "objective_score": -1.5,
+      "sharpe": 0.0,
+      "max_drawdown": 0.0
+    },
+    {
+      "params": {
+        "bayesian_prior_sharpe": 1.0,
+        "bayesian_prior_weight": 7,
+        "sharpe_smoothing_alpha": 0.44916178572925824,
+        "scaling_alpha": 1.0,
+        "min_multiplier": 0.5,
+        "max_multiplier": 1.2719357595366936,
+        "skip_trade_threshold": 0.15,
+        "ceiling_very_low_trades": 0.6203433398367536,
+        "ceiling_low_trades": 0.5,
+        "max_sharpe_for_scaling": 3.0
+      },
+      "objective_score": -1.5,
+      "sharpe": 0.0,
+      "max_drawdown": 0.0
+    },
+    {
+      "params": {
+        "bayesian_prior_sharpe": 1.0,
+        "bayesian_prior_weight": 10,
+        "sharpe_smoothing_alpha": 0.1,
+        "scaling_alpha": 1.2251532333883883,
+        "min_multiplier": 0.5,
+        "max_multiplier": 1.563416731851201,
+        "skip_trade_threshold": 0.15,
+        "ceiling_very_low_trades": 0.3159677504880812,
+        "ceiling_low_trades": 0.5335333549980648,
+        "max_sharpe_for_scaling": 1.5
+      },
+      "objective_score": -1.5,
+      "sharpe": 0.0,
+      "max_drawdown": 0.0
+    },
+    {
+      "params": {
+        "bayesian_prior_sharpe": 0.25,
+        "bayesian_prior_weight": 3,
+        "sharpe_smoothing_alpha": 0.5,
+        "scaling_alpha": 1.0,
+        "min_multiplier": 0.5,
+        "max_multiplier": 1.478534180601035,
+        "skip_trade_threshold": 0.01,
+        "ceiling_very_low_trades": 0.7,
+        "ceiling_low_trades": 1.0,
+        "max_sharpe_for_scaling": 2.651739890948815
+      },
+      "objective_score": -1.5,
+      "sharpe": 0.0,
+      "max_drawdown": 0.0
+    },
+    {
+      "params": {
+        "bayesian_prior_sharpe": 1.0,
+        "bayesian_prior_weight": 10,
+        "sharpe_smoothing_alpha": 0.5,
+        "scaling_alpha": 1.2043683377793188,
+        "min_multiplier": 0.5,
+        "max_multiplier": 1.1928354587783396,
+        "skip_trade_threshold": 0.15,
+        "ceiling_very_low_trades": 0.3,
+        "ceiling_low_trades": 0.5,
+        "max_sharpe_for_scaling": 3.0
+      },
+      "objective_score": -1.5,
+      "sharpe": 0.0,
+      "max_drawdown": 0.0
+    }
+  ]
+}

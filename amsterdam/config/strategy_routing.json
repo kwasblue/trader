@@ -1,0 +1,460 @@
+{
+  "AAPL": {
+    "low_volatility": {
+      "strategy": "stochastic",
+      "timeframe": "1hour"
+    },
+    "normal": {
+      "strategy": "psar",
+      "timeframe": "30min"
+    },
+    "high_volatility": {
+      "strategy": "psar",
+      "timeframe": "15min"
+    },
+    "default": {
+      "strategy": "psar",
+      "timeframe": "30min"
+    },
+    "use_hybrid": true,
+    "_hybrid_test_sharpe_improvement": 0.09363916119183024
+  },
+  "ABBV": {
+    "low_volatility": {
+      "strategy": "macd",
+      "timeframe": "1hour"
+    },
+    "normal": {
+      "strategy": "meanreversion",
+      "timeframe": "30min"
+    },
+    "high_volatility": {
+      "strategy": "rsi",
+      "timeframe": "15min"
+    },
+    "default": {
+      "strategy": "meanreversion",
+      "timeframe": "30min"
+    },
+    "use_hybrid": true,
+    "_hybrid_test_sharpe_improvement": 0.16476573185264565
+  },
+  "AMZN": {
+    "low_volatility": {
+      "strategy": "sma",
+      "timeframe": "1hour"
+    },
+    "normal": {
+      "strategy": "sma",
+      "timeframe": "30min"
+    },
+    "high_volatility": {
+      "strategy": "rsi",
+      "timeframe": "15min"
+    },
+    "default": {
+      "strategy": "sma",
+      "timeframe": "30min"
+    },
+    "use_hybrid": true,
+    "_hybrid_test_sharpe_improvement": 0.1251133678741123
+  },
+  "AVGO": {
+    "low_volatility": {
+      "strategy": "momentum",
+      "timeframe": "1hour"
+    },
+    "normal": {
+      "strategy": "psar",
+      "timeframe": "30min"
+    },
+    "high_volatility": {
+      "strategy": "stochastic",
+      "timeframe": "15min"
+    },
+    "default": {
+      "strategy": "psar",
+      "timeframe": "30min"
+    },
+    "use_hybrid": true,
+    "_hybrid_test_sharpe_improvement": 0.21290457331498502
+  },
+  "COST": {
+    "low_volatility": {
+      "strategy": "adx",
+      "timeframe": "1hour"
+    },
+    "normal": {
+      "strategy": "ema",
+      "timeframe": "30min"
+    },
+    "high_volatility": {
+      "strategy": "breakout",
+      "timeframe": "15min"
+    },
+    "default": {
+      "strategy": "ema",
+      "timeframe": "30min"
+    },
+    "use_hybrid": true,
+    "_hybrid_test_sharpe_improvement": 0.1360990637255448
+  },
+  "GOOGL": {
+    "low_volatility": {
+      "strategy": "sma",
+      "timeframe": "1hour"
+    },
+    "normal": {
+      "strategy": "bollinger",
+      "timeframe": "30min"
+    },
+    "high_volatility": {
+      "strategy": "psar",
+      "timeframe": "15min"
+    },
+    "default": {
+      "strategy": "bollinger",
+      "timeframe": "30min"
+    },
+    "use_hybrid": true,
+    "_hybrid_test_sharpe_improvement": 0.3013257382341852
+  },
+  "HD": {
+    "low_volatility": {
+      "strategy": "psar",
+      "timeframe": "1hour"
+    },
+    "normal": {
+      "strategy": "meanreversion",
+      "timeframe": "30min"
+    },
+    "high_volatility": {
+      "strategy": "adx",
+      "timeframe": "15min"
+    },
+    "default": {
+      "strategy": "meanreversion",
+      "timeframe": "30min"
+    },
+    "use_hybrid": false,
+    "_hybrid_test_sharpe_improvement": 0.07751889597716577
+  },
+  "JNJ": {
+    "low_volatility": {
+      "strategy": "bollinger",
+      "timeframe": "1hour"
+    },
+    "normal": {
+      "strategy": "ichimoku",
+      "timeframe": "30min"
+    },
+    "high_volatility": {
+      "strategy": "momentum",
+      "timeframe": "15min"
+    },
+    "default": {
+      "strategy": "ichimoku",
+      "timeframe": "30min"
+    },
+    "use_hybrid": true,
+    "_hybrid_test_sharpe_improvement": 0.30260270006696777
+  },
+  "JPM": {
+    "low_volatility": {
+      "strategy": "macd",
+      "timeframe": "1hour"
+    },
+    "normal": {
+      "strategy": "macd",
+      "timeframe": "30min"
+    },
+    "high_volatility": {
+      "strategy": "rsi",
+      "timeframe": "15min"
+    },
+    "default": {
+      "strategy": "macd",
+      "timeframe": "30min"
+    },
+    "use_hybrid": true,
+    "_hybrid_test_sharpe_improvement": 0.16385306899652763
+  },
+  "MA": {
+    "low_volatility": {
+      "strategy": "breakout",
+      "timeframe": "1hour"
+    },
+    "normal": {
+      "strategy": "bollinger",
+      "timeframe": "30min"
+    },
+    "high_volatility": {
+      "strategy": "vwap",
+      "timeframe": "15min"
+    },
+    "default": {
+      "strategy": "bollinger",
+      "timeframe": "30min"
+    },
+    "use_hybrid": true,
+    "_hybrid_test_sharpe_improvement": 0.15430516014626017
+  },
+  "META": {
+    "low_volatility": {
+      "strategy": "adx",
+      "timeframe": "1hour"
+    },
+    "normal": {
+      "strategy": "adx",
+      "timeframe": "30min"
+    },
+    "high_volatility": {
+      "strategy": "bollinger",
+      "timeframe": "15min"
+    },
+    "default": {
+      "strategy": "adx",
+      "timeframe": "30min"
+    },
+    "use_hybrid": true,
+    "_hybrid_test_sharpe_improvement": 0.14280664519254294
+  },
+  "MSFT": {
+    "low_volatility": {
+      "strategy": "vwap",
+      "timeframe": "1hour"
+    },
+    "normal": {
+      "strategy": "meanreversion",
+      "timeframe": "30min"
+    },
+    "high_volatility": {
+      "strategy": "momentum",
+      "timeframe": "15min"
+    },
+    "default": {
+      "strategy": "meanreversion",
+      "timeframe": "30min"
+    },
+    "use_hybrid": true,
+    "_hybrid_test_sharpe_improvement": 0.18483757998641304
+  },
+  "NVDA": {
+    "low_volatility": {
+      "strategy": "psar",
+      "timeframe": "1hour"
+    },
+    "normal": {
+      "strategy": "psar",
+      "timeframe": "30min"
+    },
+    "high_volatility": {
+      "strategy": "psar",
+      "timeframe": "15min"
+    },
+    "default": {
+      "strategy": "psar",
+      "timeframe": "30min"
+    },
+    "use_hybrid": true,
+    "_hybrid_test_sharpe_improvement": 0.2385251807529556
+  },
+  "PG": {
+    "low_volatility": {
+      "strategy": "adx",
+      "timeframe": "1hour"
+    },
+    "normal": {
+      "strategy": "rsi",
+      "timeframe": "30min"
+    },
+    "high_volatility": {
+      "strategy": "vwap",
+      "timeframe": "15min"
+    },
+    "default": {
+      "strategy": "rsi",
+      "timeframe": "30min"
+    },
+    "use_hybrid": true,
+    "_hybrid_test_sharpe_improvement": 0.12558099479756113
+  },
+  "TSLA": {
+    "low_volatility": {
+      "strategy": "vwap",
+      "timeframe": "1hour"
+    },
+    "normal": {
+      "strategy": "bollinger",
+      "timeframe": "30min"
+    },
+    "high_volatility": {
+      "strategy": "vwap",
+      "timeframe": "15min"
+    },
+    "default": {
+      "strategy": "bollinger",
+      "timeframe": "30min"
+    },
+    "use_hybrid": true,
+    "_hybrid_test_sharpe_improvement": 0.17333743465411233
+  },
+  "UNH": {
+    "low_volatility": {
+      "strategy": "bollinger",
+      "timeframe": "1hour"
+    },
+    "normal": {
+      "strategy": "bollinger",
+      "timeframe": "30min"
+    },
+    "high_volatility": {
+      "strategy": "vwap",
+      "timeframe": "15min"
+    },
+    "default": {
+      "strategy": "bollinger",
+      "timeframe": "30min"
+    },
+    "use_hybrid": false,
+    "_hybrid_test_sharpe_improvement": 0.05238005861698891
+  },
+  "V": {
+    "low_volatility": {
+      "strategy": "breakout",
+      "timeframe": "1hour"
+    },
+    "normal": {
+      "strategy": "bollinger",
+      "timeframe": "30min"
+    },
+    "high_volatility": {
+      "strategy": "sma",
+      "timeframe": "15min"
+    },
+    "default": {
+      "strategy": "bollinger",
+      "timeframe": "30min"
+    },
+    "use_hybrid": true,
+    "_hybrid_test_sharpe_improvement": 0.17495055675657278
+  },
+  "WMT": {
+    "low_volatility": {
+      "strategy": "breakout",
+      "timeframe": "1hour"
+    },
+    "normal": {
+      "strategy": "bollinger",
+      "timeframe": "30min"
+    },
+    "high_volatility": {
+      "strategy": "psar",
+      "timeframe": "15min"
+    },
+    "default": {
+      "strategy": "bollinger",
+      "timeframe": "30min"
+    },
+    "use_hybrid": true,
+    "_hybrid_test_sharpe_improvement": 0.22001233126306974
+  },
+  "XOM": {
+    "low_volatility": {
+      "strategy": "vwap",
+      "timeframe": "1hour"
+    },
+    "normal": {
+      "strategy": "stochastic",
+      "timeframe": "30min"
+    },
+    "high_volatility": {
+      "strategy": "vwap",
+      "timeframe": "15min"
+    },
+    "default": {
+      "strategy": "stochastic",
+      "timeframe": "30min"
+    },
+    "use_hybrid": true,
+    "_hybrid_test_sharpe_improvement": 0.2478536765345154
+  },
+  "default": {
+    "low_volatility": {
+      "strategy": "macd",
+      "timeframe": "day"
+    },
+    "normal": {
+      "strategy": "bollinger",
+      "timeframe": "day"
+    },
+    "high_volatility": {
+      "strategy": "psar",
+      "timeframe": "day"
+    },
+    "default": {
+      "strategy": "bollinger",
+      "timeframe": "day"
+    }
+  },
+  "FDX": {
+    "low_volatility": "meanreversion",
+    "normal": "adx",
+    "high_volatility": "adx",
+    "default": "adx"
+  },
+  "BWA": {
+    "low_volatility": "sma",
+    "normal": "rsi",
+    "high_volatility": "ema",
+    "default": "rsi"
+  },
+  "ALB": {
+    "low_volatility": "meanreversion",
+    "normal": "rsi",
+    "high_volatility": "ema",
+    "default": "rsi"
+  },
+  "CHRW": {
+    "low_volatility": "macd",
+    "normal": "ema",
+    "high_volatility": "adx",
+    "default": "ema"
+  },
+  "JCI": {
+    "low_volatility": "adx",
+    "normal": "bollinger",
+    "high_volatility": "meanreversion",
+    "default": "bollinger"
+  },
+  "MNST": {
+    "low_volatility": "sma",
+    "normal": "meanreversion",
+    "high_volatility": "ema",
+    "default": "meanreversion"
+  },
+  "SCHW": {
+    "low_volatility": "meanreversion",
+    "normal": "bollinger",
+    "high_volatility": "stochastic",
+    "default": "bollinger"
+  },
+  "FOX": {
+    "low_volatility": "meanreversion",
+    "normal": "stochastic",
+    "high_volatility": "meanreversion",
+    "default": "stochastic"
+  },
+  "IT": {
+    "low_volatility": "macd",
+    "normal": "meanreversion",
+    "high_volatility": "stochastic",
+    "default": "meanreversion"
+  },
+  "LRCX": {
+    "low_volatility": "sma",
+    "normal": "bollinger",
+    "high_volatility": "bollinger",
+    "default": "bollinger"
+  }
+}

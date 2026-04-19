@@ -1,0 +1,72 @@
+#!/bin/bash
+#
+# Daily Strategy Optimization
+#
+# This script runs every trading day morning before market open (9:00 AM ET)
+# to optimize strategy routing based on recent market data.
+#
+# What it does:
+# 1. Update historical data for all symbols (90 days)
+# 2. Run regime-based backtesting to find optimal strategies
+# 3. Update strategy_routing.json with new optimal strategies
+# 4. Restart amsterdam service to pick up new configuration
+#
+# Schedule via cron:
+#   0 9 * * 1-5 /home/kwasi/trader/amsterdam/bin/daily-optimize
+#   (Runs at 9:00 AM Monday-Friday)
+
+set -euo pipefail
+
+AMSTERDAM_DIR="/home/kwasi/trader/amsterdam"
+VENV_PYTHON="$AMSTERDAM_DIR/venv/bin/python"
+SCRIPT="$AMSTERDAM_DIR/core/backtest/daily_optimize.py"
+LOG_FILE="$AMSTERDAM_DIR/logs/daily_optimize.log"
+
+# Ensure logs directory exists
+mkdir -p "$AMSTERDAM_DIR/logs"
+
+echo "================================================================" | tee -a "$LOG_FILE"
+echo "Daily Strategy Optimization - $(date)" | tee -a "$LOG_FILE"
+echo "================================================================" | tee -a "$LOG_FILE"
+echo "" | tee -a "$LOG_FILE"
+
+# Change to amsterdam directory
+cd "$AMSTERDAM_DIR"
+
+# Run optimization
+echo "Running optimization..." | tee -a "$LOG_FILE"
+if "$VENV_PYTHON" "$SCRIPT" 2>&1 | tee -a "$LOG_FILE"; then
+    echo "" | tee -a "$LOG_FILE"
+    echo "✓ Optimization successful" | tee -a "$LOG_FILE"
+
+    # Restart amsterdam service to pick up new config
+    echo "Restarting amsterdam service..." | tee -a "$LOG_FILE"
+    if sudo systemctl restart amsterdam; then
+        echo "✓ Service restarted successfully" | tee -a "$LOG_FILE"
+
+        # Wait a moment and check status
+        sleep 2
+        if sudo systemctl is-active --quiet amsterdam; then
+            echo "✓ Service is running" | tee -a "$LOG_FILE"
+        else
+            echo "✗ Service failed to start!" | tee -a "$LOG_FILE"
+            sudo systemctl status amsterdam | tee -a "$LOG_FILE"
+            exit 1
+        fi
+    else
+        echo "✗ Failed to restart service!" | tee -a "$LOG_FILE"
+        exit 1
+    fi
+else
+    echo "" | tee -a "$LOG_FILE"
+    echo "✗ Optimization failed - service NOT restarted" | tee -a "$LOG_FILE"
+    exit 1
+fi
+
+echo "" | tee -a "$LOG_FILE"
+echo "================================================================" | tee -a "$LOG_FILE"
+echo "Daily optimization complete - $(date)" | tee -a "$LOG_FILE"
+echo "================================================================" | tee -a "$LOG_FILE"
+echo "" | tee -a "$LOG_FILE"
+
+exit 0

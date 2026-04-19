@@ -1,0 +1,109 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "amsterdam"
+version = "1.0.0"
+description = "Algorithmic trading platform with Schwab and Alpaca support"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+keywords = ["trading", "algorithmic", "schwab", "alpaca", "finance"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Environment :: X11 Applications :: Qt",
+    "Intended Audience :: Financial and Insurance Industry",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Office/Business :: Financial :: Investment",
+]
+
+dependencies = [
+    "numpy>=2.0.0",
+    "pandas>=2.0.0",
+    "scipy>=1.10.0",
+    "python-dotenv>=1.0.0",
+    "requests>=2.31.0",
+    "ta>=0.11.0",
+    "aiohttp>=3.9.0",
+    "websockets>=12.0",
+    "PySide6>=6.6.0",
+    "click>=8.1.0",
+    "scikit-learn>=1.4.0",
+    "joblib>=1.3.0",
+    "pydantic>=2.0.0",
+    "pyqtgraph>=0.13.0",
+    "qasync>=0.27.0",
+    "pytz>=2024.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-asyncio>=0.23.0",
+    "ruff>=0.4.0",
+]
+ml = [
+    "xgboost>=2.0.0",
+    "transformers>=4.35.0",
+    "imbalanced-learn>=0.12.0",
+]
+charts = [
+    "matplotlib>=3.8.0",
+    "seaborn>=0.13.0",
+]
+
+[project.scripts]
+amsterdam = "cli.main:main"
+
+[project.urls]
+Documentation = "docs/index.md"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["cli*", "core*", "strategies*", "indicators*", "monitoring*", "data*", "loggers*", "utils*", "cache*", "scanner*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
+
+[tool.coverage.run]
+source = ["core", "strategies", "indicators"]
+omit = ["tests/*", "*/__pycache__/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+]
+ignore = [
+    "E501",  # line too long (handled by formatter)
+]
+
+[tool.ruff.format]
+quote-style = "double"

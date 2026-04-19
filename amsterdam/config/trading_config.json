@@ -1,0 +1,223 @@
+{
+  "general": {
+    "default_symbols": [
+      "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA",
+      "AVGO", "JPM", "V", "UNH", "XOM", "MA", "COST", "HD",
+      "PG", "JNJ", "ABBV", "WMT"
+    ],
+    "default_mode": "simulation",
+    "log_level": "INFO"
+  },
+
+  "simulation": {
+    "enabled": true,
+    "steps": 2000,
+    "bar_sleep": 0.5,
+    "warmup_bars": 200,
+    "starting_cash": 100000.0,
+    "gbm_mu": 0.05,
+    "gbm_sigma": 0.2
+  },
+
+  "alpaca": {
+    "enabled": true,
+    "paper": true,
+    "data_feed": "iex",
+    "poll_timeout_seconds": 30
+  },
+
+  "schwab": {
+    "enabled": true,
+    "session": "NORMAL"
+  },
+
+  "risk": {
+    "risk_per_trade": 0.05,
+    "max_trade_pct": 0.10,
+    "max_holding_pct": 0.25,
+    "max_pyramid_layers": 2,
+    "min_bars_between_layers": 2,
+    "daily_loss_limit": 1000.0
+  },
+
+  "execution": {
+    "slippage_pct": 0.001,
+    "commission_per_trade": 0.0,
+    "apply_friction_in_simulation": true
+  },
+
+  "drawdown_monitor": {
+    "enabled": false,
+    "max_symbol_drawdown": 0.30,
+    "max_symbol_daily_drawdown": 0.15,
+    "symbol_cooldown_seconds": 5,
+    "max_portfolio_drawdown": 0.25,
+    "max_portfolio_daily_drawdown": 0.10,
+    "portfolio_cooldown_seconds": 5
+  },
+
+  "position_sizer": {
+    "type": "dynamic",
+    "risk_percentage": 0.05,
+    "max_trade_pct": 0.10,
+    "max_holding_pct": 0.25,
+    "min_position_size": 1,
+    "max_position_size": 1000,
+    "fee_rate": 0.001,
+    "allow_fractional": false,
+    "lot_size": 1
+  },
+
+  "strategy_quality_filter": {
+    "enabled": true,
+    "min_sharpe": 0.5
+  },
+
+  "trade_logic": {
+    "cooldown_mode": "bars",
+    "cooldown_bars": 5,
+    "cooldown_seconds": 300,
+    "min_regime_persist_bars": 3,
+    "tp_mult_low": 1.5,
+    "tp_mult_normal": 2.0,
+    "tp_mult_high": 3.0,
+    "sl_mult_low": 1.0,
+    "sl_mult_normal": 1.5,
+    "sl_mult_high": 2.0,
+    "exit_fraction": 0.25,
+    "trailing_stop": true,
+    "max_positions": 10,
+    "min_bars_to_hold": 5,
+    "swing_mode": true,
+    "min_hold_days": 1,
+    "allow_after_hours": false,
+    "trading_cutoff_hour_et": 15,
+    "trading_cutoff_minute_et": 45,
+    "close_positions_eod": true,
+    "signal_based_exits": false
+  },
+
+  "indicators": {
+    "atr_period": 14,
+    "sma_short": 20,
+    "sma_long": 50,
+    "rsi_period": 14,
+    "bollinger_period": 20,
+    "bollinger_std": 2.0
+  },
+
+  "data": {
+    "historical_data_path": "data/data_storage/proc_data",
+    "raw_data_path": "data/data_storage/raw_data",
+    "logs_path": "logs",
+    "max_stale_minutes": 60,
+    "historical_update_interval_minutes": 60,
+    "seed_bars": 200,
+    "historical_days_to_fetch": 5
+  },
+
+  "gui": {
+    "update_interval_ms": 1000,
+    "equity_maxlen": 5000,
+    "price_maxlen": 2000,
+    "auto_refresh_history": true,
+    "auto_refresh_performance": true
+  },
+
+  "logging": {
+    "console_enabled": true,
+    "file_enabled": true,
+    "propagate_to_app_log": true,
+    "debug_print_enabled": true,
+    "trace_enabled": true,
+    "trace_file": "logs/trace.log"
+  },
+
+  "autotrader": {
+    "enabled": true,
+    "default_broker": "alpaca",
+    "pre_market_buffer_minutes": 15,
+    "post_market_delay_minutes": 5,
+    "data_update_days": 5,
+    "dry_run": false,
+    "close_positions_on_market_close": true,
+    "market_close_minutes_before": 5,
+    "preflight_max_retries": 3,
+    "preflight_retry_delay": 60
+  },
+
+  "error_recovery": {
+    "retry_max_attempts": 3,
+    "retry_base_delay": 1.0,
+    "circuit_breaker_failure_threshold": 5,
+    "circuit_breaker_timeout": 60.0
+  },
+
+  "ml_training": {
+    "meta_logging_enabled": true,
+    "meta_log_file": "meta_trades_live.jsonl",
+    "training_data_path": "data/ml_training",
+    "model_path": "models/trade_quality_model.joblib",
+    "min_trades_for_training": 100,
+    "retrain_interval_days": 7,
+    "features": [
+      "feat_atr_percentile",
+      "feat_drawdown_portfolio_pct",
+      "feat_position_size_pct",
+      "feat_hour_of_day",
+      "feat_day_of_week",
+      "feat_bars_in_regime",
+      "feat_signal_strength"
+    ],
+    "filter_enabled": false,
+    "filter_min_confidence": 0.5,
+    "filter_model_path": "models/trade_quality_model.joblib",
+    "filter_shadow_mode": false
+  },
+
+  "hybrid_sizing": {
+    "enabled": false,
+    "high_confidence_threshold": 0.7,
+    "low_confidence_threshold": 0.5,
+    "trend_indicators": ["RSI", "MACD", "SMA_200"]
+  },
+
+  "scanner": {
+    "enabled": true,
+    "universe_source": "sp500",
+    "universe": [],
+    "providers": {
+      "technical_enabled": true,
+      "fundamental_enabled": false,
+      "sentiment_enabled": false,
+      "insider_enabled": false,
+      "lookback_bars": 200
+    },
+    "scoring": {
+      "weights": {
+        "momentum_breakout": 0.30,
+        "relative_strength": 0.25,
+        "volume_surge": 0.20,
+        "trend_following": 0.25
+      },
+      "trade_threshold": 0.7,
+      "watch_threshold": 0.4,
+      "max_trade_symbols": 10,
+      "max_watch_symbols": 20
+    },
+    "schedule": {
+      "pre_market_scan_enabled": true,
+      "scan_time_minutes_before_open": 10,
+      "auto_update_lists": false,
+      "optimize_after_scan": true,
+      "optimization_days": 365,
+      "optimization_metric": "sharpe_ratio"
+    },
+    "criteria": [
+      {"name": "momentum_breakout", "params": {}},
+      {"name": "relative_strength", "params": {"benchmark": "SPY", "period": 20}},
+      {"name": "volume_surge", "params": {"surge_threshold": 1.5}},
+      {"name": "trend_following", "params": {}}
+    ]
+  }
+}

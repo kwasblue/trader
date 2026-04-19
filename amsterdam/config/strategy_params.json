@@ -1,0 +1,555 @@
+{
+  "AAPL": {
+    "low_volatility": {
+      "params": {
+        "k_window": 21,
+        "d_window": 3,
+        "oversold": 25,
+        "overbought": 80
+      },
+      "strategy": "stochastic",
+      "_optimized_sharpe": 1.994044256684864,
+      "_optimized_return": 0.03564332190000001
+    },
+    "normal": {
+      "params": {
+        "af_start": 0.01,
+        "af_max": 0.1
+      },
+      "strategy": "psar",
+      "_optimized_sharpe": -0.38594409395812546,
+      "_optimized_return": -0.00981608456314265
+    },
+    "high_volatility": {
+      "params": {
+        "af_start": 0.01,
+        "af_max": 0.1
+      },
+      "strategy": "psar",
+      "_optimized_sharpe": 0.5416977879497636,
+      "_optimized_return": 0.015238859188714414
+    }
+  },
+  "ABBV": {
+    "low_volatility": {
+      "params": {
+        "fast": 8,
+        "slow": 20,
+        "signal": 7
+      },
+      "strategy": "macd",
+      "_optimized_sharpe": 0.5642040302184892,
+      "_optimized_return": 0.009709938100000436
+    },
+    "normal": {
+      "params": {
+        "window": 14,
+        "threshold": 1.5
+      },
+      "strategy": "meanreversion",
+      "_optimized_sharpe": 1.4568169404747986,
+      "_optimized_return": 0.03169337465714285
+    },
+    "high_volatility": {
+      "params": {
+        "window": 14,
+        "oversold": 30,
+        "overbought": 70
+      },
+      "strategy": "rsi",
+      "_optimized_sharpe": 1.6833569089074223,
+      "_optimized_return": 0.046615832399999925
+    }
+  },
+  "AMZN": {
+    "low_volatility": {
+      "params": {
+        "fast": 10,
+        "slow": 30
+      },
+      "strategy": "sma",
+      "_optimized_sharpe": 0.9059885454377775,
+      "_optimized_return": 0.029387966100000194
+    },
+    "normal": {
+      "params": {
+        "fast": 5,
+        "slow": 30
+      },
+      "strategy": "sma",
+      "_optimized_sharpe": 0.7624848210096017,
+      "_optimized_return": 0.028020767370000248
+    },
+    "high_volatility": {
+      "params": {
+        "window": 7,
+        "oversold": 20,
+        "overbought": 75
+      },
+      "strategy": "rsi",
+      "_optimized_sharpe": 0.5955077005832234,
+      "_optimized_return": 0.021161971501142834
+    }
+  },
+  "AVGO": {
+    "low_volatility": {
+      "params": {
+        "lookback": 20
+      },
+      "strategy": "momentum",
+      "_optimized_sharpe": 1.2589018778723846,
+      "_optimized_return": 0.05643961120000051
+    },
+    "normal": {
+      "params": {
+        "af_start": 0.01,
+        "af_max": 0.1
+      },
+      "strategy": "psar",
+      "_optimized_sharpe": 0.7781092917059045,
+      "_optimized_return": 0.04830097606642812
+    },
+    "high_volatility": {
+      "params": {
+        "k_window": 10,
+        "d_window": 3,
+        "oversold": 25,
+        "overbought": 75
+      },
+      "strategy": "stochastic",
+      "_optimized_sharpe": 0.9642428699278434,
+      "_optimized_return": 0.035256562899999844
+    }
+  },
+  "COST": {
+    "low_volatility": {
+      "params": {
+        "window": 10,
+        "threshold": 25
+      },
+      "strategy": "adx",
+      "_optimized_sharpe": 0.10070948462684128,
+      "_optimized_return": 0.0019417602814284327
+    },
+    "normal": {
+      "params": {
+        "fast": 5,
+        "slow": 20
+      },
+      "strategy": "ema",
+      "_optimized_sharpe": -0.6401143240756388,
+      "_optimized_return": -0.011908566740000097
+    },
+    "high_volatility": {
+      "params": {
+        "window": 30,
+        "threshold": 0.01
+      },
+      "strategy": "breakout",
+      "_optimized_sharpe": -0.29581713288869493,
+      "_optimized_return": -0.004272339778714377
+    }
+  },
+  "GOOGL": {
+    "low_volatility": {
+      "params": {
+        "fast": 10,
+        "slow": 50
+      },
+      "strategy": "sma",
+      "_optimized_sharpe": 1.9627701085855955,
+      "_optimized_return": 0.089113848
+    },
+    "normal": {
+      "params": {
+        "window": 10,
+        "num_std": 2.0
+      },
+      "strategy": "bollinger",
+      "_optimized_sharpe": 2.4419501321104846,
+      "_optimized_return": 0.11507083273785727
+    },
+    "high_volatility": {
+      "params": {
+        "af_start": 0.01,
+        "af_max": 0.1
+      },
+      "strategy": "psar",
+      "_optimized_sharpe": 2.2224800510130414,
+      "_optimized_return": 0.09056127229999998
+    }
+  },
+  "HD": {
+    "low_volatility": {
+      "params": {
+        "af_start": 0.01,
+        "af_max": 0.1
+      },
+      "strategy": "psar",
+      "_optimized_sharpe": 0.7293363558284948,
+      "_optimized_return": 0.012649501935714506
+    },
+    "normal": {
+      "params": {
+        "window": 10,
+        "threshold": 2.5
+      },
+      "strategy": "meanreversion",
+      "_optimized_sharpe": 1.5284145604127877,
+      "_optimized_return": 0.01607375070000009
+    },
+    "high_volatility": {
+      "params": {
+        "window": 10,
+        "threshold": 20
+      },
+      "strategy": "adx",
+      "_optimized_sharpe": -0.3330881788145696,
+      "_optimized_return": -0.007695803549142729
+    }
+  },
+  "JNJ": {
+    "low_volatility": {
+      "params": {
+        "window": 10,
+        "num_std": 1.5
+      },
+      "strategy": "bollinger",
+      "_optimized_sharpe": 2.560634544969477,
+      "_optimized_return": 0.05927727219999986
+    },
+    "normal": {
+      "params": {
+        "tenkan": 7,
+        "kijun": 22
+      },
+      "strategy": "ichimoku",
+      "_optimized_sharpe": 1.9250251471281794,
+      "_optimized_return": 0.05670615790000011
+    },
+    "high_volatility": {
+      "params": {
+        "lookback": 20
+      },
+      "strategy": "momentum",
+      "_optimized_sharpe": 1.9251371524353447,
+      "_optimized_return": 0.05296200349999999
+    }
+  },
+  "JPM": {
+    "low_volatility": {
+      "params": {
+        "fast": 8,
+        "slow": 20,
+        "signal": 7
+      },
+      "strategy": "macd",
+      "_optimized_sharpe": 0.7913747126378992,
+      "_optimized_return": 0.015002320342857273
+    },
+    "normal": {
+      "params": {
+        "fast": 8,
+        "slow": 20,
+        "signal": 7
+      },
+      "strategy": "macd",
+      "_optimized_sharpe": 1.0696090075592226,
+      "_optimized_return": 0.028930447973857226
+    },
+    "high_volatility": {
+      "params": {
+        "window": 7,
+        "oversold": 20,
+        "overbought": 80
+      },
+      "strategy": "rsi",
+      "_optimized_sharpe": 1.9053299865694298,
+      "_optimized_return": 0.04648824870742858
+    }
+  },
+  "MA": {
+    "low_volatility": {
+      "params": {
+        "window": 20,
+        "threshold": 0.01
+      },
+      "strategy": "breakout",
+      "_optimized_sharpe": 0.36065210994556857,
+      "_optimized_return": 0.008211879562857067
+    },
+    "normal": {
+      "params": {
+        "window": 20,
+        "num_std": 2.0
+      },
+      "strategy": "bollinger",
+      "_optimized_sharpe": 1.5466473335347868,
+      "_optimized_return": 0.020918251999999922
+    },
+    "high_volatility": {
+      "params": {
+        "window": 10
+      },
+      "strategy": "vwap",
+      "_optimized_sharpe": 0.7443086732214245,
+      "_optimized_return": 0.010316453114285832
+    }
+  },
+  "META": {
+    "low_volatility": {
+      "params": {
+        "window": 10,
+        "threshold": 25
+      },
+      "strategy": "adx",
+      "_optimized_sharpe": 0.7842018030028424,
+      "_optimized_return": 0.02489823740000007
+    },
+    "normal": {
+      "params": {
+        "window": 10,
+        "threshold": 30
+      },
+      "strategy": "adx",
+      "_optimized_sharpe": 0.6190679215197936,
+      "_optimized_return": 0.01732980859999996
+    },
+    "high_volatility": {
+      "params": {
+        "window": 30,
+        "num_std": 1.5
+      },
+      "strategy": "bollinger",
+      "_optimized_sharpe": 1.5090298897360905,
+      "_optimized_return": 0.0632569961888573
+    }
+  },
+  "MSFT": {
+    "low_volatility": {
+      "params": {
+        "window": 10
+      },
+      "strategy": "vwap",
+      "_optimized_sharpe": 0.5055796896441019,
+      "_optimized_return": 0.012021994442285796
+    },
+    "normal": {
+      "params": {
+        "window": 14,
+        "threshold": 1.0
+      },
+      "strategy": "meanreversion",
+      "_optimized_sharpe": 1.366174260958294,
+      "_optimized_return": 0.02704527615514293
+    },
+    "high_volatility": {
+      "params": {
+        "lookback": 30
+      },
+      "strategy": "momentum",
+      "_optimized_sharpe": 1.2985494245432267,
+      "_optimized_return": 0.028519162700000017
+    }
+  },
+  "NVDA": {
+    "low_volatility": {
+      "params": {
+        "af_start": 0.01,
+        "af_max": 0.1
+      },
+      "strategy": "psar",
+      "_optimized_sharpe": 0.45935414551592807,
+      "_optimized_return": 0.01741397127142889
+    },
+    "normal": {
+      "params": {
+        "af_start": 0.01,
+        "af_max": 0.1
+      },
+      "strategy": "psar",
+      "_optimized_sharpe": 0.2447816508713876,
+      "_optimized_return": 0.011374055681285682
+    },
+    "high_volatility": {
+      "params": {
+        "af_start": 0.01,
+        "af_max": 0.1
+      },
+      "strategy": "psar",
+      "_optimized_sharpe": 0.7699309313620056,
+      "_optimized_return": 0.030036391211000154
+    }
+  },
+  "PG": {
+    "low_volatility": {
+      "params": {
+        "window": 14,
+        "threshold": 25
+      },
+      "strategy": "adx",
+      "_optimized_sharpe": 0.0,
+      "_optimized_return": 0.0
+    },
+    "normal": {
+      "params": {
+        "window": 14,
+        "oversold": 20,
+        "overbought": 70
+      },
+      "strategy": "rsi",
+      "_optimized_sharpe": 1.3375685163552515,
+      "_optimized_return": 0.008233359811142872
+    },
+    "high_volatility": {
+      "params": {
+        "window": 10
+      },
+      "strategy": "vwap",
+      "_optimized_sharpe": 0.41627805586126015,
+      "_optimized_return": 0.008274985177571506
+    }
+  },
+  "TSLA": {
+    "low_volatility": {
+      "params": {
+        "window": 10
+      },
+      "strategy": "vwap",
+      "_optimized_sharpe": 1.1799971126401514,
+      "_optimized_return": 0.10084820659999968
+    },
+    "normal": {
+      "params": {
+        "window": 20,
+        "num_std": 2.0
+      },
+      "strategy": "bollinger",
+      "_optimized_sharpe": 1.6321227188641358,
+      "_optimized_return": 0.14697898019999994
+    },
+    "high_volatility": {
+      "params": {
+        "window": 10
+      },
+      "strategy": "vwap",
+      "_optimized_sharpe": 1.3556788876539403,
+      "_optimized_return": 0.09483193209999997
+    }
+  },
+  "UNH": {
+    "low_volatility": {
+      "params": {
+        "window": 10,
+        "num_std": 2.5
+      },
+      "strategy": "bollinger",
+      "_optimized_sharpe": 0.0,
+      "_optimized_return": 0.0
+    },
+    "normal": {
+      "params": {
+        "window": 30,
+        "num_std": 2.0
+      },
+      "strategy": "bollinger",
+      "_optimized_sharpe": 1.5880001609653422,
+      "_optimized_return": 0.048111040513285554
+    },
+    "high_volatility": {
+      "params": {
+        "window": 10
+      },
+      "strategy": "vwap",
+      "_optimized_sharpe": 0.14818754772446627,
+      "_optimized_return": 0.0051763822427144624
+    }
+  },
+  "V": {
+    "low_volatility": {
+      "params": {
+        "window": 10,
+        "threshold": 0.01
+      },
+      "strategy": "breakout",
+      "_optimized_sharpe": 0.8052383698289487,
+      "_optimized_return": 0.021381398100000077
+    },
+    "normal": {
+      "params": {
+        "window": 20,
+        "num_std": 1.5
+      },
+      "strategy": "bollinger",
+      "_optimized_sharpe": 0.9799342681343571,
+      "_optimized_return": 0.016625894810000028
+    },
+    "high_volatility": {
+      "params": {
+        "fast": 15,
+        "slow": 50
+      },
+      "strategy": "sma",
+      "_optimized_sharpe": 0.5260000404927755,
+      "_optimized_return": 0.007253869700000214
+    }
+  },
+  "WMT": {
+    "low_volatility": {
+      "params": {
+        "window": 20,
+        "threshold": 0.01
+      },
+      "strategy": "breakout",
+      "_optimized_sharpe": 1.3076584698496494,
+      "_optimized_return": 0.05356115980000002
+    },
+    "normal": {
+      "params": {
+        "window": 10,
+        "num_std": 1.5
+      },
+      "strategy": "bollinger",
+      "_optimized_sharpe": 1.50746967110073,
+      "_optimized_return": 0.034793819262571635
+    },
+    "high_volatility": {
+      "params": {
+        "af_start": 0.01,
+        "af_max": 0.1
+      },
+      "strategy": "psar",
+      "_optimized_sharpe": 1.3278469311479961,
+      "_optimized_return": 0.035086753800000155
+    }
+  },
+  "XOM": {
+    "low_volatility": {
+      "params": {
+        "window": 10
+      },
+      "strategy": "vwap",
+      "_optimized_sharpe": 0.667382390501147,
+      "_optimized_return": 0.012870327938870033
+    },
+    "normal": {
+      "params": {
+        "k_window": 10,
+        "d_window": 5,
+        "oversold": 25,
+        "overbought": 75
+      },
+      "strategy": "stochastic",
+      "_optimized_sharpe": 1.6396220172619216,
+      "_optimized_return": 0.05366785580000011
+    },
+    "high_volatility": {
+      "params": {
+        "window": 10
+      },
+      "strategy": "vwap",
+      "_optimized_sharpe": 0.48790148579498943,
+      "_optimized_return": 0.01145727515757142
+    }
+  }
+}

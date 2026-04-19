@@ -1,0 +1,15 @@
+[Unit]
+Description=Amsterdam Trading Dashboard
+After=network.target
+
+[Service]
+Type=simple
+User=kwasi
+WorkingDirectory=/home/kwasi/amsterdam
+Environment="PATH=/home/kwasi/amsterdam/venv/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/home/kwasi/amsterdam/venv/bin/python /home/kwasi/amsterdam/monitoring/scripts/dashboard.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

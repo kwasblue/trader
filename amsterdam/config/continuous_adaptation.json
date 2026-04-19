@@ -1,0 +1,88 @@
+{
+  "_description": "Continuous Adaptation Configuration",
+  "_version": "2.0.0",
+
+  "enabled": true,
+
+  "metrics": {
+    "atr_period": 14,
+    "atr_lookback": 250,
+    "sharpe_lookback_days": 30,
+    "min_trades_for_sharpe": 10
+  },
+
+  "thresholds": {
+    "volatility": {
+      "low": 30,
+      "medium": 50,
+      "high": 70
+    },
+    "sharpe": {
+      "excellent": 1.5,
+      "good": 1.0,
+      "acceptable": 0.5
+    }
+  },
+
+  "position_sizing": {
+    "use_continuous_formula": true,
+    "max_sharpe_for_scaling": 2.0,
+    "scaling_alpha": 1.5,
+
+    "multipliers": {
+      "_comment": "Discrete multipliers (only used if use_continuous_formula=false)",
+      "max": 1.5,
+      "good": 1.25,
+      "medium": 0.75,
+      "low": 0.50,
+      "min": 0.30
+    },
+
+    "limits": {
+      "_comment": "Applied AFTER scaling: C_final = clamp(α × √(V×P), floor, ceiling)",
+      "min_multiplier": 0.30,
+      "max_multiplier": 1.5,
+      "skip_trade_threshold": 0.05
+    },
+
+    "cold_start": {
+      "_comment": "Graduated ceiling reduces max multiplier during warm-up phase",
+      "_policy": "Allow trading with prior+shrinkage, but cap exposure until N grows",
+      "use_graduated_ceiling": true,
+      "cold_start_very_low_threshold": 5,
+      "cold_start_low_threshold": 10,
+      "ceiling_very_low_trades": 0.50,
+      "ceiling_low_trades": 0.75
+    },
+
+    "bayesian_shrinkage": {
+      "_comment": "Blends sample Sharpe with prior to reduce noise when trade count is low",
+      "_formula": "sharpe_estimate = (n × sample + prior_n × prior) / (n + prior_n)",
+      "bayesian_prior_sharpe": 0.5,
+      "bayesian_prior_weight": 5
+    },
+
+    "smoothing": {
+      "_comment": "Exponential moving average prevents twitchiness in Sharpe estimates",
+      "_formula": "smoothed = α × current + (1-α) × previous",
+      "sharpe_smoothing_alpha": 0.3
+    }
+  },
+
+  "per_symbol_overrides": {
+    "_comment": "Override settings for specific symbols",
+    "TSLA": {
+      "min_multiplier": 0.30,
+      "sharpe_acceptable": 0.7
+    },
+    "NVDA": {
+      "min_multiplier": 0.30
+    }
+  },
+
+  "logging": {
+    "log_position_size_decisions": true,
+    "log_metrics": true,
+    "log_level": "INFO"
+  }
+}
