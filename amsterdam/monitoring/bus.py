@@ -11,7 +11,7 @@ from core.contracts.events import (
 
 
 # =====================================================
-# CONTROL BUS (signals your engine can subscribe to)
+# CONTROL BUS (signals your engine will subscribe to)
 # =====================================================
 
 class ControlBridge(QtCore.QObject):
