@@ -100,8 +100,8 @@ class Authenticator:
         return time.time() >= (access_time + expires_in)
     
     def _contains_error(self, token_data: dict) -> bool:
-        if 'error' in token_data:
-            self.logger.error(f'{token_data['error']}')
+        if "error" in token_data:
+            self.logger.error(f"{token_data['error']}")
             return True
         else:
             return False
