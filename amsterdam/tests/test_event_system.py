@@ -276,11 +276,9 @@ class TestEventPayloads:
             {
                 "order_id": "ORD123",
                 "symbol": "AAPL",
-                "side": "buy",
-                "qty": 10,
                 "status": "filled",
                 "filled_qty": 10,
-                "avg_fill_price": 150.0,
+                "avg_price": 150.0,
                 "timestamp": "2024-01-01T10:00:00Z",
             },
         )
