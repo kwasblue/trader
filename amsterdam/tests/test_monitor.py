@@ -3,12 +3,13 @@ Test suite for monitoring and alerting.
 
 Tests system monitoring, health checks, and alert mechanisms.
 """
-import sys
+
 import os
+import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import unittest
-from unittest.mock import Mock, MagicMock, patch
 from datetime import datetime, timedelta
 
 
@@ -17,17 +18,13 @@ class TestSystemMonitor(unittest.TestCase):
 
     def test_connection_status_tracking(self):
         """Monitor should track connection status."""
-        connection_status = {
-            'broker': True,
-            'streamer': True,
-            'database': True
-        }
+        connection_status = {"broker": True, "streamer": True, "database": True}
 
         self.assertTrue(all(connection_status.values()))
 
         # Simulate connection loss
-        connection_status['broker'] = False
-        self.assertFalse(connection_status['broker'])
+        connection_status["broker"] = False
+        self.assertFalse(connection_status["broker"])
 
     def test_heartbeat_monitoring(self):
         """Monitor should track heartbeats."""
@@ -85,22 +82,22 @@ class TestAlertManager(unittest.TestCase):
     def test_alert_creation(self):
         """Should create alerts with correct properties."""
         alert = {
-            'level': 'warning',
-            'message': 'High latency detected',
-            'timestamp': datetime.now().isoformat(),
-            'source': 'latency_monitor'
+            "level": "warning",
+            "message": "High latency detected",
+            "timestamp": datetime.now().isoformat(),
+            "source": "latency_monitor",
         }
 
-        self.assertEqual(alert['level'], 'warning')
-        self.assertIn('High latency', alert['message'])
+        self.assertEqual(alert["level"], "warning")
+        self.assertIn("High latency", alert["message"])
 
     def test_alert_levels(self):
         """Should support multiple alert levels."""
-        valid_levels = ['info', 'warning', 'error', 'critical']
+        valid_levels = ["info", "warning", "error", "critical"]
 
         for level in valid_levels:
-            alert = {'level': level}
-            self.assertIn(alert['level'], valid_levels)
+            alert = {"level": level}
+            self.assertIn(alert["level"], valid_levels)
 
     def test_alert_deduplication(self):
         """Should deduplicate repeated alerts."""
@@ -110,12 +107,12 @@ class TestAlertManager(unittest.TestCase):
         def add_alert(level, message):
             key = f"{level}:{message}"
             if key not in seen_keys:
-                alerts.append({'level': level, 'message': message})
+                alerts.append({"level": level, "message": message})
                 seen_keys.add(key)
 
         # Add same alert twice
-        add_alert('warning', 'Test alert')
-        add_alert('warning', 'Test alert')
+        add_alert("warning", "Test alert")
+        add_alert("warning", "Test alert")
 
         self.assertEqual(len(alerts), 1)
 
@@ -125,6 +122,7 @@ class TestHealthCheck(unittest.TestCase):
 
     def test_component_health_check(self):
         """Should check individual component health."""
+
         def check_broker():
             return True
 
@@ -134,29 +132,21 @@ class TestHealthCheck(unittest.TestCase):
         def check_streamer():
             return False
 
-        health_status = {
-            'broker': check_broker(),
-            'database': check_database(),
-            'streamer': check_streamer()
-        }
+        health_status = {"broker": check_broker(), "database": check_database(), "streamer": check_streamer()}
 
-        self.assertTrue(health_status['broker'])
-        self.assertFalse(health_status['streamer'])
+        self.assertTrue(health_status["broker"])
+        self.assertFalse(health_status["streamer"])
 
     def test_overall_health_status(self):
         """Should calculate overall health status."""
-        components = {
-            'broker': True,
-            'database': True,
-            'streamer': True
-        }
+        components = {"broker": True, "database": True, "streamer": True}
 
         # All healthy
         overall_healthy = all(components.values())
         self.assertTrue(overall_healthy)
 
         # One unhealthy
-        components['streamer'] = False
+        components["streamer"] = False
         overall_healthy = all(components.values())
         self.assertFalse(overall_healthy)
 
@@ -202,11 +192,7 @@ class TestPositionMonitor(unittest.TestCase):
 
     def test_concentration_alert(self):
         """Should alert on portfolio concentration."""
-        positions = {
-            'AAPL': 50000,
-            'MSFT': 30000,
-            'GOOGL': 20000
-        }
+        positions = {"AAPL": 50000, "MSFT": 30000, "GOOGL": 20000}
         total_value = sum(positions.values())
         max_concentration = 0.40
 
@@ -214,7 +200,7 @@ class TestPositionMonitor(unittest.TestCase):
             concentration = value / total_value
             if concentration > max_concentration:
                 # AAPL at 50% exceeds 40% threshold
-                self.assertEqual(symbol, 'AAPL')
+                self.assertEqual(symbol, "AAPL")
                 break
 
 
@@ -246,5 +232,5 @@ class TestMarketHoursMonitor(unittest.TestCase):
         self.assertTrue(is_weekend)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

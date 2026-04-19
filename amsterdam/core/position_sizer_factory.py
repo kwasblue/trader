@@ -15,9 +15,10 @@ Usage:
     # Or create directly from config
     sizer = PositionSizerFactory.create_from_config(config)
 """
+
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Dict, List, Optional, Type
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from core.base.position_sizer_base import PositionSizerBase
@@ -32,7 +33,7 @@ class PositionSizerFactory:
     All sizers must inherit from PositionSizerBase.
     """
 
-    _registry: Dict[str, Type["PositionSizerBase"]] = {}
+    _registry: dict[str, type[PositionSizerBase]] = {}
     _loaded: bool = False
 
     @classmethod
@@ -59,7 +60,7 @@ class PositionSizerFactory:
         cls._loaded = True
 
     @classmethod
-    def register(cls, name: str, sizer_class: Type["PositionSizerBase"]) -> None:
+    def register(cls, name: str, sizer_class: type[PositionSizerBase]) -> None:
         """
         Register a sizer class.
 
@@ -76,7 +77,7 @@ class PositionSizerFactory:
         cls._registry[name.lower()] = sizer_class
 
     @classmethod
-    def get(cls, sizer_type: str) -> Type["PositionSizerBase"]:
+    def get(cls, sizer_type: str) -> type[PositionSizerBase]:
         """
         Get a sizer class by type name.
 
@@ -94,20 +95,12 @@ class PositionSizerFactory:
         type_lower = sizer_type.lower()
         if type_lower not in cls._registry:
             available = ", ".join(sorted(set(cls._registry.keys())))
-            raise ValueError(
-                f"Unknown position sizer type: '{sizer_type}'. "
-                f"Available types: {available}"
-            )
+            raise ValueError(f"Unknown position sizer type: '{sizer_type}'. Available types: {available}")
 
         return cls._registry[type_lower]
 
     @classmethod
-    def create(
-        cls,
-        sizer_type: str,
-        risk_percentage: float,
-        **kwargs
-    ) -> "PositionSizerBase":
+    def create(cls, sizer_type: str, risk_percentage: float, **kwargs) -> PositionSizerBase:
         """
         Create a sizer instance.
 
@@ -131,10 +124,7 @@ class PositionSizerFactory:
         return sizer_class(risk_percentage=risk_percentage, **kwargs)
 
     @classmethod
-    def create_from_config(
-        cls,
-        config: Optional["TradingConfig"] = None
-    ) -> "PositionSizerBase":
+    def create_from_config(cls, config: TradingConfig | None = None) -> PositionSizerBase:
         """
         Create a sizer instance from TradingConfig.
 
@@ -149,6 +139,7 @@ class PositionSizerFactory:
         """
         if config is None:
             from core.config_loader import get_config
+
             config = get_config()
 
         ps = config.position_sizer
@@ -169,7 +160,7 @@ class PositionSizerFactory:
         )
 
     @classmethod
-    def available_types(cls) -> List[str]:
+    def available_types(cls) -> list[str]:
         """
         Get list of registered sizer type names.
 

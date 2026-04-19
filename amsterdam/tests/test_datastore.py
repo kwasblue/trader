@@ -3,15 +3,18 @@ Test suite for data storage operations.
 
 Tests database operations, file I/O, and data persistence.
 """
-import sys
+
 import os
+import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import unittest
-from unittest.mock import Mock, MagicMock, patch, mock_open
 import json
-import tempfile
 import shutil
+import tempfile
+import unittest
+from unittest.mock import mock_open, patch
+
 import pandas as pd
 
 
@@ -24,10 +27,7 @@ class TestDataStore(unittest.TestCase):
 
         # Use in-memory database for testing
         with DataStore(":memory:", use_config=False) as store:
-            test_df = pd.DataFrame({
-                'symbol': ['AAPL'],
-                'close': [150.0]
-            })
+            test_df = pd.DataFrame({"symbol": ["AAPL"], "close": [150.0]})
             store.create_database("test_table", test_df)
 
             # Verify table exists
@@ -39,11 +39,9 @@ class TestDataStore(unittest.TestCase):
 
         with DataStore(":memory:", use_config=False) as store:
             # Sample data
-            data = pd.DataFrame({
-                'timestamp': ['2023-01-01', '2023-01-02'],
-                'open': [100.0, 101.0],
-                'close': [101.0, 102.0]
-            })
+            data = pd.DataFrame(
+                {"timestamp": ["2023-01-01", "2023-01-02"], "open": [100.0, 101.0], "close": [101.0, 102.0]}
+            )
 
             store.fill_database("test_data", data)
 
@@ -56,10 +54,7 @@ class TestDataStore(unittest.TestCase):
         from data.datastorage import DataStore
 
         with DataStore(":memory:", use_config=False) as store:
-            data = pd.DataFrame({
-                'symbol': ['AAPL', 'MSFT', 'AAPL'],
-                'close': [150.0, 300.0, 151.0]
-            })
+            data = pd.DataFrame({"symbol": ["AAPL", "MSFT", "AAPL"], "close": [150.0, 300.0, 151.0]})
 
             store.fill_database("stock_data", data)
             result = store.get_data_by_symbol("stock_data", "AAPL")
@@ -72,20 +67,12 @@ class TestDataStore(unittest.TestCase):
 
         with DataStore(":memory:", use_config=False) as store:
             # Initial data
-            data1 = pd.DataFrame({
-                'symbol': ['AAPL'],
-                'date': ['2023-01-01'],
-                'close': [150.0]
-            })
+            data1 = pd.DataFrame({"symbol": ["AAPL"], "date": ["2023-01-01"], "close": [150.0]})
             store.fill_database("test_upsert", data1)
 
             # Upsert with updated value
-            data2 = pd.DataFrame({
-                'symbol': ['AAPL'],
-                'date': ['2023-01-01'],
-                'close': [155.0]
-            })
-            store.upsert_data("test_upsert", data2, ['symbol', 'date'])
+            data2 = pd.DataFrame({"symbol": ["AAPL"], "date": ["2023-01-01"], "close": [155.0]})
+            store.upsert_data("test_upsert", data2, ["symbol", "date"])
 
             result = store.get_data_base("test_upsert")
             # Should still have 1 row, with updated close
@@ -96,7 +83,7 @@ class TestDataStore(unittest.TestCase):
         from data.datastorage import DataStore
 
         with DataStore(":memory:", use_config=False) as store:
-            df = pd.DataFrame({'col': [1]})
+            df = pd.DataFrame({"col": [1]})
             store.fill_database("table1", df)
             store.fill_database("table2", df)
 
@@ -109,9 +96,7 @@ class TestDataStore(unittest.TestCase):
         from data.datastorage import DataStore
 
         with DataStore(":memory:", use_config=False) as store:
-            data = pd.DataFrame({
-                'value': [1, 2, 3, 4, 5]
-            })
+            data = pd.DataFrame({"value": [1, 2, 3, 4, 5]})
             store.fill_database("count_test", data)
 
             count = store.get_row_count("count_test")
@@ -122,10 +107,7 @@ class TestDataStore(unittest.TestCase):
         from data.datastorage import DataStore
 
         with DataStore(":memory:", use_config=False) as store:
-            data = pd.DataFrame({
-                'symbol': ['AAPL', 'MSFT'],
-                'close': [150.0, 300.0]
-            })
+            data = pd.DataFrame({"symbol": ["AAPL", "MSFT"], "close": [150.0, 300.0]})
             store.fill_database("delete_test", data)
 
             # Delete AAPL
@@ -151,18 +133,18 @@ class TestJsonFileOperations(unittest.TestCase):
         data = {"symbol": "AAPL", "price": 150.0}
         filepath = os.path.join(self.test_dir, "test.json")
 
-        with open(filepath, 'w') as f:
+        with open(filepath, "w") as f:
             json.dump(data, f)
 
         # Verify file was written
         self.assertTrue(os.path.exists(filepath))
 
         # Verify content
-        with open(filepath, 'r') as f:
+        with open(filepath) as f:
             loaded = json.load(f)
 
-        self.assertEqual(loaded['symbol'], 'AAPL')
-        self.assertEqual(loaded['price'], 150.0)
+        self.assertEqual(loaded["symbol"], "AAPL")
+        self.assertEqual(loaded["price"], 150.0)
 
     def test_read_json(self):
         """Should read JSON data from file."""
@@ -170,14 +152,14 @@ class TestJsonFileOperations(unittest.TestCase):
         filepath = os.path.join(self.test_dir, "test.json")
 
         # Write first
-        with open(filepath, 'w') as f:
+        with open(filepath, "w") as f:
             json.dump(data, f)
 
         # Read back
-        with open(filepath, 'r') as f:
+        with open(filepath) as f:
             loaded = json.load(f)
 
-        self.assertEqual(loaded['symbol'], 'MSFT')
+        self.assertEqual(loaded["symbol"], "MSFT")
 
     def test_append_to_json_list(self):
         """Should append to JSON list file."""
@@ -185,20 +167,20 @@ class TestJsonFileOperations(unittest.TestCase):
 
         # Write initial list
         initial_data = [{"id": 1}]
-        with open(filepath, 'w') as f:
+        with open(filepath, "w") as f:
             json.dump(initial_data, f)
 
         # Read and append
-        with open(filepath, 'r') as f:
+        with open(filepath) as f:
             data = json.load(f)
 
         data.append({"id": 2})
 
-        with open(filepath, 'w') as f:
+        with open(filepath, "w") as f:
             json.dump(data, f)
 
         # Verify
-        with open(filepath, 'r') as f:
+        with open(filepath) as f:
             final = json.load(f)
 
         self.assertEqual(len(final), 2)
@@ -210,28 +192,23 @@ class TestRawDataStorage(unittest.TestCase):
     def setUp(self):
         """Create sample raw data."""
         self.sample_candles = [
-            {"datetime": "2023-01-01", "open": 100, "high": 105,
-             "low": 99, "close": 102, "volume": 1000000},
-            {"datetime": "2023-01-02", "open": 102, "high": 108,
-             "low": 101, "close": 107, "volume": 1200000},
+            {"datetime": "2023-01-01", "open": 100, "high": 105, "low": 99, "close": 102, "volume": 1000000},
+            {"datetime": "2023-01-02", "open": 102, "high": 108, "low": 101, "close": 107, "volume": 1200000},
         ]
 
-    @patch('builtins.open', new_callable=mock_open)
-    @patch('json.dump')
+    @patch("builtins.open", new_callable=mock_open)
+    @patch("json.dump")
     def test_store_raw_data(self, mock_json_dump, mock_file):
         """Should store raw candle data."""
         # Simulate writing raw data
-        with open("raw_AAPL.json", 'w') as f:
+        with open("raw_AAPL.json", "w") as f:
             json.dump({"symbol": "AAPL", "candles": self.sample_candles}, f)
 
         mock_json_dump.assert_called_once()
 
     def test_raw_data_format(self):
         """Raw data should have correct format."""
-        raw_data = {
-            "symbol": "AAPL",
-            "candles": self.sample_candles
-        }
+        raw_data = {"symbol": "AAPL", "candles": self.sample_candles}
 
         self.assertIn("symbol", raw_data)
         self.assertIn("candles", raw_data)
@@ -252,9 +229,16 @@ class TestProcessedDataStorage(unittest.TestCase):
     def setUp(self):
         """Create sample processed data."""
         self.processed_data = [
-            {"timestamp": "2023-01-01", "Open": 100, "High": 105,
-             "Low": 99, "Close": 102, "Volume": 1000000,
-             "EMA_20": 101.5, "RSI": 55.0},
+            {
+                "timestamp": "2023-01-01",
+                "Open": 100,
+                "High": 105,
+                "Low": 99,
+                "Close": 102,
+                "Volume": 1000000,
+                "EMA_20": 101.5,
+                "RSI": 55.0,
+            },
         ]
 
     def test_processed_data_has_indicators(self):
@@ -295,5 +279,5 @@ class TestDataStorageConfig(unittest.TestCase):
         self.assertEqual(proc_filename, "proc_AAPL_file.json")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

@@ -1,5 +1,7 @@
 import os
+
 from .logger import Logger
+
 
 def get_module_logger(module_name: str, file_key: str, level=None):
     """

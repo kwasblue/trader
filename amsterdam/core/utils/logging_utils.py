@@ -3,6 +3,7 @@ Structured logging utilities with correlation IDs and sensitive data masking.
 
 Provides production-ready logging for trading systems.
 """
+
 from __future__ import annotations
 
 import contextvars
@@ -12,13 +13,11 @@ import re
 import sys
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Set
 from functools import wraps
+from typing import Any
 
 # Context variable for correlation ID (thread-safe)
-correlation_id_var: contextvars.ContextVar[str] = contextvars.ContextVar(
-    'correlation_id', default=''
-)
+correlation_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("correlation_id", default="")
 
 
 def get_correlation_id() -> str:
@@ -41,27 +40,37 @@ def generate_correlation_id() -> str:
 
 
 # Patterns for sensitive data masking
-SENSITIVE_PATTERNS: List[tuple] = [
+SENSITIVE_PATTERNS: list[tuple] = [
     # API keys and secrets
-    (re.compile(r'(api[_-]?key|apikey)["\']?\s*[:=]\s*["\']?([a-zA-Z0-9_-]{8,})', re.I), r'\1=***MASKED***'),
-    (re.compile(r'(secret|password|token|auth)["\']?\s*[:=]\s*["\']?([a-zA-Z0-9_-]{8,})', re.I), r'\1=***MASKED***'),
+    (re.compile(r'(api[_-]?key|apikey)["\']?\s*[:=]\s*["\']?([a-zA-Z0-9_-]{8,})', re.I), r"\1=***MASKED***"),
+    (re.compile(r'(secret|password|token|auth)["\']?\s*[:=]\s*["\']?([a-zA-Z0-9_-]{8,})', re.I), r"\1=***MASKED***"),
     # Bearer tokens
-    (re.compile(r'(Bearer\s+)([a-zA-Z0-9._-]{20,})', re.I), r'\1***MASKED***'),
+    (re.compile(r"(Bearer\s+)([a-zA-Z0-9._-]{20,})", re.I), r"\1***MASKED***"),
     # Account numbers (mask middle digits)
-    (re.compile(r'(account[_-]?(number|id)?)["\']?\s*[:=]\s*["\']?(\d{4})(\d+)(\d{4})', re.I), r'\1=\3****\5'),
+    (re.compile(r'(account[_-]?(number|id)?)["\']?\s*[:=]\s*["\']?(\d{4})(\d+)(\d{4})', re.I), r"\1=\3****\5"),
     # Credit card patterns
-    (re.compile(r'\b(\d{4})[-\s]?(\d{4})[-\s]?(\d{4})[-\s]?(\d{4})\b'), r'\1-****-****-\4'),
+    (re.compile(r"\b(\d{4})[-\s]?(\d{4})[-\s]?(\d{4})[-\s]?(\d{4})\b"), r"\1-****-****-\4"),
     # SSN patterns
-    (re.compile(r'\b(\d{3})[-\s]?(\d{2})[-\s]?(\d{4})\b'), r'***-**-\3'),
+    (re.compile(r"\b(\d{3})[-\s]?(\d{2})[-\s]?(\d{4})\b"), r"***-**-\3"),
     # Email addresses (partial mask)
-    (re.compile(r'([a-zA-Z0-9._%+-]+)(@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})'), lambda m: m.group(1)[:2] + '***' + m.group(2)),
+    (re.compile(r"([a-zA-Z0-9._%+-]+)(@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})"), lambda m: m.group(1)[:2] + "***" + m.group(2)),
 ]
 
 # Fields to always mask completely
-SENSITIVE_FIELDS: Set[str] = {
-    'password', 'secret', 'api_key', 'apikey', 'api_secret',
-    'access_token', 'refresh_token', 'token', 'authorization',
-    'private_key', 'secret_key', 'credentials', 'auth',
+SENSITIVE_FIELDS: set[str] = {
+    "password",
+    "secret",
+    "api_key",
+    "apikey",
+    "api_secret",
+    "access_token",
+    "refresh_token",
+    "token",
+    "authorization",
+    "private_key",
+    "secret_key",
+    "credentials",
+    "auth",
 }
 
 
@@ -81,8 +90,7 @@ def mask_sensitive_data(data: Any, depth: int = 0) -> Any:
 
     if isinstance(data, dict):
         return {
-            k: '***MASKED***' if k.lower() in SENSITIVE_FIELDS
-            else mask_sensitive_data(v, depth + 1)
+            k: "***MASKED***" if k.lower() in SENSITIVE_FIELDS else mask_sensitive_data(v, depth + 1)
             for k, v in data.items()
         }
 
@@ -120,7 +128,7 @@ class StructuredFormatter(logging.Formatter):
         self.mask_sensitive = mask_sensitive
 
     def format(self, record: logging.LogRecord) -> str:
-        log_data: Dict[str, Any] = {
+        log_data: dict[str, Any] = {
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
@@ -147,13 +155,32 @@ class StructuredFormatter(logging.Formatter):
 
         # Add extra fields
         extra_fields = {
-            k: v for k, v in record.__dict__.items()
-            if k not in {
-                'name', 'msg', 'args', 'created', 'filename', 'funcName',
-                'levelname', 'levelno', 'lineno', 'module', 'msecs',
-                'pathname', 'process', 'processName', 'relativeCreated',
-                'stack_info', 'exc_info', 'exc_text', 'thread', 'threadName',
-                'message', 'taskName',
+            k: v
+            for k, v in record.__dict__.items()
+            if k
+            not in {
+                "name",
+                "msg",
+                "args",
+                "created",
+                "filename",
+                "funcName",
+                "levelname",
+                "levelno",
+                "lineno",
+                "module",
+                "msecs",
+                "pathname",
+                "process",
+                "processName",
+                "relativeCreated",
+                "stack_info",
+                "exc_info",
+                "exc_text",
+                "thread",
+                "threadName",
+                "message",
+                "taskName",
             }
         }
         if extra_fields:
@@ -173,21 +200,21 @@ class ContextLogger(logging.LoggerAdapter):
     Adds correlation ID, symbol, and other context to all log messages.
     """
 
-    def __init__(self, logger: logging.Logger, context: Optional[Dict[str, Any]] = None):
+    def __init__(self, logger: logging.Logger, context: dict[str, Any] | None = None):
         super().__init__(logger, context or {})
 
-    def process(self, msg: str, kwargs: Dict[str, Any]) -> tuple:
+    def process(self, msg: str, kwargs: dict[str, Any]) -> tuple:
         # Add correlation ID
-        extra = kwargs.get('extra', {})
-        extra['correlation_id'] = get_correlation_id()
+        extra = kwargs.get("extra", {})
+        extra["correlation_id"] = get_correlation_id()
 
         # Add context from adapter
         extra.update(self.extra)
 
-        kwargs['extra'] = extra
+        kwargs["extra"] = extra
         return msg, kwargs
 
-    def with_context(self, **context) -> "ContextLogger":
+    def with_context(self, **context) -> ContextLogger:
         """Create a new logger with additional context."""
         new_context = {**self.extra, **context}
         return ContextLogger(self.logger, new_context)
@@ -196,7 +223,7 @@ class ContextLogger(logging.LoggerAdapter):
 def get_structured_logger(
     name: str,
     level: int = logging.INFO,
-    context: Optional[Dict[str, Any]] = None,
+    context: dict[str, Any] | None = None,
 ) -> ContextLogger:
     """
     Get a structured logger with context support.
@@ -241,10 +268,11 @@ def setup_structured_logging(
     if json_output:
         handler.setFormatter(StructuredFormatter())
     else:
-        handler.setFormatter(logging.Formatter(
-            '%(asctime)s | %(levelname)-8s | %(name)s | [%(correlation_id)s] %(message)s',
-            datefmt='%H:%M:%S'
-        ))
+        handler.setFormatter(
+            logging.Formatter(
+                "%(asctime)s | %(levelname)-8s | %(name)s | [%(correlation_id)s] %(message)s", datefmt="%H:%M:%S"
+            )
+        )
 
     root_logger.addHandler(handler)
 
@@ -255,11 +283,13 @@ def with_correlation_id(func):
 
     Creates new correlation ID if none exists.
     """
+
     @wraps(func)
     def wrapper(*args, **kwargs):
         if not correlation_id_var.get():
             correlation_id_var.set(generate_correlation_id())
         return func(*args, **kwargs)
+
     return wrapper
 
 
@@ -267,9 +297,11 @@ def async_with_correlation_id(func):
     """
     Async decorator to ensure function has a correlation ID.
     """
+
     @wraps(func)
     async def wrapper(*args, **kwargs):
         if not correlation_id_var.get():
             correlation_id_var.set(generate_correlation_id())
         return await func(*args, **kwargs)
+
     return wrapper

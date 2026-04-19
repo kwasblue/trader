@@ -3,13 +3,16 @@ Test suite for technical indicators.
 
 Tests indicator calculations for correctness.
 """
-import sys
+
 import os
+import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import unittest
-import pandas as pd
+
 import numpy as np
+import pandas as pd
 
 
 class TestATRIndicator(unittest.TestCase):
@@ -21,13 +24,15 @@ class TestATRIndicator(unittest.TestCase):
         n = 50
 
         close = 100 + np.cumsum(np.random.randn(n) * 0.5)
-        self.data = pd.DataFrame({
-            'Open': close - np.random.rand(n) * 0.5,
-            'High': close + np.random.rand(n) * 1.0,
-            'Low': close - np.random.rand(n) * 1.0,
-            'Close': close,
-            'Volume': np.random.randint(100000, 1000000, n),
-        })
+        self.data = pd.DataFrame(
+            {
+                "Open": close - np.random.rand(n) * 0.5,
+                "High": close + np.random.rand(n) * 1.0,
+                "Low": close - np.random.rand(n) * 1.0,
+                "Close": close,
+                "Volume": np.random.randint(100000, 1000000, n),
+            }
+        )
 
     def test_atr_calculation(self):
         """ATR should return valid float values."""
@@ -38,9 +43,9 @@ class TestATRIndicator(unittest.TestCase):
             indicator.compute()
             result = indicator.df
 
-            self.assertIn('ATR', result.columns)
+            self.assertIn("ATR", result.columns)
             # ATR should be positive after warmup period
-            valid_atr = result['ATR'].dropna()
+            valid_atr = result["ATR"].dropna()
             self.assertTrue(all(valid_atr >= 0), "ATR should be non-negative")
         except ImportError:
             self.skipTest("ATRIndicator not found")
@@ -66,14 +71,12 @@ class TestEMAIndicator(unittest.TestCase):
 
     def setUp(self):
         """Create sample data."""
-        self.data = pd.DataFrame({
-            'Close': [100, 102, 104, 103, 105, 107, 106, 108, 110, 109]
-        })
+        self.data = pd.DataFrame({"Close": [100, 102, 104, 103, 105, 107, 106, 108, 110, 109]})
 
     def test_ema_calculation(self):
         """EMA should be calculated correctly."""
         # Pandas EWM implementation
-        ema = self.data['Close'].ewm(span=5, adjust=False).mean()
+        ema = self.data["Close"].ewm(span=5, adjust=False).mean()
 
         # EMA should exist and be numeric
         self.assertEqual(len(ema), len(self.data))
@@ -81,8 +84,8 @@ class TestEMAIndicator(unittest.TestCase):
 
     def test_ema_smoothing(self):
         """EMA should smooth price fluctuations."""
-        ema_short = self.data['Close'].ewm(span=3, adjust=False).mean()
-        ema_long = self.data['Close'].ewm(span=7, adjust=False).mean()
+        ema_short = self.data["Close"].ewm(span=3, adjust=False).mean()
+        ema_long = self.data["Close"].ewm(span=7, adjust=False).mean()
 
         # Shorter EMA should be more responsive (higher std deviation)
         # This is a general property, not strict for all data
@@ -96,18 +99,14 @@ class TestRSIIndicator(unittest.TestCase):
     def setUp(self):
         """Create sample data with known RSI behavior."""
         # Uptrend data
-        self.uptrend_data = pd.DataFrame({
-            'Close': [100 + i for i in range(20)]
-        })
+        self.uptrend_data = pd.DataFrame({"Close": [100 + i for i in range(20)]})
 
         # Downtrend data
-        self.downtrend_data = pd.DataFrame({
-            'Close': [120 - i for i in range(20)]
-        })
+        self.downtrend_data = pd.DataFrame({"Close": [120 - i for i in range(20)]})
 
     def test_rsi_uptrend(self):
         """RSI should be high (>70) in strong uptrend."""
-        delta = self.uptrend_data['Close'].diff()
+        delta = self.uptrend_data["Close"].diff()
         gain = delta.where(delta > 0, 0).rolling(window=14).mean()
         loss = -delta.where(delta < 0, 0).rolling(window=14).mean()
 
@@ -122,7 +121,7 @@ class TestRSIIndicator(unittest.TestCase):
 
     def test_rsi_downtrend(self):
         """RSI should be low (<30) in strong downtrend."""
-        delta = self.downtrend_data['Close'].diff()
+        delta = self.downtrend_data["Close"].diff()
         gain = delta.where(delta > 0, 0).rolling(window=14).mean()
         loss = -delta.where(delta < 0, 0).rolling(window=14).mean()
 
@@ -142,49 +141,41 @@ class TestBollingerBands(unittest.TestCase):
     def setUp(self):
         """Create sample data."""
         np.random.seed(42)
-        self.data = pd.DataFrame({
-            'Close': 100 + np.random.randn(50) * 2
-        })
+        self.data = pd.DataFrame({"Close": 100 + np.random.randn(50) * 2})
 
     def test_bollinger_band_calculation(self):
         """Bollinger Bands should be calculated correctly."""
         window = 20
         num_std = 2
 
-        rolling_mean = self.data['Close'].rolling(window=window).mean()
-        rolling_std = self.data['Close'].rolling(window=window).std()
+        rolling_mean = self.data["Close"].rolling(window=window).mean()
+        rolling_std = self.data["Close"].rolling(window=window).std()
 
         upper_band = rolling_mean + (rolling_std * num_std)
         lower_band = rolling_mean - (rolling_std * num_std)
 
         # Upper band should be above lower band
         valid_idx = ~(upper_band.isna() | lower_band.isna())
-        self.assertTrue(
-            all(upper_band[valid_idx] > lower_band[valid_idx]),
-            "Upper band should be above lower band"
-        )
+        self.assertTrue(all(upper_band[valid_idx] > lower_band[valid_idx]), "Upper band should be above lower band")
 
     def test_bollinger_contains_most_prices(self):
         """Most prices should fall within Bollinger Bands."""
         window = 20
         num_std = 2
 
-        rolling_mean = self.data['Close'].rolling(window=window).mean()
-        rolling_std = self.data['Close'].rolling(window=window).std()
+        rolling_mean = self.data["Close"].rolling(window=window).mean()
+        rolling_std = self.data["Close"].rolling(window=window).std()
 
         upper_band = rolling_mean + (rolling_std * num_std)
         lower_band = rolling_mean - (rolling_std * num_std)
 
         # Check how many prices are within bands
-        within_bands = (
-            (self.data['Close'] >= lower_band) &
-            (self.data['Close'] <= upper_band)
-        ).dropna()
+        within_bands = ((self.data["Close"] >= lower_band) & (self.data["Close"] <= upper_band)).dropna()
 
         # With random walk data, most prices should be within bands
         pct_within = within_bands.mean()
         self.assertGreater(pct_within, 0.5, "Most prices should be within bands")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

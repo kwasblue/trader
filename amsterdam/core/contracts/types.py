@@ -7,17 +7,19 @@ of truth for dataclasses and types used across the codebase.
 Usage:
     from core.contracts import SignalContext, OrderResult, PositionView, BrokerSnapshot
 """
-from typing import TypedDict, Literal, Optional, Dict, Any
-from datetime import datetime, timezone
-from dataclasses import dataclass, asdict, field
 
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
+from typing import Any, TypedDict
 
 # =============================================================================
 # TypedDict Payloads (lightweight, no validation overhead)
 # =============================================================================
 
+
 class SignalPayload(TypedDict):
     """Signal payload for events."""
+
     symbol: str
     timestamp: datetime
     signal: int  # -1, 0, 1
@@ -29,6 +31,7 @@ class SignalPayload(TypedDict):
 # =============================================================================
 # Core Dataclasses
 # =============================================================================
+
 
 @dataclass
 class SignalContext:
@@ -59,6 +62,7 @@ class SignalContext:
             regime="normal"
         )
     """
+
     # Core signal data
     symbol: str
     signal: int  # -1 (short/sell), 0 (hold), 1 (long/buy)
@@ -68,21 +72,21 @@ class SignalContext:
     timestamp: datetime
 
     # Strategy context
-    strategy_name: Optional[str] = None
+    strategy_name: str | None = None
     confidence: float = 1.0  # Signal strength 0-1
 
     # Market context
-    df: Optional[Any] = None  # DataFrame with price history
+    df: Any | None = None  # DataFrame with price history
     market_open: bool = True
 
     # Order parameters (configurable per signal)
     order_type: str = "market"  # market, limit, stop, stop_limit
     time_in_force: str = "day"  # day, gtc, ioc, fok
-    limit_price: Optional[float] = None  # For limit orders
-    stop_price: Optional[float] = None  # For stop orders
+    limit_price: float | None = None  # For limit orders
+    stop_price: float | None = None  # For stop orders
 
     # Extensible metadata
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_kwargs(
@@ -92,16 +96,16 @@ class SignalContext:
         price: float = 0.0,
         atr: float = 0.0,
         regime: str = "normal",
-        timestamp: Optional[datetime] = None,
-        strategy_name: Optional[str] = None,
+        timestamp: datetime | None = None,
+        strategy_name: str | None = None,
         confidence: float = 1.0,
-        df: Optional[Any] = None,
+        df: Any | None = None,
         market_open: bool = True,
         order_type: str = "market",
         time_in_force: str = "day",
-        limit_price: Optional[float] = None,
-        stop_price: Optional[float] = None,
-        **kwargs
+        limit_price: float | None = None,
+        stop_price: float | None = None,
+        **kwargs,
     ) -> "SignalContext":
         """
         Factory for backward compatibility with scattered kwargs.
@@ -123,7 +127,7 @@ class SignalContext:
             time_in_force=time_in_force,
             limit_price=limit_price,
             stop_price=stop_price,
-            metadata=kwargs
+            metadata=kwargs,
         )
 
     def is_buy(self) -> bool:
@@ -150,45 +154,46 @@ class OrderResult:
         - avg_price is a deprecated alias for avg_fill_price
         - Use avg_fill_price for new code
     """
-    order_id: Optional[str] = None
-    client_order_id: Optional[str] = None  # Broker's client order ID
-    symbol: Optional[str] = None
-    side: Optional[str] = None
-    qty: Optional[float] = None
-    type: Optional[str] = None  # market, limit, stop, stop_limit
-    time_in_force: Optional[str] = None
-    status: Optional[str] = None  # submitted, filled, cancelled, rejected, etc.
-    limit_price: Optional[float] = None
-    stop_price: Optional[float] = None
-    filled_qty: Optional[float] = None
-    avg_fill_price: Optional[float] = None
-    raw: Optional[Dict] = None  # broker-native response payload
-    message: Optional[str] = None
-    commission: Optional[float] = None  # Commission/fees paid for this order
+
+    order_id: str | None = None
+    client_order_id: str | None = None  # Broker's client order ID
+    symbol: str | None = None
+    side: str | None = None
+    qty: float | None = None
+    type: str | None = None  # market, limit, stop, stop_limit
+    time_in_force: str | None = None
+    status: str | None = None  # submitted, filled, cancelled, rejected, etc.
+    limit_price: float | None = None
+    stop_price: float | None = None
+    filled_qty: float | None = None
+    avg_fill_price: float | None = None
+    raw: dict | None = None  # broker-native response payload
+    message: str | None = None
+    commission: float | None = None  # Commission/fees paid for this order
 
     # Legacy field for backwards compatibility
-    success: Optional[bool] = None
-    avg_price: Optional[float] = None  # DEPRECATED: alias for avg_fill_price
+    success: bool | None = None
+    avg_price: float | None = None  # DEPRECATED: alias for avg_fill_price
 
     def __bool__(self) -> bool:
         """Allow: if result: ... to check for success."""
         if self.success is not None:
             return self.success
         # Infer success from status
-        return self.status in ('filled', 'submitted', 'accepted', 'working', 'pending')
+        return self.status in ("filled", "submitted", "accepted", "working", "pending")
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         return asdict(self)
 
     @property
     def is_filled(self) -> bool:
         """Check if order is completely filled."""
-        return self.status == 'filled'
+        return self.status == "filled"
 
     @property
     def is_rejected(self) -> bool:
         """Check if order was rejected."""
-        return self.status in ('rejected', 'error', 'failed')
+        return self.status in ("rejected", "error", "failed")
 
     @property
     def filled_value(self) -> float:
@@ -207,16 +212,17 @@ class OrderResult:
 @dataclass
 class PositionView:
     """View of a position in a symbol."""
-    symbol: Optional[str] = None
+
+    symbol: str | None = None
     qty: float = 0
     avg_entry_price: float = 0.0
-    market_price: Optional[float] = None
-    side: Optional[str] = None  # 'long', 'short', 'flat'
-    last_price: Optional[float] = None  # alias for market_price
-    unrealized_pl: Optional[float] = None  # P&L from broker
-    unrealized_plpc: Optional[float] = None  # P&L percentage from broker
+    market_price: float | None = None
+    side: str | None = None  # 'long', 'short', 'flat'
+    last_price: float | None = None  # alias for market_price
+    unrealized_pl: float | None = None  # P&L from broker
+    unrealized_plpc: float | None = None  # P&L percentage from broker
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         return asdict(self)
 
     @property
@@ -238,15 +244,16 @@ class PositionView:
 @dataclass
 class BrokerSnapshot:
     """Snapshot of broker account state."""
-    account_number: Optional[str] = None
-    status: Optional[str] = None
+
+    account_number: str | None = None
+    status: str | None = None
     cash: float = 0.0
     buying_power: float = 0.0
     equity: float = 0.0
     portfolio_value: float = 0.0
-    positions: Optional[Dict[str, PositionView]] = None
+    positions: dict[str, PositionView] | None = None
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         result = {
             "account_number": self.account_number,
             "status": self.status,
@@ -266,10 +273,10 @@ class BrokerSnapshot:
 
 __all__ = [
     # TypedDicts
-    'SignalPayload',
+    "SignalPayload",
     # Dataclasses
-    'SignalContext',
-    'OrderResult',
-    'PositionView',
-    'BrokerSnapshot',
+    "SignalContext",
+    "OrderResult",
+    "PositionView",
+    "BrokerSnapshot",
 ]

@@ -3,27 +3,27 @@
 Fetch ALL orders from Alpaca (paper or live account)
 """
 
+import json
 import os
 import sys
-import json
 from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from dotenv import load_dotenv
 from alpaca.trading.client import TradingClient
-from alpaca.trading.requests import GetOrdersRequest
 from alpaca.trading.enums import QueryOrderStatus
+from alpaca.trading.requests import GetOrdersRequest
+from dotenv import load_dotenv
 
 # Load environment
-env_path = Path(__file__).parent.parent / '.env'
+env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(env_path)
 
 
 def fetch_all_orders(paper: bool = True):
     """Fetch ALL orders from Alpaca with proper pagination"""
-    api_key = os.getenv('ALPACA_API_KEY')
-    secret_key = os.getenv('ALPACA_SECRET_KEY')
+    api_key = os.getenv("ALPACA_API_KEY")
+    secret_key = os.getenv("ALPACA_SECRET_KEY")
 
     if not api_key or not secret_key:
         print("ERROR: Alpaca credentials not found in environment")
@@ -42,12 +42,7 @@ def fetch_all_orders(paper: bool = True):
         until = None  # Use 'until' to paginate backwards in time
 
         while True:
-            request = GetOrdersRequest(
-                status=status,
-                limit=500,
-                nested=True,
-                until=until
-            )
+            request = GetOrdersRequest(status=status, limit=500, nested=True, until=until)
 
             orders = client.get_orders(request)
 
@@ -73,9 +68,9 @@ def fetch_all_orders(paper: bool = True):
 
 def display_orders(orders):
     """Display orders in a readable format"""
-    print(f"\n{'='*80}")
+    print(f"\n{'=' * 80}")
     print(f"TOTAL ORDERS: {len(orders)}")
-    print(f"{'='*80}\n")
+    print(f"{'=' * 80}\n")
 
     # Count by status
     status_counts = {}
@@ -89,15 +84,19 @@ def display_orders(orders):
     print()
 
     # Display each order
-    print(f"{'Date':<20} {'Symbol':<8} {'Side':<5} {'Qty':<8} {'Status':<12} {'Type':<10} {'Fill Price':<12} {'Order ID'}")
+    print(
+        f"{'Date':<20} {'Symbol':<8} {'Side':<5} {'Qty':<8} {'Status':<12} {'Type':<10} {'Fill Price':<12} {'Order ID'}"
+    )
     print("-" * 120)
 
     for o in orders:
-        created = o.created_at.strftime('%Y-%m-%d %H:%M') if o.created_at else 'N/A'
-        fill_price = f"${float(o.filled_avg_price):.2f}" if o.filled_avg_price else '-'
+        created = o.created_at.strftime("%Y-%m-%d %H:%M") if o.created_at else "N/A"
+        fill_price = f"${float(o.filled_avg_price):.2f}" if o.filled_avg_price else "-"
         qty = str(o.qty) if o.qty else str(o.notional)
 
-        print(f"{created:<20} {o.symbol:<8} {o.side.value:<5} {qty:<8} {str(o.status):<12} {str(o.type):<10} {fill_price:<12} {o.id}")
+        print(
+            f"{created:<20} {o.symbol:<8} {o.side.value:<5} {qty:<8} {str(o.status):<12} {str(o.type):<10} {fill_price:<12} {o.id}"
+        )
 
 
 def export_to_json(orders, output_file: str):
@@ -107,27 +106,29 @@ def export_to_json(orders, output_file: str):
 
     orders_data = []
     for o in orders:
-        orders_data.append({
-            'id': str(o.id),
-            'client_order_id': o.client_order_id,
-            'symbol': o.symbol,
-            'side': o.side.value,
-            'qty': str(o.qty) if o.qty else None,
-            'notional': str(o.notional) if o.notional else None,
-            'filled_qty': str(o.filled_qty) if o.filled_qty else None,
-            'type': str(o.type),
-            'status': str(o.status),
-            'limit_price': str(o.limit_price) if o.limit_price else None,
-            'stop_price': str(o.stop_price) if o.stop_price else None,
-            'filled_avg_price': str(o.filled_avg_price) if o.filled_avg_price else None,
-            'time_in_force': str(o.time_in_force),
-            'created_at': o.created_at.isoformat() if o.created_at else None,
-            'submitted_at': o.submitted_at.isoformat() if o.submitted_at else None,
-            'filled_at': o.filled_at.isoformat() if o.filled_at else None,
-            'canceled_at': o.canceled_at.isoformat() if o.canceled_at else None,
-        })
+        orders_data.append(
+            {
+                "id": str(o.id),
+                "client_order_id": o.client_order_id,
+                "symbol": o.symbol,
+                "side": o.side.value,
+                "qty": str(o.qty) if o.qty else None,
+                "notional": str(o.notional) if o.notional else None,
+                "filled_qty": str(o.filled_qty) if o.filled_qty else None,
+                "type": str(o.type),
+                "status": str(o.status),
+                "limit_price": str(o.limit_price) if o.limit_price else None,
+                "stop_price": str(o.stop_price) if o.stop_price else None,
+                "filled_avg_price": str(o.filled_avg_price) if o.filled_avg_price else None,
+                "time_in_force": str(o.time_in_force),
+                "created_at": o.created_at.isoformat() if o.created_at else None,
+                "submitted_at": o.submitted_at.isoformat() if o.submitted_at else None,
+                "filled_at": o.filled_at.isoformat() if o.filled_at else None,
+                "canceled_at": o.canceled_at.isoformat() if o.canceled_at else None,
+            }
+        )
 
-    with open(output_path, 'w') as f:
+    with open(output_path, "w") as f:
         json.dump(orders_data, f, indent=2)
 
     print(f"\nExported {len(orders)} orders to: {output_file}")
@@ -135,10 +136,11 @@ def export_to_json(orders, output_file: str):
 
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description='Fetch all Alpaca orders')
-    parser.add_argument('--live', action='store_true', help='Use live account (default: paper)')
-    parser.add_argument('--export', type=str, help='Export to JSON file')
-    parser.add_argument('--no-display', action='store_true', help='Skip displaying orders')
+
+    parser = argparse.ArgumentParser(description="Fetch all Alpaca orders")
+    parser.add_argument("--live", action="store_true", help="Use live account (default: paper)")
+    parser.add_argument("--export", type=str, help="Export to JSON file")
+    parser.add_argument("--no-display", action="store_true", help="Skip displaying orders")
     args = parser.parse_args()
 
     paper = not args.live
@@ -155,9 +157,9 @@ def main():
         export_to_json(orders, args.export)
     else:
         # Default export location
-        default_export = Path(__file__).parent.parent / 'logs' / 'all_alpaca_orders.json'
+        default_export = Path(__file__).parent.parent / "logs" / "all_alpaca_orders.json"
         export_to_json(orders, str(default_export))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

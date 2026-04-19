@@ -16,11 +16,11 @@ Usage:
     sharpe = quantifier.calculate_sharpe_ratio()
 """
 
-from core.risk.metrics import StandardRiskModel, RiskQuantifier
 from core.base.risk_model_base import RiskModelBase
+from core.risk.metrics import RiskQuantifier, StandardRiskModel
 
 __all__ = [
-    'RiskModelBase',
-    'StandardRiskModel',
-    'RiskQuantifier',
+    "RiskModelBase",
+    "StandardRiskModel",
+    "RiskQuantifier",
 ]

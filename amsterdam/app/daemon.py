@@ -34,18 +34,18 @@ Usage (direct - for debugging):
 
 from __future__ import annotations
 
-import os
-import sys
-import asyncio
-import signal
 import argparse
+import asyncio
 import atexit
 import fcntl
+import os
+import signal
+import sys
 import warnings
-from pathlib import Path
 from datetime import datetime, time, timedelta
-from typing import List, Optional, Dict, Any, TYPE_CHECKING
 from enum import Enum
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo
 
 if TYPE_CHECKING:
@@ -63,6 +63,7 @@ if str(ROOT) not in sys.path:
 # ============================================================================
 # INSTANCE LOCK - Prevents multiple autotraders from running simultaneously
 # ============================================================================
+
 
 class InstanceLock:
     """
@@ -89,7 +90,7 @@ class InstanceLock:
 
         try:
             # Open (or create) the lock file
-            self.lock_fd = open(self.lock_file, 'w')
+            self.lock_fd = open(self.lock_file, "w")
 
             # Try to get an exclusive lock (non-blocking)
             fcntl.flock(self.lock_fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -104,7 +105,7 @@ class InstanceLock:
 
             return True
 
-        except (IOError, OSError):
+        except OSError:
             # Lock is held by another process
             if self.lock_fd:
                 self.lock_fd.close()
@@ -112,7 +113,7 @@ class InstanceLock:
 
             # Try to read the other PID
             try:
-                with open(self.lock_file, 'r') as f:
+                with open(self.lock_file) as f:
                     other_pid = f.read().strip()
                 print(f"ERROR: Another autotrader instance is running (PID: {other_pid})")
                 print(f"       Kill it with: kill {other_pid}")
@@ -142,10 +143,10 @@ class InstanceLock:
     def __exit__(self, *args):
         self.release()
 
-# Canonical path imports - all initialization goes through bootstrap
-from app.bootstrap import bootstrap_app, AppContext
-from core.config_loader import get_config
 
+# Canonical path imports - all initialization goes through bootstrap
+from app.bootstrap import AppContext, bootstrap_app
+from core.config_loader import get_config
 
 # US Eastern timezone for market hours
 ET = ZoneInfo("America/New_York")
@@ -161,6 +162,7 @@ DEFAULT_POST_MARKET_DELAY_MINUTES = 5
 
 class AutoTraderState(Enum):
     """Current state of the autotrader."""
+
     INITIALIZING = "initializing"
     WAITING_FOR_MARKET = "waiting_for_market"
     PRE_FLIGHT = "pre_flight"
@@ -183,38 +185,38 @@ class MarketScheduler:
     # US market holidays 2024-2025 (add more as needed)
     HOLIDAYS = {
         # 2024
-        datetime(2024, 1, 1).date(),   # New Year's Day
+        datetime(2024, 1, 1).date(),  # New Year's Day
         datetime(2024, 1, 15).date(),  # MLK Day
         datetime(2024, 2, 19).date(),  # Presidents Day
         datetime(2024, 3, 29).date(),  # Good Friday
         datetime(2024, 5, 27).date(),  # Memorial Day
         datetime(2024, 6, 19).date(),  # Juneteenth
-        datetime(2024, 7, 4).date(),   # Independence Day
-        datetime(2024, 9, 2).date(),   # Labor Day
-        datetime(2024, 11, 28).date(), # Thanksgiving
-        datetime(2024, 12, 25).date(), # Christmas
+        datetime(2024, 7, 4).date(),  # Independence Day
+        datetime(2024, 9, 2).date(),  # Labor Day
+        datetime(2024, 11, 28).date(),  # Thanksgiving
+        datetime(2024, 12, 25).date(),  # Christmas
         # 2025
-        datetime(2025, 1, 1).date(),   # New Year's Day
+        datetime(2025, 1, 1).date(),  # New Year's Day
         datetime(2025, 1, 20).date(),  # MLK Day
         datetime(2025, 2, 17).date(),  # Presidents Day
         datetime(2025, 4, 18).date(),  # Good Friday
         datetime(2025, 5, 26).date(),  # Memorial Day
         datetime(2025, 6, 19).date(),  # Juneteenth
-        datetime(2025, 7, 4).date(),   # Independence Day
-        datetime(2025, 9, 1).date(),   # Labor Day
-        datetime(2025, 11, 27).date(), # Thanksgiving
-        datetime(2025, 12, 25).date(), # Christmas
+        datetime(2025, 7, 4).date(),  # Independence Day
+        datetime(2025, 9, 1).date(),  # Labor Day
+        datetime(2025, 11, 27).date(),  # Thanksgiving
+        datetime(2025, 12, 25).date(),  # Christmas
         # 2026
-        datetime(2026, 1, 1).date(),   # New Year's Day
+        datetime(2026, 1, 1).date(),  # New Year's Day
         datetime(2026, 1, 19).date(),  # MLK Day
         datetime(2026, 2, 16).date(),  # Presidents Day
-        datetime(2026, 4, 3).date(),   # Good Friday
+        datetime(2026, 4, 3).date(),  # Good Friday
         datetime(2026, 5, 25).date(),  # Memorial Day
         datetime(2026, 6, 19).date(),  # Juneteenth
-        datetime(2026, 7, 3).date(),   # Independence Day (observed)
-        datetime(2026, 9, 7).date(),   # Labor Day
-        datetime(2026, 11, 26).date(), # Thanksgiving
-        datetime(2026, 12, 25).date(), # Christmas
+        datetime(2026, 7, 3).date(),  # Independence Day (observed)
+        datetime(2026, 9, 7).date(),  # Labor Day
+        datetime(2026, 11, 26).date(),  # Thanksgiving
+        datetime(2026, 12, 25).date(),  # Christmas
     }
 
     def __init__(self, logger=None):
@@ -314,7 +316,7 @@ class AutoTrader:
         # Store AppContext - single source of truth
         self.ctx = ctx
         self.symbols = ctx.symbols
-        self.broker = ctx.metadata.get('broker', 'alpaca')
+        self.broker = ctx.metadata.get("broker", "alpaca")
         self.dry_run = dry_run
         self.update_data_days = update_data_days
         self.day_trade = day_trade
@@ -322,7 +324,7 @@ class AutoTrader:
         self.state = AutoTraderState.INITIALIZING
         self.scheduler = MarketScheduler()
         self.running = False
-        self.trading_task: Optional[asyncio.Task] = None
+        self.trading_task: asyncio.Task | None = None
 
         # Statistics
         self.stats = {
@@ -341,6 +343,7 @@ class AutoTrader:
         # Override swing mode if day trading is enabled
         if day_trade:
             from core.config_loader import enable_day_trade_mode
+
             self.config = enable_day_trade_mode()
             self.logger.info("DAY TRADE MODE: Swing mode disabled, same-day exits allowed")
 
@@ -369,12 +372,12 @@ class AutoTrader:
         self._set_state(AutoTraderState.INITIALIZING)
 
         self.logger.info("Starting AutoTrader main loop")
-        print(f"\n{'='*60}")
-        print(f"  AUTOTRADER STARTED")
+        print(f"\n{'=' * 60}")
+        print("  AUTOTRADER STARTED")
         print(f"  Symbols: {', '.join(self.symbols)}")
         print(f"  Broker: {self.broker}")
         print(f"  Dry run: {self.dry_run}")
-        print(f"{'='*60}\n")
+        print(f"{'=' * 60}\n")
 
         try:
             while self.running:
@@ -458,7 +461,7 @@ class AutoTrader:
             preflight_start = next_open - timedelta(minutes=self.pre_market_buffer)
 
             if now >= preflight_start:
-                self.logger.info(f"Pre-market window reached, proceeding to preflight")
+                self.logger.info("Pre-market window reached, proceeding to preflight")
                 return
 
             wait_seconds = (preflight_start - now).total_seconds()
@@ -558,11 +561,11 @@ class AutoTrader:
 
             self.logger.warning(
                 f"No network connectivity, retrying in {check_interval}s... "
-                f"({int(seconds_to_open/60)} min until market open)"
+                f"({int(seconds_to_open / 60)} min until market open)"
             )
             print(
                 f"[{self.scheduler.now_et().strftime('%H:%M:%S')}] "
-                f"Waiting for network... ({int(seconds_to_open/60)} min until market open)"
+                f"Waiting for network... ({int(seconds_to_open / 60)} min until market open)"
             )
             await asyncio.sleep(check_interval)
 
@@ -606,12 +609,14 @@ class AutoTrader:
             return False
 
         # Now run preflight with retries
-        max_retries = getattr(self.config.autotrader, 'preflight_max_retries', 3)
-        retry_delay = getattr(self.config.autotrader, 'preflight_retry_delay', 60)
+        max_retries = getattr(self.config.autotrader, "preflight_max_retries", 3)
+        retry_delay = getattr(self.config.autotrader, "preflight_retry_delay", 60)
 
         for attempt in range(1, max_retries + 1):
             self.logger.info(f"Running pre-flight checks (attempt {attempt}/{max_retries})...")
-            print(f"[{self.scheduler.now_et().strftime('%H:%M:%S')}] Running pre-flight checks (attempt {attempt}/{max_retries})...")
+            print(
+                f"[{self.scheduler.now_et().strftime('%H:%M:%S')}] Running pre-flight checks (attempt {attempt}/{max_retries})..."
+            )
 
             try:
                 from preflight import PreFlightChecker
@@ -630,9 +635,7 @@ class AutoTrader:
 
                 # Check if we should retry
                 if attempt < max_retries:
-                    self.logger.warning(
-                        f"Pre-flight checks failed, retrying in {retry_delay}s..."
-                    )
+                    self.logger.warning(f"Pre-flight checks failed, retrying in {retry_delay}s...")
                     print(
                         f"[{self.scheduler.now_et().strftime('%H:%M:%S')}] "
                         f"Pre-flight failed, retrying in {retry_delay}s..."
@@ -676,7 +679,7 @@ class AutoTrader:
             # In dry run, just wait until market close
             while self.running and self.scheduler.is_market_open():
                 await asyncio.sleep(60)
-                now = self.scheduler.now_et()
+                self.scheduler.now_et()
                 remaining = self.scheduler.seconds_until_market_close()
                 mins_remaining = int(remaining // 60)
                 self.logger.debug(f"Dry run: {mins_remaining} minutes until close")
@@ -709,22 +712,14 @@ class AutoTrader:
         from core.runner_factory import RunnerFactory
 
         # Create runner via factory (supports alpaca, schwab, and any registered broker)
-        runner = RunnerFactory.create(
-            broker=self.broker,
-            symbols=self.symbols,
-            config=self.config
-        )
+        runner = RunnerFactory.create(broker=self.broker, symbols=self.symbols, config=self.config)
 
         # Create task for the runner
         self.trading_task = asyncio.create_task(runner.run())
 
         # Config for market close position closing
-        close_on_market_close = getattr(
-            self.config.autotrader, 'close_positions_on_market_close', True
-        )
-        minutes_before = getattr(
-            self.config.autotrader, 'market_close_minutes_before', 5
-        )
+        close_on_market_close = getattr(self.config.autotrader, "close_positions_on_market_close", True)
+        minutes_before = getattr(self.config.autotrader, "market_close_minutes_before", 5)
         positions_closed = False
 
         try:
@@ -737,7 +732,7 @@ class AutoTrader:
                     seconds_to_close = self.scheduler.seconds_until_market_close()
                     if seconds_to_close <= (minutes_before * 60):
                         self.logger.info(
-                            f"Triggering position close {int(seconds_to_close/60)} minutes before market close"
+                            f"Triggering position close {int(seconds_to_close / 60)} minutes before market close"
                         )
                         await self._close_all_positions_market_close(runner)
                         positions_closed = True
@@ -784,9 +779,7 @@ class AutoTrader:
                 self.logger.info("Market close: No open positions to close")
                 return
 
-            self.logger.warning(
-                f"Market close safety net: Found {len(open_positions)} open positions to close"
-            )
+            self.logger.warning(f"Market close safety net: Found {len(open_positions)} open positions to close")
             print(
                 f"[{self.scheduler.now_et().strftime('%H:%M:%S')}] "
                 f"WARNING: Closing {len(open_positions)} positions at market close"
@@ -800,11 +793,7 @@ class AutoTrader:
 
                     self.logger.info(f"[{pos.symbol}] Market close: {side} {qty} shares")
 
-                    await broker.place_market_order(
-                        symbol=pos.symbol,
-                        qty=qty,
-                        side=side
-                    )
+                    await broker.place_market_order(symbol=pos.symbol, qty=qty, side=side)
                     closed_count += 1
 
                 except Exception as e:
@@ -861,7 +850,6 @@ class AutoTrader:
         then runs regime backtest to assign optimal strategies.
         Non-fatal — errors are logged and trading continues with existing config.
         """
-        from core.config_loader import get_config
 
         cfg = get_config()
         if not cfg.scanner.enabled or not cfg.scanner.schedule.get("pre_market_scan_enabled", True):
@@ -872,8 +860,8 @@ class AutoTrader:
         print(f"[{self.scheduler.now_et().strftime('%H:%M:%S')}] Running scanner + optimizer...")
 
         try:
-            from scanner.engine import get_scanner
             from core.symbol_list_manager import get_list_manager
+            from scanner.engine import get_scanner
 
             scanner_cfg = cfg.scanner.to_engine_config()
             scanner = get_scanner(scanner_cfg)
@@ -911,8 +899,9 @@ class AutoTrader:
 
                 # 4. Reload strategy routing
                 try:
-                    from core.logic.strategy_routing_manager import StrategyRoutingManager
                     from pathlib import Path
+
+                    from core.logic.strategy_routing_manager import StrategyRoutingManager
 
                     routing_path = Path(__file__).resolve().parent.parent / "config" / "strategy_routing.json"
                     if routing_path.exists():
@@ -982,7 +971,7 @@ class AutoTrader:
         if self.trading_task and not self.trading_task.done():
             self.trading_task.cancel()
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> dict[str, Any]:
         """Get current status."""
         return {
             "state": self.state.value,
@@ -998,7 +987,7 @@ class AutoTrader:
 
 async def main():
     parser = argparse.ArgumentParser(
-        description='Autonomous trading daemon (wrapper around canonical path)',
+        description="Autonomous trading daemon (wrapper around canonical path)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples (via CLI - recommended):
@@ -1014,43 +1003,35 @@ Examples (direct - for debugging):
 Canonical Path:
   This script uses: bootstrap_app() -> AppContext -> RunnerFactory
   See app/bootstrap.py for the canonical initialization path.
-        """
+        """,
     )
 
     parser.add_argument(
-        '--symbols', '-s',
-        nargs='+',
+        "--symbols",
+        "-s",
+        nargs="+",
         default=None,
-        help='Symbols to trade (default: uses trade list from symbol manager)'
+        help="Symbols to trade (default: uses trade list from symbol manager)",
     )
     parser.add_argument(
-        '--broker', '-b',
-        choices=['alpaca', 'schwab', 'hybrid', 'alpaca-schwab'],
-        default='alpaca',
-        help='Broker to use (default: alpaca, hybrid: Alpaca execution + Schwab data)'
+        "--broker",
+        "-b",
+        choices=["alpaca", "schwab", "hybrid", "alpaca-schwab"],
+        default="alpaca",
+        help="Broker to use (default: alpaca, hybrid: Alpaca execution + Schwab data)",
     )
+    parser.add_argument("--dry-run", action="store_true", help="Run without executing actual trades")
     parser.add_argument(
-        '--dry-run',
-        action='store_true',
-        help='Run without executing actual trades'
+        "--day-trade", action="store_true", help="Enable day trading (disable swing mode, allow same-day exits)"
     )
-    parser.add_argument(
-        '--day-trade',
-        action='store_true',
-        help='Enable day trading (disable swing mode, allow same-day exits)'
-    )
-    parser.add_argument(
-        '--update-days',
-        type=int,
-        default=5,
-        help='Days of historical data to update (default: 5)'
-    )
+    parser.add_argument("--update-days", type=int, default=5, help="Days of historical data to update (default: 5)")
 
     args = parser.parse_args()
 
     # Get symbols from trade list if not specified
     if args.symbols is None:
         from core.symbol_list_manager import get_list_manager
+
         symbols = get_list_manager().get_trade_list()
         if not symbols:
             print("Error: No symbols in trade list. Add symbols with:")
@@ -1064,10 +1045,10 @@ Canonical Path:
     # CANONICAL PATH: Use bootstrap_app() for all initialization
     # =========================================================================
     ctx = bootstrap_app(
-        mode='daemon',
+        mode="daemon",
         symbols=symbols,
         broker=args.broker,
-        trading_mode='live' if not args.dry_run else 'dry_run',
+        trading_mode="live" if not args.dry_run else "dry_run",
     )
 
     # Create autotrader with canonical AppContext
@@ -1096,7 +1077,7 @@ Canonical Path:
         print(f"\nFinal status: {trader.get_status()}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # Acquire instance lock to prevent multiple autotraders
     lock = InstanceLock("autotrader")
     if not lock.acquire():

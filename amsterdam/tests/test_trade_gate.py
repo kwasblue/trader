@@ -6,11 +6,13 @@ Coverage:
 - State management
 - Regime persistence tracking
 """
-import pytest
-from datetime import datetime, timezone, timedelta
 
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
+
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -31,12 +33,7 @@ class TestTradeGateInit:
 
     def test_init_custom_values(self):
         """Test initialization with custom values."""
-        gate = TradeGate(
-            max_layers=3,
-            min_bars_between_layers=5,
-            regime_min_persist_bars=10,
-            flip_cooldown_bars=3
-        )
+        gate = TradeGate(max_layers=3, min_bars_between_layers=5, regime_min_persist_bars=10, flip_cooldown_bars=3)
         assert gate.max_layers == 3
         assert gate.min_bars_between_layers == 5
         assert gate.regime_min_persist_bars == 10
@@ -64,8 +61,8 @@ class TestGateState:
     def test_state_has_expected_attributes(self, gate):
         """Test state has expected attributes."""
         state = gate.get_state("AAPL")
-        assert hasattr(state, 'did_action_this_bar')
-        assert hasattr(state, 'last_bar_id')
+        assert hasattr(state, "did_action_this_bar")
+        assert hasattr(state, "last_bar_id")
 
 
 class TestCanEnter:
@@ -73,12 +70,7 @@ class TestCanEnter:
 
     @pytest.fixture
     def gate(self):
-        return TradeGate(
-            max_layers=2,
-            min_bars_between_layers=3,
-            regime_min_persist_bars=2,
-            flip_cooldown_bars=2
-        )
+        return TradeGate(max_layers=2, min_bars_between_layers=3, regime_min_persist_bars=2, flip_cooldown_bars=2)
 
     def test_can_enter_returns_tuple(self, gate):
         """Test can_enter returns tuple of (bool, reason)."""
@@ -86,13 +78,7 @@ class TestCanEnter:
         # Initialize the state with on_new_bar first
         gate.on_new_bar("AAPL", bar_id=1, regime="trending")
 
-        result = gate.can_enter(
-            symbol="AAPL",
-            side="long",
-            ts=now,
-            bar_id=1,
-            regime="trending"
-        )
+        result = gate.can_enter(symbol="AAPL", side="long", ts=now, bar_id=1, regime="trending")
         assert isinstance(result, tuple)
         assert len(result) == 2
         assert isinstance(result[0], bool)
@@ -104,13 +90,7 @@ class TestCanEnter:
         state.did_action_this_bar = True
         state.last_regime = "trending"
 
-        can_enter, reason = gate.can_enter(
-            symbol="AAPL",
-            side="long",
-            ts=now,
-            bar_id=1,
-            regime="trending"
-        )
+        can_enter, reason = gate.can_enter(symbol="AAPL", side="long", ts=now, bar_id=1, regime="trending")
         assert can_enter is False
         assert "already" in reason.lower()
 

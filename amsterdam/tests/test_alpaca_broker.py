@@ -10,29 +10,31 @@ Coverage:
 - Streaming subscription
 - Error handling and retry logic
 """
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
-from datetime import datetime, timezone
-import asyncio
 
+import asyncio
 import sys
 from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from core.broker.alpaca_broker import AlpacaBroker
-from core.app_types import OrderResult, PositionView
 
 
 @pytest.fixture(autouse=True)
 def mock_async_create_task(monkeypatch):
     """Mock asyncio.create_task to prevent 'no running event loop' errors."""
+
     def mock_create_task(coro, **kwargs):
         # Close the coroutine to avoid warnings
         coro.close()
         return MagicMock()
-    monkeypatch.setattr(asyncio, 'create_task', mock_create_task)
+
+    monkeypatch.setattr(asyncio, "create_task", mock_create_task)
 
 
 class TestAlpacaBrokerInit:
@@ -40,24 +42,16 @@ class TestAlpacaBrokerInit:
 
     def test_init(self):
         """Test broker initialization."""
-        with patch('core.broker.alpaca_broker.Logger'):
-            broker = AlpacaBroker(
-                api_key="test_key",
-                api_secret="test_secret",
-                paper=True
-            )
+        with patch("core.broker.alpaca_broker.Logger"):
+            broker = AlpacaBroker(api_key="test_key", api_secret="test_secret", paper=True)
             assert broker.api_key == "test_key"
             assert broker.api_secret == "test_secret"
             assert broker.paper is True
 
     def test_init_live_mode(self):
         """Test broker initialization in live mode."""
-        with patch('core.broker.alpaca_broker.Logger'):
-            broker = AlpacaBroker(
-                api_key="test_key",
-                api_secret="test_secret",
-                paper=False
-            )
+        with patch("core.broker.alpaca_broker.Logger"):
+            broker = AlpacaBroker(api_key="test_key", api_secret="test_secret", paper=False)
             assert broker.paper is False
 
 
@@ -66,20 +60,16 @@ class TestConnection:
 
     @pytest.fixture
     def broker(self):
-        with patch('core.broker.alpaca_broker.Logger'):
-            return AlpacaBroker(
-                api_key="test_key",
-                api_secret="test_secret",
-                paper=True
-            )
+        with patch("core.broker.alpaca_broker.Logger"):
+            return AlpacaBroker(api_key="test_key", api_secret="test_secret", paper=True)
 
     @pytest.mark.asyncio
     async def test_connect_success(self, broker):
         """Test successful connection."""
-        with patch('core.broker.alpaca_broker.TradingClient') as MockTradingClient:
-            with patch('core.broker.alpaca_broker.StockDataStream') as MockStream:
-                with patch('core.broker.alpaca_broker.StockHistoricalDataClient') as MockDataClient:
-                    with patch('core.broker.alpaca_broker.get_health_checker') as mock_health:
+        with patch("core.broker.alpaca_broker.TradingClient") as MockTradingClient:
+            with patch("core.broker.alpaca_broker.StockDataStream") as MockStream:
+                with patch("core.broker.alpaca_broker.StockHistoricalDataClient") as MockDataClient:
+                    with patch("core.broker.alpaca_broker.get_health_checker") as mock_health:
                         mock_health.return_value = MagicMock()
 
                         await broker.connect()
@@ -92,7 +82,7 @@ class TestConnection:
     @pytest.mark.asyncio
     async def test_connect_failure_retry(self, broker):
         """Test connection retry on failure."""
-        with patch('core.broker.alpaca_broker.TradingClient') as MockTradingClient:
+        with patch("core.broker.alpaca_broker.TradingClient") as MockTradingClient:
             MockTradingClient.side_effect = Exception("Connection failed")
 
             with pytest.raises(Exception):
@@ -104,12 +94,8 @@ class TestOrderPlacement:
 
     @pytest.fixture
     def connected_broker(self):
-        with patch('core.broker.alpaca_broker.Logger'):
-            broker = AlpacaBroker(
-                api_key="test_key",
-                api_secret="test_secret",
-                paper=True
-            )
+        with patch("core.broker.alpaca_broker.Logger"):
+            broker = AlpacaBroker(api_key="test_key", api_secret="test_secret", paper=True)
             broker.trading_client = MagicMock()
             return broker
 
@@ -127,12 +113,7 @@ class TestOrderPlacement:
 
         connected_broker.trading_client.submit_order.return_value = mock_order
 
-        result = await connected_broker.place_order(
-            symbol="AAPL",
-            side="buy",
-            qty=10,
-            order_type="market"
-        )
+        result = await connected_broker.place_order(symbol="AAPL", side="buy", qty=10, order_type="market")
 
         assert result.order_id == "order123"
         assert result.symbol == "AAPL"
@@ -152,12 +133,7 @@ class TestOrderPlacement:
 
         connected_broker.trading_client.submit_order.return_value = mock_order
 
-        result = await connected_broker.place_order(
-            symbol="AAPL",
-            side="sell",
-            qty=10,
-            order_type="market"
-        )
+        result = await connected_broker.place_order(symbol="AAPL", side="sell", qty=10, order_type="market")
 
         assert result.side == "sell"
 
@@ -176,11 +152,7 @@ class TestOrderPlacement:
         connected_broker.trading_client.submit_order.return_value = mock_order
 
         result = await connected_broker.place_order(
-            symbol="AAPL",
-            side="buy",
-            qty=10,
-            order_type="limit",
-            limit_price=148.00
+            symbol="AAPL", side="buy", qty=10, order_type="limit", limit_price=148.00
         )
 
         assert result.status == "new"
@@ -191,12 +163,7 @@ class TestOrderPlacement:
         connected_broker.trading_client.submit_order.side_effect = Exception("Insufficient funds")
 
         with pytest.raises(Exception):
-            await connected_broker.place_order(
-                symbol="AAPL",
-                side="buy",
-                qty=10000,
-                order_type="market"
-            )
+            await connected_broker.place_order(symbol="AAPL", side="buy", qty=10000, order_type="market")
 
 
 class TestOrderCancellation:
@@ -204,12 +171,8 @@ class TestOrderCancellation:
 
     @pytest.fixture
     def connected_broker(self):
-        with patch('core.broker.alpaca_broker.Logger'):
-            broker = AlpacaBroker(
-                api_key="test_key",
-                api_secret="test_secret",
-                paper=True
-            )
+        with patch("core.broker.alpaca_broker.Logger"):
+            broker = AlpacaBroker(api_key="test_key", api_secret="test_secret", paper=True)
             broker.trading_client = MagicMock()
             return broker
 
@@ -237,12 +200,8 @@ class TestPositionRetrieval:
 
     @pytest.fixture
     def connected_broker(self):
-        with patch('core.broker.alpaca_broker.Logger'):
-            broker = AlpacaBroker(
-                api_key="test_key",
-                api_secret="test_secret",
-                paper=True
-            )
+        with patch("core.broker.alpaca_broker.Logger"):
+            broker = AlpacaBroker(api_key="test_key", api_secret="test_secret", paper=True)
             broker.trading_client = MagicMock()
             return broker
 
@@ -263,7 +222,7 @@ class TestPositionRetrieval:
         connected_broker.trading_client.get_open_position.return_value = mock_position
 
         # Mock asyncio.to_thread to run synchronously
-        with patch('asyncio.to_thread', side_effect=lambda fn, *args, **kwargs: fn(*args, **kwargs)):
+        with patch("asyncio.to_thread", side_effect=lambda fn, *args, **kwargs: fn(*args, **kwargs)):
             result = await connected_broker.get_position("AAPL")
 
         assert result is not None
@@ -315,7 +274,7 @@ class TestPositionRetrieval:
         connected_broker.trading_client.get_account.return_value = mock_account
         connected_broker.trading_client.get_all_positions.return_value = [mock_pos1, mock_pos2]
 
-        with patch('asyncio.to_thread', side_effect=lambda fn, *args, **kwargs: fn(*args, **kwargs)):
+        with patch("asyncio.to_thread", side_effect=lambda fn, *args, **kwargs: fn(*args, **kwargs)):
             result = await connected_broker.get_account_info()
 
         assert result is not None
@@ -329,12 +288,8 @@ class TestMarketStatus:
 
     @pytest.fixture
     def connected_broker(self):
-        with patch('core.broker.alpaca_broker.Logger'):
-            broker = AlpacaBroker(
-                api_key="test_key",
-                api_secret="test_secret",
-                paper=True
-            )
+        with patch("core.broker.alpaca_broker.Logger"):
+            broker = AlpacaBroker(api_key="test_key", api_secret="test_secret", paper=True)
             broker.trading_client = MagicMock()
             return broker
 
@@ -366,12 +321,8 @@ class TestStreaming:
 
     @pytest.fixture
     def connected_broker(self):
-        with patch('core.broker.alpaca_broker.Logger'):
-            broker = AlpacaBroker(
-                api_key="test_key",
-                api_secret="test_secret",
-                paper=True
-            )
+        with patch("core.broker.alpaca_broker.Logger"):
+            broker = AlpacaBroker(api_key="test_key", api_secret="test_secret", paper=True)
             broker.trading_client = MagicMock()
             broker.stream = MagicMock()
             return broker
@@ -389,7 +340,7 @@ class TestStreaming:
         # subscribe_quotes may not exist, but stream.subscribe_quotes does
         callback = MagicMock()
 
-        if hasattr(connected_broker, 'subscribe_quotes'):
+        if hasattr(connected_broker, "subscribe_quotes"):
             connected_broker.subscribe_quotes(callback, "AAPL")
             connected_broker.stream.subscribe_quotes.assert_called()
         else:
@@ -433,12 +384,8 @@ class TestAccountInfo:
 
     @pytest.fixture
     def connected_broker(self):
-        with patch('core.broker.alpaca_broker.Logger'):
-            broker = AlpacaBroker(
-                api_key="test_key",
-                api_secret="test_secret",
-                paper=True
-            )
+        with patch("core.broker.alpaca_broker.Logger"):
+            broker = AlpacaBroker(api_key="test_key", api_secret="test_secret", paper=True)
             broker.trading_client = MagicMock()
             return broker
 
@@ -457,7 +404,7 @@ class TestAccountInfo:
         connected_broker.trading_client.get_account.return_value = mock_account
         connected_broker.trading_client.get_all_positions.return_value = mock_positions
 
-        with patch('asyncio.to_thread', side_effect=lambda fn, *args, **kwargs: fn(*args, **kwargs)):
+        with patch("asyncio.to_thread", side_effect=lambda fn, *args, **kwargs: fn(*args, **kwargs)):
             result = await connected_broker.get_account_info()
 
         assert result is not None
@@ -485,7 +432,7 @@ class TestAccountInfo:
         connected_broker.trading_client.get_account.return_value = mock_account
         connected_broker.trading_client.get_all_positions.return_value = [mock_pos]
 
-        with patch('asyncio.to_thread', side_effect=lambda fn, *args, **kwargs: fn(*args, **kwargs)):
+        with patch("asyncio.to_thread", side_effect=lambda fn, *args, **kwargs: fn(*args, **kwargs)):
             snapshot = await connected_broker.get_account_info()
 
         assert snapshot is not None
@@ -497,12 +444,8 @@ class TestErrorHandling:
 
     @pytest.fixture
     def broker(self):
-        with patch('core.broker.alpaca_broker.Logger'):
-            return AlpacaBroker(
-                api_key="test_key",
-                api_secret="test_secret",
-                paper=True
-            )
+        with patch("core.broker.alpaca_broker.Logger"):
+            return AlpacaBroker(api_key="test_key", api_secret="test_secret", paper=True)
 
     @pytest.mark.asyncio
     async def test_api_error_handling(self, broker):
@@ -511,12 +454,7 @@ class TestErrorHandling:
         broker.trading_client.submit_order.side_effect = Exception("API rate limit exceeded")
 
         with pytest.raises(Exception) as exc_info:
-            await broker.place_order(
-                symbol="AAPL",
-                side="buy",
-                qty=10,
-                order_type="market"
-            )
+            await broker.place_order(symbol="AAPL", side="buy", qty=10, order_type="market")
 
         assert "rate limit" in str(exc_info.value).lower()
 

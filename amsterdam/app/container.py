@@ -22,7 +22,8 @@ This module is part of the canonical path. Do not create runners or other
 core components directly - always go through the container.
 """
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
+
 from app.bootstrap import AppContext
 
 if TYPE_CHECKING:
@@ -51,8 +52,8 @@ class AppContainer:
             context: AppContext from bootstrap_app()
         """
         self.ctx = context
-        self._runner: Optional["BaseLiveRunner"] = None
-        self._event_handler: Optional["EventHandler"] = None
+        self._runner: BaseLiveRunner | None = None
+        self._event_handler: EventHandler | None = None
 
     def get_runner(self) -> "BaseLiveRunner":
         """Lazy-load runner from factory
@@ -65,12 +66,8 @@ class AppContainer:
         if self._runner is None:
             from core.runner_factory import RunnerFactory
 
-            broker = self.ctx.metadata.get('broker', 'schwab')
-            self._runner = RunnerFactory.create(
-                broker=broker,
-                symbols=self.ctx.symbols,
-                config=self.ctx.config
-            )
+            broker = self.ctx.metadata.get("broker", "schwab")
+            self._runner = RunnerFactory.create(broker=broker, symbols=self.ctx.symbols, config=self.ctx.config)
             self.ctx.logger.info(f"Runner initialized: {broker}")
         return self._runner
 
@@ -96,7 +93,7 @@ class AppContainer:
         self.ctx.logger.info("Cleaning up container resources")
 
         if self._runner is not None:
-            if hasattr(self._runner, 'cleanup'):
+            if hasattr(self._runner, "cleanup"):
                 try:
                     self._runner.cleanup()
                     self.ctx.logger.debug("Runner cleanup complete")
@@ -104,7 +101,7 @@ class AppContainer:
                     self.ctx.logger.error(f"Runner cleanup failed: {e}")
 
         if self._event_handler is not None:
-            if hasattr(self._event_handler, 'cleanup'):
+            if hasattr(self._event_handler, "cleanup"):
                 try:
                     self._event_handler.cleanup()
                     self.ctx.logger.debug("Event handler cleanup complete")

@@ -15,13 +15,14 @@ Responsibilities:
 from __future__ import annotations
 
 import uuid
-from typing import Optional, List, Any, Dict
-from core.base.executor_base import BaseExecutor
-from core.base.base_broker_interface import BaseBrokerInterface
-from core.enums import OrderSide, OrderType, OrderStatus
+from typing import Any
+
 from core.app_types import OrderResult
-from loggers.logger import Logger
+from core.base.base_broker_interface import BaseBrokerInterface
+from core.base.executor_base import BaseExecutor
+from core.enums import OrderSide, OrderStatus, OrderType
 from core.tracing import trace
+from loggers.logger import Logger
 
 
 class LiveExecutor(BaseExecutor):
@@ -45,11 +46,7 @@ class LiveExecutor(BaseExecutor):
         orders = executor.get_open_orders("AAPL")
     """
 
-    def __init__(
-        self,
-        broker: BaseBrokerInterface,
-        dry_run: bool = False
-    ):
+    def __init__(self, broker: BaseBrokerInterface, dry_run: bool = False):
         """
         Initialize live executor.
 
@@ -73,13 +70,8 @@ class LiveExecutor(BaseExecutor):
 
     @trace
     def place_order(
-        self,
-        symbol: str,
-        qty: int,
-        side: OrderSide,
-        order_type: OrderType = OrderType.MARKET,
-        **kwargs
-    ) -> Optional[OrderResult]:
+        self, symbol: str, qty: int, side: OrderSide, order_type: OrderType = OrderType.MARKET, **kwargs
+    ) -> OrderResult | None:
         """
         Place an order via broker.
 
@@ -97,10 +89,8 @@ class LiveExecutor(BaseExecutor):
             OrderResult if successful, None if failed
         """
         if self.dry_run:
-            price = kwargs.get('price', 0.0)
-            self.logger.info(
-                f"[DRY RUN] {side.value} {qty} {symbol} @ ${price:.2f}"
-            )
+            price = kwargs.get("price", 0.0)
+            self.logger.info(f"[DRY RUN] {side.value} {qty} {symbol} @ ${price:.2f}")
             return OrderResult(
                 order_id=f"dry_run_{uuid.uuid4()}",
                 symbol=symbol,
@@ -111,10 +101,7 @@ class LiveExecutor(BaseExecutor):
             )
 
         try:
-            self.logger.info(
-                f"[LIVE] Placing {order_type.value} {side.value} order: "
-                f"{symbol} {qty} shares"
-            )
+            self.logger.info(f"[LIVE] Placing {order_type.value} {side.value} order: {symbol} {qty} shares")
 
             # Build order kwargs
             order_kwargs = {
@@ -137,17 +124,13 @@ class LiveExecutor(BaseExecutor):
 
             # Place via broker
             if order_type == OrderType.MARKET:
-                response = self.broker.place_market_order(
-                    symbol=symbol,
-                    qty=qty,
-                    side=side.value.lower()
-                )
+                response = self.broker.place_market_order(symbol=symbol, qty=qty, side=side.value.lower())
             else:
                 response = self.broker.place_order(**order_kwargs)
 
             # Extract order info from response
             order_id = self._extract_order_id(response)
-            avg_price = kwargs.get('price', 0.0)
+            avg_price = kwargs.get("price", 0.0)
 
             self.logger.info(f"[{symbol}] Order placed: {order_id}")
 
@@ -174,31 +157,18 @@ class LiveExecutor(BaseExecutor):
         result = self.place_order(symbol, qty, OrderSide.SELL, **kwargs)
         return result is not None
 
-    def place_oco_order(
-        self,
-        symbol: str,
-        qty: int,
-        stop_price: float,
-        limit_price: float
-    ) -> bool:
+    def place_oco_order(self, symbol: str, qty: int, stop_price: float, limit_price: float) -> bool:
         """
         Place OCO (one-cancels-other) order.
 
         Not all brokers support this natively.
         """
         try:
-            if hasattr(self.broker, 'place_oco_order'):
-                self.broker.place_oco_order(
-                    symbol=symbol,
-                    qty=qty,
-                    stop_price=stop_price,
-                    limit_price=limit_price
-                )
+            if hasattr(self.broker, "place_oco_order"):
+                self.broker.place_oco_order(symbol=symbol, qty=qty, stop_price=stop_price, limit_price=limit_price)
                 return True
             else:
-                self.logger.warning(
-                    f"[{symbol}] OCO orders not supported by this broker"
-                )
+                self.logger.warning(f"[{symbol}] OCO orders not supported by this broker")
                 return False
         except Exception as e:
             self.logger.error(f"[{symbol}] OCO order failed: {e}")
@@ -218,7 +188,7 @@ class LiveExecutor(BaseExecutor):
             self.logger.error(f"Failed to cancel order {order_id}: {e}")
             return False
 
-    def get_open_orders(self, symbol: Optional[str] = None) -> List[Any]:
+    def get_open_orders(self, symbol: str | None = None) -> list[Any]:
         """Get open orders from broker."""
         try:
             return self.broker.get_open_orders(symbol)
@@ -226,11 +196,11 @@ class LiveExecutor(BaseExecutor):
             self.logger.error(f"Failed to get open orders: {e}")
             return []
 
-    def get_order_status(self, order_id: str) -> Optional[OrderStatus]:
+    def get_order_status(self, order_id: str) -> OrderStatus | None:
         """Get status of order."""
         try:
             order = self.broker.get_order(order_id)
-            if hasattr(order, 'status'):
+            if hasattr(order, "status"):
                 return OrderStatus(order.status)
             return None
         except Exception as e:
@@ -260,4 +230,3 @@ class LiveExecutor(BaseExecutor):
         """Retry failed order (not implemented)."""
         self.logger.warning("Order retry not implemented")
         return False
-

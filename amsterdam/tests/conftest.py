@@ -6,12 +6,14 @@ Provides:
 - Common fixtures
 - Test utilities
 """
-import pytest
+
 import asyncio
 import os
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 # Add project root to path
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,7 +22,7 @@ if str(ROOT) not in sys.path:
 
 
 # Configure pytest-asyncio
-pytest_plugins = ('pytest_asyncio',)
+pytest_plugins = ("pytest_asyncio",)
 
 
 @pytest.fixture(scope="session")
@@ -35,14 +37,15 @@ def event_loop():
 # Environment Fixtures
 # ============================================================================
 
+
 @pytest.fixture
 def mock_env_vars():
     """Mock environment variables for testing."""
     env_vars = {
-        'ALPACA_API_KEY': 'test_alpaca_key',
-        'ALPACA_SECRET_KEY': 'test_alpaca_secret',
-        'SCHWAB_API_KEY': 'test_schwab_key',
-        'SCHWAB_SECRET': 'test_schwab_secret',
+        "ALPACA_API_KEY": "test_alpaca_key",
+        "ALPACA_SECRET_KEY": "test_alpaca_secret",
+        "SCHWAB_API_KEY": "test_schwab_key",
+        "SCHWAB_SECRET": "test_schwab_secret",
     }
     with patch.dict(os.environ, env_vars):
         yield env_vars
@@ -52,8 +55,12 @@ def mock_env_vars():
 def clean_env():
     """Provide clean environment without trading credentials."""
     vars_to_remove = [
-        'ALPACA_API_KEY', 'ALPACA_KEY_ID', 'ALPACA_SECRET_KEY', 'ALPACA_SECRET',
-        'SCHWAB_API_KEY', 'SCHWAB_SECRET'
+        "ALPACA_API_KEY",
+        "ALPACA_KEY_ID",
+        "ALPACA_SECRET_KEY",
+        "ALPACA_SECRET",
+        "SCHWAB_API_KEY",
+        "SCHWAB_SECRET",
     ]
     original = {k: os.environ.get(k) for k in vars_to_remove}
 
@@ -72,41 +79,32 @@ def clean_env():
 # Broker Fixtures
 # ============================================================================
 
+
 @pytest.fixture
 def mock_broker():
     """Create a mock broker for testing."""
     from core.app_types import OrderResult, PositionView
 
     broker = MagicMock()
-    broker.place_order = AsyncMock(return_value=OrderResult(
-        order_id="ORD123",
-        symbol="AAPL",
-        side="buy",
-        qty=10,
-        status="filled",
-        filled_qty=10,
-        avg_fill_price=150.0,
-        raw={}
-    ))
-    broker.cancel_order = AsyncMock(return_value=OrderResult(
-        order_id="ORD123",
-        status="cancelled",
-        raw={}
-    ))
-    broker.get_position = AsyncMock(return_value=PositionView(
-        symbol="AAPL",
-        qty=100,
-        avg_entry_price=145.0,
-        market_price=150.0,
-        side="long"
-    ))
+    broker.place_order = AsyncMock(
+        return_value=OrderResult(
+            order_id="ORD123",
+            symbol="AAPL",
+            side="buy",
+            qty=10,
+            status="filled",
+            filled_qty=10,
+            avg_fill_price=150.0,
+            raw={},
+        )
+    )
+    broker.cancel_order = AsyncMock(return_value=OrderResult(order_id="ORD123", status="cancelled", raw={}))
+    broker.get_position = AsyncMock(
+        return_value=PositionView(symbol="AAPL", qty=100, avg_entry_price=145.0, market_price=150.0, side="long")
+    )
     broker.get_all_positions = AsyncMock(return_value=[])
     broker.is_market_open = AsyncMock(return_value=True)
-    broker.get_account = AsyncMock(return_value=MagicMock(
-        equity=100000.0,
-        buying_power=50000.0,
-        cash=25000.0
-    ))
+    broker.get_account = AsyncMock(return_value=MagicMock(equity=100000.0, buying_power=50000.0, cash=25000.0))
     broker.connect = MagicMock()
     broker.subscribe_bars = MagicMock()
     broker.start_stream = AsyncMock()
@@ -132,6 +130,7 @@ def mock_schwab_broker(mock_broker):
 # ============================================================================
 # Trading Component Fixtures
 # ============================================================================
+
 
 @pytest.fixture
 def mock_sizer():
@@ -171,7 +170,7 @@ def mock_strategy_router():
     """Create a mock strategy router."""
     router = MagicMock()
     mock_strategy = MagicMock()
-    mock_strategy.generate_signal.return_value = {'signal': 'buy', 'strength': 0.8}
+    mock_strategy.generate_signal.return_value = {"signal": "buy", "strength": 0.8}
     router.get_strategy.return_value = mock_strategy
     return router
 
@@ -203,25 +202,36 @@ def mock_trade_gate():
 # Data Fixtures
 # ============================================================================
 
+
 @pytest.fixture
 def sample_bar_data():
     """Provide sample bar data for testing."""
     from datetime import datetime, timezone
+
     return [
         {
-            'timestamp': datetime(2024, 1, 8, 10, 0, tzinfo=timezone.utc),
-            'Open': 150.0, 'High': 151.0, 'Low': 149.0,
-            'Close': 150.5, 'Volume': 1000
+            "timestamp": datetime(2024, 1, 8, 10, 0, tzinfo=timezone.utc),
+            "Open": 150.0,
+            "High": 151.0,
+            "Low": 149.0,
+            "Close": 150.5,
+            "Volume": 1000,
         },
         {
-            'timestamp': datetime(2024, 1, 8, 10, 1, tzinfo=timezone.utc),
-            'Open': 150.5, 'High': 152.0, 'Low': 150.0,
-            'Close': 151.0, 'Volume': 1100
+            "timestamp": datetime(2024, 1, 8, 10, 1, tzinfo=timezone.utc),
+            "Open": 150.5,
+            "High": 152.0,
+            "Low": 150.0,
+            "Close": 151.0,
+            "Volume": 1100,
         },
         {
-            'timestamp': datetime(2024, 1, 8, 10, 2, tzinfo=timezone.utc),
-            'Open': 151.0, 'High': 153.0, 'Low': 150.5,
-            'Close': 152.5, 'Volume': 1200
+            "timestamp": datetime(2024, 1, 8, 10, 2, tzinfo=timezone.utc),
+            "Open": 151.0,
+            "High": 153.0,
+            "Low": 150.5,
+            "Close": 152.5,
+            "Volume": 1200,
         },
     ]
 
@@ -230,6 +240,7 @@ def sample_bar_data():
 def sample_ohlcv_df(sample_bar_data):
     """Provide sample OHLCV DataFrame."""
     import pandas as pd
+
     return pd.DataFrame(sample_bar_data)
 
 
@@ -237,23 +248,20 @@ def sample_ohlcv_df(sample_bar_data):
 def sample_position():
     """Provide sample position data."""
     from core.app_types import PositionView
-    return PositionView(
-        symbol="AAPL",
-        qty=100,
-        avg_entry_price=145.0,
-        market_price=150.0,
-        side="long"
-    )
+
+    return PositionView(symbol="AAPL", qty=100, avg_entry_price=145.0, market_price=150.0, side="long")
 
 
 # ============================================================================
 # Config Fixtures
 # ============================================================================
 
+
 @pytest.fixture
 def mock_config():
     """Create a mock trading config."""
     from core.config_loader import TradingConfig
+
     return TradingConfig()
 
 
@@ -261,33 +269,17 @@ def mock_config():
 def sample_config_dict():
     """Provide sample configuration dictionary."""
     return {
-        "general": {
-            "default_symbols": ["AAPL", "MSFT"],
-            "default_mode": "simulation",
-            "log_level": "INFO"
-        },
-        "simulation": {
-            "enabled": True,
-            "steps": 1000,
-            "bar_sleep": 0.1,
-            "starting_cash": 100000.0
-        },
-        "risk": {
-            "risk_per_trade": 0.01,
-            "max_trade_pct": 0.10,
-            "daily_loss_limit": 1000.0
-        },
-        "trade_logic": {
-            "cooldown_bars": 5,
-            "tp_mult_normal": 2.0,
-            "sl_mult_normal": 1.5
-        }
+        "general": {"default_symbols": ["AAPL", "MSFT"], "default_mode": "simulation", "log_level": "INFO"},
+        "simulation": {"enabled": True, "steps": 1000, "bar_sleep": 0.1, "starting_cash": 100000.0},
+        "risk": {"risk_per_trade": 0.01, "max_trade_pct": 0.10, "daily_loss_limit": 1000.0},
+        "trade_logic": {"cooldown_bars": 5, "tp_mult_normal": 2.0, "sl_mult_normal": 1.5},
     }
 
 
 # ============================================================================
 # Event Fixtures
 # ============================================================================
+
 
 @pytest.fixture
 def mock_event_handler():
@@ -303,6 +295,7 @@ def mock_event_handler():
 # File System Fixtures
 # ============================================================================
 
+
 @pytest.fixture
 def temp_data_dir(tmp_path):
     """Create a temporary data directory structure."""
@@ -314,27 +307,21 @@ def temp_data_dir(tmp_path):
     for d in [proc_data, raw_data, logs, config]:
         d.mkdir(parents=True)
 
-    return {
-        'root': tmp_path,
-        'proc_data': proc_data,
-        'raw_data': raw_data,
-        'logs': logs,
-        'config': config
-    }
+    return {"root": tmp_path, "proc_data": proc_data, "raw_data": raw_data, "logs": logs, "config": config}
 
 
 @pytest.fixture
 def sample_token_file(tmp_path):
     """Create a sample Schwab token file."""
-    import time
     import json
+    import time
 
     token_data = {
         "access_token": "test_access_token",
         "refresh_token": "test_refresh_token",
         "access_time": time.time(),
         "refresh_time": time.time(),
-        "expires_in": 1800
+        "expires_in": 1800,
     }
 
     token_dir = tmp_path / "tokens"
@@ -348,6 +335,7 @@ def sample_token_file(tmp_path):
 # ============================================================================
 # Utility Functions
 # ============================================================================
+
 
 def create_mock_bar(symbol, price, volume=1000):
     """Create a mock bar object."""
@@ -376,5 +364,5 @@ def create_mock_order_result(order_id, symbol, side, qty, status="filled", fill_
         status=status,
         filled_qty=qty if status == "filled" else 0,
         avg_fill_price=fill_price,
-        raw={}
+        raw={},
     )

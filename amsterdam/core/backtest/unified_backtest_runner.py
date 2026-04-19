@@ -25,16 +25,17 @@ Usage:
 
 from __future__ import annotations
 
+import logging
+from dataclasses import dataclass, field
+from typing import Any
+
 import numpy as np
 import pandas as pd
-from dataclasses import dataclass, field
-from typing import Dict, List, Any, Optional, Tuple
-import logging
 
-from strategies.strategy_registry import load_strategy, list_strategies
+from core.backtest.slippage_models import FixedSlippage, SlippageModel
 from core.backtest.validation import validate_ohlcv_data
-from core.backtest.slippage_models import SlippageModel, FixedSlippage
-from core.logic.hybrid_position_sizer import HybridPositionSizer, HybridSizingResult
+from core.logic.hybrid_position_sizer import HybridPositionSizer
+from strategies.strategy_registry import list_strategies, load_strategy
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +58,7 @@ def get_strategy_category(strategy_name: str) -> str:
     return "unknown"
 
 
-def get_strategies_by_category(category: str) -> List[str]:
+def get_strategies_by_category(category: str) -> list[str]:
     """Get all strategies in a category."""
     return STRATEGY_CATEGORIES.get(category.lower(), [])
 
@@ -67,7 +68,7 @@ class BacktestConfig:
     """Configuration for running a backtest."""
 
     strategy_name: str
-    strategy_params: Dict[str, Any] = field(default_factory=dict)
+    strategy_params: dict[str, Any] = field(default_factory=dict)
 
     # Position sizing
     position_sizing: str = "fixed"  # "fixed", "volatility_scaled", "risk_parity"
@@ -84,7 +85,7 @@ class BacktestConfig:
 
     # Hybrid sizing
     use_hybrid_sizing: bool = False
-    hybrid_config: Optional[Dict[str, Any]] = None
+    hybrid_config: dict[str, Any] | None = None
 
     # Confidence settings (for hybrid sizing)
     default_confidence: float = 0.6  # Default if strategy doesn't provide confidence
@@ -99,9 +100,9 @@ class TradeRecord:
     entry_signal: int  # 1 for buy, -1 for sell
     quantity: int
 
-    exit_idx: Optional[int] = None
-    exit_price: Optional[float] = None
-    exit_reason: Optional[str] = None  # "signal", "stop_loss", "take_profit"
+    exit_idx: int | None = None
+    exit_price: float | None = None
+    exit_reason: str | None = None  # "signal", "stop_loss", "take_profit"
 
     pnl: float = 0.0
     pnl_pct: float = 0.0
@@ -144,7 +145,7 @@ class BacktestMetrics:
     cagr: float = 0.0
     calmar_ratio: float = 0.0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert metrics to dictionary."""
         return {
             "total_return": self.total_return,
@@ -186,7 +187,7 @@ class BacktestResult:
     drawdown: pd.Series = field(default_factory=lambda: pd.Series(dtype=float))
 
     # Trade log
-    trades: List[TradeRecord] = field(default_factory=list)
+    trades: list[TradeRecord] = field(default_factory=list)
 
     # Signal series
     signals: pd.Series = field(default_factory=lambda: pd.Series(dtype=int))
@@ -201,21 +202,23 @@ class BacktestResult:
 
         records = []
         for t in self.trades:
-            records.append({
-                "entry_idx": t.entry_idx,
-                "entry_price": t.entry_price,
-                "signal": t.entry_signal,
-                "quantity": t.quantity,
-                "exit_idx": t.exit_idx,
-                "exit_price": t.exit_price,
-                "exit_reason": t.exit_reason,
-                "pnl": t.pnl,
-                "pnl_pct": t.pnl_pct,
-                "trend": t.trend,
-                "aligned": t.aligned,
-                "confidence": t.confidence,
-                "size_multiplier": t.size_multiplier,
-            })
+            records.append(
+                {
+                    "entry_idx": t.entry_idx,
+                    "entry_price": t.entry_price,
+                    "signal": t.entry_signal,
+                    "quantity": t.quantity,
+                    "exit_idx": t.exit_idx,
+                    "exit_price": t.exit_price,
+                    "exit_reason": t.exit_reason,
+                    "pnl": t.pnl,
+                    "pnl_pct": t.pnl_pct,
+                    "trend": t.trend,
+                    "aligned": t.aligned,
+                    "confidence": t.confidence,
+                    "size_multiplier": t.size_multiplier,
+                }
+            )
 
         return pd.DataFrame(records)
 
@@ -234,7 +237,7 @@ class UnifiedBacktestRunner:
     def __init__(
         self,
         data: pd.DataFrame,
-        slippage_model: Optional[SlippageModel] = None,
+        slippage_model: SlippageModel | None = None,
     ):
         """
         Initialize the backtest runner.
@@ -285,18 +288,12 @@ class UnifiedBacktestRunner:
         low = self.data["Low"].values
         close = self.data["Close"].values
 
-        tr = np.maximum(
-            high - low,
-            np.maximum(
-                np.abs(high - np.roll(close, 1)),
-                np.abs(low - np.roll(close, 1))
-            )
-        )
+        tr = np.maximum(high - low, np.maximum(np.abs(high - np.roll(close, 1)), np.abs(low - np.roll(close, 1))))
         tr[0] = high[0] - low[0]
 
         self.data["ATR"] = pd.Series(tr).rolling(period).mean().values
 
-    def _build_daily_context(self) -> Dict[int, Dict[str, Any]]:
+    def _build_daily_context(self) -> dict[int, dict[str, Any]]:
         """
         Build daily context for each bar for hybrid sizing.
 
@@ -360,10 +357,7 @@ class UnifiedBacktestRunner:
         # Initialize hybrid sizer if enabled
         hybrid_sizer = None
         if config.use_hybrid_sizing:
-            hybrid_sizer = HybridPositionSizer(
-                enabled=True,
-                config=config.hybrid_config
-            )
+            hybrid_sizer = HybridPositionSizer(enabled=True, config=config.hybrid_config)
 
         # Run simulation
         result_df, trades = self._simulate(
@@ -383,7 +377,7 @@ class UnifiedBacktestRunner:
             returns=result_df["Strategy_Return"],
             drawdown=result_df["Drawdown"],
             trades=trades,
-            signals=pd.Series(signals, index=self.data.index if hasattr(self.data, 'index') else None),
+            signals=pd.Series(signals, index=self.data.index if hasattr(self.data, "index") else None),
             result_df=result_df,
         )
 
@@ -408,7 +402,7 @@ class UnifiedBacktestRunner:
         # Fall back to row-by-row
         for i in range(n):
             try:
-                sig = strategy.generate_signal(self.data.iloc[:i+1])
+                sig = strategy.generate_signal(self.data.iloc[: i + 1])
                 signals[i] = int(sig) if sig in (-1, 0, 1) else 0
             except Exception:
                 signals[i] = 0
@@ -419,8 +413,8 @@ class UnifiedBacktestRunner:
         self,
         signals: np.ndarray,
         config: BacktestConfig,
-        hybrid_sizer: Optional[HybridPositionSizer] = None,
-    ) -> Tuple[pd.DataFrame, List[TradeRecord]]:
+        hybrid_sizer: HybridPositionSizer | None = None,
+    ) -> tuple[pd.DataFrame, list[TradeRecord]]:
         """
         Simulate trading with the given signals.
 
@@ -442,12 +436,12 @@ class UnifiedBacktestRunner:
         cash[0] = config.initial_capital
         portfolio_value[0] = config.initial_capital
 
-        trades: List[TradeRecord] = []
-        current_trade: Optional[TradeRecord] = None
+        trades: list[TradeRecord] = []
+        current_trade: TradeRecord | None = None
 
         for i in range(1, n):
-            cash[i] = cash[i-1]
-            position[i] = position[i-1]
+            cash[i] = cash[i - 1]
+            position[i] = position[i - 1]
 
             current_price = close[i]
             current_atr = atr[i] if not np.isnan(atr[i]) else current_price * 0.02
@@ -495,7 +489,9 @@ class UnifiedBacktestRunner:
             if signal == 1 and can_enter_long and quantity > 0:
                 # Close short if any (only if signal_based_exits enabled)
                 if position[i] < 0 and current_trade is not None and config.signal_based_exits:
-                    exec_price = self._get_exec_price(current_price, abs(int(position[i])), "buy", volume[i], current_atr)
+                    exec_price = self._get_exec_price(
+                        current_price, abs(int(position[i])), "buy", volume[i], current_atr
+                    )
                     cost = abs(position[i]) * exec_price * (1 + config.transaction_cost)
                     cash[i] -= cost
 
@@ -503,7 +499,9 @@ class UnifiedBacktestRunner:
                     current_trade.exit_price = exec_price
                     current_trade.exit_reason = "signal"
                     current_trade.pnl = (current_trade.entry_price - exec_price) * abs(current_trade.quantity)
-                    current_trade.pnl_pct = current_trade.pnl / (current_trade.entry_price * abs(current_trade.quantity))
+                    current_trade.pnl_pct = current_trade.pnl / (
+                        current_trade.entry_price * abs(current_trade.quantity)
+                    )
                     trades.append(current_trade)
                     position[i] = 0
 
@@ -621,7 +619,7 @@ class UnifiedBacktestRunner:
     def _calculate_metrics(
         self,
         result_df: pd.DataFrame,
-        trades: List[TradeRecord],
+        trades: list[TradeRecord],
         config: BacktestConfig,
     ) -> BacktestMetrics:
         """Calculate comprehensive metrics."""
@@ -720,7 +718,7 @@ class UnifiedBacktestRunner:
     def run_strategy(
         self,
         strategy_name: str,
-        strategy_params: Optional[Dict[str, Any]] = None,
+        strategy_params: dict[str, Any] | None = None,
         use_hybrid: bool = False,
         **kwargs,
     ) -> BacktestResult:
@@ -747,9 +745,9 @@ class UnifiedBacktestRunner:
     def compare_hybrid(
         self,
         strategy_name: str,
-        strategy_params: Optional[Dict[str, Any]] = None,
+        strategy_params: dict[str, Any] | None = None,
         **kwargs,
-    ) -> Tuple[BacktestResult, BacktestResult]:
+    ) -> tuple[BacktestResult, BacktestResult]:
         """
         Run strategy with and without hybrid sizing for comparison.
 
@@ -782,11 +780,11 @@ class UnifiedBacktestRunner:
         return standard_result, hybrid_result
 
 
-def list_available_strategies() -> List[str]:
+def list_available_strategies() -> list[str]:
     """Get list of all available strategies."""
     return list_strategies()
 
 
-def list_categories() -> Dict[str, List[str]]:
+def list_categories() -> dict[str, list[str]]:
     """Get all strategy categories with their strategies."""
     return STRATEGY_CATEGORIES.copy()

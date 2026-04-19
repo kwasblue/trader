@@ -1,17 +1,17 @@
 """
 Technical data provider — wraps existing HistoricalBarLoader and TechnicalIndicators.
 """
+
 from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Dict, List
 
 import pandas as pd
 
-from scanner.providers.base import BaseDataProvider, ProviderData
 from core.historical_loader import HistoricalBarLoader
 from indicators.technical_indicators import TechnicalIndicators
+from scanner.providers.base import BaseDataProvider, ProviderData
 
 logger = logging.getLogger(__name__)
 
@@ -46,20 +46,27 @@ class TechnicalProvider(BaseDataProvider):
         df = TechnicalIndicators(df).apply_all()
 
         # Normalize to lowercase for consistent access in criteria
-        df = df.rename(columns={"Open": "open", "High": "high", "Low": "low",
-                                "Close": "close", "Volume": "volume"})
+        df = df.rename(columns={"Open": "open", "High": "high", "Low": "low", "Close": "close", "Volume": "volume"})
 
         # Build summary dict from latest row
         latest = df.iloc[-1] if len(df) > 0 else {}
         summary = {}
         # Map canonical names to actual indicator column names
         key_aliases = {
-            "close": "close", "volume": "volume", "RSI": "RSI",
-            "MACD": "MACD", "MACD_signal": "MACD_Signal",
-            "SMA": "SMA_20", "EMA": "EMA_20", "ATR": "ATR",
-            "OBV": "OBV", "BB_upper": "Bollinger_Upper",
+            "close": "close",
+            "volume": "volume",
+            "RSI": "RSI",
+            "MACD": "MACD",
+            "MACD_signal": "MACD_Signal",
+            "SMA": "SMA_20",
+            "EMA": "EMA_20",
+            "ATR": "ATR",
+            "OBV": "OBV",
+            "BB_upper": "Bollinger_Upper",
             "BB_lower": "Bollinger_Lower",
-            "Momentum": "Momentum", "ROC": "ROC", "PSAR": "SAR",
+            "Momentum": "Momentum",
+            "ROC": "ROC",
+            "PSAR": "SAR",
         }
         for out_key, col_key in key_aliases.items():
             if col_key in latest.index:

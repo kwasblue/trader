@@ -26,13 +26,13 @@ import json
 import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import List, Dict, Any, Optional
 from threading import Lock
+from typing import Any
 
+from alpaca.data.enums import DataFeed
 from alpaca.data.historical.stock import StockHistoricalDataClient
 from alpaca.data.requests import StockBarsRequest
 from alpaca.data.timeframe import TimeFrame
-from alpaca.data.enums import DataFeed
 
 from loggers.logger import Logger
 
@@ -49,7 +49,7 @@ class HistoricalDataUpdater:
         self,
         api_key: str,
         api_secret: str,
-        data_path: Optional[str] = None,
+        data_path: str | None = None,
         timeframe: TimeFrame = TimeFrame.Minute,
     ):
         """
@@ -79,11 +79,7 @@ class HistoricalDataUpdater:
         self._file_lock = Lock()
 
         # Logger
-        self.logger = Logger(
-            "historical_updater.log",
-            "HistoricalDataUpdater",
-            propagate=True
-        ).get_logger()
+        self.logger = Logger("historical_updater.log", "HistoricalDataUpdater", propagate=True).get_logger()
 
         self.logger.info(f"HistoricalDataUpdater initialized. Data path: {self.data_path}")
 
@@ -91,12 +87,7 @@ class HistoricalDataUpdater:
     # PUBLIC METHODS
     # ========================================================================
 
-    async def update_symbol(
-        self,
-        symbol: str,
-        days: int = 30,
-        force_full: bool = False
-    ) -> int:
+    async def update_symbol(self, symbol: str, days: int = 30, force_full: bool = False) -> int:
         """
         Update historical data for a single symbol.
 
@@ -149,12 +140,8 @@ class HistoricalDataUpdater:
             return 0
 
     async def update_symbols(
-        self,
-        symbols: List[str],
-        days: int = 30,
-        force_full: bool = False,
-        max_concurrent: int = 5
-    ) -> Dict[str, int]:
+        self, symbols: list[str], days: int = 30, force_full: bool = False, max_concurrent: int = 5
+    ) -> dict[str, int]:
         """
         Update historical data for multiple symbols.
 
@@ -193,12 +180,7 @@ class HistoricalDataUpdater:
 
         return output
 
-    async def run_periodic(
-        self,
-        symbols: List[str],
-        interval_minutes: int = 60,
-        days: int = 5
-    ) -> None:
+    async def run_periodic(self, symbols: list[str], interval_minutes: int = 60, days: int = 5) -> None:
         """
         Run periodic updates as a background task.
 
@@ -207,10 +189,7 @@ class HistoricalDataUpdater:
             interval_minutes: Update interval in minutes
             days: Days of history to maintain
         """
-        self.logger.info(
-            f"Starting periodic updater: {len(symbols)} symbols, "
-            f"every {interval_minutes} minutes"
-        )
+        self.logger.info(f"Starting periodic updater: {len(symbols)} symbols, every {interval_minutes} minutes")
 
         while True:
             try:
@@ -220,7 +199,7 @@ class HistoricalDataUpdater:
 
             await asyncio.sleep(interval_minutes * 60)
 
-    def get_data_freshness(self, symbol: str) -> Optional[Dict[str, Any]]:
+    def get_data_freshness(self, symbol: str) -> dict[str, Any] | None:
         """
         Get information about data freshness for a symbol.
 
@@ -233,15 +212,15 @@ class HistoricalDataUpdater:
             return None
 
         try:
-            with open(file_path, 'r') as f:
+            with open(file_path) as f:
                 data = json.load(f)
 
-            bars = data.get('bars', data) if isinstance(data, dict) else data
+            bars = data.get("bars", data) if isinstance(data, dict) else data
             if not bars:
                 return None
 
             last_bar = bars[-1]
-            last_ts_raw = last_bar.get('Date') or last_bar.get('timestamp')
+            last_ts_raw = last_bar.get("Date") or last_bar.get("timestamp")
 
             if isinstance(last_ts_raw, (int, float)) and last_ts_raw > 10_000_000_000:
                 last_ts = datetime.fromtimestamp(last_ts_raw / 1000.0, tz=timezone.utc)
@@ -254,11 +233,11 @@ class HistoricalDataUpdater:
             age = datetime.now(timezone.utc) - last_ts
 
             return {
-                'symbol': symbol,
-                'last_timestamp': last_ts.isoformat(),
-                'bar_count': len(bars),
-                'age_minutes': int(age.total_seconds() / 60),
-                'is_stale': age > timedelta(hours=1)
+                "symbol": symbol,
+                "last_timestamp": last_ts.isoformat(),
+                "bar_count": len(bars),
+                "age_minutes": int(age.total_seconds() / 60),
+                "is_stale": age > timedelta(hours=1),
             }
 
         except Exception as e:
@@ -269,12 +248,7 @@ class HistoricalDataUpdater:
     # PRIVATE METHODS
     # ========================================================================
 
-    async def _fetch_bars(
-        self,
-        symbol: str,
-        start: datetime,
-        end: datetime
-    ) -> List[Dict[str, Any]]:
+    async def _fetch_bars(self, symbol: str, start: datetime, end: datetime) -> list[dict[str, Any]]:
         """Fetch bars from Alpaca API."""
 
         def _do_fetch():
@@ -294,24 +268,28 @@ class HistoricalDataUpdater:
             symbol_bars = bars_response[symbol] if symbol in bars_response.data else []
 
             for bar in symbol_bars:
-                bars.append({
-                    'Date': int(bar.timestamp.timestamp() * 1000),  # epoch ms
-                    'Symbol': symbol,
-                    'Open': float(bar.open),
-                    'High': float(bar.high),
-                    'Low': float(bar.low),
-                    'Close': float(bar.close),
-                    'Volume': int(bar.volume),
-                    'VWAP': float(bar.vwap) if hasattr(bar, 'vwap') and bar.vwap else None,
-                    'trade_count': int(bar.trade_count) if hasattr(bar, 'trade_count') and bar.trade_count else None,
-                })
+                bars.append(
+                    {
+                        "Date": int(bar.timestamp.timestamp() * 1000),  # epoch ms
+                        "Symbol": symbol,
+                        "Open": float(bar.open),
+                        "High": float(bar.high),
+                        "Low": float(bar.low),
+                        "Close": float(bar.close),
+                        "Volume": int(bar.volume),
+                        "VWAP": float(bar.vwap) if hasattr(bar, "vwap") and bar.vwap else None,
+                        "trade_count": int(bar.trade_count)
+                        if hasattr(bar, "trade_count") and bar.trade_count
+                        else None,
+                    }
+                )
 
             return bars
 
         # Run in thread pool to not block event loop
         return await asyncio.to_thread(_do_fetch)
 
-    def _get_last_timestamp(self, symbol: str) -> Optional[datetime]:
+    def _get_last_timestamp(self, symbol: str) -> datetime | None:
         """Get the last timestamp from existing data file."""
         file_path = self.data_path / f"proc_{symbol}_file.json"
 
@@ -319,15 +297,15 @@ class HistoricalDataUpdater:
             return None
 
         try:
-            with open(file_path, 'r') as f:
+            with open(file_path) as f:
                 data = json.load(f)
 
-            bars = data.get('bars', data) if isinstance(data, dict) else data
+            bars = data.get("bars", data) if isinstance(data, dict) else data
             if not bars:
                 return None
 
             last_bar = bars[-1]
-            ts_raw = last_bar.get('Date') or last_bar.get('timestamp')
+            ts_raw = last_bar.get("Date") or last_bar.get("timestamp")
 
             if isinstance(ts_raw, (int, float)) and ts_raw > 10_000_000_000:
                 return datetime.fromtimestamp(ts_raw / 1000.0, tz=timezone.utc)
@@ -338,12 +316,7 @@ class HistoricalDataUpdater:
             self.logger.warning(f"[{symbol}] Failed to read last timestamp: {e}")
             return None
 
-    def _save_bars(
-        self,
-        symbol: str,
-        new_bars: List[Dict[str, Any]],
-        append: bool = True
-    ) -> None:
+    def _save_bars(self, symbol: str, new_bars: list[dict[str, Any]], append: bool = True) -> None:
         """Save bars to JSON file."""
         file_path = self.data_path / f"proc_{symbol}_file.json"
 
@@ -352,9 +325,9 @@ class HistoricalDataUpdater:
                 existing_bars = []
 
                 if append and file_path.exists():
-                    with open(file_path, 'r') as f:
+                    with open(file_path) as f:
                         data = json.load(f)
-                    existing_bars = data.get('bars', data) if isinstance(data, dict) else data
+                    existing_bars = data.get("bars", data) if isinstance(data, dict) else data
 
                 # Merge and deduplicate by timestamp
                 all_bars = existing_bars + new_bars
@@ -362,13 +335,13 @@ class HistoricalDataUpdater:
                 unique_bars = []
 
                 for bar in all_bars:
-                    ts = bar.get('Date') or bar.get('timestamp')
+                    ts = bar.get("Date") or bar.get("timestamp")
                     if ts not in seen_timestamps:
                         seen_timestamps.add(ts)
                         unique_bars.append(bar)
 
                 # Sort by timestamp
-                unique_bars.sort(key=lambda b: b.get('Date') or b.get('timestamp') or 0)
+                unique_bars.sort(key=lambda b: b.get("Date") or b.get("timestamp") or 0)
 
                 # Keep only last N bars to prevent unbounded growth
                 max_bars = 50000  # ~34 days of 1-min bars
@@ -376,12 +349,10 @@ class HistoricalDataUpdater:
                     unique_bars = unique_bars[-max_bars:]
 
                 # Save
-                with open(file_path, 'w') as f:
-                    json.dump({'bars': unique_bars}, f)
+                with open(file_path, "w") as f:
+                    json.dump({"bars": unique_bars}, f)
 
-                self.logger.debug(
-                    f"[{symbol}] Saved {len(unique_bars)} bars to {file_path}"
-                )
+                self.logger.debug(f"[{symbol}] Saved {len(unique_bars)} bars to {file_path}")
 
             except Exception as e:
                 self.logger.exception(f"[{symbol}] Failed to save bars: {e}")
@@ -392,28 +363,26 @@ class HistoricalDataUpdater:
 # STANDALONE ENTRY POINT
 # ============================================================================
 
+
 async def main():
     """Standalone entry point for historical data updates."""
     import argparse
+
     from dotenv import load_dotenv
 
     # Load environment
     load_dotenv()
 
-    parser = argparse.ArgumentParser(description='Update historical data from Alpaca')
-    parser.add_argument('--symbols', nargs='+', default=['AAPL', 'MSFT'],
-                        help='Symbols to update')
-    parser.add_argument('--days', type=int, default=30,
-                        help='Days of history to fetch')
-    parser.add_argument('--force', action='store_true',
-                        help='Force full refresh (not incremental)')
-    parser.add_argument('--periodic', type=int, default=0,
-                        help='Run periodically every N minutes (0 = one-shot)')
+    parser = argparse.ArgumentParser(description="Update historical data from Alpaca")
+    parser.add_argument("--symbols", nargs="+", default=["AAPL", "MSFT"], help="Symbols to update")
+    parser.add_argument("--days", type=int, default=30, help="Days of history to fetch")
+    parser.add_argument("--force", action="store_true", help="Force full refresh (not incremental)")
+    parser.add_argument("--periodic", type=int, default=0, help="Run periodically every N minutes (0 = one-shot)")
 
     args = parser.parse_args()
 
-    api_key = os.getenv('ALPACA_API_KEY') or os.getenv('ALPACA_KEY_ID')
-    api_secret = os.getenv('ALPACA_SECRET_KEY') or os.getenv('ALPACA_SECRET')
+    api_key = os.getenv("ALPACA_API_KEY") or os.getenv("ALPACA_KEY_ID")
+    api_secret = os.getenv("ALPACA_SECRET_KEY") or os.getenv("ALPACA_SECRET")
 
     if not api_key or not api_secret:
         print("Error: ALPACA_API_KEY and ALPACA_SECRET_KEY must be set")
@@ -426,9 +395,11 @@ async def main():
     for symbol in args.symbols:
         freshness = updater.get_data_freshness(symbol)
         if freshness:
-            print(f"  {symbol}: {freshness['bar_count']} bars, "
-                  f"age={freshness['age_minutes']} min, "
-                  f"stale={freshness['is_stale']}")
+            print(
+                f"  {symbol}: {freshness['bar_count']} bars, "
+                f"age={freshness['age_minutes']} min, "
+                f"stale={freshness['is_stale']}"
+            )
         else:
             print(f"  {symbol}: No data")
 
@@ -444,5 +415,5 @@ async def main():
             print(f"  {symbol}: {count} bars fetched")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     asyncio.run(main())

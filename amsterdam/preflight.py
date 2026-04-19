@@ -26,13 +26,12 @@ Usage:
 
 from __future__ import annotations
 
+import argparse
+import asyncio
 import os
 import sys
-import asyncio
-import argparse
-from pathlib import Path
 from datetime import datetime, timezone
-from typing import Dict, Any, List
+from pathlib import Path
 
 # Add project root to path
 ROOT = Path(__file__).resolve().parent
@@ -40,12 +39,14 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from dotenv import load_dotenv
+
 load_dotenv(ROOT / ".env")
 
-from core.credential_validator import CredentialValidator, CredentialStatus, ValidationResult
-from core.unified_data_pipeline import UnifiedDataPipeline
-from core.config_loader import get_config
 import subprocess
+
+from core.config_loader import get_config
+from core.credential_validator import CredentialStatus, CredentialValidator
+from core.unified_data_pipeline import UnifiedDataPipeline
 
 
 class PreFlightChecker:
@@ -58,12 +59,13 @@ class PreFlightChecker:
     def __init__(self, verbose: bool = False):
         self.verbose = verbose
         self.validator = CredentialValidator()
-        self.issues: List[str] = []
-        self.warnings: List[str] = []
-        self.passed: List[str] = []
+        self.issues: list[str] = []
+        self.warnings: list[str] = []
+        self.passed: list[str] = []
 
         # Setup file logging
         from loggers.logger import Logger
+
         self.logger = Logger(
             "preflight.log",
             "PreFlightChecker",
@@ -76,9 +78,9 @@ class PreFlightChecker:
 
     def print_header(self, text: str) -> None:
         """Print a section header."""
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"  {text}")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
 
     def print_status(self, name: str, passed: bool, message: str) -> None:
         """Print a status line and log it."""
@@ -100,7 +102,7 @@ class PreFlightChecker:
 
     async def run_all_checks(
         self,
-        symbols: List[str],
+        symbols: list[str],
         update_data: bool = False,
         reauth_schwab: bool = False,
         optimize_strategies: bool = False,
@@ -119,12 +121,14 @@ class PreFlightChecker:
         Returns:
             True if all critical checks pass
         """
-        timestamp = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
+        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
         self.logger.info(f"Starting pre-flight checks at {timestamp}")
         self.logger.info(f"Symbols: {symbols}")
-        self.logger.info(f"Options: update_data={update_data}, reauth_schwab={reauth_schwab}, "
-                        f"optimize_strategies={optimize_strategies}")
+        self.logger.info(
+            f"Options: update_data={update_data}, reauth_schwab={reauth_schwab}, "
+            f"optimize_strategies={optimize_strategies}"
+        )
 
         self.print_header("PRE-FLIGHT SYSTEM CHECK")
         print(f"  Timestamp: {timestamp}")
@@ -154,10 +158,10 @@ class PreFlightChecker:
         self.print_header("ENVIRONMENT")
 
         required_vars = {
-            'ALPACA_API_KEY': ['ALPACA_API_KEY', 'ALPACA_KEY_ID'],
-            'ALPACA_SECRET_KEY': ['ALPACA_SECRET_KEY', 'ALPACA_SECRET'],
-            'SCHWAB_API_KEY': ['SCHWAB_API_KEY'],
-            'SCHWAB_SECRET': ['SCHWAB_SECRET'],
+            "ALPACA_API_KEY": ["ALPACA_API_KEY", "ALPACA_KEY_ID"],
+            "ALPACA_SECRET_KEY": ["ALPACA_SECRET_KEY", "ALPACA_SECRET"],
+            "SCHWAB_API_KEY": ["SCHWAB_API_KEY"],
+            "SCHWAB_SECRET": ["SCHWAB_SECRET"],
         }
 
         for name, variants in required_vars.items():
@@ -168,11 +172,11 @@ class PreFlightChecker:
                     break
 
             if value:
-                masked = value[:4] + '*' * (len(value) - 8) + value[-4:] if len(value) > 8 else '****'
+                masked = value[:4] + "*" * (len(value) - 8) + value[-4:] if len(value) > 8 else "****"
                 self.print_status(name, True, f"Set ({masked})")
                 self.passed.append(f"ENV: {name}")
             else:
-                if 'SCHWAB' in name:
+                if "SCHWAB" in name:
                     self.print_warning(name, "Not set (Schwab features disabled)")
                     self.warnings.append(f"ENV: {name} not set")
                 else:
@@ -186,7 +190,7 @@ class PreFlightChecker:
         results = await self.validator.validate_all()
 
         # Alpaca
-        alpaca = results['alpaca']
+        alpaca = results["alpaca"]
         if alpaca.status == CredentialStatus.VALID:
             self.print_status("Alpaca", True, alpaca.message)
             if self.verbose and alpaca.details:
@@ -201,7 +205,7 @@ class PreFlightChecker:
             self.issues.append(f"Alpaca: {alpaca.message}")
 
         # Schwab
-        schwab = results['schwab']
+        schwab = results["schwab"]
         if schwab.status == CredentialStatus.VALID:
             self.print_status("Schwab", True, schwab.message)
             if self.verbose and schwab.details:
@@ -213,7 +217,7 @@ class PreFlightChecker:
 
         elif schwab.status == CredentialStatus.EXPIRING_SOON:
             self.print_warning("Schwab", schwab.message)
-            self.warnings.append(f"Schwab token expiring soon")
+            self.warnings.append("Schwab token expiring soon")
             # Still start token keeper - it will handle renewal
             self._start_token_keeper()
 
@@ -244,11 +248,7 @@ class PreFlightChecker:
         print(f"\n  Recommended data source: {best_data.upper()}")
         print(f"  Recommended trading broker: {best_trading.upper()}")
 
-    async def _check_data_freshness(
-        self,
-        symbols: List[str],
-        update_data: bool = False
-    ) -> None:
+    async def _check_data_freshness(self, symbols: list[str], update_data: bool = False) -> None:
         """Check historical data freshness using UnifiedDataPipeline."""
         self.print_header("HISTORICAL DATA")
 
@@ -273,6 +273,7 @@ class PreFlightChecker:
             else:
                 # Check age of data
                 from datetime import datetime, timezone
+
                 if proc_ts:
                     age_hours = (datetime.now(timezone.utc).timestamp() * 1000 - proc_ts) / 3600000
                     # Get bar count from file
@@ -280,18 +281,11 @@ class PreFlightChecker:
                     bar_count = len(df) if not df.empty else 0
 
                     if age_hours > 24:  # Consider stale if > 24 hours old
-                        self.print_warning(
-                            symbol,
-                            f"Data may be stale ({bar_count} bars, {age_hours:.0f}h old)"
-                        )
+                        self.print_warning(symbol, f"Data may be stale ({bar_count} bars, {age_hours:.0f}h old)")
                         stale_symbols.append(symbol)
                         self.warnings.append(f"{symbol} data may be stale")
                     else:
-                        self.print_status(
-                            symbol,
-                            True,
-                            f"Fresh ({bar_count} bars, {age_hours:.1f}h old)"
-                        )
+                        self.print_status(symbol, True, f"Fresh ({bar_count} bars, {age_hours:.1f}h old)")
                         self.passed.append(f"Data: {symbol}")
                 else:
                     self.print_status(symbol, True, "Raw data available")
@@ -324,6 +318,7 @@ class PreFlightChecker:
         routing_path = ROOT / "config" / "strategy_routing.json"
         if routing_path.exists():
             import json
+
             with open(routing_path) as f:
                 routing = json.load(f)
             symbol_count = len([k for k in routing.keys() if k != "default"])
@@ -343,16 +338,17 @@ class PreFlightChecker:
             self.print_status("Processed data dir", False, "Not found")
             self.issues.append("Data directory missing")
 
-    async def _optimize_strategies(self, symbols: List[str], days: int = 365) -> None:
+    async def _optimize_strategies(self, symbols: list[str], days: int = 365) -> None:
         """Run regime-aware strategy optimization."""
         self.print_header("STRATEGY OPTIMIZATION")
         print(f"  Optimizing strategies for {len(symbols)} symbols...")
         print(f"  Using {days} days of historical data")
         print()
 
-        from core.backtest.regime_backtest import RegimeBacktester, REGIME_TYPES
-        from collections import Counter
         import json
+        from collections import Counter
+
+        from core.backtest.regime_backtest import RegimeBacktester
 
         pipeline = UnifiedDataPipeline()
 
@@ -373,7 +369,7 @@ class PreFlightChecker:
         strategies = ["sma", "ema", "macd", "rsi", "bollinger", "momentum", "meanreversion", "stochastic"]
 
         for i, symbol in enumerate(symbols):
-            print(f"  [{i+1}/{len(symbols)}] {symbol}...", end=" ")
+            print(f"  [{i + 1}/{len(symbols)}] {symbol}...", end=" ")
 
             try:
                 data = pipeline.get_data(symbol)
@@ -396,9 +392,11 @@ class PreFlightChecker:
 
                 # Print summary
                 best = result.best_strategies
-                print(f"low={best.get('low_volatility', '?')}, "
-                      f"norm={best.get('normal', '?')}, "
-                      f"high={best.get('high_volatility', '?')}")
+                print(
+                    f"low={best.get('low_volatility', '?')}, "
+                    f"norm={best.get('normal', '?')}, "
+                    f"high={best.get('high_volatility', '?')}"
+                )
 
             except Exception as e:
                 print(f"ERROR: {e}")
@@ -414,11 +412,13 @@ class PreFlightChecker:
                 continue
 
             trend_count = sum(
-                1 for regime in ["low_volatility", "normal", "high_volatility"]
+                1
+                for regime in ["low_volatility", "normal", "high_volatility"]
                 if config.get(regime, "").lower() in trend_following
             )
             mr_count = sum(
-                1 for regime in ["low_volatility", "normal", "high_volatility"]
+                1
+                for regime in ["low_volatility", "normal", "high_volatility"]
                 if config.get(regime, "").lower() in mean_reversion
             )
 
@@ -449,8 +449,7 @@ class PreFlightChecker:
         hybrid_disabled = len(combined_routing) - 1 - hybrid_enabled
 
         print()
-        self.print_status("Strategy Optimization", True,
-                         f"Optimized {len(combined_routing) - 1} symbols")
+        self.print_status("Strategy Optimization", True, f"Optimized {len(combined_routing) - 1} symbols")
         print(f"      Hybrid sizing: {hybrid_enabled} enabled, {hybrid_disabled} disabled")
         print(f"      Config saved to: {config_path}")
         self.passed.append("Strategy optimization")
@@ -459,6 +458,7 @@ class PreFlightChecker:
         """Trigger Schwab re-authentication."""
         try:
             from data.streaming.authenticator import Authenticator
+
             auth = Authenticator()
             result = await auth.manual_refresh_token(use_gui=False)
 
@@ -473,11 +473,7 @@ class PreFlightChecker:
     def _is_token_keeper_running(self) -> bool:
         """Check if token keeper is already running."""
         try:
-            result = subprocess.run(
-                ['pgrep', '-f', 'token_keeper.py'],
-                capture_output=True,
-                text=True
-            )
+            result = subprocess.run(["pgrep", "-f", "token_keeper.py"], capture_output=True, text=True)
             return result.returncode == 0
         except Exception:
             return False
@@ -495,7 +491,7 @@ class PreFlightChecker:
                 [sys.executable, str(ROOT / "token_keeper.py"), "--daemon", "--interval", "60"],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
-                start_new_session=True
+                start_new_session=True,
             )
             self.print_status("Token Keeper", True, "Started background daemon")
             self.logger.info("Token keeper daemon started")
@@ -559,10 +555,10 @@ async def main():
         config = get_config()
         default_symbols = config.general.default_symbols
     except Exception:
-        default_symbols = ['AAPL', 'MSFT']
+        default_symbols = ["AAPL", "MSFT"]
 
     parser = argparse.ArgumentParser(
-        description='Pre-flight system check for trading',
+        description="Pre-flight system check for trading",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=f"""
 Examples:
@@ -573,46 +569,34 @@ Examples:
   python preflight.py -v --update-data       # Verbose with data update
   python preflight.py --optimize-strategies  # Run strategy optimization
   python preflight.py -u --optimize-strategies  # Full refresh: update data + optimize
-        """
+        """,
     )
 
     parser.add_argument(
-        '--symbols', '-s',
-        nargs='+',
+        "--symbols",
+        "-s",
+        nargs="+",
         default=default_symbols,
-        help=f'Symbols to check (default from config: {default_symbols})'
+        help=f"Symbols to check (default from config: {default_symbols})",
     )
     parser.add_argument(
-        '--all-data',
-        action='store_true',
-        help='Check all symbols that have data files (ignores --symbols)'
+        "--all-data", action="store_true", help="Check all symbols that have data files (ignores --symbols)"
+    )
+    parser.add_argument("--update-data", "-u", action="store_true", help="Update stale historical data")
+    parser.add_argument("--reauth-schwab", action="store_true", help="Trigger Schwab re-authentication")
+    parser.add_argument(
+        "--optimize-strategies",
+        "-o",
+        action="store_true",
+        help="Run regime-based strategy optimization and update routing config",
     )
     parser.add_argument(
-        '--update-data', '-u',
-        action='store_true',
-        help='Update stale historical data'
-    )
-    parser.add_argument(
-        '--reauth-schwab',
-        action='store_true',
-        help='Trigger Schwab re-authentication'
-    )
-    parser.add_argument(
-        '--optimize-strategies', '-o',
-        action='store_true',
-        help='Run regime-based strategy optimization and update routing config'
-    )
-    parser.add_argument(
-        '--optimization-days',
+        "--optimization-days",
         type=int,
         default=365,
-        help='Days of data to use for strategy optimization (default: 365)'
+        help="Days of data to use for strategy optimization (default: 365)",
     )
-    parser.add_argument(
-        '--verbose', '-v',
-        action='store_true',
-        help='Verbose output'
-    )
+    parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
 
     args = parser.parse_args()
 
@@ -620,7 +604,7 @@ Examples:
     symbols = args.symbols
     if args.all_data:
         pipeline = UnifiedDataPipeline()
-        symbols = pipeline.list_available_symbols('file')
+        symbols = pipeline.list_available_symbols("file")
         if not symbols:
             print("No data files found in proc_data/")
             sys.exit(1)
@@ -638,5 +622,5 @@ Examples:
     sys.exit(0 if success else 1)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     asyncio.run(main())

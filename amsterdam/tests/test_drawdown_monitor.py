@@ -7,13 +7,15 @@ Coverage:
 - Cooldown management
 - Trading permission checks
 """
-import pytest
-from unittest.mock import MagicMock, patch
-from datetime import datetime, timezone, timedelta
-import asyncio
 
+import asyncio
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest.mock import MagicMock
+
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -24,11 +26,13 @@ from core.drawdown_monitor import DrawdownMonitor
 @pytest.fixture(autouse=True)
 def mock_async_create_task(monkeypatch):
     """Mock asyncio.create_task to prevent 'no running event loop' errors."""
+
     def mock_create_task(coro, **kwargs):
         # Close the coroutine to avoid warnings
         coro.close()
         return MagicMock()
-    monkeypatch.setattr(asyncio, 'create_task', mock_create_task)
+
+    monkeypatch.setattr(asyncio, "create_task", mock_create_task)
 
 
 class TestDrawdownMonitorInit:
@@ -50,7 +54,7 @@ class TestDrawdownMonitorInit:
             symbol_cooldown_seconds=300,
             max_portfolio_drawdown=0.15,
             max_portfolio_daily_drawdown=0.08,
-            portfolio_cooldown_seconds=600
+            portfolio_cooldown_seconds=600,
         )
         assert monitor.max_symbol_drawdown == 0.20
         assert monitor.max_symbol_daily_drawdown == 0.10
@@ -63,11 +67,7 @@ class TestSymbolDrawdown:
 
     @pytest.fixture
     def monitor(self):
-        return DrawdownMonitor(
-            max_symbol_drawdown=0.20,
-            max_symbol_daily_drawdown=0.10,
-            symbol_cooldown_seconds=60
-        )
+        return DrawdownMonitor(max_symbol_drawdown=0.20, max_symbol_daily_drawdown=0.10, symbol_cooldown_seconds=60)
 
     def test_update_symbol_returns_bool(self, monitor):
         """Test update_symbol returns boolean."""
@@ -101,9 +101,7 @@ class TestPortfolioDrawdown:
     @pytest.fixture
     def monitor(self):
         return DrawdownMonitor(
-            max_portfolio_drawdown=0.25,
-            max_portfolio_daily_drawdown=0.10,
-            portfolio_cooldown_seconds=120
+            max_portfolio_drawdown=0.25, max_portfolio_daily_drawdown=0.10, portfolio_cooldown_seconds=120
         )
 
     def test_update_portfolio_returns_bool(self, monitor):
@@ -136,10 +134,7 @@ class TestCanTrade:
 
     @pytest.fixture
     def monitor(self):
-        return DrawdownMonitor(
-            max_symbol_drawdown=0.20,
-            max_portfolio_drawdown=0.25
-        )
+        return DrawdownMonitor(max_symbol_drawdown=0.20, max_portfolio_drawdown=0.25)
 
     def test_can_trade_when_all_ok(self, monitor):
         """Test can_trade returns True when all limits OK."""
@@ -251,10 +246,7 @@ class TestStartNewDay:
 
     def test_start_new_day_both(self, monitor):
         """Test start_new_day sets both portfolio and symbols."""
-        monitor.start_new_day(
-            portfolio_equity=100000.0,
-            per_symbol_equity={"AAPL": 5000.0}
-        )
+        monitor.start_new_day(portfolio_equity=100000.0, per_symbol_equity={"AAPL": 5000.0})
 
         assert monitor.portfolio_daily_start == 100000.0
         assert monitor.symbol_daily_start["AAPL"] == 5000.0
@@ -370,10 +362,7 @@ class TestCooldown:
 
     @pytest.fixture
     def monitor(self):
-        return DrawdownMonitor(
-            symbol_cooldown_seconds=60,
-            portfolio_cooldown_seconds=120
-        )
+        return DrawdownMonitor(symbol_cooldown_seconds=60, portfolio_cooldown_seconds=120)
 
     def test_is_symbol_in_cooldown_true(self, monitor):
         """Test is_symbol_in_cooldown when in cooldown."""
@@ -446,7 +435,7 @@ class TestPersistence:
                     "current_dd": -0.05,
                     "current_daily_dd": -0.05,
                 }
-            }
+            },
         }
 
         monitor._deserialize_state(state)
@@ -458,6 +447,7 @@ class TestPersistence:
     def test_set_persistence_path(self, monitor):
         """Test set_persistence_path sets the path."""
         from pathlib import Path
+
         path = Path("/tmp/test_dd.json")
 
         monitor.set_persistence_path(path)
@@ -466,10 +456,10 @@ class TestPersistence:
 
     def test_save_state(self, monitor):
         """Test save_state persists to disk."""
-        import tempfile
         import os
+        import tempfile
 
-        with tempfile.NamedTemporaryFile(suffix='.json', delete=False) as f:
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
             temp_path = Path(f.name)
 
         try:
@@ -550,10 +540,7 @@ class TestDailyDrawdownBreaches:
 
     @pytest.fixture
     def monitor(self):
-        return DrawdownMonitor(
-            max_symbol_daily_drawdown=0.10,
-            max_portfolio_daily_drawdown=0.08
-        )
+        return DrawdownMonitor(max_symbol_daily_drawdown=0.10, max_portfolio_daily_drawdown=0.08)
 
     def test_portfolio_daily_breach_locks(self, monitor):
         """Test portfolio locks on daily drawdown breach."""

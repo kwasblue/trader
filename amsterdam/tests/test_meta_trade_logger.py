@@ -1,12 +1,11 @@
 """
 Tests for MetaTradeLogger and meta trade types.
 """
+
 import json
-import os
 import tempfile
-from datetime import datetime, timezone
-from pathlib import Path
 import unittest
+from datetime import datetime, timezone
 
 from core.contracts.meta_types import TradeEntryContext, TradeExitContext
 from loggers.meta_trade_logger import MetaTradeLogger, generate_trade_id
@@ -156,6 +155,7 @@ class TestMetaTradeLogger(unittest.TestCase):
     def tearDown(self):
         """Clean up test files."""
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_log_entry(self):
@@ -185,7 +185,7 @@ class TestMetaTradeLogger(unittest.TestCase):
         self.logger.log_entry(entry)
 
         # Read and verify
-        with open(self.logger.log_path, "r") as f:
+        with open(self.logger.log_path) as f:
             line = f.readline()
             event = json.loads(line)
 
@@ -215,7 +215,7 @@ class TestMetaTradeLogger(unittest.TestCase):
         self.logger.log_exit(exit_ctx)
 
         # Read and verify
-        with open(self.logger.log_path, "r") as f:
+        with open(self.logger.log_path) as f:
             line = f.readline()
             event = json.loads(line)
 
@@ -267,7 +267,7 @@ class TestMetaTradeLogger(unittest.TestCase):
         self.logger.log_exit(exit_ctx)
 
         # Read and verify both lines
-        with open(self.logger.log_path, "r") as f:
+        with open(self.logger.log_path) as f:
             lines = f.readlines()
 
         self.assertEqual(len(lines), 2)
@@ -308,7 +308,7 @@ class TestMetaTradeLogger(unittest.TestCase):
             self.logger.log_entry(entry)
 
         # Verify each line is valid JSON
-        with open(self.logger.log_path, "r") as f:
+        with open(self.logger.log_path) as f:
             for i, line in enumerate(f):
                 try:
                     event = json.loads(line)

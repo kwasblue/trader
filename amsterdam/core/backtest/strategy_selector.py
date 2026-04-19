@@ -17,18 +17,17 @@ Usage:
 
 import json
 import logging
-from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Dict, List, Any, Optional, Tuple
-from concurrent.futures import ProcessPoolExecutor, as_completed
-import numpy as np
+from pathlib import Path
+from typing import Any
+
 import pandas as pd
 
-from strategies.strategy_registry import STRATEGY_MAP, load_strategy, list_strategies
 from core.backtest.backtester import VectorizedBacktester
-from core.backtest.optimization import grid_search, OptimizationResult
+from core.backtest.optimization import grid_search
+from core.backtest.regime_backtest import REGIME_TYPES, RegimeAnalysisResult, RegimeBacktester
 from core.backtest.walk_forward import walk_forward_analysis
-from core.backtest.regime_backtest import RegimeBacktester, RegimeAnalysisResult, REGIME_TYPES
+from strategies.strategy_registry import list_strategies
 
 logger = logging.getLogger(__name__)
 
@@ -36,71 +35,34 @@ logger = logging.getLogger(__name__)
 # Default parameter grids for each strategy
 # Keys match the registry format (lowercase, no underscores)
 STRATEGY_PARAM_GRIDS = {
-    "sma": {
-        "fast": [5, 10, 15, 20],
-        "slow": [20, 30, 50, 100]
-    },
-    "ema": {
-        "fast": [5, 10, 12, 15],
-        "slow": [20, 26, 30, 50]
-    },
-    "momentum": {
-        "lookback": [5, 10, 20, 30, 60]
-    },
-    "meanreversion": {
-        "window": [10, 14, 20, 30],
-        "threshold": [1.0, 1.5, 2.0, 2.5]
-    },
-    "rsi": {
-        "window": [7, 14, 21],
-        "oversold": [20, 25, 30],
-        "overbought": [70, 75, 80]
-    },
-    "bollinger": {
-        "window": [10, 20, 30],
-        "num_std": [1.5, 2.0, 2.5]
-    },
-    "macd": {
-        "fast": [8, 12, 16],
-        "slow": [20, 26, 30],
-        "signal": [7, 9, 12]
-    },
-    "adx": {
-        "window": [10, 14, 20],
-        "threshold": [20, 25, 30]
-    },
+    "sma": {"fast": [5, 10, 15, 20], "slow": [20, 30, 50, 100]},
+    "ema": {"fast": [5, 10, 12, 15], "slow": [20, 26, 30, 50]},
+    "momentum": {"lookback": [5, 10, 20, 30, 60]},
+    "meanreversion": {"window": [10, 14, 20, 30], "threshold": [1.0, 1.5, 2.0, 2.5]},
+    "rsi": {"window": [7, 14, 21], "oversold": [20, 25, 30], "overbought": [70, 75, 80]},
+    "bollinger": {"window": [10, 20, 30], "num_std": [1.5, 2.0, 2.5]},
+    "macd": {"fast": [8, 12, 16], "slow": [20, 26, 30], "signal": [7, 9, 12]},
+    "adx": {"window": [10, 14, 20], "threshold": [20, 25, 30]},
     "stochastic": {
         "k_window": [10, 14, 21],
         "d_window": [3, 5, 7],
         "oversold": [15, 20, 25],
-        "overbought": [75, 80, 85]
+        "overbought": [75, 80, 85],
     },
-    "donchian": {
-        "window": [10, 20, 30, 55]
-    },
-    "breakout": {
-        "window": [10, 20, 30],
-        "threshold": [0.01, 0.02, 0.03]
-    },
-    "vwap": {
-        "window": [10, 20, 30]
-    },
-    "psar": {
-        "af_start": [0.01, 0.02, 0.03],
-        "af_max": [0.1, 0.2, 0.3]
-    },
-    "ichimoku": {
-        "tenkan": [7, 9, 12],
-        "kijun": [22, 26, 30]
-    },
+    "donchian": {"window": [10, 20, 30, 55]},
+    "breakout": {"window": [10, 20, 30], "threshold": [0.01, 0.02, 0.03]},
+    "vwap": {"window": [10, 20, 30]},
+    "psar": {"af_start": [0.01, 0.02, 0.03], "af_max": [0.1, 0.2, 0.3]},
+    "ichimoku": {"tenkan": [7, 9, 12], "kijun": [22, 26, 30]},
 }
 
 
 @dataclass
 class StrategyEvaluation:
     """Result of evaluating a single strategy."""
+
     strategy_name: str
-    best_params: Dict[str, Any]
+    best_params: dict[str, Any]
     sharpe_ratio: float
     sortino_ratio: float
     total_return: float
@@ -109,20 +71,21 @@ class StrategyEvaluation:
     profit_factor: float
     num_trades: int
     composite_score: float
-    walk_forward_sharpe: Optional[float] = None
+    walk_forward_sharpe: float | None = None
     is_overfit: bool = False
-    all_metrics: Dict[str, Any] = field(default_factory=dict)
+    all_metrics: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
 class SelectionResult:
     """Result of strategy selection."""
+
     symbol: str
-    top_strategies: List[StrategyEvaluation]
-    all_evaluations: List[StrategyEvaluation]
+    top_strategies: list[StrategyEvaluation]
+    all_evaluations: list[StrategyEvaluation]
     data_period: str
     num_bars: int
-    selection_config: Dict[str, Any] = field(default_factory=dict)
+    selection_config: dict[str, Any] = field(default_factory=dict)
 
 
 class StrategySelector:
@@ -160,7 +123,7 @@ class StrategySelector:
         logger.info(f"StrategySelector initialized with {len(self.data)} bars")
         logger.info(f"Available strategies: {len(self._available_strategies)}")
 
-    def _get_available_strategies(self) -> List[str]:
+    def _get_available_strategies(self) -> list[str]:
         """Get list of available strategy names."""
         # Get strategies from registry, excluding meta-strategies
         strategies = []
@@ -209,7 +172,7 @@ class StrategySelector:
 
         for i, strategy_name in enumerate(self._available_strategies):
             if verbose:
-                logger.info(f"[{i+1}/{len(self._available_strategies)}] Evaluating {strategy_name}...")
+                logger.info(f"[{i + 1}/{len(self._available_strategies)}] Evaluating {strategy_name}...")
 
             try:
                 evaluation = self._evaluate_strategy(
@@ -217,7 +180,7 @@ class StrategySelector:
                     use_walk_forward=use_walk_forward,
                     walk_forward_train_size=walk_forward_train_size,
                     walk_forward_test_size=walk_forward_test_size,
-                    verbose=verbose
+                    verbose=verbose,
                 )
 
                 if evaluation is not None:
@@ -256,7 +219,7 @@ class StrategySelector:
                 # Check if dates are Unix timestamps (milliseconds)
                 if pd.api.types.is_numeric_dtype(dates):
                     # Convert from milliseconds to datetime
-                    dates = pd.to_datetime(dates, unit='ms')
+                    dates = pd.to_datetime(dates, unit="ms")
                 else:
                     dates = pd.to_datetime(dates)
                 data_period = f"{dates.min().date()} to {dates.max().date()}"
@@ -276,7 +239,7 @@ class StrategySelector:
                 "use_walk_forward": use_walk_forward,
                 "initial_capital": self.initial_capital,
                 "transaction_cost": self.transaction_cost,
-            }
+            },
         )
 
         if verbose:
@@ -338,7 +301,7 @@ class StrategySelector:
         walk_forward_train_size: int = 252,
         walk_forward_test_size: int = 63,
         verbose: bool = False,
-    ) -> Optional[StrategyEvaluation]:
+    ) -> StrategyEvaluation | None:
         """Evaluate a single strategy with optional walk-forward validation."""
 
         # Get parameter grid for this strategy
@@ -358,18 +321,14 @@ class StrategySelector:
                     metric="sharpe_ratio",
                     initial_capital=self.initial_capital,
                     transaction_cost=self.transaction_cost,
-                    verbose=False
+                    verbose=False,
                 )
                 best_params = opt_result.best_params
             else:
                 best_params = {}
 
             # Run final backtest with best params
-            bt = VectorizedBacktester(
-                self.data.copy(),
-                self.initial_capital,
-                self.transaction_cost
-            )
+            bt = VectorizedBacktester(self.data.copy(), self.initial_capital, self.transaction_cost)
             portfolio_df = bt.run(strategy_name, best_params)
 
             if portfolio_df.empty:
@@ -384,7 +343,11 @@ class StrategySelector:
             wf_sharpe = None
             is_overfit = False
 
-            if use_walk_forward and param_grid and len(self.data) > (walk_forward_train_size + walk_forward_test_size * 2):
+            if (
+                use_walk_forward
+                and param_grid
+                and len(self.data) > (walk_forward_train_size + walk_forward_test_size * 2)
+            ):
                 try:
                     wf_result = walk_forward_analysis(
                         data=self.data,
@@ -394,7 +357,7 @@ class StrategySelector:
                         test_size=walk_forward_test_size,
                         metric="sharpe_ratio",
                         initial_capital=self.initial_capital,
-                        verbose=False
+                        verbose=False,
                     )
 
                     if wf_result and "overall" in wf_result:
@@ -419,18 +382,14 @@ class StrategySelector:
                 composite_score=composite,
                 walk_forward_sharpe=wf_sharpe,
                 is_overfit=is_overfit,
-                all_metrics=metrics
+                all_metrics=metrics,
             )
 
         except Exception as e:
             logger.debug(f"Strategy {strategy_name} evaluation failed: {e}")
             return None
 
-    def _calculate_composite_score(
-        self,
-        metrics: Dict[str, Any],
-        weights: Dict[str, float] = None
-    ) -> float:
+    def _calculate_composite_score(self, metrics: dict[str, Any], weights: dict[str, float] = None) -> float:
         """
         Calculate composite score from multiple metrics.
 
@@ -467,11 +426,11 @@ class StrategySelector:
         wr_norm = win_rate * 100  # Already 0-1
 
         score = (
-            weights["sharpe_ratio"] * sharpe_norm +
-            weights["sortino_ratio"] * sortino_norm +
-            weights["total_return"] * return_norm +
-            weights["max_drawdown"] * dd_norm +
-            weights["win_rate"] * wr_norm
+            weights["sharpe_ratio"] * sharpe_norm
+            + weights["sortino_ratio"] * sortino_norm
+            + weights["total_return"] * return_norm
+            + weights["max_drawdown"] * dd_norm
+            + weights["win_rate"] * wr_norm
         )
 
         return score
@@ -503,11 +462,8 @@ class StrategySelector:
         print("=" * 70)
 
     def save_to_config(
-        self,
-        result: SelectionResult,
-        config_dir: str = None,
-        regime: str = "normal"
-    ) -> Tuple[Path, Path]:
+        self, result: SelectionResult, config_dir: str = None, regime: str = "normal"
+    ) -> tuple[Path, Path]:
         """
         Save selection results to strategy routing config files.
 
@@ -554,9 +510,7 @@ class StrategySelector:
             params[symbol][regime] = {"params": top.best_params}
 
             # Also save ranked list
-            routing[symbol][f"{regime}_ranked"] = [
-                e.strategy_name for e in result.top_strategies
-            ]
+            routing[symbol][f"{regime}_ranked"] = [e.strategy_name for e in result.top_strategies]
 
         # Write configs
         with open(routing_path, "w") as f:
@@ -575,7 +529,7 @@ class StrategySelector:
         result: RegimeAnalysisResult,
         config_dir: str = None,
         add_timeframes: bool = False,
-        default_timeframe: str = "day"
+        default_timeframe: str = "day",
     ) -> Path:
         """
         Save regime analysis result to strategy routing config.
@@ -613,10 +567,7 @@ class StrategySelector:
             best_strategy = result.best_strategies.get(regime, "momentum")
 
             if add_timeframes:
-                routing[symbol][regime] = {
-                    "strategy": best_strategy,
-                    "timeframe": default_timeframe
-                }
+                routing[symbol][regime] = {"strategy": best_strategy, "timeframe": default_timeframe}
             else:
                 routing[symbol][regime] = best_strategy
 
@@ -625,7 +576,7 @@ class StrategySelector:
             if add_timeframes:
                 routing[symbol]["default"] = {
                     "strategy": result.best_strategies["normal"],
-                    "timeframe": default_timeframe
+                    "timeframe": default_timeframe,
                 }
             else:
                 routing[symbol]["default"] = result.best_strategies["normal"]
@@ -643,12 +594,7 @@ class StrategySelector:
         return routing_path
 
 
-def select_best_strategies(
-    symbol: str,
-    data: pd.DataFrame,
-    top_n: int = 3,
-    **kwargs
-) -> SelectionResult:
+def select_best_strategies(symbol: str, data: pd.DataFrame, top_n: int = 3, **kwargs) -> SelectionResult:
     """
     Convenience function to select best strategies for a symbol.
 
@@ -674,27 +620,32 @@ if __name__ == "__main__":
     project_root = Path(__file__).resolve().parents[2]
     sys.path.insert(0, str(project_root))
 
-    from loggers.logger import Logger
     from core.unified_data_pipeline import UnifiedDataPipeline
 
-    parser = argparse.ArgumentParser(
-        description="Select best trading strategies for a given symbol"
-    )
+    parser = argparse.ArgumentParser(description="Select best trading strategies for a given symbol")
     parser.add_argument("symbol", type=str, help="Stock symbol (e.g., AAPL)")
     parser.add_argument("--days", type=int, default=365, help="Days of historical data")
     parser.add_argument("--top", type=int, default=3, help="Number of top strategies")
-    parser.add_argument("--metric", type=str, default="composite",
-                       choices=["composite", "sharpe_ratio", "sortino_ratio", "total_return"],
-                       help="Ranking metric")
-    parser.add_argument("--no-walk-forward", action="store_true",
-                       help="Disable walk-forward validation")
+    parser.add_argument(
+        "--metric",
+        type=str,
+        default="composite",
+        choices=["composite", "sharpe_ratio", "sortino_ratio", "total_return"],
+        help="Ranking metric",
+    )
+    parser.add_argument("--no-walk-forward", action="store_true", help="Disable walk-forward validation")
     parser.add_argument("--capital", type=float, default=100000, help="Initial capital")
     parser.add_argument("--save", action="store_true", help="Save results to config files")
-    parser.add_argument("--regime", type=str, default="normal",
-                       choices=["low_volatility", "normal", "high_volatility"],
-                       help="Market regime to save for (legacy mode only)")
-    parser.add_argument("--regime-aware", action="store_true",
-                       help="Use regime-aware backtesting (tests strategies per regime)")
+    parser.add_argument(
+        "--regime",
+        type=str,
+        default="normal",
+        choices=["low_volatility", "normal", "high_volatility"],
+        help="Market regime to save for (legacy mode only)",
+    )
+    parser.add_argument(
+        "--regime-aware", action="store_true", help="Use regime-aware backtesting (tests strategies per regime)"
+    )
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
 
     args = parser.parse_args()
@@ -712,7 +663,7 @@ if __name__ == "__main__":
 
         if data is None or data.empty:
             # Try to fetch if not available
-            print(f"No cached data, fetching from source...")
+            print("No cached data, fetching from source...")
             pipeline.update_symbols([args.symbol], days=args.days)
             data = pipeline.load_symbol_data(args.symbol)
 
@@ -732,6 +683,7 @@ if __name__ == "__main__":
 
         # Fallback to raw data
         from core.config_loader import get_raw_data_path
+
         data_dir = get_raw_data_path()
 
         data_file = data_dir / f"{args.symbol}.csv"
@@ -750,20 +702,13 @@ if __name__ == "__main__":
     if args.regime_aware:
         # Use regime-aware backtesting
         result = selector.select_best_strategies_by_regime(
-            symbol=args.symbol,
-            top_n=args.top,
-            metric=args.metric,
-            verbose=True
+            symbol=args.symbol, top_n=args.top, metric=args.metric, verbose=True
         )
 
         # Save to config if requested
         if args.save:
-            routing_path = selector.save_regime_result_to_config(
-                result,
-                add_timeframes=True,
-                default_timeframe="day"
-            )
-            print(f"\nSaved to:")
+            routing_path = selector.save_regime_result_to_config(result, add_timeframes=True, default_timeframe="day")
+            print("\nSaved to:")
             print(f"  {routing_path}")
     else:
         # Use legacy overall backtesting
@@ -772,13 +717,13 @@ if __name__ == "__main__":
             top_n=args.top,
             metric=args.metric,
             use_walk_forward=not args.no_walk_forward,
-            verbose=True
+            verbose=True,
         )
 
         # Save to config if requested
         if args.save:
             routing_path, params_path = selector.save_to_config(result, regime=args.regime)
-            print(f"\nSaved to:")
+            print("\nSaved to:")
             print(f"  {routing_path}")
             print(f"  {params_path}")
 

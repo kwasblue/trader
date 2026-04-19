@@ -20,27 +20,23 @@ DEPRECATED NAMES (backwards compatibility):
 
 from __future__ import annotations
 
-from typing import Optional, Tuple, Dict, Any, TYPE_CHECKING
+import asyncio
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 
 from core.base.trade_logic_manager_base import TradeApprover
-from core.enums import OrderSide
-from core.logic.symbol_state import SymbolState
-from core.events.eventhandler import EventHandler
 from core.contracts.events import EVENT_STRATEGY_SIGNAL, StrategySignalPayload
+from core.enums import OrderSide
+from core.events.eventhandler import EventHandler
+from core.logic.symbol_state import SymbolState
 from core.tracing import trace
 from loggers.logger import Logger
-import asyncio
 
 if TYPE_CHECKING:
     from core.contracts.types import SignalContext
 
 # Logger - own file with propagation to app.log
-_logger_instance = Logger(
-    log_file="trade_logic.log",
-    logger_name="TradeApprover",
-    propagate=True
-)
+_logger_instance = Logger(log_file="trade_logic.log", logger_name="TradeApprover", propagate=True)
 logger = _logger_instance.get_logger()
 
 
@@ -83,10 +79,10 @@ class StandardTradeApprover(TradeApprover):
         # Gating settings
         cooldown_seconds: int = 300,
         cooldown_bars: int = 5,
-        cooldown_mode: str = 'bars',
+        cooldown_mode: str = "bars",
         max_positions: int = 10,
-        event_handler: Optional[EventHandler] = None,
-        **kwargs
+        event_handler: EventHandler | None = None,
+        **kwargs,
     ):
         """
         Initialize trade approver.
@@ -108,20 +104,12 @@ class StandardTradeApprover(TradeApprover):
             cooldown_bars=cooldown_bars,
             cooldown_mode=cooldown_mode,
             max_positions=max_positions,
-            **kwargs
+            **kwargs,
         )
 
         # Store multipliers for Engine/PositionManager access
-        self.tp_mults = {
-            "low_volatility": tp_mult_low,
-            "normal": tp_mult_normal,
-            "high_volatility": tp_mult_high
-        }
-        self.sl_mults = {
-            "low_volatility": sl_mult_low,
-            "normal": sl_mult_normal,
-            "high_volatility": sl_mult_high
-        }
+        self.tp_mults = {"low_volatility": tp_mult_low, "normal": tp_mult_normal, "high_volatility": tp_mult_high}
+        self.sl_mults = {"low_volatility": sl_mult_low, "normal": sl_mult_normal, "high_volatility": sl_mult_high}
 
         # Position management params (Engine reads these)
         self.exit_fraction = exit_fraction
@@ -132,8 +120,10 @@ class StandardTradeApprover(TradeApprover):
         self.event_handler = event_handler
 
         cooldown_info = (
-            f"{cooldown_bars} bars" if cooldown_mode == 'bars'
-            else f"{cooldown_seconds}s" if cooldown_mode == 'time'
+            f"{cooldown_bars} bars"
+            if cooldown_mode == "bars"
+            else f"{cooldown_seconds}s"
+            if cooldown_mode == "time"
             else f"{cooldown_bars} bars/{cooldown_seconds}s"
         )
         swing_info = f", swing_mode=True (min {min_hold_days} day(s))" if swing_mode else ""
@@ -149,10 +139,10 @@ class StandardTradeApprover(TradeApprover):
     @trace
     def should_trade(
         self,
-        context: "SignalContext",
+        context: SignalContext,
         state: SymbolState,
         account_positions: int = 0,
-    ) -> Tuple[bool, Optional[str]]:
+    ) -> tuple[bool, str | None]:
         """
         Pure gating check - are we ALLOWED to trade?
 
@@ -199,20 +189,12 @@ class StandardTradeApprover(TradeApprover):
         if not in_position:
             # Entry gating
             side = OrderSide.BUY if signal == 1 else OrderSide.SELL
-            return self._can_enter_position_impl(
-                symbol, state, side, account_positions, market_open
-            )
+            return self._can_enter_position_impl(symbol, state, side, account_positions, market_open)
         else:
             # In position - always allow (Engine uses PositionManager for exit logic)
             return True, None
 
-    def can_enter_position(
-        self,
-        symbol: str,
-        state: SymbolState,
-        side: OrderSide,
-        **kwargs
-    ) -> Tuple[bool, Optional[str]]:
+    def can_enter_position(self, symbol: str, state: SymbolState, side: OrderSide, **kwargs) -> tuple[bool, str | None]:
         """
         Check if new position can be opened (entry gating).
 
@@ -226,11 +208,9 @@ class StandardTradeApprover(TradeApprover):
             (True, None) if allowed
             (False, reason) if gated
         """
-        account_positions = kwargs.get('account_positions', 0)
-        market_open = kwargs.get('market_open', True)
-        return self._can_enter_position_impl(
-            symbol, state, side, account_positions, market_open
-        )
+        account_positions = kwargs.get("account_positions", 0)
+        market_open = kwargs.get("market_open", True)
+        return self._can_enter_position_impl(symbol, state, side, account_positions, market_open)
 
     def _can_enter_position_impl(
         self,
@@ -239,7 +219,7 @@ class StandardTradeApprover(TradeApprover):
         side: OrderSide,
         account_positions: int,
         market_open: bool,
-    ) -> Tuple[bool, Optional[str]]:
+    ) -> tuple[bool, str | None]:
         """
         Implementation of entry gating logic.
 
@@ -275,13 +255,7 @@ class StandardTradeApprover(TradeApprover):
 
         return True, None
 
-    def can_exit_position(
-        self,
-        symbol: str,
-        state: SymbolState,
-        side: OrderSide,
-        **kwargs
-    ) -> Tuple[bool, Optional[str]]:
+    def can_exit_position(self, symbol: str, state: SymbolState, side: OrderSide, **kwargs) -> tuple[bool, str | None]:
         """
         Check if position can be closed (exit gating).
 
@@ -302,7 +276,7 @@ class StandardTradeApprover(TradeApprover):
             return False, "Not in position"
 
         # Verify side matches position
-        if kwargs.get('is_full_exit', True):
+        if kwargs.get("is_full_exit", True):
             if self.is_long(state) and side != OrderSide.SELL:
                 return False, "Cannot buy to exit long (need sell)"
             if self.is_short(state) and side != OrderSide.BUY:
@@ -315,12 +289,7 @@ class StandardTradeApprover(TradeApprover):
     # ========================================================================
 
     def _emit_signal_event(
-        self,
-        symbol: str,
-        state: SymbolState,
-        signal: int,
-        price: Optional[float],
-        regime: Optional[str]
+        self, symbol: str, state: SymbolState, signal: int, price: float | None, regime: str | None
     ) -> None:
         """Emit signal event to event bus."""
         if not self.event_handler:
@@ -336,13 +305,11 @@ class StandardTradeApprover(TradeApprover):
         }
 
         try:
-            asyncio.create_task(
-                self.event_handler.emit(EVENT_STRATEGY_SIGNAL, payload)
-            )
+            asyncio.create_task(self.event_handler.emit(EVENT_STRATEGY_SIGNAL, payload))
         except Exception as e:
             logger.error(f"Failed to emit signal event: {e}")
 
-    def normalize_regime(self, regime: Optional[str]) -> str:
+    def normalize_regime(self, regime: str | None) -> str:
         """Normalize regime to known conditions."""
         if regime in ("low_volatility", "normal", "high_volatility"):
             return regime
@@ -366,9 +333,9 @@ class DefaultTradeLogicManager(StandardTradeApprover):
         warnings.warn(
             "DefaultTradeLogicManager is deprecated. Use StandardTradeApprover instead.",
             DeprecationWarning,
-            stacklevel=2
+            stacklevel=2,
         )
         super().__init__(*args, **kwargs)
 
 
-__all__ = ['StandardTradeApprover', 'DefaultTradeLogicManager']
+__all__ = ["StandardTradeApprover", "DefaultTradeLogicManager"]

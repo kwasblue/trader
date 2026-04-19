@@ -29,11 +29,10 @@ Usage in autoamsterdam.py or runner:
 
 from __future__ import annotations
 
-from typing import Dict, Optional, List, Callable, Any
+from collections.abc import Callable
 from datetime import datetime
-from pathlib import Path
 
-from core.bar_aggregator import BarAggregator, Bar
+from core.bar_aggregator import Bar, BarAggregator
 from core.logic.strategy_routing_manager import StrategyRoutingManager
 from loggers.logger import Logger
 
@@ -51,9 +50,9 @@ class MultiTimeframeManager:
 
     def __init__(
         self,
-        symbols: List[str],
+        symbols: list[str],
         routing_config_path: str = "config/strategy_routing.json",
-        initial_regime: str = "normal"
+        initial_regime: str = "normal",
     ):
         """
         Initialize multi-timeframe manager.
@@ -71,7 +70,7 @@ class MultiTimeframeManager:
             "multi_timeframe_manager.log",
             "MultiTimeframeManager",
             propagate=True,
-            level=10  # DEBUG
+            level=10,  # DEBUG
         ).get_logger()
 
         # Initialize components
@@ -79,17 +78,15 @@ class MultiTimeframeManager:
         self.routing_manager = StrategyRoutingManager(routing_config_path)
 
         # Track current regimes
-        self.current_regimes: Dict[str, str] = {}
+        self.current_regimes: dict[str, str] = {}
 
         # Callbacks for aggregated bars
-        self.bar_callbacks: List[Callable[[Bar], None]] = []
+        self.bar_callbacks: list[Callable[[Bar], None]] = []
 
         # Initialize timeframes
         self._configure_initial_timeframes()
 
-        self.logger.info(
-            f"MultiTimeframeManager initialized for {len(symbols)} symbols"
-        )
+        self.logger.info(f"MultiTimeframeManager initialized for {len(symbols)} symbols")
 
     def _configure_initial_timeframes(self):
         """Configure aggregator timeframes for all symbols at startup."""
@@ -100,14 +97,13 @@ class MultiTimeframeManager:
             routing = self.routing_manager.get_routing(symbol, regime)
 
             # Configure aggregator
-            self.aggregator.set_timeframe(symbol, routing['timeframe'])
+            self.aggregator.set_timeframe(symbol, routing["timeframe"])
 
             # Track regime
             self.current_regimes[symbol] = regime
 
             self.logger.info(
-                f"  [{symbol}] regime={regime}, strategy={routing['strategy']}, "
-                f"timeframe={routing['timeframe']}"
+                f"  [{symbol}] regime={regime}, strategy={routing['strategy']}, timeframe={routing['timeframe']}"
             )
 
     def register_bar_callback(self, callback: Callable[[Bar], None]):
@@ -133,7 +129,7 @@ class MultiTimeframeManager:
 
         self.logger.info(f"Registered bar callback: {callback.__name__}")
 
-    def process_websocket_data(self, raw_data: dict) -> Optional[List[Bar]]:
+    def process_websocket_data(self, raw_data: dict) -> list[Bar] | None:
         """
         Process raw websocket data and return any completed aggregated bars.
 
@@ -186,7 +182,7 @@ class MultiTimeframeManager:
             Bar object
         """
         # Extract timestamp (handle both epoch ms and datetime)
-        timestamp = raw_data.get('timestamp')
+        timestamp = raw_data.get("timestamp")
         if isinstance(timestamp, int):
             # Epoch milliseconds
             timestamp = datetime.fromtimestamp(timestamp / 1000)
@@ -199,13 +195,13 @@ class MultiTimeframeManager:
 
         return Bar(
             timestamp=timestamp,
-            open=float(raw_data.get('open', 0)),
-            high=float(raw_data.get('high', 0)),
-            low=float(raw_data.get('low', 0)),
-            close=float(raw_data.get('close', 0)),
-            volume=int(raw_data.get('volume', 0)),
-            symbol=raw_data.get('symbol', ''),
-            timeframe='raw'  # Input timeframe (before aggregation)
+            open=float(raw_data.get("open", 0)),
+            high=float(raw_data.get("high", 0)),
+            low=float(raw_data.get("low", 0)),
+            close=float(raw_data.get("close", 0)),
+            volume=int(raw_data.get("volume", 0)),
+            symbol=raw_data.get("symbol", ""),
+            timeframe="raw",  # Input timeframe (before aggregation)
         )
 
     def update_regime(self, symbol: str, new_regime: str):
@@ -242,16 +238,12 @@ class MultiTimeframeManager:
         old_timeframe = self.aggregator.get_timeframe(symbol)
 
         # Update aggregator (completes partial window if timeframe changes)
-        self.aggregator.set_timeframe(symbol, new_routing['timeframe'])
+        self.aggregator.set_timeframe(symbol, new_routing["timeframe"])
 
-        if old_timeframe != new_routing['timeframe']:
-            self.logger.info(
-                f"[{symbol}] Timeframe changed: {old_timeframe} → {new_routing['timeframe']}"
-            )
+        if old_timeframe != new_routing["timeframe"]:
+            self.logger.info(f"[{symbol}] Timeframe changed: {old_timeframe} → {new_routing['timeframe']}")
 
-        self.logger.info(
-            f"[{symbol}] New strategy: {new_routing['strategy']}"
-        )
+        self.logger.info(f"[{symbol}] New strategy: {new_routing['strategy']}")
 
         # Update tracking
         self.current_regimes[symbol] = new_regime
@@ -288,13 +280,13 @@ class MultiTimeframeManager:
         aggregator_stats = self.aggregator.get_stats()
 
         return {
-            'aggregator_stats': aggregator_stats,
-            'active_symbols': len(self.symbols),
-            'current_regimes': self.current_regimes.copy(),
-            'current_timeframes': aggregator_stats.get('timeframes', {}),
+            "aggregator_stats": aggregator_stats,
+            "active_symbols": len(self.symbols),
+            "current_regimes": self.current_regimes.copy(),
+            "current_timeframes": aggregator_stats.get("timeframes", {}),
         }
 
-    def get_timeframe(self, symbol: str) -> Optional[str]:
+    def get_timeframe(self, symbol: str) -> str | None:
         """
         Get current timeframe for a symbol.
 
@@ -306,7 +298,7 @@ class MultiTimeframeManager:
         """
         return self.aggregator.get_timeframe(symbol)
 
-    def get_regime(self, symbol: str) -> Optional[str]:
+    def get_regime(self, symbol: str) -> str | None:
         """
         Get current regime for a symbol.
 
@@ -318,7 +310,7 @@ class MultiTimeframeManager:
         """
         return self.current_regimes.get(symbol)
 
-    def get_routing(self, symbol: str) -> Optional[dict]:
+    def get_routing(self, symbol: str) -> dict | None:
         """
         Get current routing decision for a symbol.
 
@@ -338,9 +330,8 @@ class MultiTimeframeManager:
 # STANDALONE DEMO
 # ============================================================================
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     """Demonstration of MultiTimeframeManager usage."""
-    import time
     from datetime import timedelta
 
     print("=" * 70)
@@ -349,20 +340,21 @@ if __name__ == '__main__':
 
     # Initialize manager
     manager = MultiTimeframeManager(
-        symbols=['AAPL', 'TSLA', 'MSFT'],
-        routing_config_path='config/strategy_routing.json'
+        symbols=["AAPL", "TSLA", "MSFT"], routing_config_path="config/strategy_routing.json"
     )
 
     # Register bar callback
     def on_aggregated_bar(bar: Bar):
-        print(f"✓ [{bar.symbol:5s}] {bar.timestamp.strftime('%H:%M:%S')} "
-              f"[{bar.timeframe:5s}] OHLCV({bar.open:.2f}, {bar.high:.2f}, "
-              f"{bar.low:.2f}, {bar.close:.2f}, {bar.volume})")
+        print(
+            f"✓ [{bar.symbol:5s}] {bar.timestamp.strftime('%H:%M:%S')} "
+            f"[{bar.timeframe:5s}] OHLCV({bar.open:.2f}, {bar.high:.2f}, "
+            f"{bar.low:.2f}, {bar.close:.2f}, {bar.volume})"
+        )
 
     manager.register_bar_callback(on_aggregated_bar)
 
     print("\n=== Initial Configuration ===")
-    for symbol in ['AAPL', 'TSLA', 'MSFT']:
+    for symbol in ["AAPL", "TSLA", "MSFT"]:
         routing = manager.get_routing(symbol)
         print(f"  {symbol}: {routing}")
 
@@ -372,23 +364,23 @@ if __name__ == '__main__':
 
     # Simulate 10 minutes of 1-minute bars
     for i in range(10):
-        for symbol in ['AAPL', 'TSLA', 'MSFT']:
+        for symbol in ["AAPL", "TSLA", "MSFT"]:
             # Simulate websocket data
             raw_data = {
-                'symbol': symbol,
-                'timestamp': int((base_time + timedelta(minutes=i)).timestamp() * 1000),
-                'open': 150.0 + i * 0.1,
-                'high': 151.0 + i * 0.1,
-                'low': 149.0 + i * 0.1,
-                'close': 150.5 + i * 0.1,
-                'volume': 10000
+                "symbol": symbol,
+                "timestamp": int((base_time + timedelta(minutes=i)).timestamp() * 1000),
+                "open": 150.0 + i * 0.1,
+                "high": 151.0 + i * 0.1,
+                "low": 149.0 + i * 0.1,
+                "close": 150.5 + i * 0.1,
+                "volume": 10000,
             }
 
             # Process through manager
             manager.process_websocket_data(raw_data)
 
     print("\n=== Simulating Regime Change ===")
-    manager.update_regime('AAPL', 'high_volatility')
+    manager.update_regime("AAPL", "high_volatility")
 
     print("\n=== Force Complete (Market Close) ===")
     manager.force_complete_all()
@@ -396,6 +388,7 @@ if __name__ == '__main__':
     print("\n=== Final Statistics ===")
     stats = manager.get_statistics()
     import json
+
     print(json.dumps(stats, indent=2, default=str))
 
     print("\n" + "=" * 70)

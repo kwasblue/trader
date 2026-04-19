@@ -11,25 +11,25 @@ Coverage:
 - Cash sync
 - Severity classification
 """
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime, timezone
-import asyncio
 
+import asyncio
 import sys
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from core.app_types import BrokerSnapshot, PositionView
 from core.state_reconciler import (
-    StateReconciler,
+    PositionMismatch,
     ReconcilerConfig,
     ReconcileResult,
-    PositionMismatch,
-    ReconcileAction,
+    StateReconciler,
 )
-from core.app_types import BrokerSnapshot, PositionView
 
 
 @pytest.fixture
@@ -54,7 +54,7 @@ def mock_portfolio():
 @pytest.fixture
 def reconciler(mock_broker, mock_portfolio):
     """Create a StateReconciler for testing."""
-    with patch('core.state_reconciler.get_event_handler') as mock_eh:
+    with patch("core.state_reconciler.get_event_handler") as mock_eh:
         mock_eh.return_value = AsyncMock()
         return StateReconciler(
             broker=mock_broker,
@@ -358,7 +358,7 @@ class TestReconcile:
     @pytest.mark.asyncio
     async def test_reconcile_halt_on_critical(self, mock_broker, mock_portfolio):
         """Test reconcile halts on critical mismatch."""
-        with patch('core.state_reconciler.get_event_handler') as mock_eh:
+        with patch("core.state_reconciler.get_event_handler") as mock_eh:
             mock_eh.return_value = AsyncMock()
 
             halt_callback = MagicMock()
@@ -369,7 +369,7 @@ class TestReconcile:
                     halt_on_critical=True,
                     auto_sync_critical=False,  # Disable auto-sync to test halt behavior
                     major_qty_diff=10,
-                    minor_qty_diff=1
+                    minor_qty_diff=1,
                 ),
                 on_halt=halt_callback,
             )
@@ -404,7 +404,7 @@ class TestReconcile:
             config=ReconcilerConfig(
                 auto_sync_critical=True,  # Default behavior
                 major_qty_diff=10,
-                minor_qty_diff=1
+                minor_qty_diff=1,
             ),
         )
 

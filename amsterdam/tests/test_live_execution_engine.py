@@ -8,10 +8,11 @@ Coverage:
 - Signal handling
 - Trade logic integration
 """
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+
 from datetime import datetime, timezone
-import asyncio
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 from core.app_types import OrderResult, PositionView, SignalContext
 
@@ -20,28 +21,22 @@ from core.app_types import OrderResult, PositionView, SignalContext
 def mock_broker():
     """Create a mock broker."""
     broker = MagicMock()
-    broker.place_order = AsyncMock(return_value=OrderResult(
-        order_id="ORD123",
-        symbol="AAPL",
-        side="buy",
-        qty=10,
-        status="filled",
-        filled_qty=10,
-        avg_fill_price=150.0,
-        raw={}
-    ))
-    broker.cancel_order = AsyncMock(return_value=OrderResult(
-        order_id="ORD123",
-        status="cancelled",
-        raw={}
-    ))
-    broker.get_position = AsyncMock(return_value=PositionView(
-        symbol="AAPL",
-        qty=100,
-        avg_entry_price=145.0,
-        market_price=150.0,
-        side="long"
-    ))
+    broker.place_order = AsyncMock(
+        return_value=OrderResult(
+            order_id="ORD123",
+            symbol="AAPL",
+            side="buy",
+            qty=10,
+            status="filled",
+            filled_qty=10,
+            avg_fill_price=150.0,
+            raw={},
+        )
+    )
+    broker.cancel_order = AsyncMock(return_value=OrderResult(order_id="ORD123", status="cancelled", raw={}))
+    broker.get_position = AsyncMock(
+        return_value=PositionView(symbol="AAPL", qty=100, avg_entry_price=145.0, market_price=150.0, side="long")
+    )
     broker.is_market_open = AsyncMock(return_value=True)
     return broker
 
@@ -104,16 +99,18 @@ def mock_trade_logic_manager():
 def mock_executor():
     """Create a mock executor."""
     executor = MagicMock()
-    executor.execute_order = AsyncMock(return_value=OrderResult(
-        order_id="ORD123",
-        symbol="AAPL",
-        side="buy",
-        qty=10,
-        status="filled",
-        filled_qty=10,
-        avg_fill_price=150.0,
-        raw={}
-    ))
+    executor.execute_order = AsyncMock(
+        return_value=OrderResult(
+            order_id="ORD123",
+            symbol="AAPL",
+            side="buy",
+            qty=10,
+            status="filled",
+            filled_qty=10,
+            avg_fill_price=150.0,
+            raw={},
+        )
+    )
     return executor
 
 
@@ -121,6 +118,7 @@ def mock_executor():
 def mock_portfolio():
     """Create a real PortfolioState for accurate testing."""
     from core.logic.portfolio_state import PortfolioState
+
     return PortfolioState(cash=100000.0)
 
 
@@ -128,7 +126,9 @@ class TestLiveExecutionEngineSignals:
     """Test signal handling."""
 
     @pytest.mark.asyncio
-    async def test_handle_buy_signal(self, mock_broker, mock_executor, mock_sizer, mock_trade_logger, mock_trade_logic_manager, mock_portfolio):
+    async def test_handle_buy_signal(
+        self, mock_broker, mock_executor, mock_sizer, mock_trade_logger, mock_trade_logic_manager, mock_portfolio
+    ):
         """Test handling a buy signal."""
         # Import here to avoid circular imports
         from core.logic.live_execution_engine import LiveExecutionEngine
@@ -159,13 +159,15 @@ class TestLiveExecutionEngineSignals:
         )
 
         # Should run without exception
-        result = await engine.handle_signal(context, state)
+        await engine.handle_signal(context, state)
 
         # Engine should handle the signal (may or may not trade depending on logic)
         assert engine is not None
 
     @pytest.mark.asyncio
-    async def test_handle_sell_signal(self, mock_broker, mock_executor, mock_sizer, mock_trade_logger, mock_trade_logic_manager, mock_portfolio):
+    async def test_handle_sell_signal(
+        self, mock_broker, mock_executor, mock_sizer, mock_trade_logger, mock_trade_logic_manager, mock_portfolio
+    ):
         """Test handling a sell signal."""
         from core.logic.live_execution_engine import LiveExecutionEngine
         from core.logic.symbol_state import SymbolState
@@ -197,13 +199,15 @@ class TestLiveExecutionEngineSignals:
         )
 
         # Should run without exception
-        result = await engine.handle_signal(context, state)
+        await engine.handle_signal(context, state)
 
         # Engine should handle the signal
         assert engine is not None
 
     @pytest.mark.asyncio
-    async def test_handle_hold_signal(self, mock_broker, mock_executor, mock_sizer, mock_trade_logger, mock_trade_logic_manager, mock_portfolio):
+    async def test_handle_hold_signal(
+        self, mock_broker, mock_executor, mock_sizer, mock_trade_logger, mock_trade_logic_manager, mock_portfolio
+    ):
         """Test handling a hold signal."""
         from core.logic.live_execution_engine import LiveExecutionEngine
         from core.logic.symbol_state import SymbolState
@@ -239,7 +243,9 @@ class TestLiveExecutionEnginePositionManagement:
     """Test position management."""
 
     @pytest.mark.asyncio
-    async def test_position_sizing(self, mock_broker, mock_executor, mock_sizer, mock_trade_logger, mock_trade_logic_manager, mock_portfolio):
+    async def test_position_sizing(
+        self, mock_broker, mock_executor, mock_sizer, mock_trade_logger, mock_trade_logic_manager, mock_portfolio
+    ):
         """Test that position sizing is calculated correctly."""
         from core.logic.live_execution_engine import LiveExecutionEngine
         from core.logic.symbol_state import SymbolState
@@ -269,7 +275,7 @@ class TestLiveExecutionEnginePositionManagement:
         )
 
         # Should run without exception
-        result = await engine.handle_signal(context, state)
+        await engine.handle_signal(context, state)
 
         # Engine should handle position sizing internally
         assert engine is not None
@@ -279,7 +285,9 @@ class TestLiveExecutionEngineRiskManagement:
     """Test risk management features."""
 
     @pytest.mark.asyncio
-    async def test_trade_gate_integration(self, mock_broker, mock_executor, mock_sizer, mock_trade_logger, mock_trade_logic_manager, mock_portfolio):
+    async def test_trade_gate_integration(
+        self, mock_broker, mock_executor, mock_sizer, mock_trade_logger, mock_trade_logic_manager, mock_portfolio
+    ):
         """Test trade gate integration."""
         from core.logic.live_execution_engine import LiveExecutionEngine
         from core.logic.symbol_state import SymbolState
@@ -315,11 +323,13 @@ class TestLiveExecutionEngineRiskManagement:
         await engine.handle_signal(context, state)
 
     @pytest.mark.asyncio
-    async def test_drawdown_monitor_integration(self, mock_broker, mock_executor, mock_sizer, mock_trade_logger, mock_trade_logic_manager, mock_portfolio):
+    async def test_drawdown_monitor_integration(
+        self, mock_broker, mock_executor, mock_sizer, mock_trade_logger, mock_trade_logic_manager, mock_portfolio
+    ):
         """Test drawdown monitor integration."""
+        from core.drawdown_monitor import DrawdownMonitor
         from core.logic.live_execution_engine import LiveExecutionEngine
         from core.logic.symbol_state import SymbolState
-        from core.drawdown_monitor import DrawdownMonitor
 
         engine = LiveExecutionEngine(
             broker=mock_broker,
@@ -355,7 +365,9 @@ class TestLiveExecutionEngineLogging:
     """Test trade logging."""
 
     @pytest.mark.asyncio
-    async def test_trade_logged_on_entry(self, mock_broker, mock_executor, mock_sizer, mock_trade_logger, mock_trade_logic_manager, mock_portfolio):
+    async def test_trade_logged_on_entry(
+        self, mock_broker, mock_executor, mock_sizer, mock_trade_logger, mock_trade_logic_manager, mock_portfolio
+    ):
         """Test that trades are logged on entry."""
         from core.logic.live_execution_engine import LiveExecutionEngine
         from core.logic.symbol_state import SymbolState
@@ -393,7 +405,9 @@ class TestLiveExecutionEngineTradeLogic:
     """Test trade logic routing."""
 
     @pytest.mark.asyncio
-    async def test_trade_logic_routing(self, mock_broker, mock_executor, mock_sizer, mock_trade_logger, mock_trade_logic_manager, mock_portfolio):
+    async def test_trade_logic_routing(
+        self, mock_broker, mock_executor, mock_sizer, mock_trade_logger, mock_trade_logic_manager, mock_portfolio
+    ):
         """Test that correct trade logic is used based on regime."""
         from core.logic.live_execution_engine import LiveExecutionEngine
         from core.logic.symbol_state import SymbolState
@@ -422,7 +436,7 @@ class TestLiveExecutionEngineTradeLogic:
         )
 
         # Should run without exception and route based on regime
-        result = await engine.handle_signal(context, state)
+        await engine.handle_signal(context, state)
 
         # Engine should handle the signal with appropriate trade logic
         assert engine is not None
@@ -432,7 +446,9 @@ class TestLiveExecutionEngineErrorHandling:
     """Test error handling."""
 
     @pytest.mark.asyncio
-    async def test_handles_broker_error(self, mock_broker, mock_executor, mock_sizer, mock_trade_logger, mock_trade_logic_manager, mock_portfolio):
+    async def test_handles_broker_error(
+        self, mock_broker, mock_executor, mock_sizer, mock_trade_logger, mock_trade_logic_manager, mock_portfolio
+    ):
         """Test handling of broker errors."""
         from core.logic.live_execution_engine import LiveExecutionEngine
         from core.logic.symbol_state import SymbolState
@@ -467,7 +483,9 @@ class TestLiveExecutionEngineErrorHandling:
         await engine.handle_signal(context, state)
 
     @pytest.mark.asyncio
-    async def test_handles_sizer_error(self, mock_broker, mock_executor, mock_sizer, mock_trade_logger, mock_trade_logic_manager, mock_portfolio):
+    async def test_handles_sizer_error(
+        self, mock_broker, mock_executor, mock_sizer, mock_trade_logger, mock_trade_logic_manager, mock_portfolio
+    ):
         """Test handling of position sizer errors."""
         from core.logic.live_execution_engine import LiveExecutionEngine
         from core.logic.symbol_state import SymbolState

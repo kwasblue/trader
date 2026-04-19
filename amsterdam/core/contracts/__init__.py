@@ -17,11 +17,25 @@ Usage:
 """
 
 # Core types
-from core.contracts.types import (
-    SignalContext,
-    OrderResult,
-    PositionView,
-    BrokerSnapshot,
+# Event names (most commonly used)
+# Event payloads (most commonly used)
+from core.contracts.events import (
+    EVENT_ALERT,
+    EVENT_HEALTH_UPDATE,
+    EVENT_NEW_BAR,
+    EVENT_NEW_TRADE,
+    EVENT_ORDER_STATUS,
+    EVENT_PNL_UPDATE,
+    EVENT_POSITION_UPDATE,
+    EVENT_STRATEGY_SIGNAL,
+    AlertPayload,
+    BarPayload,
+    HealthPayload,
+    OrderStatusPayload,
+    PnLPayload,
+    PositionPayload,
+    StrategySignalPayload,
+    TradePayload,
 )
 
 # Meta types (for ML training data)
@@ -29,56 +43,38 @@ from core.contracts.meta_types import (
     TradeEntryContext,
     TradeExitContext,
 )
-
-# Event names (most commonly used)
-from core.contracts.events import (
-    EVENT_NEW_BAR,
-    EVENT_NEW_TRADE,
-    EVENT_ORDER_STATUS,
-    EVENT_POSITION_UPDATE,
-    EVENT_PNL_UPDATE,
-    EVENT_ALERT,
-    EVENT_HEALTH_UPDATE,
-    EVENT_STRATEGY_SIGNAL,
-)
-
-# Event payloads (most commonly used)
-from core.contracts.events import (
-    BarPayload,
-    TradePayload,
-    OrderStatusPayload,
-    PositionPayload,
-    PnLPayload,
-    AlertPayload,
-    HealthPayload,
-    StrategySignalPayload,
+from core.contracts.types import (
+    BrokerSnapshot,
+    OrderResult,
+    PositionView,
+    SignalContext,
 )
 
 __all__ = [
     # Core types
-    'SignalContext',
-    'OrderResult',
-    'PositionView',
-    'BrokerSnapshot',
+    "SignalContext",
+    "OrderResult",
+    "PositionView",
+    "BrokerSnapshot",
     # Meta types
-    'TradeEntryContext',
-    'TradeExitContext',
+    "TradeEntryContext",
+    "TradeExitContext",
     # Event names
-    'EVENT_NEW_BAR',
-    'EVENT_NEW_TRADE',
-    'EVENT_ORDER_STATUS',
-    'EVENT_POSITION_UPDATE',
-    'EVENT_PNL_UPDATE',
-    'EVENT_ALERT',
-    'EVENT_HEALTH_UPDATE',
-    'EVENT_STRATEGY_SIGNAL',
+    "EVENT_NEW_BAR",
+    "EVENT_NEW_TRADE",
+    "EVENT_ORDER_STATUS",
+    "EVENT_POSITION_UPDATE",
+    "EVENT_PNL_UPDATE",
+    "EVENT_ALERT",
+    "EVENT_HEALTH_UPDATE",
+    "EVENT_STRATEGY_SIGNAL",
     # Event payloads
-    'BarPayload',
-    'TradePayload',
-    'OrderStatusPayload',
-    'PositionPayload',
-    'PnLPayload',
-    'AlertPayload',
-    'HealthPayload',
-    'StrategySignalPayload',
+    "BarPayload",
+    "TradePayload",
+    "OrderStatusPayload",
+    "PositionPayload",
+    "PnLPayload",
+    "AlertPayload",
+    "HealthPayload",
+    "StrategySignalPayload",
 ]

@@ -4,7 +4,6 @@ Unit tests for HybridPositionSizer.
 Tests all matrix combinations, trend detection, and alignment logic.
 """
 
-import pytest
 from core.logic.hybrid_position_sizer import HybridPositionSizer, HybridSizingResult
 
 
@@ -229,10 +228,7 @@ class TestHybridPositionSizer:
 
     def test_custom_high_threshold(self):
         """Should respect custom high confidence threshold."""
-        sizer = HybridPositionSizer(
-            enabled=True,
-            config={"high_confidence_threshold": 0.8}
-        )
+        sizer = HybridPositionSizer(enabled=True, config={"high_confidence_threshold": 0.8})
         daily_ctx = {"RSI": 60, "MACD": 1.0, "MACD_Signal": 0.5, "Close": 150, "SMA_200": 140}
 
         # 0.75 should be "med" with threshold of 0.8
@@ -245,10 +241,7 @@ class TestHybridPositionSizer:
 
     def test_custom_low_threshold(self):
         """Should respect custom low confidence threshold."""
-        sizer = HybridPositionSizer(
-            enabled=True,
-            config={"low_confidence_threshold": 0.4}
-        )
+        sizer = HybridPositionSizer(enabled=True, config={"low_confidence_threshold": 0.4})
         daily_ctx = {"RSI": 60, "MACD": 1.0, "MACD_Signal": 0.5, "Close": 150, "SMA_200": 140}
 
         # 0.35 should be "low" with threshold of 0.4
@@ -320,11 +313,7 @@ class TestHybridSizingResult:
     def test_result_has_all_fields(self):
         """Result should have all required fields."""
         result = HybridSizingResult(
-            base_multiplier=0.5,
-            confidence=0.6,
-            trend="bullish",
-            aligned=True,
-            reason="test reason"
+            base_multiplier=0.5, confidence=0.6, trend="bullish", aligned=True, reason="test reason"
         )
 
         assert result.base_multiplier == 0.5

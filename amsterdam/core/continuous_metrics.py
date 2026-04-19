@@ -20,17 +20,18 @@ Usage:
     risk_score = metrics.get_risk_score('AAPL', bars, 'rsi', recent_trades)
 """
 
-import numpy as np
-import pandas as pd
-from typing import List, Dict, Optional
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-import logging
+
+import numpy as np
+import pandas as pd
 
 
 @dataclass
 class RiskMetrics:
     """Container for continuous risk metrics."""
+
     atr_percentile: float  # 0-100
     rolling_sharpe: float  # typically -2 to +3
     volatility_score: float  # 0-1 (normalized)
@@ -75,9 +76,9 @@ class ContinuousMetrics:
 
         # Override from config if provided
         if config:
-            self.bayesian_prior_sharpe = config.get('bayesian_prior_sharpe', 0.5)
-            self.bayesian_prior_weight = config.get('bayesian_prior_weight', 5)
-            self.sharpe_smoothing_alpha = config.get('sharpe_smoothing_alpha', 0.3)
+            self.bayesian_prior_sharpe = config.get("bayesian_prior_sharpe", 0.5)
+            self.bayesian_prior_weight = config.get("bayesian_prior_weight", 5)
+            self.sharpe_smoothing_alpha = config.get("sharpe_smoothing_alpha", 0.3)
 
     def calculate_atr(self, bars: pd.DataFrame, period: int = 14) -> float:
         """
@@ -96,15 +97,11 @@ class ContinuousMetrics:
         # Calculate True Range for each bar
         true_ranges = []
         for i in range(1, len(bars)):
-            high = bars.iloc[i]['high']
-            low = bars.iloc[i]['low']
-            prev_close = bars.iloc[i-1]['close']
+            high = bars.iloc[i]["high"]
+            low = bars.iloc[i]["low"]
+            prev_close = bars.iloc[i - 1]["close"]
 
-            tr = max(
-                high - low,
-                abs(high - prev_close),
-                abs(low - prev_close)
-            )
+            tr = max(high - low, abs(high - prev_close), abs(low - prev_close))
             true_ranges.append(tr)
 
         # Average of last 'period' true ranges
@@ -115,11 +112,7 @@ class ContinuousMetrics:
         return 0.0
 
     def calculate_atr_percentile(
-        self,
-        symbol: str,
-        bars: pd.DataFrame,
-        current_period: int = 14,
-        lookback: int = 250
+        self, symbol: str, bars: pd.DataFrame, current_period: int = 14, lookback: int = 250
     ) -> float:
         """
         Calculate where current ATR ranks in historical distribution.
@@ -156,7 +149,7 @@ class ContinuousMetrics:
         for i in range(current_period, lookback):
             if i >= len(bars):
                 break
-            window = bars.iloc[i-current_period:i+1]
+            window = bars.iloc[i - current_period : i + 1]
             atr = self.calculate_atr(window, current_period)
             if atr > 0:
                 historical_atrs.append(atr)
@@ -169,10 +162,7 @@ class ContinuousMetrics:
         below_current = sum(1 for atr in historical_atrs if atr < current_atr)
         percentile = (below_current / len(historical_atrs)) * 100
 
-        self.logger.debug(
-            f"{symbol} ATR: current={current_atr:.2f}, "
-            f"percentile={percentile:.1f}%"
-        )
+        self.logger.debug(f"{symbol} ATR: current={current_atr:.2f}, percentile={percentile:.1f}%")
 
         return percentile
 
@@ -180,10 +170,10 @@ class ContinuousMetrics:
         self,
         symbol: str,
         strategy: str,
-        recent_trades: List[Dict],
+        recent_trades: list[dict],
         lookback_days: int = 30,
         use_bayesian_shrinkage: bool = True,
-        use_smoothing: bool = True
+        use_smoothing: bool = True,
     ) -> float:
         """
         Calculate rolling Sharpe ratio from recent trades with Bayesian shrinkage and smoothing.
@@ -215,7 +205,7 @@ class ContinuousMetrics:
         cutoff_date = datetime.now() - timedelta(days=lookback_days)
         filtered_trades = []
         for t in recent_trades:
-            ts = t.get('timestamp', datetime.now())
+            ts = t.get("timestamp", datetime.now())
             # Handle both string and datetime timestamps
             if isinstance(ts, str):
                 try:
@@ -241,10 +231,10 @@ class ContinuousMetrics:
         returns = []
         for trade in filtered_trades:
             # Get return as percentage
-            if 'return_pct' in trade:
-                ret = trade['return_pct']
-            elif 'pnl' in trade and 'entry_value' in trade:
-                ret = (trade['pnl'] / trade['entry_value']) * 100
+            if "return_pct" in trade:
+                ret = trade["return_pct"]
+            elif "pnl" in trade and "entry_value" in trade:
+                ret = (trade["pnl"] / trade["entry_value"]) * 100
             else:
                 continue
             returns.append(ret)
@@ -287,8 +277,7 @@ class ContinuousMetrics:
             if key in self.smoothed_sharpe_history:
                 prev_smoothed = self.smoothed_sharpe_history[key]
                 smoothed_sharpe = (
-                    self.sharpe_smoothing_alpha * current_sharpe +
-                    (1 - self.sharpe_smoothing_alpha) * prev_smoothed
+                    self.sharpe_smoothing_alpha * current_sharpe + (1 - self.sharpe_smoothing_alpha) * prev_smoothed
                 )
                 self.logger.debug(
                     f"{symbol}/{strategy} Smoothing: current={current_sharpe:.2f}, "
@@ -349,9 +338,9 @@ class ContinuousMetrics:
         symbol: str,
         bars: pd.DataFrame,
         strategy: str,
-        recent_trades: List[Dict],
+        recent_trades: list[dict],
         atr_lookback: int = 250,
-        sharpe_lookback_days: int = 30
+        sharpe_lookback_days: int = 30,
     ) -> RiskMetrics:
         """
         Calculate comprehensive risk metrics.
@@ -368,13 +357,9 @@ class ContinuousMetrics:
             RiskMetrics object with all calculated metrics
         """
         # Calculate raw metrics
-        atr_pct = self.calculate_atr_percentile(
-            symbol, bars, lookback=atr_lookback
-        )
+        atr_pct = self.calculate_atr_percentile(symbol, bars, lookback=atr_lookback)
 
-        sharpe = self.calculate_rolling_sharpe(
-            symbol, strategy, recent_trades, lookback_days=sharpe_lookback_days
-        )
+        sharpe = self.calculate_rolling_sharpe(symbol, strategy, recent_trades, lookback_days=sharpe_lookback_days)
 
         # Normalize to 0-1 scores
         vol_score = self.normalize_atr_percentile(atr_pct)
@@ -388,7 +373,7 @@ class ContinuousMetrics:
             rolling_sharpe=sharpe,
             volatility_score=vol_score,
             performance_score=perf_score,
-            combined_score=combined
+            combined_score=combined,
         )
 
         self.logger.info(
@@ -423,22 +408,21 @@ def main():
         metrics_calc = ContinuousMetrics()
 
         # ATR percentile
-        atr_pct = metrics_calc.calculate_atr_percentile('AAPL', bars)
+        atr_pct = metrics_calc.calculate_atr_percentile("AAPL", bars)
         print(f"AAPL ATR Percentile: {atr_pct:.1f}%")
 
         # Mock some trades for Sharpe calculation
         mock_trades = [
-            {'pnl': 100, 'entry_value': 10000, 'timestamp': datetime.now() - timedelta(days=i)}
-            for i in range(20)
+            {"pnl": 100, "entry_value": 10000, "timestamp": datetime.now() - timedelta(days=i)} for i in range(20)
         ]
 
-        sharpe = metrics_calc.calculate_rolling_sharpe('AAPL', 'rsi', mock_trades)
+        sharpe = metrics_calc.calculate_rolling_sharpe("AAPL", "rsi", mock_trades)
         print(f"AAPL/RSI Rolling Sharpe: {sharpe:.2f}")
 
         # Full metrics
-        metrics = metrics_calc.get_risk_metrics('AAPL', bars, 'rsi', mock_trades)
+        metrics = metrics_calc.get_risk_metrics("AAPL", bars, "rsi", mock_trades)
         print(f"Combined Score: {metrics.combined_score:.2f}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

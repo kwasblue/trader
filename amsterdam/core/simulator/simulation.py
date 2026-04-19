@@ -19,52 +19,45 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 import asyncio
-import json
-import logging
-from collections import defaultdict, deque
+from collections import deque
 from dataclasses import dataclass
-from typing import Dict, Deque, Any, Optional
 from datetime import datetime, timezone
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
-from loggers.logger import Logger
-from loggers.file_trade_logger import FileTradeLogger
-from loggers.meta_trade_logger import MetaTradeLogger
-from indicators.technical_indicators import TechnicalIndicators
 from core.broker.mock_broker import MockBroker
-from core.mock_executor import MockExecutor
-from core.position_sizer import KellyPositionSizer
-from core.events.eventhandler import EventHandler
-from core.simulator.gbm_simulator import GBMSimulator
-from core.simulator.historical_simulator import HistoricalDataSimulator
-from core.logic.strategy_routing_manager import StrategyRoutingManager
-from core.logic.trade_logic_manager import DynamicTradeLogicManager
-from core.logic.mock_execution_engine import MockExecutionEngine
-from core.logic.symbol_state import SymbolState
-from core.logic.portfolio_state import PortfolioState
-from core.drawdown_monitor import DrawdownMonitor
-from core.enums import OrderSide
-from core.contracts.types import SignalContext
-
+from core.config_loader import get_config
 from core.contracts.events import (
+    EVENT_HALTED,
     EVENT_NEW_BAR,
-    EVENT_STRATEGY_SIGNAL,
     EVENT_PNL_UPDATE,
     EVENT_REGIME_UPDATE,
-    EVENT_HALTED,
-    PnLPayload,
+    EVENT_STRATEGY_SIGNAL,
     BarPayload,
-    StrategySignalPayload,
+    PnLPayload,
     RegimePayload,
 )
-from core.config_loader import get_config
-
+from core.contracts.types import SignalContext
+from core.drawdown_monitor import DrawdownMonitor
+from core.logic.mock_execution_engine import MockExecutionEngine
+from core.logic.portfolio_state import PortfolioState
+from core.logic.strategy_routing_manager import StrategyRoutingManager
+from core.logic.symbol_state import SymbolState
+from core.logic.trade_logic_manager import DynamicTradeLogicManager
+from core.mock_executor import MockExecutor
+from core.position_sizer import KellyPositionSizer
+from core.simulator.gbm_simulator import GBMSimulator
+from core.simulator.historical_simulator import HistoricalDataSimulator
+from indicators.technical_indicators import TechnicalIndicators
+from loggers.file_trade_logger import FileTradeLogger
+from loggers.logger import Logger
+from loggers.meta_trade_logger import MetaTradeLogger
 
 # ============================================================================
 # HELPER FUNCTIONS
 # ============================================================================
+
 
 class IncrementalATR:
     """
@@ -83,11 +76,11 @@ class IncrementalATR:
             period: ATR lookback period (default: 14)
         """
         self.period = period
-        self.prev_close: Optional[float] = None
+        self.prev_close: float | None = None
         self.tr_buffer: deque = deque(maxlen=period)
-        self.current_atr: Optional[float] = None
+        self.current_atr: float | None = None
 
-    def update(self, high: float, low: float, close: float) -> Optional[float]:
+    def update(self, high: float, low: float, close: float) -> float | None:
         """
         Update ATR with a new bar.
 
@@ -101,11 +94,7 @@ class IncrementalATR:
         """
         if self.prev_close is not None:
             # Calculate True Range
-            tr = max(
-                high - low,
-                abs(high - self.prev_close),
-                abs(low - self.prev_close)
-            )
+            tr = max(high - low, abs(high - self.prev_close), abs(low - self.prev_close))
             self.tr_buffer.append(tr)
 
             # Calculate ATR once we have enough data
@@ -122,7 +111,7 @@ class IncrementalATR:
         self.current_atr = None
 
 
-def compute_atr(df: pd.DataFrame, period: int = 14) -> Optional[float]:
+def compute_atr(df: pd.DataFrame, period: int = 14) -> float | None:
     """
     Compute the Average True Range (ATR) from OHLC data.
 
@@ -137,9 +126,9 @@ def compute_atr(df: pd.DataFrame, period: int = 14) -> Optional[float]:
         return None
 
     # Get column names (handle both 'High' and 'high' conventions)
-    high_col = 'High' if 'High' in df.columns else 'high'
-    low_col = 'Low' if 'Low' in df.columns else 'low'
-    close_col = 'Close' if 'Close' in df.columns else 'close'
+    high_col = "High" if "High" in df.columns else "high"
+    low_col = "Low" if "Low" in df.columns else "low"
+    close_col = "Close" if "Close" in df.columns else "close"
 
     high = df[high_col].values
     low = df[low_col].values
@@ -148,7 +137,7 @@ def compute_atr(df: pd.DataFrame, period: int = 14) -> Optional[float]:
     # Calculate True Range components
     tr1 = high[1:] - low[1:]  # High - Low
     tr2 = np.abs(high[1:] - close[:-1])  # |High - Prev Close|
-    tr3 = np.abs(low[1:] - close[:-1])   # |Low - Prev Close|
+    tr3 = np.abs(low[1:] - close[:-1])  # |Low - Prev Close|
 
     # True Range is max of the three
     tr = np.maximum(np.maximum(tr1, tr2), tr3)
@@ -161,7 +150,7 @@ def compute_atr(df: pd.DataFrame, period: int = 14) -> Optional[float]:
     return float(atr)
 
 
-def classify_regime(atr: Optional[float], atr_history: list) -> str:
+def classify_regime(atr: float | None, atr_history: list) -> str:
     """
     Classify market regime based on ATR relative to historical values.
 
@@ -195,6 +184,7 @@ def classify_regime(atr: Optional[float], atr_history: list) -> str:
 # CONFIGURATION
 # ============================================================================
 
+
 @dataclass
 class SimConfig:
     """Simulation configuration"""
@@ -214,14 +204,14 @@ class SimConfig:
 
     # Position sizing
     risk_per_trade: float = 0.01  # 1% risk per trade
-    max_trade_pct: float = 0.10   # Max 10% of portfolio per trade
+    max_trade_pct: float = 0.10  # Max 10% of portfolio per trade
     max_holding_pct: float = 0.25  # Max 25% in any single position
 
     # Drawdown limits (intraday = from peak, daily = from day start)
-    drawdown_monitor_enabled: bool = False      # Enable/disable drawdown monitor
-    max_symbol_drawdown: float = 0.30           # 30% symbol intraday
-    max_symbol_daily_drawdown: float = 0.15     # 15% symbol daily
-    max_portfolio_drawdown: float = 0.25        # 25% portfolio intraday
+    drawdown_monitor_enabled: bool = False  # Enable/disable drawdown monitor
+    max_symbol_drawdown: float = 0.30  # 30% symbol intraday
+    max_symbol_daily_drawdown: float = 0.15  # 15% symbol daily
+    max_portfolio_drawdown: float = 0.25  # 25% portfolio intraday
     max_portfolio_daily_drawdown: float = 0.10  # 10% portfolio daily
 
     # History buffers
@@ -252,7 +242,7 @@ class SimConfig:
     historical_start_index: int = 0  # Starting bar index (skip warmup)
 
     @classmethod
-    def from_config_file(cls, symbols: list[str] = None) -> "SimConfig":
+    def from_config_file(cls, symbols: list[str] = None) -> SimConfig:
         """
         Create SimConfig from the global trading_config.json file.
 
@@ -265,9 +255,9 @@ class SimConfig:
         cfg = get_config()
 
         # Get simulation realism settings if available
-        slippage = getattr(cfg.simulation, 'slippage', 0.001)
-        commission = getattr(cfg.simulation, 'commission', 0.0)
-        meta_logging = getattr(cfg.simulation, 'meta_logging_enabled', True)
+        slippage = getattr(cfg.simulation, "slippage", 0.001)
+        commission = getattr(cfg.simulation, "commission", 0.0)
+        meta_logging = getattr(cfg.simulation, "meta_logging_enabled", True)
 
         return cls(
             symbols=symbols or cfg.general.default_symbols,
@@ -288,16 +278,16 @@ class SimConfig:
             commission=commission,
             meta_logging_enabled=meta_logging,
         )
-    
+
     def __post_init__(self):
         """Validate and create directories"""
         if not self.symbols:
             raise ValueError("symbols list cannot be empty")
-        
+
         Path(self.trade_log_dir).mkdir(parents=True, exist_ok=True)
         Path(self.strategy_routing).parent.mkdir(parents=True, exist_ok=True)
         Path(self.trade_logic_routing).parent.mkdir(parents=True, exist_ok=True)
-    
+
     @property
     def trade_log_path(self) -> str:
         return os.path.join(self.trade_log_dir, self.trade_log_file)
@@ -307,6 +297,7 @@ class SimConfig:
 # SIMULATION RUNNER
 # ============================================================================
 
+
 class SimulationRunner:
     """
     Simulation runner using improved architecture
@@ -315,31 +306,21 @@ class SimulationRunner:
     def __init__(self, cfg: SimConfig):
         self.cfg = cfg
         # Logger - own file with propagation to app.log
-        self.logger = Logger(
-            log_file="simulation.log",
-            logger_name="SimulationRunner",
-            propagate=True
-        ).get_logger()
+        self.logger = Logger(log_file="simulation.log", logger_name="SimulationRunner", propagate=True).get_logger()
 
         # Stop flag for graceful shutdown
         self._stop_requested = False
 
         # Core state
         self.portfolio = PortfolioState(cash=cfg.starting_cash)
-        self.symbol_states: Dict[str, SymbolState] = {
-            s: SymbolState(symbol=s) for s in cfg.symbols
-        }
+        self.symbol_states: dict[str, SymbolState] = {s: SymbolState(symbol=s) for s in cfg.symbols}
 
         # History buffers
-        self.history: Dict[str, Deque[dict]] = {
-            s: deque(maxlen=cfg.max_history_bars) for s in cfg.symbols
-        }
-        self.atr_hist: Dict[str, Deque[float]] = {
-            s: deque(maxlen=cfg.max_atr_history) for s in cfg.symbols
-        }
+        self.history: dict[str, deque[dict]] = {s: deque(maxlen=cfg.max_history_bars) for s in cfg.symbols}
+        self.atr_hist: dict[str, deque[float]] = {s: deque(maxlen=cfg.max_atr_history) for s in cfg.symbols}
 
         # Equity curve history for PNL events
-        self.equity_history: Deque[float] = deque(maxlen=1000)
+        self.equity_history: deque[float] = deque(maxlen=1000)
         self.equity_history.append(cfg.starting_cash)
 
         # Utilities
@@ -353,7 +334,7 @@ class SimulationRunner:
         """Request graceful stop of the simulation."""
         self._stop_requested = True
         self.logger.info("Stop requested")
-    
+
     def _init_components(self):
         """Initialize all components"""
         # Simulator - choose between GBM (synthetic) or Historical (real data)
@@ -364,32 +345,23 @@ class SimulationRunner:
                 loop_data=True,
                 start_index=self.cfg.historical_start_index,
             )
-            self.logger.info(
-                f"[SIM] Using HISTORICAL data from {self.cfg.historical_data_path}"
-            )
+            self.logger.info(f"[SIM] Using HISTORICAL data from {self.cfg.historical_data_path}")
         else:
-            self.sim = GBMSimulator(
-                self.cfg.symbols,
-                base_price=300.0
-            )
+            self.sim = GBMSimulator(self.cfg.symbols, base_price=300.0)
             self.logger.info("[SIM] Using GBM (synthetic) data")
 
         # Event handler - use global singleton so GUI receives events
         # NOTE: Must be created BEFORE trade logic manager to pass event handler
         from core.events.eventhandler import get_event_handler
+
         self.events = get_event_handler()
         print(f"[SIM] EventHandler instance ID: {id(self.events)}")
 
         # Strategy routing
-        self.strategy_routing = StrategyRoutingManager(
-            self.cfg.strategy_routing
-        )
+        self.strategy_routing = StrategyRoutingManager(self.cfg.strategy_routing)
 
         # Trade logic routing (with event handler for signal emission)
-        self.trade_logic_manager = DynamicTradeLogicManager(
-            self.cfg.trade_logic_routing,
-            event_handler=self.events
-        )
+        self.trade_logic_manager = DynamicTradeLogicManager(self.cfg.trade_logic_routing, event_handler=self.events)
 
         # Broker with realistic slippage/commission
         self.broker = MockBroker(
@@ -399,7 +371,7 @@ class SimulationRunner:
         )
         self.logger.info(
             f"[SIM] Broker initialized: slippage={self.cfg.slippage:.4f} "
-            f"({self.cfg.slippage*100:.2f}%), commission=${self.cfg.commission:.2f}"
+            f"({self.cfg.slippage * 100:.2f}%), commission=${self.cfg.commission:.2f}"
         )
 
         # Executor
@@ -414,28 +386,27 @@ class SimulationRunner:
             self.logger.info(f"[SIM] Meta-logging enabled: {self.cfg.meta_log_file}")
         else:
             self.meta_logger = None
-        
+
         # Position sizer - use config values
         self.sizer = KellyPositionSizer(
             risk_percentage=self.cfg.risk_per_trade,
             max_trade_pct=self.cfg.max_trade_pct,
-            max_holding_pct=self.cfg.max_holding_pct
+            max_holding_pct=self.cfg.max_holding_pct,
         )
-        self.logger.info(f"[SIM] Position sizer: risk={self.cfg.risk_per_trade:.1%}, max_trade={self.cfg.max_trade_pct:.1%}")
-        
+        self.logger.info(
+            f"[SIM] Position sizer: risk={self.cfg.risk_per_trade:.1%}, max_trade={self.cfg.max_trade_pct:.1%}"
+        )
+
         # Trade logger
-        self.trade_logger = FileTradeLogger(
-            log_file=self.cfg.trade_log_file,
-            log_dir=self.cfg.trade_log_dir
-        )
-        
+        self.trade_logger = FileTradeLogger(log_file=self.cfg.trade_log_file, log_dir=self.cfg.trade_log_dir)
+
         # Drawdown monitor - controlled by config
         if self.cfg.drawdown_monitor_enabled:
             self.ddm = DrawdownMonitor(
                 max_symbol_drawdown=self.cfg.max_symbol_drawdown,
                 max_symbol_daily_drawdown=self.cfg.max_symbol_daily_drawdown,
                 max_portfolio_drawdown=self.cfg.max_portfolio_drawdown,
-                max_portfolio_daily_drawdown=self.cfg.max_portfolio_daily_drawdown
+                max_portfolio_daily_drawdown=self.cfg.max_portfolio_daily_drawdown,
             )
             self.logger.info("[SIM] Drawdown monitor ENABLED")
         else:
@@ -452,43 +423,43 @@ class SimulationRunner:
             portfolio=self.portfolio,
             drawdown_monitor=self.ddm,
             event_handler=self.events,
-            meta_logger=self.meta_logger if hasattr(self, 'meta_logger') else None,
+            meta_logger=self.meta_logger if hasattr(self, "meta_logger") else None,
         )
 
         # Provide ATR history reference for meta-model feature computation
         self.engine.set_atr_hist_reference(self.atr_hist)
-    
+
     # ========================================================================
     # BAR PROCESSING
     # ========================================================================
-    
+
     def _df_from_history(self, symbol: str) -> pd.DataFrame:
         """Build DataFrame from history"""
         if not self.history[symbol]:
             return pd.DataFrame()
-        
+
         df = pd.DataFrame(list(self.history[symbol]))
-        df['timestamp'] = pd.to_datetime(df['timestamp'])
-        df = df.set_index('timestamp')
+        df["timestamp"] = pd.to_datetime(df["timestamp"])
+        df = df.set_index("timestamp")
         return df[["Open", "High", "Low", "Close", "Volume"]].copy()
-    
+
     def _classify_regime(self, indicators_row, atr_history):
         """Classify market regime based on indicator values"""
-        atr = indicators_row.get('ATR')
-        rsi = indicators_row.get('RSI')
-        bb_upper = indicators_row.get('Bollinger_Upper')
-        bb_lower = indicators_row.get('Bollinger_Lower')
-        close = indicators_row.get('Close')
-        
+        atr = indicators_row.get("ATR")
+        rsi = indicators_row.get("RSI")
+        bb_upper = indicators_row.get("Bollinger_Upper")
+        bb_lower = indicators_row.get("Bollinger_Lower")
+        close = indicators_row.get("Close")
+
         # Default to UNKNOWN if key indicators are missing
         if pd.isna(atr) or pd.isna(close):
             return "UNKNOWN"
-        
+
         # Calculate Bollinger Band width if we have the bands
         bb_width = None
         if not pd.isna(bb_upper) and not pd.isna(bb_lower):
             bb_width = (bb_upper - bb_lower) / close
-        
+
         # Calculate dynamic ATR thresholds based on history
         if len(atr_history) >= 20:
             atr_list = list(atr_history)
@@ -498,29 +469,29 @@ class SimulationRunner:
             low_atr_threshold = atr_mean - 0.5 * atr_std
         else:
             return "UNKNOWN"  # Not enough history yet
-        
+
         # High volatility regime
         if atr > high_atr_threshold:
             return "HIGH_VOLATILITY"
-        
-        # Low volatility regime  
+
+        # Low volatility regime
         if atr < low_atr_threshold:
             return "LOW_VOLATILITY"
-        
+
         # Range-bound (using RSI and Bollinger Bands)
         if not pd.isna(rsi) and bb_width is not None:
             if 40 < rsi < 60 and bb_width < 0.02:  # Narrow range
                 return "RANGE_BOUND"
-        
+
         # Trending (default when volatility is normal)
         return "TRENDING"
-        
+
     async def _on_bar(self, event) -> None:
         """Process bar event"""
         try:
             payload = event.payload
             symbol = payload["symbol"]
-            
+
             # Build bar dict
             bar = {
                 "timestamp": pd.to_datetime(payload["timestamp"]),
@@ -529,35 +500,35 @@ class SimulationRunner:
                 "High": payload["high"],
                 "Low": payload["low"],
                 "Close": payload["close"],
-                "Volume": payload["volume"]
+                "Volume": payload["volume"],
             }
-            
+
             # Update history
             self.history[symbol].append(bar)
-            
+
             # Update portfolio with price
             price = float(bar["Close"])
             self.portfolio.update_price(symbol, price)
-            
+
             # Build DataFrame
             df = self._df_from_history(symbol)
             if df.empty or len(df) < self.cfg.atr_period:
                 return
-            
+
             # Compute indicators
             indicators = TechnicalIndicators(df).apply_all()
-            
-            atr = indicators['ATR'].iloc[-1]
+
+            atr = indicators["ATR"].iloc[-1]
             if atr and not pd.isna(atr):
                 self.atr_hist[symbol].append(atr)
-            
+
             # Classify regime based on current indicators - PASS THE SERIES, NOT ATR
             regime = self._classify_regime(indicators.iloc[-1], self.atr_hist[symbol])
-                    
+
             # Get strategy and generate signal
             strategy = self.strategy_routing.get_strategy(symbol, regime)
             strategy_name = strategy.__class__.__name__
-            
+
             try:
                 signal = strategy.generate_signal(df)
                 if not isinstance(signal, int):
@@ -624,11 +595,11 @@ class SimulationRunner:
 
         except Exception as e:
             self.logger.error(f"Bar processing failed: {e}", exc_info=True)
-    
+
     # ========================================================================
     # SIMULATION LOOP
     # ========================================================================
-    
+
     async def _bar_producer(self) -> None:
         """Generate and emit bars"""
         try:
@@ -652,7 +623,9 @@ class SimulationRunner:
                     # Emit bar event
                     payload: BarPayload = {
                         "symbol": bar["symbol"],
-                        "timestamp": bar["timestamp"].isoformat() if hasattr(bar["timestamp"], 'isoformat') else str(bar["timestamp"]),
+                        "timestamp": bar["timestamp"].isoformat()
+                        if hasattr(bar["timestamp"], "isoformat")
+                        else str(bar["timestamp"]),
                         "open": float(bar["open"]),
                         "high": float(bar["high"]),
                         "low": float(bar["low"]),
@@ -676,7 +649,7 @@ class SimulationRunner:
             raise
         except Exception as e:
             self.logger.error(f"Bar producer failed: {e}", exc_info=True)
-    
+
     async def _bar_consumer(self) -> None:
         """Subscribe to bar events"""
         try:
@@ -691,7 +664,7 @@ class SimulationRunner:
             # so subscribing to EVENT_STRATEGY_SIGNAL would cause duplicate processing.
 
             # But DO subscribe to GUI events (flatten, cancel, halt, manual orders)
-            if hasattr(self.engine, '_subscribe_gui_events'):
+            if hasattr(self.engine, "_subscribe_gui_events"):
                 await self.engine._subscribe_gui_events()
 
         except Exception as e:
@@ -699,12 +672,12 @@ class SimulationRunner:
 
     async def _on_halt(self, event) -> None:
         """Handle HALT event from GUI."""
-        payload = event.payload if hasattr(event, 'payload') else event
-        halted = payload.get('halted', False)
+        payload = event.payload if hasattr(event, "payload") else event
+        halted = payload.get("halted", False)
         if halted:
             self.logger.info("HALT received - stopping simulation")
             self.stop()
-    
+
     def _seed(self):
         """Seed with warm-up bars"""
         for symbol in self.cfg.symbols:
@@ -712,7 +685,7 @@ class SimulationRunner:
                 bar = self.sim.generate_bar(symbol)
                 bar["timestamp"] = datetime.now(timezone.utc)
                 self.history[symbol].append(bar)
-    
+
     async def run(self) -> None:
         """Run simulation"""
         try:
@@ -727,24 +700,24 @@ class SimulationRunner:
 
             # Now run the producer
             await self._bar_producer()
-            
+
             # Final stats
             final_equity = self.portfolio.total_equity()
             self.logger.info(f"Simulation complete. Final equity: ${final_equity:,.2f}")
-            
-            print("\n" + "="*60)
+
+            print("\n" + "=" * 60)
             print("📊 SIMULATION RESULTS")
-            print("="*60)
+            print("=" * 60)
             print(f"Final Equity:    ${final_equity:>15,.2f}")
             print(f"Cash:            ${self.portfolio.cash:>15,.2f}")
             print(f"Unrealized PnL:  ${self.portfolio.total_unrealized():>15,.2f}")
             print(f"Realized PnL:    ${self.portfolio.realized_pnl:>15,.2f}")
             print(f"Total Positions: {self.portfolio.num_positions:>15}")
-            print("="*60)
-        
+            print("=" * 60)
+
         except Exception as e:
             self.logger.error(f"Simulation failed: {e}", exc_info=True)
-        
+
         finally:
             self.trade_logger.flush()
             self.trade_logger.close()
@@ -754,15 +727,11 @@ class SimulationRunner:
 # MAIN
 # ============================================================================
 
+
 async def main():
     """Run simulation"""
-    cfg = SimConfig(
-        symbols=["AAPL", "MSFT"],
-        steps=500,
-        bar_sleep=0.01,
-        starting_cash=100_000.0
-    )
-    
+    cfg = SimConfig(symbols=["AAPL", "MSFT"], steps=500, bar_sleep=0.01, starting_cash=100_000.0)
+
     runner = SimulationRunner(cfg)
     await runner.run()
 

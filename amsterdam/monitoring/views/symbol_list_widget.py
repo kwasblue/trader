@@ -4,12 +4,12 @@ Symbol List Widget - GUI for managing trade and watch lists.
 Provides a two-column view for managing symbols between trade and watch lists
 with drag-and-drop support and context menus.
 """
+
 from __future__ import annotations
 
-from PySide6 import QtWidgets, QtCore, QtGui
-from typing import Optional
+from PySide6 import QtCore, QtWidgets
 
-from core.symbol_list_manager import get_list_manager, LIST_TYPE_TRADE, LIST_TYPE_WATCH
+from core.symbol_list_manager import LIST_TYPE_TRADE, LIST_TYPE_WATCH, get_list_manager
 
 
 class SymbolListWidget(QtWidgets.QWidget):
@@ -17,7 +17,7 @@ class SymbolListWidget(QtWidgets.QWidget):
 
     symbolMoved = QtCore.Signal(str, str)  # symbol, new_list_type
 
-    def __init__(self, parent: Optional[QtWidgets.QWidget] = None):
+    def __init__(self, parent: QtWidgets.QWidget | None = None):
         super().__init__(parent)
         self._manager = get_list_manager()
         self._setup_ui()
@@ -97,9 +97,7 @@ class SymbolListWidget(QtWidgets.QWidget):
         self.trade_list = QtWidgets.QListWidget()
         self.trade_list.setStyleSheet(self._list_style())
         self.trade_list.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
-        self.trade_list.customContextMenuRequested.connect(
-            lambda pos: self._show_context_menu(pos, LIST_TYPE_TRADE)
-        )
+        self.trade_list.customContextMenuRequested.connect(lambda pos: self._show_context_menu(pos, LIST_TYPE_TRADE))
         self.trade_list.setDragDropMode(QtWidgets.QAbstractItemView.DragDrop)
         self.trade_list.setDefaultDropAction(QtCore.Qt.MoveAction)
         trade_layout.addWidget(self.trade_list)
@@ -137,9 +135,7 @@ class SymbolListWidget(QtWidgets.QWidget):
         self.watch_list = QtWidgets.QListWidget()
         self.watch_list.setStyleSheet(self._list_style())
         self.watch_list.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
-        self.watch_list.customContextMenuRequested.connect(
-            lambda pos: self._show_context_menu(pos, LIST_TYPE_WATCH)
-        )
+        self.watch_list.customContextMenuRequested.connect(lambda pos: self._show_context_menu(pos, LIST_TYPE_WATCH))
         self.watch_list.setDragDropMode(QtWidgets.QAbstractItemView.DragDrop)
         self.watch_list.setDefaultDropAction(QtCore.Qt.MoveAction)
         watch_layout.addWidget(self.watch_list)
@@ -158,8 +154,7 @@ class SymbolListWidget(QtWidgets.QWidget):
         info_layout = QtWidgets.QVBoxLayout(info_box)
 
         self.info_text = QtWidgets.QLabel(
-            "Select a symbol to view details. "
-            "Use the buttons or right-click to move symbols between lists."
+            "Select a symbol to view details. Use the buttons or right-click to move symbols between lists."
         )
         self.info_text.setStyleSheet("color: #94a3b8; font-size: 12px;")
         self.info_text.setWordWrap(True)
@@ -331,7 +326,7 @@ class SymbolListWidget(QtWidgets.QWidget):
             "Remove Symbol",
             f"Remove {symbol} from all lists?",
             QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
-            QtWidgets.QMessageBox.No
+            QtWidgets.QMessageBox.No,
         )
         if reply == QtWidgets.QMessageBox.Yes:
             self._manager.remove_symbol(symbol)

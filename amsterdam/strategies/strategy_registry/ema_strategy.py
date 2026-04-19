@@ -1,5 +1,5 @@
 import numpy as np
-from typing import Optional, List
+
 from core.base.base_strategy import BaseStrategy
 
 
@@ -28,7 +28,7 @@ class EMAStrategy(BaseStrategy):
             return 1
         return -1
 
-    def generate_signals_vectorized(self, data) -> Optional[List[int]]:
+    def generate_signals_vectorized(self, data) -> list[int] | None:
         """
         Vectorized signal generation for fast backtesting.
         10-50x faster than row-by-row for large datasets.

@@ -2,8 +2,10 @@ import logging
 import os
 from logging.handlers import RotatingFileHandler
 
+
 class UniqueMessageFilter(logging.Filter):
     """Suppress consecutive duplicate log messages."""
+
     def __init__(self):
         super().__init__()
         self.last_message = None
@@ -67,8 +69,17 @@ class Logger:
     def get_logger(self):
         return self._logger
 
-    def debug(self, msg: str): self._logger.debug(msg)
-    def info(self, msg: str): self._logger.info(msg)
-    def warning(self, msg: str): self._logger.warning(msg)
-    def error(self, msg: str): self._logger.error(msg)
-    def critical(self, msg: str): self._logger.critical(msg)
+    def debug(self, msg: str):
+        self._logger.debug(msg)
+
+    def info(self, msg: str):
+        self._logger.info(msg)
+
+    def warning(self, msg: str):
+        self._logger.warning(msg)
+
+    def error(self, msg: str):
+        self._logger.error(msg)
+
+    def critical(self, msg: str):
+        self._logger.critical(msg)

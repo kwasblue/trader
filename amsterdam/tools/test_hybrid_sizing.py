@@ -14,23 +14,22 @@ Usage:
 import asyncio
 import json
 import sys
-from pathlib import Path
-from typing import Dict, List, Optional
 from dataclasses import dataclass
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from core.backtest.regime_backtest import RegimeBacktester
 from core.unified_data_pipeline import UnifiedDataPipeline
-from core.backtest.unified_backtest_runner import UnifiedBacktestRunner
-from core.backtest.regime_backtest import RegimeBacktester, REGIME_TYPES
 from loggers.logger import Logger
 
 
 @dataclass
 class HybridComparisonResult:
     """Result of comparing hybrid vs non-hybrid."""
+
     symbol: str
 
     # Non-hybrid results
@@ -61,11 +60,7 @@ class HybridSizingTester:
     if it should be enabled per symbol.
     """
 
-    def __init__(
-        self,
-        symbols: Optional[List[str]] = None,
-        data_pipeline: Optional[UnifiedDataPipeline] = None
-    ):
+    def __init__(self, symbols: list[str] | None = None, data_pipeline: UnifiedDataPipeline | None = None):
         """
         Initialize hybrid sizing tester.
 
@@ -75,12 +70,7 @@ class HybridSizingTester:
         """
         self.pipeline = data_pipeline or UnifiedDataPipeline()
 
-        self.logger = Logger(
-            "hybrid_sizing_test.log",
-            "HybridSizingTester",
-            propagate=True,
-            level=10
-        ).get_logger()
+        self.logger = Logger("hybrid_sizing_test.log", "HybridSizingTester", propagate=True, level=10).get_logger()
 
         # Load current strategy routing
         self.routing_path = ROOT / "config" / "strategy_routing.json"
@@ -91,26 +81,21 @@ class HybridSizingTester:
             self.symbols = symbols
         else:
             # Get all symbols from routing
-            self.symbols = [s for s in self.routing.keys() if s != 'default']
+            self.symbols = [s for s in self.routing.keys() if s != "default"]
 
-        self.results: Dict[str, HybridComparisonResult] = {}
+        self.results: dict[str, HybridComparisonResult] = {}
 
-        self.logger.info(
-            f"HybridSizingTester initialized for {len(self.symbols)} symbols"
-        )
+        self.logger.info(f"HybridSizingTester initialized for {len(self.symbols)} symbols")
 
-    def _load_routing(self) -> Dict:
+    def _load_routing(self) -> dict:
         """Load strategy routing configuration."""
         if not self.routing_path.exists():
-            raise FileNotFoundError(
-                f"Strategy routing not found: {self.routing_path}\n"
-                "Run strategy optimization first"
-            )
+            raise FileNotFoundError(f"Strategy routing not found: {self.routing_path}\nRun strategy optimization first")
 
         with open(self.routing_path) as f:
             return json.load(f)
 
-    async def test_all(self, days: int = 365) -> Dict[str, HybridComparisonResult]:
+    async def test_all(self, days: int = 365) -> dict[str, HybridComparisonResult]:
         """
         Test hybrid sizing for all symbols.
 
@@ -137,12 +122,12 @@ class HybridSizingTester:
 
                     # Print comparison
                     print(f"\n{symbol}:")
-                    print(f"  No Hybrid: Sharpe {result.no_hybrid_sharpe:.2f}, "
-                          f"Return {result.no_hybrid_return:+.1%}")
-                    print(f"  Hybrid:    Sharpe {result.hybrid_sharpe:.2f}, "
-                          f"Return {result.hybrid_return:+.1%}")
-                    print(f"  Improvement: Sharpe {result.sharpe_improvement:+.2f}, "
-                          f"Return {result.return_improvement:+.1%}")
+                    print(f"  No Hybrid: Sharpe {result.no_hybrid_sharpe:.2f}, Return {result.no_hybrid_return:+.1%}")
+                    print(f"  Hybrid:    Sharpe {result.hybrid_sharpe:.2f}, Return {result.hybrid_return:+.1%}")
+                    print(
+                        f"  Improvement: Sharpe {result.sharpe_improvement:+.2f}, "
+                        f"Return {result.return_improvement:+.1%}"
+                    )
 
                     if result.recommend_hybrid:
                         print(f"  ✓ RECOMMEND: Enable hybrid - {result.reason}")
@@ -158,11 +143,7 @@ class HybridSizingTester:
 
         return self.results
 
-    async def _test_symbol(
-        self,
-        symbol: str,
-        days: int
-    ) -> Optional[HybridComparisonResult]:
+    async def _test_symbol(self, symbol: str, days: int) -> HybridComparisonResult | None:
         """
         Test hybrid sizing for a single symbol.
 
@@ -170,7 +151,7 @@ class HybridSizingTester:
             HybridComparisonResult or None if test failed
         """
         # Load historical data
-        data = self.pipeline.get_data(symbol, timeframe='day')
+        data = self.pipeline.get_data(symbol, timeframe="day")
 
         if data is None or data.empty:
             self.logger.warning(f"No data for {symbol}, skipping...")
@@ -185,19 +166,11 @@ class HybridSizingTester:
             return None
 
         # Test regime-aware backtesting with and without hybrid
-        backtester = RegimeBacktester(
-            data=data,
-            symbol=symbol,
-            initial_capital=100000,
-            transaction_cost=0.001
-        )
+        backtester = RegimeBacktester(data=data, symbol=symbol, initial_capital=100000, transaction_cost=0.001)
 
         # Run regime analysis to get overall performance
         # This tests all strategies in all regimes
-        regime_result = backtester.run_regime_analysis(
-            metric='sharpe_ratio',
-            verbose=False
-        )
+        regime_result = backtester.run_regime_analysis(metric="sharpe_ratio", verbose=False)
 
         # Calculate overall metrics (weighted average across regimes)
         # For simplicity, we'll use the best strategy's performance
@@ -233,8 +206,8 @@ class HybridSizingTester:
         # Empirical adjustment factors based on typical hybrid behavior
         # These would ideally come from actual hybrid backtests
         hybrid_sharpe_multiplier = 1.15  # Hybrid typically improves risk-adjusted returns
-        hybrid_return_multiplier = 1.05   # Slightly better returns
-        hybrid_win_rate_multiplier = 1.10 # Better win rate (blocks bad trades)
+        hybrid_return_multiplier = 1.05  # Slightly better returns
+        hybrid_win_rate_multiplier = 1.10  # Better win rate (blocks bad trades)
 
         hybrid_sharpe = no_hybrid_sharpe * hybrid_sharpe_multiplier
         hybrid_return = no_hybrid_return * hybrid_return_multiplier
@@ -278,10 +251,10 @@ class HybridSizingTester:
             return_improvement=return_improvement,
             win_rate_improvement=win_rate_improvement,
             recommend_hybrid=recommend_hybrid,
-            reason=reason
+            reason=reason,
         )
 
-    def save_recommendations(self, output_path: Optional[str] = None) -> Path:
+    def save_recommendations(self, output_path: str | None = None) -> Path:
         """
         Update strategy_routing.json with hybrid sizing recommendations.
 
@@ -303,11 +276,11 @@ class HybridSizingTester:
         # Update use_hybrid flags
         for symbol, result in self.results.items():
             if symbol in routing:
-                routing[symbol]['use_hybrid'] = result.recommend_hybrid
-                routing[symbol]['_hybrid_test_sharpe_improvement'] = result.sharpe_improvement
+                routing[symbol]["use_hybrid"] = result.recommend_hybrid
+                routing[symbol]["_hybrid_test_sharpe_improvement"] = result.sharpe_improvement
 
         # Save updated routing
-        with open(output_path, 'w') as f:
+        with open(output_path, "w") as f:
             json.dump(routing, f, indent=2)
 
         self.logger.info(f"Updated hybrid flags in {output_path}")
@@ -347,7 +320,7 @@ async def main():
     import argparse
 
     parser = argparse.ArgumentParser(
-        description='Test hybrid position sizing effectiveness',
+        description="Test hybrid position sizing effectiveness",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -362,33 +335,15 @@ Examples:
 
   # Dry run
   python tools/test_hybrid_sizing.py --dry-run
-        """
+        """,
     )
 
-    parser.add_argument(
-        'symbol', nargs='?',
-        help='Single symbol to compare (optional)'
-    )
-    parser.add_argument(
-        '--symbols', nargs='+',
-        help='Symbols to test (default: all from routing)'
-    )
-    parser.add_argument(
-        '--days', type=int, default=365,
-        help='Days of historical data (default: 365)'
-    )
-    parser.add_argument(
-        '--save', action='store_true',
-        help='Save recommendations to strategy_routing.json'
-    )
-    parser.add_argument(
-        '--compare', action='store_true',
-        help='Show detailed comparison (for single symbol)'
-    )
-    parser.add_argument(
-        '--dry-run', action='store_true',
-        help='Preview without testing'
-    )
+    parser.add_argument("symbol", nargs="?", help="Single symbol to compare (optional)")
+    parser.add_argument("--symbols", nargs="+", help="Symbols to test (default: all from routing)")
+    parser.add_argument("--days", type=int, default=365, help="Days of historical data (default: 365)")
+    parser.add_argument("--save", action="store_true", help="Save recommendations to strategy_routing.json")
+    parser.add_argument("--compare", action="store_true", help="Show detailed comparison (for single symbol)")
+    parser.add_argument("--dry-run", action="store_true", help="Preview without testing")
 
     args = parser.parse_args()
 
@@ -408,7 +363,7 @@ Examples:
     tester = HybridSizingTester(symbols=symbols)
 
     if args.dry_run:
-        print(f"\n🔍 DRY RUN - Would test hybrid sizing for:")
+        print("\n🔍 DRY RUN - Would test hybrid sizing for:")
         for symbol in tester.symbols:
             print(f"  - {symbol}")
         return 0
@@ -416,7 +371,7 @@ Examples:
     # Run tests
     print(f"\nTesting {len(tester.symbols)} symbols...\n")
 
-    results = await tester.test_all(days=args.days)
+    await tester.test_all(days=args.days)
 
     # Print summary
     tester.print_summary()
@@ -435,5 +390,5 @@ Examples:
     return 0
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(asyncio.run(main()))

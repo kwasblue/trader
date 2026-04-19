@@ -37,30 +37,31 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import math
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Any
-import math
+from typing import Any
 
 # Add project root to path
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from core.logic.hybrid_position_sizer import HybridPositionSizer, HybridSizingResult
+from core.logic.hybrid_position_sizer import HybridPositionSizer
 
 
 @dataclass
 class TradeRecord:
     """Record of a single trade for analysis."""
+
     symbol: str
     entry_time: datetime
-    exit_time: Optional[datetime]
+    exit_time: datetime | None
     side: str  # "long" or "short"
     entry_price: float
-    exit_price: Optional[float]
+    exit_price: float | None
     quantity: int
     pnl: float = 0.0
     pnl_percent: float = 0.0
@@ -74,6 +75,7 @@ class TradeRecord:
 @dataclass
 class BacktestResult:
     """Results from a single backtest run."""
+
     name: str
     total_trades: int = 0
     winning_trades: int = 0
@@ -82,7 +84,7 @@ class BacktestResult:
     max_drawdown: float = 0.0
     sharpe_ratio: float = 0.0
     avg_position_size: float = 0.0
-    trades: List[TradeRecord] = field(default_factory=list)
+    trades: list[TradeRecord] = field(default_factory=list)
 
     @property
     def win_rate(self) -> float:
@@ -95,11 +97,12 @@ class BacktestResult:
 @dataclass
 class ComparisonReport:
     """Comparison of current vs hybrid backtest results."""
+
     current: BacktestResult
     hybrid: BacktestResult
     period_start: datetime
     period_end: datetime
-    symbols: List[str]
+    symbols: list[str]
 
     def print_report(self) -> None:
         """Print formatted comparison report."""
@@ -109,7 +112,9 @@ class ComparisonReport:
         print("=" * 80)
         print()
         print(f"Period: {self.period_start.strftime('%Y-%m-%d')} to {self.period_end.strftime('%Y-%m-%d')}")
-        print(f"Symbols: {', '.join(self.symbols[:5])}{'...' if len(self.symbols) > 5 else ''} ({len(self.symbols)} total)")
+        print(
+            f"Symbols: {', '.join(self.symbols[:5])}{'...' if len(self.symbols) > 5 else ''} ({len(self.symbols)} total)"
+        )
         print()
         print(f"{'Metric':<25} {'CURRENT':>15} {'HYBRID':>15} {'CHANGE':>15}")
         print("-" * 80)
@@ -117,7 +122,9 @@ class ComparisonReport:
         # Total trades
         trades_change = self.hybrid.total_trades - self.current.total_trades
         trades_pct = (trades_change / self.current.total_trades * 100) if self.current.total_trades > 0 else 0
-        print(f"{'Total Trades':<25} {self.current.total_trades:>15} {self.hybrid.total_trades:>15} {trades_pct:>+14.0f}%")
+        print(
+            f"{'Total Trades':<25} {self.current.total_trades:>15} {self.hybrid.total_trades:>15} {trades_pct:>+14.0f}%"
+        )
 
         # Win rate
         wr_change = self.hybrid.win_rate - self.current.win_rate
@@ -125,19 +132,31 @@ class ComparisonReport:
 
         # Total P&L
         pnl_change = self.hybrid.total_pnl - self.current.total_pnl
-        print(f"{'Total P&L':<25} ${self.current.total_pnl:>13,.0f} ${self.hybrid.total_pnl:>13,.0f} ${pnl_change:>+13,.0f}")
+        print(
+            f"{'Total P&L':<25} ${self.current.total_pnl:>13,.0f} ${self.hybrid.total_pnl:>13,.0f} ${pnl_change:>+13,.0f}"
+        )
 
         # Max drawdown
         dd_change = self.hybrid.max_drawdown - self.current.max_drawdown
-        print(f"{'Max Drawdown':<25} {self.current.max_drawdown:>14.1f}% {self.hybrid.max_drawdown:>14.1f}% {dd_change:>+14.1f}%")
+        print(
+            f"{'Max Drawdown':<25} {self.current.max_drawdown:>14.1f}% {self.hybrid.max_drawdown:>14.1f}% {dd_change:>+14.1f}%"
+        )
 
         # Sharpe ratio
         sharpe_change = self.hybrid.sharpe_ratio - self.current.sharpe_ratio
-        print(f"{'Sharpe Ratio':<25} {self.current.sharpe_ratio:>15.2f} {self.hybrid.sharpe_ratio:>15.2f} {sharpe_change:>+15.2f}")
+        print(
+            f"{'Sharpe Ratio':<25} {self.current.sharpe_ratio:>15.2f} {self.hybrid.sharpe_ratio:>15.2f} {sharpe_change:>+15.2f}"
+        )
 
         # Avg position size
-        pos_change = (self.hybrid.avg_position_size / self.current.avg_position_size - 1) * 100 if self.current.avg_position_size > 0 else 0
-        print(f"{'Avg Position Size':<25} ${self.current.avg_position_size:>13,.0f} ${self.hybrid.avg_position_size:>13,.0f} {pos_change:>+14.0f}%")
+        pos_change = (
+            (self.hybrid.avg_position_size / self.current.avg_position_size - 1) * 100
+            if self.current.avg_position_size > 0
+            else 0
+        )
+        print(
+            f"{'Avg Position Size':<25} ${self.current.avg_position_size:>13,.0f} ${self.hybrid.avg_position_size:>13,.0f} {pos_change:>+14.0f}%"
+        )
 
         # Print trade distribution for hybrid
         if self.hybrid.trades:
@@ -147,7 +166,10 @@ class ComparisonReport:
 
         # Recommendation
         print()
-        if self.hybrid.sharpe_ratio > self.current.sharpe_ratio and self.hybrid.max_drawdown < self.current.max_drawdown:
+        if (
+            self.hybrid.sharpe_ratio > self.current.sharpe_ratio
+            and self.hybrid.max_drawdown < self.current.max_drawdown
+        ):
             print("RECOMMENDATION: Hybrid logic shows improvement. Consider enabling.")
         elif self.hybrid.sharpe_ratio > self.current.sharpe_ratio:
             print("RECOMMENDATION: Hybrid shows better returns but similar drawdown. Consider testing further.")
@@ -162,7 +184,7 @@ class ComparisonReport:
     def _print_trade_distribution(self) -> None:
         """Print distribution of trades by confidence/alignment."""
         # Group trades by (confidence_tier, aligned)
-        groups: Dict[tuple, List[TradeRecord]] = {}
+        groups: dict[tuple, list[TradeRecord]] = {}
         for trade in self.hybrid.trades:
             key = (trade.confidence_tier, trade.aligned)
             if key not in groups:
@@ -202,7 +224,7 @@ class HybridBacktester:
 
     def __init__(
         self,
-        symbols: List[str],
+        symbols: list[str],
         data_path: str = "data/data_storage/proc_data",
         starting_cash: float = 100_000.0,
     ):
@@ -224,22 +246,22 @@ class HybridBacktester:
             config={
                 "high_confidence_threshold": 0.7,
                 "low_confidence_threshold": 0.5,
-            }
+            },
         )
 
-    def load_data(self, symbol: str) -> List[Dict[str, Any]]:
+    def load_data(self, symbol: str) -> list[dict[str, Any]]:
         """Load historical bars for a symbol."""
         # Try processed data first
         proc_file = self.data_path / f"proc_{symbol}_file.json"
         if proc_file.exists():
-            with open(proc_file, "r") as f:
+            with open(proc_file) as f:
                 data = json.load(f)
                 return data.get("bars", data) if isinstance(data, dict) else data
 
         # Fall back to raw data
         raw_file = self.data_path / f"raw_{symbol}_file.json"
         if raw_file.exists():
-            with open(raw_file, "r") as f:
+            with open(raw_file) as f:
                 data = json.load(f)
                 if isinstance(data, dict):
                     return data.get("candles", data.get("bars", []))
@@ -248,7 +270,7 @@ class HybridBacktester:
         print(f"Warning: No data file found for {symbol}")
         return []
 
-    def generate_mock_signals(self, bars: List[Dict]) -> List[Dict[str, Any]]:
+    def generate_mock_signals(self, bars: list[dict]) -> list[dict[str, Any]]:
         """
         Generate mock trading signals from bar data.
 
@@ -285,19 +307,21 @@ class HybridBacktester:
                 "Close": close,
             }
 
-            signals.append({
-                "bar": bar,
-                "signal": signal,
-                "confidence": confidence,
-                "daily_context": daily_context,
-            })
+            signals.append(
+                {
+                    "bar": bar,
+                    "signal": signal,
+                    "confidence": confidence,
+                    "daily_context": daily_context,
+                }
+            )
 
         return signals
 
     def run_backtest(
         self,
         hybrid_enabled: bool,
-        bars_limit: Optional[int] = None,
+        bars_limit: int | None = None,
     ) -> BacktestResult:
         """
         Run backtest with or without hybrid sizing.
@@ -313,8 +337,8 @@ class HybridBacktester:
         result = BacktestResult(name=name)
 
         cash = self.starting_cash
-        positions: Dict[str, Dict] = {}  # symbol -> position info
-        equity_curve: List[float] = [cash]
+        positions: dict[str, dict] = {}  # symbol -> position info
+        equity_curve: list[float] = [cash]
         peak_equity = cash
         max_dd = 0.0
 
@@ -363,8 +387,7 @@ class HybridBacktester:
                 if symbol in positions:
                     pos = positions[symbol]
                     # Check for exit condition (opposite signal)
-                    if (pos["side"] == "long" and signal == -1) or \
-                       (pos["side"] == "short" and signal == 1):
+                    if (pos["side"] == "long" and signal == -1) or (pos["side"] == "short" and signal == 1):
                         # Exit position
                         exit_price = price
                         entry_price = pos["entry_price"]
@@ -424,9 +447,7 @@ class HybridBacktester:
                         result.avg_position_size += final_qty * price
 
                 # Update equity curve
-                position_value = sum(
-                    p["quantity"] * price for p in positions.values()
-                )
+                position_value = sum(p["quantity"] * price for p in positions.values())
                 equity = cash + position_value
                 equity_curve.append(equity)
 
@@ -445,9 +466,9 @@ class HybridBacktester:
         # Calculate Sharpe ratio (simplified)
         if len(equity_curve) > 1:
             returns = [
-                (equity_curve[i] - equity_curve[i-1]) / equity_curve[i-1]
+                (equity_curve[i] - equity_curve[i - 1]) / equity_curve[i - 1]
                 for i in range(1, len(equity_curve))
-                if equity_curve[i-1] > 0
+                if equity_curve[i - 1] > 0
             ]
             if returns:
                 avg_return = sum(returns) / len(returns)
@@ -465,7 +486,7 @@ class HybridBacktester:
             return "med"
         return "low"
 
-    def run_comparison(self, bars_limit: Optional[int] = None) -> ComparisonReport:
+    def run_comparison(self, bars_limit: int | None = None) -> ComparisonReport:
         """
         Run both current and hybrid backtests and compare.
 
@@ -524,39 +545,13 @@ def main():
     )
 
     parser.add_argument(
-        "--symbols", "-s",
-        nargs="+",
-        default=["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN"],
-        help="Symbols to backtest"
+        "--symbols", "-s", nargs="+", default=["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN"], help="Symbols to backtest"
     )
-    parser.add_argument(
-        "--bars", "-b",
-        type=int,
-        default=None,
-        help="Limit bars per symbol (for faster testing)"
-    )
-    parser.add_argument(
-        "--data-path",
-        default="data/data_storage/proc_data",
-        help="Path to historical data files"
-    )
-    parser.add_argument(
-        "--cash",
-        type=float,
-        default=100_000.0,
-        help="Starting cash"
-    )
-    parser.add_argument(
-        "--compare",
-        action="store_true",
-        default=True,
-        help="Run comparison (default behavior)"
-    )
-    parser.add_argument(
-        "--hybrid-only",
-        action="store_true",
-        help="Run only hybrid mode (skip comparison)"
-    )
+    parser.add_argument("--bars", "-b", type=int, default=None, help="Limit bars per symbol (for faster testing)")
+    parser.add_argument("--data-path", default="data/data_storage/proc_data", help="Path to historical data files")
+    parser.add_argument("--cash", type=float, default=100_000.0, help="Starting cash")
+    parser.add_argument("--compare", action="store_true", default=True, help="Run comparison (default behavior)")
+    parser.add_argument("--hybrid-only", action="store_true", help="Run only hybrid mode (skip comparison)")
 
     args = parser.parse_args()
 

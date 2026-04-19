@@ -1,4 +1,5 @@
-from typing import Any, get_type_hints, get_origin, get_args, Union
+from typing import Any, Union, get_args, get_origin, get_type_hints
+
 
 def validate_payload(payload: dict, schema: Any) -> None:
     """
@@ -11,7 +12,7 @@ def validate_payload(payload: dict, schema: Any) -> None:
 
     # Check if TypedDict has total=False (all fields optional)
     # TypedDict with total=False has __total__ = False
-    all_optional = getattr(schema, '__total__', True) is False
+    all_optional = getattr(schema, "__total__", True) is False
 
     for field, ftype in hints.items():
         # --- detect Optional fields ---

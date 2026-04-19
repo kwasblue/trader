@@ -8,13 +8,15 @@ Coverage:
 - Bar bucket calculation
 - Periodic data update scheduling
 """
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime, timezone
-import asyncio
 
+import asyncio
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -28,81 +30,81 @@ class TestCanonicalizeSchwabQuote:
         from core.schwab_runner import SchwabLiveRunner
 
         raw_quote = {
-            '1': 150.25,       # Bid Price
-            '2': 150.30,       # Ask Price
-            '3': 150.27,       # Last Price
-            '8': 5000000,      # Volume
-            '10': 152.00,      # High Price
-            '11': 149.00,      # Low Price
-            '12': 149.50,      # Close Price (prev day)
-            '17': 149.75,      # Open Price
-            '35': 1704067200000,  # Trade Time (ms since epoch)
+            "1": 150.25,  # Bid Price
+            "2": 150.30,  # Ask Price
+            "3": 150.27,  # Last Price
+            "8": 5000000,  # Volume
+            "10": 152.00,  # High Price
+            "11": 149.00,  # Low Price
+            "12": 149.50,  # Close Price (prev day)
+            "17": 149.75,  # Open Price
+            "35": 1704067200000,  # Trade Time (ms since epoch)
         }
 
         result = SchwabLiveRunner._canonicalize_schwab_quote(raw_quote, "AAPL")
 
-        assert result['symbol'] == "AAPL"
-        assert result['Close'] == 150.27  # Uses last price
-        assert result['Open'] == 149.75
-        assert result['High'] == 152.00
-        assert result['Low'] == 149.00
-        assert result['Volume'] == 5000000
-        assert result['prev_close'] == 149.50
-        assert isinstance(result['timestamp'], datetime)
+        assert result["symbol"] == "AAPL"
+        assert result["Close"] == 150.27  # Uses last price
+        assert result["Open"] == 149.75
+        assert result["High"] == 152.00
+        assert result["Low"] == 149.00
+        assert result["Volume"] == 5000000
+        assert result["prev_close"] == 149.50
+        assert isinstance(result["timestamp"], datetime)
 
     def test_canonicalize_with_named_fields(self):
         """Test canonicalization using named fields (fallback)."""
         from core.schwab_runner import SchwabLiveRunner
 
         raw_quote = {
-            'bid_price': 150.25,
-            'ask_price': 150.30,
-            'last_price': 150.27,
-            'volume': 5000000,
-            'high_price': 152.00,
-            'low_price': 149.00,
-            'close_price': 149.50,
-            'open_price': 149.75,
+            "bid_price": 150.25,
+            "ask_price": 150.30,
+            "last_price": 150.27,
+            "volume": 5000000,
+            "high_price": 152.00,
+            "low_price": 149.00,
+            "close_price": 149.50,
+            "open_price": 149.75,
         }
 
         result = SchwabLiveRunner._canonicalize_schwab_quote(raw_quote, "MSFT")
 
-        assert result['symbol'] == "MSFT"
-        assert result['Close'] == 150.27
-        assert result['Open'] == 149.75
-        assert result['High'] == 152.00
-        assert result['Low'] == 149.00
+        assert result["symbol"] == "MSFT"
+        assert result["Close"] == 150.27
+        assert result["Open"] == 149.75
+        assert result["High"] == 152.00
+        assert result["Low"] == 149.00
 
     def test_canonicalize_uses_mid_price_when_no_last(self):
         """Test that mid price is used when last price is not available."""
         from core.schwab_runner import SchwabLiveRunner
 
         raw_quote = {
-            '1': 150.00,  # Bid
-            '2': 151.00,  # Ask
+            "1": 150.00,  # Bid
+            "2": 151.00,  # Ask
             # No field 3 (last price)
         }
 
         result = SchwabLiveRunner._canonicalize_schwab_quote(raw_quote, "AAPL")
 
         # Should use mid price: (150 + 151) / 2 = 150.5
-        assert result['Close'] == 150.5
+        assert result["Close"] == 150.5
 
     def test_canonicalize_partial_quote(self):
         """Test canonicalization with partial data (only some fields present)."""
         from core.schwab_runner import SchwabLiveRunner
 
         raw_quote = {
-            '3': 150.27,  # Only last price
+            "3": 150.27,  # Only last price
         }
 
         result = SchwabLiveRunner._canonicalize_schwab_quote(raw_quote, "AAPL")
 
-        assert result['Close'] == 150.27
+        assert result["Close"] == 150.27
         # Other OHLC fields fall back to Close when not available
-        assert result['Open'] == 150.27
-        assert result['High'] == 150.27
-        assert result['Low'] == 150.27
+        assert result["Open"] == 150.27
+        assert result["High"] == 150.27
+        assert result["Low"] == 150.27
 
     def test_canonicalize_timestamp_from_trade_time(self):
         """Test that timestamp is parsed from trade time field."""
@@ -112,14 +114,14 @@ class TestCanonicalizeSchwabQuote:
         trade_time_ms = 1704110400000
 
         raw_quote = {
-            '3': 150.27,
-            '35': trade_time_ms,
+            "3": 150.27,
+            "35": trade_time_ms,
         }
 
         result = SchwabLiveRunner._canonicalize_schwab_quote(raw_quote, "AAPL")
 
         expected_ts = datetime.fromtimestamp(trade_time_ms / 1000, tz=timezone.utc)
-        assert result['timestamp'] == expected_ts
+        assert result["timestamp"] == expected_ts
 
 
 class TestCanonicalizeSchwabChartBar:
@@ -130,24 +132,24 @@ class TestCanonicalizeSchwabChartBar:
         from core.schwab_runner import SchwabLiveRunner
 
         raw_bar = {
-            '1': 150.00,    # Open (different from LEVELONE where 1=Bid)
-            '2': 152.00,    # High (different from LEVELONE where 2=Ask)
-            '3': 149.50,    # Low (different from LEVELONE where 3=Last)
-            '4': 151.50,    # Close
-            '5': 1000000,   # Volume
-            '6': 123,       # Sequence
-            '7': 1704110400000,  # Chart Time
+            "1": 150.00,  # Open (different from LEVELONE where 1=Bid)
+            "2": 152.00,  # High (different from LEVELONE where 2=Ask)
+            "3": 149.50,  # Low (different from LEVELONE where 3=Last)
+            "4": 151.50,  # Close
+            "5": 1000000,  # Volume
+            "6": 123,  # Sequence
+            "7": 1704110400000,  # Chart Time
         }
 
         result = SchwabLiveRunner._canonicalize_schwab_chart_bar(raw_bar, "AAPL")
 
-        assert result['symbol'] == "AAPL"
-        assert result['Open'] == 150.00
-        assert result['High'] == 152.00
-        assert result['Low'] == 149.50
-        assert result['Close'] == 151.50
-        assert result['Volume'] == 1000000
-        assert result['sequence'] == 123
+        assert result["symbol"] == "AAPL"
+        assert result["Open"] == 150.00
+        assert result["High"] == 152.00
+        assert result["Low"] == 149.50
+        assert result["Close"] == 151.50
+        assert result["Volume"] == 1000000
+        assert result["sequence"] == 123
 
     def test_chart_vs_levelone_field_difference(self):
         """Verify CHART_EQUITY and LEVELONE_EQUITIES use different field meanings."""
@@ -155,22 +157,22 @@ class TestCanonicalizeSchwabChartBar:
 
         # Same raw fields but different interpretation
         raw_data = {
-            '1': 150.00,
-            '2': 152.00,
-            '3': 149.50,
+            "1": 150.00,
+            "2": 152.00,
+            "3": 149.50,
         }
 
         # As LEVELONE_EQUITIES quote
         quote_result = SchwabLiveRunner._canonicalize_schwab_quote(raw_data, "AAPL")
         # Field 1 = Bid, Field 2 = Ask, Field 3 = Last
-        assert quote_result['Close'] == 149.50  # Field 3 = Last price
+        assert quote_result["Close"] == 149.50  # Field 3 = Last price
 
         # As CHART_EQUITY bar
         chart_result = SchwabLiveRunner._canonicalize_schwab_chart_bar(raw_data, "AAPL")
         # Field 1 = Open, Field 2 = High, Field 3 = Low
-        assert chart_result['Open'] == 150.00
-        assert chart_result['High'] == 152.00
-        assert chart_result['Low'] == 149.50
+        assert chart_result["Open"] == 150.00
+        assert chart_result["High"] == 152.00
+        assert chart_result["Low"] == 149.50
 
 
 class TestBarBucket:
@@ -225,20 +227,21 @@ class TestBarAggregation:
     @pytest.fixture
     def mock_runner(self):
         """Create a minimal runner for testing aggregation."""
-        with patch('core.base.base_live_runner.get_event_handler'), \
-             patch('core.base.base_live_runner.get_module_logger'), \
-             patch('core.base.base_live_runner.FileTradeLogger'), \
-             patch('core.schwab_runner.SchwabClient'), \
-             patch('core.schwab_runner.SchwabBroker'), \
-             patch('core.base.base_live_runner.get_config'), \
-             patch('core.base.base_live_runner.StrategyRoutingManager'), \
-             patch('core.base.base_live_runner.LiveExecutor'), \
-             patch('core.base.base_live_runner.LiveExecutionEngine'), \
-             patch('core.base.base_live_runner.StateReconciler'), \
-             patch('core.base.base_live_runner.UnifiedDataPipeline'), \
-             patch('core.base.base_live_runner.HistoricalDataUpdater'), \
-             patch('core.base.base_live_runner.DynamicTradeLogicManager'):
-
+        with (
+            patch("core.base.base_live_runner.get_event_handler"),
+            patch("core.base.base_live_runner.get_module_logger"),
+            patch("core.base.base_live_runner.FileTradeLogger"),
+            patch("core.schwab_runner.SchwabClient"),
+            patch("core.schwab_runner.SchwabBroker"),
+            patch("core.base.base_live_runner.get_config"),
+            patch("core.base.base_live_runner.StrategyRoutingManager"),
+            patch("core.base.base_live_runner.LiveExecutor"),
+            patch("core.base.base_live_runner.LiveExecutionEngine"),
+            patch("core.base.base_live_runner.StateReconciler"),
+            patch("core.base.base_live_runner.UnifiedDataPipeline"),
+            patch("core.base.base_live_runner.HistoricalDataUpdater"),
+            patch("core.base.base_live_runner.DynamicTradeLogicManager"),
+        ):
             from core.schwab_runner import SchwabLiveRunner
 
             # Create runner with mocked dependencies
@@ -247,6 +250,7 @@ class TestBarAggregation:
 
             # Add the method we're testing
             from collections import defaultdict
+
             runner._bar_aggregation = defaultdict(
                 lambda: {"open": None, "high": None, "low": None, "close": None, "volume": 0, "bar_id": None}
             )
@@ -257,12 +261,12 @@ class TestBarAggregation:
         """First quote should start a new bar."""
         result = mock_runner._aggregate_quote_to_bar("AAPL", 150.0, 1000, bar_id=100)
 
-        assert result['Open'] == 150.0
-        assert result['High'] == 150.0
-        assert result['Low'] == 150.0
-        assert result['Close'] == 150.0
-        assert result['Volume'] == 1000
-        assert result['bar_closed'] is False
+        assert result["Open"] == 150.0
+        assert result["High"] == 150.0
+        assert result["Low"] == 150.0
+        assert result["Close"] == 150.0
+        assert result["Volume"] == 1000
+        assert result["bar_closed"] is False
 
     def test_aggregation_updates_ohlc(self, mock_runner):
         """Subsequent quotes should update OHLC correctly."""
@@ -271,15 +275,15 @@ class TestBarAggregation:
 
         # Higher price - should update high
         result = mock_runner._aggregate_quote_to_bar("AAPL", 152.0, 500, bar_id=100)
-        assert result['High'] == 152.0
-        assert result['Open'] == 150.0  # Unchanged
-        assert result['Close'] == 152.0
+        assert result["High"] == 152.0
+        assert result["Open"] == 150.0  # Unchanged
+        assert result["Close"] == 152.0
 
         # Lower price - should update low
         result = mock_runner._aggregate_quote_to_bar("AAPL", 149.0, 500, bar_id=100)
-        assert result['Low'] == 149.0
-        assert result['High'] == 152.0  # Unchanged
-        assert result['Close'] == 149.0
+        assert result["Low"] == 149.0
+        assert result["High"] == 152.0  # Unchanged
+        assert result["Close"] == 149.0
 
     def test_aggregation_accumulates_volume(self, mock_runner):
         """Volume should accumulate across quotes in same bar."""
@@ -287,7 +291,7 @@ class TestBarAggregation:
         mock_runner._aggregate_quote_to_bar("AAPL", 151.0, 500, bar_id=100)
         result = mock_runner._aggregate_quote_to_bar("AAPL", 152.0, 200, bar_id=100)
 
-        assert result['Volume'] == 1700  # 1000 + 500 + 200
+        assert result["Volume"] == 1700  # 1000 + 500 + 200
 
     def test_aggregation_new_bar_closes_previous(self, mock_runner):
         """New bar ID should close previous bar and start new one."""
@@ -298,12 +302,12 @@ class TestBarAggregation:
         # New bar - should close previous
         result = mock_runner._aggregate_quote_to_bar("AAPL", 153.0, 800, bar_id=101)
 
-        assert result['bar_closed'] is True
+        assert result["bar_closed"] is True
         # Closed bar values (from bar 100)
-        assert result['Open'] == 150.0
-        assert result['High'] == 152.0
-        assert result['Close'] == 152.0
-        assert result['Volume'] == 1500
+        assert result["Open"] == 150.0
+        assert result["High"] == 152.0
+        assert result["Close"] == 152.0
+        assert result["Volume"] == 1500
 
     def test_aggregation_after_bar_close(self, mock_runner):
         """After bar closes, next call should show new bar in progress."""
@@ -316,10 +320,10 @@ class TestBarAggregation:
         # Continue second bar
         result = mock_runner._aggregate_quote_to_bar("AAPL", 154.0, 200, bar_id=101)
 
-        assert result['bar_closed'] is False
-        assert result['Open'] == 153.0  # New bar started at 153
-        assert result['High'] == 154.0
-        assert result['Volume'] == 1000  # 800 + 200
+        assert result["bar_closed"] is False
+        assert result["Open"] == 153.0  # New bar started at 153
+        assert result["High"] == 154.0
+        assert result["Volume"] == 1000  # 800 + 200
 
     def test_aggregation_multiple_symbols_independent(self, mock_runner):
         """Different symbols should have independent aggregation."""
@@ -330,14 +334,14 @@ class TestBarAggregation:
         msft_result = mock_runner._aggregate_quote_to_bar("MSFT", 352.0, 500, bar_id=100)
 
         # AAPL aggregation
-        assert aapl_result['Open'] == 150.0
-        assert aapl_result['High'] == 152.0
-        assert aapl_result['Volume'] == 1500
+        assert aapl_result["Open"] == 150.0
+        assert aapl_result["High"] == 152.0
+        assert aapl_result["Volume"] == 1500
 
         # MSFT aggregation - independent
-        assert msft_result['Open'] == 350.0
-        assert msft_result['High'] == 352.0
-        assert msft_result['Volume'] == 2500
+        assert msft_result["Open"] == 350.0
+        assert msft_result["High"] == 352.0
+        assert msft_result["Volume"] == 2500
 
 
 class TestPeriodicDataUpdate:
@@ -385,27 +389,27 @@ class TestSchwabRunnerFieldMappingIntegration:
         from core.schwab_runner import SchwabLiveRunner
 
         quote = {
-            '1': 100.00,  # If this were last price, Close would be 100
-            '2': 101.00,
-            '3': 100.50,  # This is actually the last price
+            "1": 100.00,  # If this were last price, Close would be 100
+            "2": 101.00,
+            "3": 100.50,  # This is actually the last price
         }
 
         result = SchwabLiveRunner._canonicalize_schwab_quote(quote, "TEST")
 
         # Close should be field 3 (last price), NOT field 1 (bid)
-        assert result['Close'] == 100.50
-        assert result['Close'] != 100.00
+        assert result["Close"] == 100.50
+        assert result["Close"] != 100.00
 
     def test_field_3_is_last_not_low(self):
         """Verify field 3 is last price, not low (important distinction)."""
         from core.schwab_runner import SchwabLiveRunner
 
         quote = {
-            '3': 150.27,   # Last price (LEVELONE)
-            '11': 149.00,  # Low price
+            "3": 150.27,  # Last price (LEVELONE)
+            "11": 149.00,  # Low price
         }
 
         result = SchwabLiveRunner._canonicalize_schwab_quote(quote, "TEST")
 
-        assert result['Close'] == 150.27  # Field 3 = Last
-        assert result['Low'] == 149.00    # Field 11 = Low
+        assert result["Close"] == 150.27  # Field 3 = Last
+        assert result["Low"] == 149.00  # Field 11 = Low

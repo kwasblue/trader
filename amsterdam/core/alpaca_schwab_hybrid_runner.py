@@ -12,23 +12,25 @@ This runner:
 - Aggregates Schwab quotes into OHLCV bars
 - Validates Schwab tokens before starting
 """
+
 from __future__ import annotations
 
 import asyncio
 import os
 from collections import defaultdict
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 
 from dotenv import load_dotenv
 
 from core.base.base_live_runner import BaseLiveRunner
 from core.broker.alpaca_broker import AlpacaBroker
 from core.broker.schwab_broker import SchwabBroker
-from core.config_loader import get_config, TradingConfig
-from core.credential_validator import CredentialValidator, CredentialStatus
+from core.config_loader import TradingConfig, get_config
 from core.contracts.events import EVENT_HEALTH_UPDATE
+from core.credential_validator import CredentialStatus, CredentialValidator
 from data.streaming.schwab_client import SchwabClient
 
 ROOT = Path(__file__).resolve().parents[1]  # .../amsterdam
@@ -51,11 +53,7 @@ class AlpacaSchwabHybridRunner(BaseLiveRunner):
     LOG_FILE_KEY = "AlpacaSchwabHybrid"
     TRADE_LOG_FILE = "alpaca_schwab_hybrid_trades.csv"
 
-    def __init__(
-        self,
-        symbols: List[str],
-        config: Optional[TradingConfig] = None
-    ):
+    def __init__(self, symbols: list[str], config: TradingConfig | None = None):
         """
         Initialize the hybrid runner.
 
@@ -67,7 +65,7 @@ class AlpacaSchwabHybridRunner(BaseLiveRunner):
         self._init_config = config or get_config()
 
         # Schwab client for data streaming
-        self._schwab_client: Optional[SchwabClient] = None
+        self._schwab_client: SchwabClient | None = None
 
         # Reconnection state
         self._reconnect_attempts = 0
@@ -75,10 +73,10 @@ class AlpacaSchwabHybridRunner(BaseLiveRunner):
         self._reconnect_delay = 5  # seconds
 
         # Quote callback registry
-        self._quote_callbacks: Dict[str, Callable] = {}
+        self._quote_callbacks: dict[str, Callable] = {}
 
         # Bar aggregation state (Schwab streams quotes, we aggregate to bars)
-        self._bar_aggregation: Dict[str, Dict[str, Any]] = defaultdict(
+        self._bar_aggregation: dict[str, dict[str, Any]] = defaultdict(
             lambda: {"open": None, "high": None, "low": None, "close": None, "volume": 0, "bar_id": None}
         )
 
@@ -91,20 +89,20 @@ class AlpacaSchwabHybridRunner(BaseLiveRunner):
 
     def _create_broker(self) -> AlpacaBroker:
         """Create Alpaca broker for order execution."""
-        config = getattr(self, '_init_config', None) or self.config
+        config = getattr(self, "_init_config", None) or self.config
 
         # Create Alpaca broker
         alpaca_broker = AlpacaBroker(
             api_key=os.getenv("ALPACA_API_KEY"),
             api_secret=os.getenv("ALPACA_SECRET_KEY"),
             paper=config.alpaca.paper,
-            poll_timeout=getattr(config.alpaca, 'poll_timeout_seconds', 30),
+            poll_timeout=getattr(config.alpaca, "poll_timeout_seconds", 30),
         )
 
         self.logger.info("Using Alpaca broker for execution")
         return alpaca_broker
 
-    def _canonicalize_bar(self, raw_data: Any) -> Dict:
+    def _canonicalize_bar(self, raw_data: Any) -> dict:
         """
         Convert Schwab quote data to canonical bar format.
 
@@ -146,11 +144,7 @@ class AlpacaSchwabHybridRunner(BaseLiveRunner):
         self._schwab_stream_broker.connect_stream(api_key, secret_key)
         self._reconnect_attempts = 0
 
-        await self._emit_health_status("connected", {
-            "execution": "alpaca",
-            "data": "schwab",
-            "symbols": self.symbols
-        })
+        await self._emit_health_status("connected", {"execution": "alpaca", "data": "schwab", "symbols": self.symbols})
 
         self.logger.info(f"Connected to Schwab streaming for data: {', '.join(self.symbols)}")
 
@@ -161,7 +155,7 @@ class AlpacaSchwabHybridRunner(BaseLiveRunner):
     async def _disconnect_broker(self) -> None:
         """Disconnect from both Alpaca and Schwab."""
         # Disconnect Schwab streaming
-        if hasattr(self, '_schwab_stream_broker'):
+        if hasattr(self, "_schwab_stream_broker"):
             await self._schwab_stream_broker.disconnect()
             self.logger.info("Disconnected from Schwab streaming")
 
@@ -202,8 +196,7 @@ class AlpacaSchwabHybridRunner(BaseLiveRunner):
         elif schwab_result.status == CredentialStatus.EXPIRING_SOON:
             hours = schwab_result.expires_in // 3600 if schwab_result.expires_in else 0
             self.logger.warning(
-                f"SCHWAB TOKEN EXPIRING in {hours} hours. "
-                f"Renew soon: python -m data.streaming.authenticator"
+                f"SCHWAB TOKEN EXPIRING in {hours} hours. Renew soon: python -m data.streaming.authenticator"
             )
         elif schwab_result.status == CredentialStatus.MISSING:
             self.logger.error("Schwab credentials not configured!")
@@ -256,15 +249,11 @@ class AlpacaSchwabHybridRunner(BaseLiveRunner):
     async def _reconnect(self) -> bool:
         """Attempt to reconnect to Schwab streaming."""
         if self._reconnect_attempts >= self._max_reconnect_attempts:
-            self.logger.error(
-                f"Max reconnection attempts ({self._max_reconnect_attempts}) reached. Giving up."
-            )
+            self.logger.error(f"Max reconnection attempts ({self._max_reconnect_attempts}) reached. Giving up.")
             return False
 
         self._reconnect_attempts += 1
-        self.logger.warning(
-            f"Attempting reconnection {self._reconnect_attempts}/{self._max_reconnect_attempts}..."
-        )
+        self.logger.warning(f"Attempting reconnection {self._reconnect_attempts}/{self._max_reconnect_attempts}...")
 
         await asyncio.sleep(self._reconnect_delay)
 
@@ -285,16 +274,20 @@ class AlpacaSchwabHybridRunner(BaseLiveRunner):
             self.logger.error(f"Reconnection failed: {e}")
             return False
 
-    async def _emit_health_status(self, status: str, details: Dict = None) -> None:
+    async def _emit_health_status(self, status: str, details: dict = None) -> None:
         """Emit health status event."""
         from datetime import datetime
         from zoneinfo import ZoneInfo
-        await self.event_handler.emit(EVENT_HEALTH_UPDATE, {
-            "broker": "hybrid",
-            "status": status,
-            "timestamp": datetime.now(ZoneInfo("America/New_York")).isoformat(),
-            **(details or {})
-        })
+
+        await self.event_handler.emit(
+            EVENT_HEALTH_UPDATE,
+            {
+                "broker": "hybrid",
+                "status": status,
+                "timestamp": datetime.now(ZoneInfo("America/New_York")).isoformat(),
+                **(details or {}),
+            },
+        )
 
     async def _cleanup(self, stream_task: asyncio.Task) -> None:
         """Cleanup with health status emission."""
@@ -306,7 +299,7 @@ class AlpacaSchwabHybridRunner(BaseLiveRunner):
     # ==========================================================================
 
     @staticmethod
-    def _canonicalize_schwab_quote(quote: Dict, symbol: str) -> Dict:
+    def _canonicalize_schwab_quote(quote: dict, symbol: str) -> dict:
         """
         Normalize Schwab quote format to canonical bar format.
 
@@ -321,20 +314,20 @@ class AlpacaSchwabHybridRunner(BaseLiveRunner):
         - 17: Open Price (day's open)
         - 35: Trade Time in Long (milliseconds since Epoch)
         """
-        trade_time_ms = quote.get('35') or quote.get('trade_time')
+        trade_time_ms = quote.get("35") or quote.get("trade_time")
         if trade_time_ms:
             ts = datetime.fromtimestamp(int(trade_time_ms) / 1000, tz=timezone.utc)
         else:
             ts = datetime.now(timezone.utc)
 
-        bid_price = quote.get('1') or quote.get('bid_price') or quote.get('bidPrice', 0)
-        ask_price = quote.get('2') or quote.get('ask_price') or quote.get('askPrice', 0)
-        last_price = quote.get('3') or quote.get('last_price') or quote.get('lastPrice', 0)
-        volume = quote.get('8') or quote.get('volume') or quote.get('totalVolume', 0)
-        high_price = quote.get('10') or quote.get('high_price') or quote.get('highPrice', 0)
-        low_price = quote.get('11') or quote.get('low_price') or quote.get('lowPrice', 0)
-        prev_close = quote.get('12') or quote.get('close_price') or quote.get('closePrice', 0)
-        open_price = quote.get('17') or quote.get('open_price') or quote.get('openPrice', 0)
+        bid_price = quote.get("1") or quote.get("bid_price") or quote.get("bidPrice", 0)
+        ask_price = quote.get("2") or quote.get("ask_price") or quote.get("askPrice", 0)
+        last_price = quote.get("3") or quote.get("last_price") or quote.get("lastPrice", 0)
+        volume = quote.get("8") or quote.get("volume") or quote.get("totalVolume", 0)
+        high_price = quote.get("10") or quote.get("high_price") or quote.get("highPrice", 0)
+        low_price = quote.get("11") or quote.get("low_price") or quote.get("lowPrice", 0)
+        prev_close = quote.get("12") or quote.get("close_price") or quote.get("closePrice", 0)
+        open_price = quote.get("17") or quote.get("open_price") or quote.get("openPrice", 0)
 
         if last_price:
             price = float(last_price)
@@ -354,7 +347,7 @@ class AlpacaSchwabHybridRunner(BaseLiveRunner):
             "prev_close": float(prev_close) if prev_close else None,
         }
 
-    def _aggregate_quote_to_bar(self, symbol: str, price: float, volume: int, bar_id: int) -> Dict:
+    def _aggregate_quote_to_bar(self, symbol: str, price: float, volume: int, bar_id: int) -> dict:
         """
         Aggregate quote data into OHLCV bar.
 
@@ -412,11 +405,13 @@ class AlpacaSchwabHybridRunner(BaseLiveRunner):
 
     def _create_quote_callback(self, symbol: str) -> Callable:
         """Create a quote callback bound to a specific symbol."""
-        async def callback(quote: Dict):
+
+        async def callback(quote: dict):
             await self._on_quote(symbol, quote)
+
         return callback
 
-    async def _on_quote(self, symbol: str, quote: Dict) -> None:
+    async def _on_quote(self, symbol: str, quote: dict) -> None:
         """
         Handle incoming Schwab quote data.
 
@@ -448,7 +443,9 @@ class AlpacaSchwabHybridRunner(BaseLiveRunner):
 
         # Only process completed bars
         if bar_closed:
-            self.logger.debug(f"[BAR CLOSED] {symbol} {ts} O={bar['Open']} H={bar['High']} L={bar['Low']} C={bar['Close']} V={bar['Volume']}")
+            self.logger.debug(
+                f"[BAR CLOSED] {symbol} {ts} O={bar['Open']} H={bar['High']} L={bar['Low']} C={bar['Close']} V={bar['Volume']}"
+            )
             await self._process_bar(bar)
         else:
             # For incomplete bars, just update current price tracking

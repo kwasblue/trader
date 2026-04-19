@@ -14,7 +14,7 @@ This module provides a centralized synchronizer that:
 from __future__ import annotations
 
 import asyncio
-from typing import Dict, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from loggers.logger import Logger
 
@@ -44,8 +44,8 @@ class StateSynchronizer:
 
     def __init__(
         self,
-        portfolio: "PortfolioState",
-        symbol_states: Dict[str, "SymbolState"],
+        portfolio: PortfolioState,
+        symbol_states: dict[str, SymbolState],
     ):
         """
         Initialize the state synchronizer.
@@ -61,15 +61,9 @@ class StateSynchronizer:
         self._sync_lock = asyncio.Lock()
 
         # Logger
-        self.logger = Logger(
-            log_file="state_sync.log",
-            logger_name="StateSynchronizer",
-            propagate=True
-        ).get_logger()
+        self.logger = Logger(log_file="state_sync.log", logger_name="StateSynchronizer", propagate=True).get_logger()
 
-        self.logger.info(
-            f"StateSynchronizer initialized with {len(symbol_states)} symbol states"
-        )
+        self.logger.info(f"StateSynchronizer initialized with {len(symbol_states)} symbol states")
 
     async def apply_fill_and_sync(
         self,
@@ -97,9 +91,7 @@ class StateSynchronizer:
             # 2. Sync to symbol state
             await self._sync_symbol_from_portfolio(symbol)
 
-            self.logger.debug(
-                f"[{symbol}] Fill applied and synced: {side} {qty}@${price:.2f}"
-            )
+            self.logger.debug(f"[{symbol}] Fill applied and synced: {side} {qty}@${price:.2f}")
 
     async def _sync_symbol_from_portfolio(self, symbol: str) -> None:
         """
@@ -120,14 +112,8 @@ class StateSynchronizer:
 
         if position:
             # Update symbol state from portfolio position
-            state.update_from_portfolio(
-                qty=position.qty,
-                avg_price=position.avg_price
-            )
-            self.logger.debug(
-                f"[{symbol}] Symbol state synced: qty={position.qty}, "
-                f"avg=${position.avg_price:.2f}"
-            )
+            state.update_from_portfolio(qty=position.qty, avg_price=position.avg_price)
+            self.logger.debug(f"[{symbol}] Symbol state synced: qty={position.qty}, avg=${position.avg_price:.2f}")
         else:
             # Position closed - reset symbol state
             if state.current_position != 0:
@@ -158,7 +144,7 @@ class StateSynchronizer:
 
     async def sync_from_broker_snapshot(
         self,
-        broker_positions: Dict[str, any],
+        broker_positions: dict[str, any],
     ) -> int:
         """
         Sync symbol states from broker position snapshot.
@@ -177,21 +163,16 @@ class StateSynchronizer:
             for symbol, pos in broker_positions.items():
                 state = self.symbol_states.get(symbol)
                 if state:
-                    qty = getattr(pos, 'qty', 0)
-                    avg_price = getattr(pos, 'avg_price', 0.0)
+                    qty = getattr(pos, "qty", 0)
+                    avg_price = getattr(pos, "avg_price", 0.0)
                     state.update_from_portfolio(qty=qty, avg_price=avg_price)
                     updated_count += 1
-                    self.logger.debug(
-                        f"[{symbol}] Updated from broker: qty={qty}, "
-                        f"avg=${avg_price:.2f}"
-                    )
+                    self.logger.debug(f"[{symbol}] Updated from broker: qty={qty}, avg=${avg_price:.2f}")
 
-            self.logger.info(
-                f"Synced {updated_count} symbol states from broker snapshot"
-            )
+            self.logger.info(f"Synced {updated_count} symbol states from broker snapshot")
             return updated_count
 
-    def register_symbol(self, symbol: str, state: "SymbolState") -> None:
+    def register_symbol(self, symbol: str, state: SymbolState) -> None:
         """
         Register a new symbol state for synchronization.
 
@@ -213,7 +194,7 @@ class StateSynchronizer:
             del self.symbol_states[symbol]
             self.logger.debug(f"[{symbol}] Unregistered from state sync")
 
-    async def verify_consistency(self) -> Dict[str, Dict]:
+    async def verify_consistency(self) -> dict[str, dict]:
         """
         Verify that Portfolio and Symbol states are consistent.
 
@@ -237,8 +218,7 @@ class StateSynchronizer:
                         "symbol_qty": symbol_qty,
                     }
                     self.logger.warning(
-                        f"[{symbol}] Inconsistency: portfolio_qty={portfolio_qty}, "
-                        f"symbol_qty={symbol_qty}"
+                        f"[{symbol}] Inconsistency: portfolio_qty={portfolio_qty}, symbol_qty={symbol_qty}"
                     )
 
                 # Check average price consistency
@@ -254,9 +234,7 @@ class StateSynchronizer:
             if not inconsistencies:
                 self.logger.info("State consistency check passed")
             else:
-                self.logger.warning(
-                    f"Found {len(inconsistencies)} state inconsistencies"
-                )
+                self.logger.warning(f"Found {len(inconsistencies)} state inconsistencies")
 
             return inconsistencies
 

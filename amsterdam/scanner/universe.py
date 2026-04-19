@@ -1,12 +1,12 @@
 """
 Universe provider — resolves which symbols the scanner should screen.
 """
+
 from __future__ import annotations
 
 import json
 import logging
 from pathlib import Path
-from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -14,12 +14,25 @@ DATA_DIR = Path(__file__).parent / "data"
 
 # Fallback mega-caps if sp500.json is missing
 FALLBACK_SYMBOLS = [
-    "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA",
-    "BRK.B", "JPM", "V", "UNH", "XOM", "JNJ", "WMT", "MA",
+    "AAPL",
+    "MSFT",
+    "GOOGL",
+    "AMZN",
+    "NVDA",
+    "META",
+    "TSLA",
+    "BRK.B",
+    "JPM",
+    "V",
+    "UNH",
+    "XOM",
+    "JNJ",
+    "WMT",
+    "MA",
 ]
 
 
-def get_universe(source: str = "sp500", custom_symbols: Optional[List[str]] = None) -> List[str]:
+def get_universe(source: str = "sp500", custom_symbols: list[str] | None = None) -> list[str]:
     """
     Resolve the screening universe based on source type.
 
@@ -43,7 +56,7 @@ def get_universe(source: str = "sp500", custom_symbols: Optional[List[str]] = No
         return _load_sp500()
 
 
-def _load_sp500() -> List[str]:
+def _load_sp500() -> list[str]:
     sp500_path = DATA_DIR / "sp500.json"
     if sp500_path.exists():
         try:
@@ -58,9 +71,10 @@ def _load_sp500() -> List[str]:
     return FALLBACK_SYMBOLS.copy()
 
 
-def _load_from_list_manager(list_type: str) -> List[str]:
+def _load_from_list_manager(list_type: str) -> list[str]:
     try:
         from core.symbol_list_manager import get_list_manager
+
         manager = get_list_manager()
         if list_type == "watch":
             return manager.get_watch_list()

@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from typing import List, Dict, Union
 
 
 class SentimentModelBase(ABC):
@@ -9,7 +8,7 @@ class SentimentModelBase(ABC):
     """
 
     @abstractmethod
-    def analyze_text(self, text: str) -> Union[float, str]:
+    def analyze_text(self, text: str) -> float | str:
         """
         Analyze the sentiment of a single text string.
 
@@ -22,7 +21,7 @@ class SentimentModelBase(ABC):
         pass
 
     @abstractmethod
-    def analyze_batch(self, texts: List[str]) -> List[Union[float, str]]:
+    def analyze_batch(self, texts: list[str]) -> list[float | str]:
         """
         Analyze sentiment for a batch of text strings.
 
@@ -35,7 +34,7 @@ class SentimentModelBase(ABC):
         pass
 
     @abstractmethod
-    def analyze_asset(self, symbol: str) -> Dict[str, Union[float, str]]:
+    def analyze_asset(self, symbol: str) -> dict[str, float | str]:
         """
         Analyze sentiment for a given asset symbol by aggregating relevant text (e.g., news, tweets).
 

@@ -7,6 +7,7 @@ Tests cover:
 - allows_new_orders property
 - State transitions (in PortfolioState)
 """
+
 import pytest
 
 from core.enums import PositionState
@@ -126,11 +127,7 @@ class TestPositionStateTransitions:
     def test_valid_transitions_from_open(self):
         """Test valid transitions from OPEN state."""
         # OPEN -> PENDING_EXIT (exit order) or PENDING_ADD (add to position) or NONE (closed)
-        valid_from_open = {
-            PositionState.PENDING_EXIT,
-            PositionState.PENDING_ADD,
-            PositionState.NONE
-        }
+        valid_from_open = {PositionState.PENDING_EXIT, PositionState.PENDING_ADD, PositionState.NONE}
 
         assert PositionState.PENDING_EXIT in valid_from_open
         assert PositionState.PENDING_ADD in valid_from_open
@@ -214,8 +211,8 @@ class TestPositionStateUseCases:
 # State Synchronizer Tests
 # ============================================================================
 
-import pytest
 import asyncio
+
 from core.logic.portfolio_state import PortfolioState
 from core.logic.symbol_state import SymbolState
 from core.state_sync import StateSynchronizer
@@ -283,6 +280,7 @@ class TestStateSynchronizer:
     @pytest.mark.asyncio
     async def test_concurrent_fills_maintain_consistency(self, synchronizer, portfolio, symbol_states):
         """Test that concurrent fills maintain state consistency."""
+
         # Run multiple fills concurrently
         async def do_fills():
             tasks = [

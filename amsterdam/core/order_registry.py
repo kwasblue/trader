@@ -10,12 +10,12 @@ Features:
 - Conflict detection for wash trade prevention
 - Order lifecycle management (register, update, remove)
 """
+
 from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Union
 
 from core.enums import OrderStatus
 
@@ -35,6 +35,7 @@ class TrackedOrder:
         created_at: When order was placed
         filled_qty: Quantity filled so far (for partial fills)
     """
+
     order_id: str
     symbol: str
     side: str  # "buy" or "sell"
@@ -85,20 +86,20 @@ class OrderRegistry:
     """
 
     # Valid order status transitions
-    VALID_TRANSITIONS: Dict[OrderStatus, set] = {
+    VALID_TRANSITIONS: dict[OrderStatus, set] = {
         OrderStatus.PENDING: {OrderStatus.ACCEPTED, OrderStatus.REJECTED, OrderStatus.FILLED},
         OrderStatus.ACCEPTED: {OrderStatus.PARTIAL, OrderStatus.FILLED, OrderStatus.CANCELLED, OrderStatus.EXPIRED},
         OrderStatus.PARTIAL: {OrderStatus.FILLED, OrderStatus.CANCELLED},
-        OrderStatus.FILLED: set(),      # Terminal
-        OrderStatus.CANCELLED: set(),   # Terminal
-        OrderStatus.REJECTED: set(),    # Terminal
-        OrderStatus.EXPIRED: set(),     # Terminal
+        OrderStatus.FILLED: set(),  # Terminal
+        OrderStatus.CANCELLED: set(),  # Terminal
+        OrderStatus.REJECTED: set(),  # Terminal
+        OrderStatus.EXPIRED: set(),  # Terminal
     }
 
     def __init__(self):
         """Initialize empty order registry."""
-        self._orders: Dict[str, TrackedOrder] = {}
-        self._by_symbol: Dict[str, List[str]] = {}  # symbol -> [order_ids]
+        self._orders: dict[str, TrackedOrder] = {}
+        self._by_symbol: dict[str, list[str]] = {}  # symbol -> [order_ids]
         self._lock = asyncio.Lock()
 
     @staticmethod
@@ -139,7 +140,7 @@ class OrderRegistry:
         side: str,
         qty: int,
         correlation_id: str,
-        status: str | OrderStatus = OrderStatus.PENDING
+        status: str | OrderStatus = OrderStatus.PENDING,
     ) -> TrackedOrder:
         """
         Register a new order in the registry.
@@ -174,11 +175,8 @@ class OrderRegistry:
             return order
 
     async def update_status(
-        self,
-        order_id: str,
-        status: str | OrderStatus,
-        filled_qty: Optional[int] = None
-    ) -> Optional[TrackedOrder]:
+        self, order_id: str, status: str | OrderStatus, filled_qty: int | None = None
+    ) -> TrackedOrder | None:
         """
         Update the status of a tracked order.
 
@@ -203,9 +201,9 @@ class OrderRegistry:
             if not self._is_valid_transition(order.status, new_status):
                 # Log warning but allow - broker is source of truth
                 import logging
+
                 logging.getLogger("OrderRegistry").warning(
-                    f"Invalid order status transition for {order_id}: "
-                    f"{order.status.value} -> {new_status.value}"
+                    f"Invalid order status transition for {order_id}: {order.status.value} -> {new_status.value}"
                 )
 
             order.status = new_status
@@ -214,7 +212,7 @@ class OrderRegistry:
 
             return order
 
-    async def get(self, order_id: str) -> Optional[TrackedOrder]:
+    async def get(self, order_id: str) -> TrackedOrder | None:
         """
         Get a tracked order by ID.
 
@@ -227,7 +225,7 @@ class OrderRegistry:
         async with self._lock:
             return self._orders.get(order_id)
 
-    async def get_pending_for_symbol(self, symbol: str) -> List[TrackedOrder]:
+    async def get_pending_for_symbol(self, symbol: str) -> list[TrackedOrder]:
         """
         Get all pending (open) orders for a symbol.
 
@@ -266,11 +264,7 @@ class OrderRegistry:
                     return True
             return False
 
-    async def get_conflicting_orders(
-        self,
-        symbol: str,
-        side: str
-    ) -> List[TrackedOrder]:
+    async def get_conflicting_orders(self, symbol: str, side: str) -> list[TrackedOrder]:
         """
         Get orders that would conflict with a new order (opposite side).
 
@@ -296,7 +290,7 @@ class OrderRegistry:
 
             return conflicting
 
-    async def remove(self, order_id: str) -> Optional[TrackedOrder]:
+    async def remove(self, order_id: str) -> TrackedOrder | None:
         """
         Remove an order from the registry.
 
@@ -316,7 +310,7 @@ class OrderRegistry:
                     symbol_orders.remove(order_id)
             return order
 
-    async def clear_symbol(self, symbol: str) -> List[TrackedOrder]:
+    async def clear_symbol(self, symbol: str) -> list[TrackedOrder]:
         """
         Remove all orders for a symbol.
 
@@ -335,7 +329,7 @@ class OrderRegistry:
                     removed.append(order)
             return removed
 
-    async def get_all_pending(self) -> List[TrackedOrder]:
+    async def get_all_pending(self) -> list[TrackedOrder]:
         """
         Get all pending orders across all symbols.
 
@@ -353,10 +347,7 @@ class OrderRegistry:
             Number of orders removed
         """
         async with self._lock:
-            closed_ids = [
-                oid for oid, order in self._orders.items()
-                if not order.is_open
-            ]
+            closed_ids = [oid for oid, order in self._orders.items() if not order.is_open]
 
             for oid in closed_ids:
                 order = self._orders.pop(oid, None)

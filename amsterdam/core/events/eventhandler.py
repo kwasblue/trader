@@ -4,12 +4,13 @@ from __future__ import annotations
 import asyncio
 import inspect
 import threading
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
-from typing import Any, Callable, Awaitable, Dict, List, Set
+from typing import Any
 
 from core.base.event_handler_base import Event, EventHandlerBase
-from core.contracts.events import EVENT_SCHEMA_MAP, GuardrailPayload, EVENT_GUARDRAIL_TRIGGERED
+from core.contracts.events import EVENT_GUARDRAIL_TRIGGERED, EVENT_SCHEMA_MAP, GuardrailPayload
 from core.events.validation import validate_payload
 
 # Optimization constants - tuned for 100-200 symbol scaling
@@ -32,7 +33,8 @@ class EventHandler(EventHandlerBase):
     IMPORTANT: This is a true singleton - __init__ is guarded to prevent
     reinitializing the listeners dict on subsequent calls.
     """
-    _instance: "EventHandler" | None = None
+
+    _instance: EventHandler | None = None
     _create_lock = threading.Lock()
     _initialized = False  # Guard against __init__ being called multiple times
 
@@ -55,14 +57,11 @@ class EventHandler(EventHandlerBase):
         self._queue = None
         self._runner = None
         # Optimization: bounded thread pool for sync callbacks
-        self._executor = ThreadPoolExecutor(
-            max_workers=MAX_THREAD_WORKERS,
-            thread_name_prefix="event_handler"
-        )
+        self._executor = ThreadPoolExecutor(max_workers=MAX_THREAD_WORKERS, thread_name_prefix="event_handler")
         # Optimization: limit concurrent async handlers
         self._semaphore = asyncio.Semaphore(MAX_CONCURRENT_HANDLERS)
         # Track active tasks for graceful shutdown
-        self._active_tasks: Set[asyncio.Task] = set()
+        self._active_tasks: set[asyncio.Task] = set()
 
         # Mark as initialized
         EventHandler._initialized = True
@@ -73,10 +72,12 @@ class EventHandler(EventHandlerBase):
         """
         SYNCHRONOUS subscribe - use this when you need guaranteed immediate subscription.
         """
-        cb_name = getattr(callback, '__name__', repr(callback))
+        cb_name = getattr(callback, "__name__", repr(callback))
         if callback not in self.listeners[event_name]:
             self.listeners[event_name].append(callback)
-            self.logger.debug(f"[EventHandler] Subscribed to '{event_name}' -> {cb_name} (total: {len(self.listeners[event_name])})")
+            self.logger.debug(
+                f"[EventHandler] Subscribed to '{event_name}' -> {cb_name} (total: {len(self.listeners[event_name])})"
+            )
         else:
             self.logger.debug(f"[EventHandler] Duplicate subscription blocked for '{event_name}'")
 
@@ -155,9 +156,7 @@ class EventHandler(EventHandlerBase):
         try:
             cb(event)
         except Exception as e:
-            self.logger.exception(
-                f"[EventHandler] Error in sync callback {getattr(cb, '__name__', repr(cb))}: {e}"
-            )
+            self.logger.exception(f"[EventHandler] Error in sync callback {getattr(cb, '__name__', repr(cb))}: {e}")
 
     async def shutdown(self) -> None:
         """Gracefully shutdown: wait for pending tasks and close executor."""
@@ -170,11 +169,12 @@ class EventHandler(EventHandlerBase):
         self._executor.shutdown(wait=True, cancel_futures=False)
         self.logger.info("[EventHandler] Shutdown complete")
 
-
     def unsubscribe(self, event_name: str, callback: Callable[[Event], Any]) -> None:
         if callback in self.listeners[event_name]:
             self.listeners[event_name].remove(callback)
-            self.logger.debug(f"[EventHandler] Unsubscribed {getattr(callback, '__name__', repr(callback))} from '{event_name}'")
+            self.logger.debug(
+                f"[EventHandler] Unsubscribed {getattr(callback, '__name__', repr(callback))} from '{event_name}'"
+            )
 
     def get_event_names(self) -> list[str]:
         return sorted(self.listeners.keys())
@@ -216,8 +216,10 @@ class EventHandler(EventHandlerBase):
         }
         await self.emit(EVENT_GUARDRAIL_TRIGGERED, payload)
 
+
 # --- Global Singleton Accessor ---
 _global_event_handler: EventHandler | None = None
+
 
 def get_event_handler() -> EventHandler:
     """Return the global EventHandler singleton."""

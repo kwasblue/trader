@@ -4,16 +4,17 @@ Amsterdam Trading Dashboard - v3
 Uses Alpaca as source of truth for all trade data
 """
 
-from flask import Flask, render_template_string, jsonify
-import os
 import json
-import psutil
+import os
+import re
 import shutil
+from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
+
+import psutil
 from dotenv import load_dotenv
-from collections import defaultdict
-import re
+from flask import Flask, jsonify, render_template_string
 
 app = Flask(__name__)
 
@@ -26,6 +27,7 @@ LOG_FILE = BASE_DIR / "logs" / "autotrader.log"
 PID_FILE = BASE_DIR / "logs" / "autotrader.pid"
 TRADES_LOG_FILE = BASE_DIR / "logs" / "meta_trades_live.jsonl"
 
+
 def get_status():
     """Get Amsterdam running status"""
     if PID_FILE.exists():
@@ -37,13 +39,14 @@ def get_status():
             return "Stopped"
     return "Unknown"
 
+
 def get_current_state():
     """Parse current state from logs"""
     if not LOG_FILE.exists():
         return "Unknown"
 
     try:
-        with open(LOG_FILE, 'r') as f:
+        with open(LOG_FILE) as f:
             lines = f.readlines()
             for line in reversed(lines[-50:]):
                 # Check for waiting state
@@ -64,21 +67,22 @@ def get_current_state():
 
     return "Unknown"
 
+
 def get_next_market_open():
     """Get next market open time from logs"""
     if not LOG_FILE.exists():
         return "Unknown"
 
     try:
-        with open(LOG_FILE, 'r') as f:
+        with open(LOG_FILE) as f:
             lines = f.readlines()
             for line in reversed(lines[-20:]):
                 if "Market opens at" in line:
-                    match = re.search(r'Market opens at ([\d-]+ [\d:]+ \w+)', line)
+                    match = re.search(r"Market opens at ([\d-]+ [\d:]+ \w+)", line)
                     if match:
                         return match.group(1)
                 if r"Waiting (\d+)h (\d+)m" in line:
-                    match = re.search(r'Waiting (\d+h \d+m)', line)
+                    match = re.search(r"Waiting (\d+h \d+m)", line)
                     if match:
                         return f"in {match.group(1)}"
     except Exception:
@@ -86,31 +90,30 @@ def get_next_market_open():
 
     return "Unknown"
 
+
 def get_recent_logs(n=10):
     """Get recent log entries"""
     if not LOG_FILE.exists():
         return []
 
     try:
-        with open(LOG_FILE, 'r') as f:
+        with open(LOG_FILE) as f:
             lines = f.readlines()
             return [line.strip() for line in lines[-n:]]
     except Exception:
         return []
 
+
 def parse_log_line(line):
     """Parse log line into structured data"""
     try:
-        parts = line.split(' - ', 3)
+        parts = line.split(" - ", 3)
         if len(parts) >= 4:
-            return {
-                'timestamp': parts[0],
-                'level': parts[2],
-                'message': parts[3]
-            }
+            return {"timestamp": parts[0], "level": parts[2], "message": parts[3]}
     except Exception:
         pass
-    return {'timestamp': '', 'level': '', 'message': line}
+    return {"timestamp": "", "level": "", "message": line}
+
 
 def get_system_health():
     """Get system health metrics"""
@@ -120,24 +123,25 @@ def get_system_health():
         disk = shutil.disk_usage("/")
 
         return {
-            'cpu_percent': round(cpu_percent, 1),
-            'memory_percent': round(memory.percent, 1),
-            'memory_used_gb': round(memory.used / (1024**3), 1),
-            'memory_total_gb': round(memory.total / (1024**3), 1),
-            'disk_percent': round((disk.used / disk.total) * 100, 1),
-            'disk_used_gb': round(disk.used / (1024**3), 1),
-            'disk_total_gb': round(disk.total / (1024**3), 1)
+            "cpu_percent": round(cpu_percent, 1),
+            "memory_percent": round(memory.percent, 1),
+            "memory_used_gb": round(memory.used / (1024**3), 1),
+            "memory_total_gb": round(memory.total / (1024**3), 1),
+            "disk_percent": round((disk.used / disk.total) * 100, 1),
+            "disk_used_gb": round(disk.used / (1024**3), 1),
+            "disk_total_gb": round(disk.total / (1024**3), 1),
         }
     except Exception:
         return {
-            'cpu_percent': 0,
-            'memory_percent': 0,
-            'memory_used_gb': 0,
-            'memory_total_gb': 0,
-            'disk_percent': 0,
-            'disk_used_gb': 0,
-            'disk_total_gb': 0
+            "cpu_percent": 0,
+            "memory_percent": 0,
+            "memory_used_gb": 0,
+            "memory_total_gb": 0,
+            "disk_percent": 0,
+            "disk_used_gb": 0,
+            "disk_total_gb": 0,
         }
+
 
 def get_broker_info():
     """Get broker account and position info"""
@@ -162,42 +166,46 @@ def get_broker_info():
             pnl_pct = float(pos.unrealized_plpc) * 100
             total_unrealized_pnl += pnl
 
-            position_list.append({
-                'symbol': pos.symbol,
-                'qty': int(pos.qty),
-                'side': 'LONG' if float(pos.qty) > 0 else 'SHORT',
-                'entry_price': float(pos.avg_entry_price),
-                'current_price': float(pos.current_price),
-                'market_value': float(pos.market_value),
-                'unrealized_pnl': pnl,
-                'unrealized_pnl_pct': pnl_pct
-            })
+            position_list.append(
+                {
+                    "symbol": pos.symbol,
+                    "qty": int(pos.qty),
+                    "side": "LONG" if float(pos.qty) > 0 else "SHORT",
+                    "entry_price": float(pos.avg_entry_price),
+                    "current_price": float(pos.current_price),
+                    "market_value": float(pos.market_value),
+                    "unrealized_pnl": pnl,
+                    "unrealized_pnl_pct": pnl_pct,
+                }
+            )
 
         return {
-            'equity': float(account.equity),
-            'buying_power': float(account.buying_power),
-            'cash': float(account.cash),
-            'positions': position_list,
-            'total_positions': len(position_list),
-            'total_unrealized_pnl': total_unrealized_pnl
+            "equity": float(account.equity),
+            "buying_power": float(account.buying_power),
+            "cash": float(account.cash),
+            "positions": position_list,
+            "total_positions": len(position_list),
+            "total_unrealized_pnl": total_unrealized_pnl,
         }
     except Exception:
         return None
 
+
 def get_active_symbols():
     """Get list of symbols being monitored"""
     try:
-        with open(LOG_FILE, 'r') as f:
+        with open(LOG_FILE) as f:
             lines = f.readlines()
             for line in reversed(lines[-100:]):
                 if "Symbols:" in line:
-                    match = re.search(r'Symbols: \[(.*?)\]', line)
+                    match = re.search(r"Symbols: \[(.*?)\]", line)
                     if match:
-                        symbols = [s.strip().strip("'") for s in match.group(1).split(',')]
+                        symbols = [s.strip().strip("'") for s in match.group(1).split(",")]
                         return symbols
     except Exception:
         pass
     return []
+
 
 def get_trade_stats_from_log():
     """Get trade statistics from backfilled log file"""
@@ -209,62 +217,65 @@ def get_trade_stats_from_log():
         exits = {}
 
         # Read all trades from log
-        with open(TRADES_LOG_FILE, 'r') as f:
+        with open(TRADES_LOG_FILE) as f:
             for line in f:
                 event = json.loads(line.strip())
-                if event['event'] == 'entry':
-                    entries[event['trade_id']] = event
-                elif event['event'] == 'exit':
-                    exits[event['trade_id']] = event
+                if event["event"] == "entry":
+                    entries[event["trade_id"]] = event
+                elif event["event"] == "exit":
+                    exits[event["trade_id"]] = event
 
         # Match entries with exits
         completed_trades = []
         for trade_id, exit_event in exits.items():
             if trade_id in entries:
                 entry = entries[trade_id]
-                completed_trades.append({
-                    'symbol': entry['symbol'],
-                    'side': entry['side'],
-                    'entry_price': entry['price'],
-                    'exit_price': exit_event['price'],
-                    'qty': entry['qty'],
-                    'pnl': exit_event['outcome']['pnl_dollars'],
-                    'pnl_pct': exit_event['outcome']['pnl_percent'] * 100,
-                    'entry_time': datetime.fromisoformat(entry['timestamp']),
-                    'exit_time': datetime.fromisoformat(exit_event['timestamp'])
-                })
+                completed_trades.append(
+                    {
+                        "symbol": entry["symbol"],
+                        "side": entry["side"],
+                        "entry_price": entry["price"],
+                        "exit_price": exit_event["price"],
+                        "qty": entry["qty"],
+                        "pnl": exit_event["outcome"]["pnl_dollars"],
+                        "pnl_pct": exit_event["outcome"]["pnl_percent"] * 100,
+                        "entry_time": datetime.fromisoformat(entry["timestamp"]),
+                        "exit_time": datetime.fromisoformat(exit_event["timestamp"]),
+                    }
+                )
 
         if not completed_trades:
             return None
 
         # Calculate statistics
-        wins = [t for t in completed_trades if t['pnl'] > 0]
-        losses = [t for t in completed_trades if t['pnl'] <= 0]
+        wins = [t for t in completed_trades if t["pnl"] > 0]
+        losses = [t for t in completed_trades if t["pnl"] <= 0]
 
-        total_pnl = sum(t['pnl'] for t in completed_trades)
-        avg_win = sum(t['pnl'] for t in wins) / len(wins) if wins else 0
-        avg_loss = sum(t['pnl'] for t in losses) / len(losses) if losses else 0
+        total_pnl = sum(t["pnl"] for t in completed_trades)
+        avg_win = sum(t["pnl"] for t in wins) / len(wins) if wins else 0
+        avg_loss = sum(t["pnl"] for t in losses) / len(losses) if losses else 0
 
-        best_trade = max(completed_trades, key=lambda x: x['pnl']) if completed_trades else None
-        worst_trade = min(completed_trades, key=lambda x: x['pnl']) if completed_trades else None
+        best_trade = max(completed_trades, key=lambda x: x["pnl"]) if completed_trades else None
+        worst_trade = min(completed_trades, key=lambda x: x["pnl"]) if completed_trades else None
 
         return {
-            'total_trades': len(entries),
-            'completed_trades': len(completed_trades),
-            'wins': len(wins),
-            'losses': len(losses),
-            'win_rate': (len(wins) / len(completed_trades) * 100) if completed_trades else 0,
-            'total_pnl_from_trades': total_pnl,
-            'avg_win': avg_win,
-            'avg_loss': avg_loss,
-            'profit_factor': abs(avg_win / avg_loss) if avg_loss != 0 else 0,
-            'best_trade': best_trade,
-            'worst_trade': worst_trade,
-            'recent_trades': sorted(completed_trades, key=lambda x: x['exit_time'], reverse=True)[:10],
-            'data_source': 'log_file'
+            "total_trades": len(entries),
+            "completed_trades": len(completed_trades),
+            "wins": len(wins),
+            "losses": len(losses),
+            "win_rate": (len(wins) / len(completed_trades) * 100) if completed_trades else 0,
+            "total_pnl_from_trades": total_pnl,
+            "avg_win": avg_win,
+            "avg_loss": avg_loss,
+            "profit_factor": abs(avg_win / avg_loss) if avg_loss != 0 else 0,
+            "best_trade": best_trade,
+            "worst_trade": worst_trade,
+            "recent_trades": sorted(completed_trades, key=lambda x: x["exit_time"], reverse=True)[:10],
+            "data_source": "log_file",
         }
-    except Exception as e:
+    except Exception:
         return None
+
 
 def get_alpaca_trade_stats():
     """Get real trade statistics from Alpaca orders"""
@@ -276,20 +287,16 @@ def get_alpaca_trade_stats():
             return None
 
         from alpaca.trading.client import TradingClient
-        from alpaca.trading.requests import GetOrdersRequest
         from alpaca.trading.enums import QueryOrderStatus
+        from alpaca.trading.requests import GetOrdersRequest
 
         client = TradingClient(api_key, secret_key, paper=True)
 
         # Get filled orders
-        request = GetOrdersRequest(
-            status=QueryOrderStatus.CLOSED,
-            limit=500,
-            nested=True
-        )
+        request = GetOrdersRequest(status=QueryOrderStatus.CLOSED, limit=500, nested=True)
 
         orders = client.get_orders(request)
-        filled_orders = [o for o in orders if o.status == 'filled']
+        filled_orders = [o for o in orders if o.status == "filled"]
         filled_orders.sort(key=lambda x: x.filled_at)
 
         # Match trades using FIFO
@@ -303,83 +310,78 @@ def get_alpaca_trade_stats():
             price = float(order.filled_avg_price)
             filled_at = order.filled_at
 
-            if side == 'buy':
-                positions[symbol].append({
-                    'entry_price': price,
-                    'qty': qty,
-                    'entry_time': filled_at,
-                    'side': 'long'
-                })
-            elif side == 'sell':
+            if side == "buy":
+                positions[symbol].append({"entry_price": price, "qty": qty, "entry_time": filled_at, "side": "long"})
+            elif side == "sell":
                 remaining_qty = qty
 
                 while remaining_qty > 0 and positions[symbol]:
                     position = positions[symbol][0]
 
-                    if position['side'] == 'long':
-                        close_qty = min(remaining_qty, position['qty'])
+                    if position["side"] == "long":
+                        close_qty = min(remaining_qty, position["qty"])
 
-                        pnl = (price - position['entry_price']) * close_qty
-                        pnl_pct = ((price - position['entry_price']) / position['entry_price']) * 100
+                        pnl = (price - position["entry_price"]) * close_qty
+                        pnl_pct = ((price - position["entry_price"]) / position["entry_price"]) * 100
 
-                        completed_trades.append({
-                            'symbol': symbol,
-                            'side': 'long',
-                            'entry_price': position['entry_price'],
-                            'exit_price': price,
-                            'qty': close_qty,
-                            'pnl': pnl,
-                            'pnl_pct': pnl_pct,
-                            'entry_time': position['entry_time'],
-                            'exit_time': filled_at
-                        })
+                        completed_trades.append(
+                            {
+                                "symbol": symbol,
+                                "side": "long",
+                                "entry_price": position["entry_price"],
+                                "exit_price": price,
+                                "qty": close_qty,
+                                "pnl": pnl,
+                                "pnl_pct": pnl_pct,
+                                "entry_time": position["entry_time"],
+                                "exit_time": filled_at,
+                            }
+                        )
 
-                        position['qty'] -= close_qty
+                        position["qty"] -= close_qty
                         remaining_qty -= close_qty
 
-                        if position['qty'] <= 0:
+                        if position["qty"] <= 0:
                             positions[symbol].pop(0)
                     else:
                         break
 
                 if remaining_qty > 0:
-                    positions[symbol].append({
-                        'entry_price': price,
-                        'qty': remaining_qty,
-                        'entry_time': filled_at,
-                        'side': 'short'
-                    })
+                    positions[symbol].append(
+                        {"entry_price": price, "qty": remaining_qty, "entry_time": filled_at, "side": "short"}
+                    )
 
         # Calculate statistics
         if not completed_trades:
             return None
 
-        wins = [t for t in completed_trades if t['pnl'] > 0]
-        losses = [t for t in completed_trades if t['pnl'] <= 0]
+        wins = [t for t in completed_trades if t["pnl"] > 0]
+        losses = [t for t in completed_trades if t["pnl"] <= 0]
 
-        total_pnl_trades = sum(t['pnl'] for t in completed_trades)
-        avg_win = sum(t['pnl'] for t in wins) / len(wins) if wins else 0
-        avg_loss = sum(t['pnl'] for t in losses) / len(losses) if losses else 0
+        total_pnl_trades = sum(t["pnl"] for t in completed_trades)
+        avg_win = sum(t["pnl"] for t in wins) / len(wins) if wins else 0
+        avg_loss = sum(t["pnl"] for t in losses) / len(losses) if losses else 0
 
-        best_trade = max(completed_trades, key=lambda x: x['pnl']) if completed_trades else None
-        worst_trade = min(completed_trades, key=lambda x: x['pnl']) if completed_trades else None
+        best_trade = max(completed_trades, key=lambda x: x["pnl"]) if completed_trades else None
+        worst_trade = min(completed_trades, key=lambda x: x["pnl"]) if completed_trades else None
 
         return {
-            'total_trades': len(filled_orders),
-            'completed_trades': len(completed_trades),
-            'wins': len(wins),
-            'losses': len(losses),
-            'win_rate': (len(wins) / len(completed_trades) * 100) if completed_trades else 0,
-            'total_pnl_from_trades': total_pnl_trades,
-            'avg_win': avg_win,
-            'avg_loss': avg_loss,
-            'profit_factor': abs(avg_win / avg_loss) if avg_loss != 0 else 0,
-            'best_trade': best_trade,
-            'worst_trade': worst_trade,
-            'recent_trades': sorted(completed_trades, key=lambda x: x['exit_time'], reverse=True)[:10]
+            "total_trades": len(filled_orders),
+            "completed_trades": len(completed_trades),
+            "wins": len(wins),
+            "losses": len(losses),
+            "win_rate": (len(wins) / len(completed_trades) * 100) if completed_trades else 0,
+            "total_pnl_from_trades": total_pnl_trades,
+            "avg_win": avg_win,
+            "avg_loss": avg_loss,
+            "profit_factor": abs(avg_win / avg_loss) if avg_loss != 0 else 0,
+            "best_trade": best_trade,
+            "worst_trade": worst_trade,
+            "recent_trades": sorted(completed_trades, key=lambda x: x["exit_time"], reverse=True)[:10],
         }
-    except Exception as e:
+    except Exception:
         return None
+
 
 def get_equity_curve():
     """Get equity curve from Alpaca portfolio history"""
@@ -388,36 +390,34 @@ def get_equity_curve():
         secret_key = os.getenv("ALPACA_SECRET_KEY")
 
         if not api_key or not secret_key:
-            return {'dates': [], 'equity': []}
+            return {"dates": [], "equity": []}
+
+        from datetime import datetime
 
         from alpaca.trading.client import TradingClient
         from alpaca.trading.requests import GetPortfolioHistoryRequest
-        from datetime import datetime
 
         client = TradingClient(api_key, secret_key, paper=True)
 
-        request = GetPortfolioHistoryRequest(
-            period='1M',
-            timeframe='1D'
-        )
+        request = GetPortfolioHistoryRequest(period="1M", timeframe="1D")
 
         history = client.get_portfolio_history(request)
 
         if not history.timestamp:
-            return {'dates': [], 'equity': []}
+            return {"dates": [], "equity": []}
 
-        dates = [datetime.fromtimestamp(ts).strftime('%Y-%m-%d') for ts in history.timestamp]
+        dates = [datetime.fromtimestamp(ts).strftime("%Y-%m-%d") for ts in history.timestamp]
         equity_points = history.equity
 
         return {
-            'dates': dates,
-            'equity': equity_points,
-            'starting_equity': equity_points[0] if equity_points else 100000,
-            'current_equity': equity_points[-1] if equity_points else 0,
-            'total_pnl': history.profit_loss[-1] if history.profit_loss else 0
+            "dates": dates,
+            "equity": equity_points,
+            "starting_equity": equity_points[0] if equity_points else 100000,
+            "current_equity": equity_points[-1] if equity_points else 0,
+            "total_pnl": history.profit_loss[-1] if history.profit_loss else 0,
         }
     except Exception:
-        return {'dates': [], 'equity': []}
+        return {"dates": [], "equity": []}
 
 
 def get_symbol_performance():
@@ -429,70 +429,72 @@ def get_symbol_performance():
         entries = {}
         exits = {}
 
-        with open(TRADES_LOG_FILE, 'r') as f:
+        with open(TRADES_LOG_FILE) as f:
             for line in f:
                 event = json.loads(line.strip())
-                if event['event'] == 'entry':
-                    entries[event['trade_id']] = event
-                elif event['event'] == 'exit':
-                    exits[event['trade_id']] = event
+                if event["event"] == "entry":
+                    entries[event["trade_id"]] = event
+                elif event["event"] == "exit":
+                    exits[event["trade_id"]] = event
 
         # Group trades by symbol
         symbol_trades = defaultdict(list)
         for trade_id, exit_event in exits.items():
             if trade_id in entries:
                 entry = entries[trade_id]
-                symbol_trades[entry['symbol']].append({
-                    'pnl': exit_event['outcome']['pnl_dollars'],
-                    'pnl_pct': exit_event['outcome']['pnl_percent'] * 100
-                })
+                symbol_trades[entry["symbol"]].append(
+                    {"pnl": exit_event["outcome"]["pnl_dollars"], "pnl_pct": exit_event["outcome"]["pnl_percent"] * 100}
+                )
 
         # Calculate metrics per symbol
         performance = []
         for symbol, trades in symbol_trades.items():
-            wins = [t for t in trades if t['pnl'] > 0]
-            total_pnl = sum(t['pnl'] for t in trades)
+            wins = [t for t in trades if t["pnl"] > 0]
+            total_pnl = sum(t["pnl"] for t in trades)
             win_rate = (len(wins) / len(trades) * 100) if trades else 0
             avg_pnl = total_pnl / len(trades) if trades else 0
 
-            performance.append({
-                'symbol': symbol,
-                'total_trades': len(trades),
-                'win_rate': win_rate,
-                'total_pnl': total_pnl,
-                'avg_pnl': avg_pnl
-            })
+            performance.append(
+                {
+                    "symbol": symbol,
+                    "total_trades": len(trades),
+                    "win_rate": win_rate,
+                    "total_pnl": total_pnl,
+                    "avg_pnl": avg_pnl,
+                }
+            )
 
         # Sort by total P&L descending
-        performance.sort(key=lambda x: x['total_pnl'], reverse=True)
+        performance.sort(key=lambda x: x["total_pnl"], reverse=True)
         return performance
 
     except Exception:
         return []
 
+
 def get_daily_pnl():
     """Get daily P&L for bar chart"""
     if not TRADES_LOG_FILE.exists():
-        return {'dates': [], 'pnl': []}
+        return {"dates": [], "pnl": []}
 
     try:
         entries = {}
         exits = {}
 
-        with open(TRADES_LOG_FILE, 'r') as f:
+        with open(TRADES_LOG_FILE) as f:
             for line in f:
                 event = json.loads(line.strip())
-                if event['event'] == 'entry':
-                    entries[event['trade_id']] = event
-                elif event['event'] == 'exit':
-                    exits[event['trade_id']] = event
+                if event["event"] == "entry":
+                    entries[event["trade_id"]] = event
+                elif event["event"] == "exit":
+                    exits[event["trade_id"]] = event
 
         # Group by exit date
         daily_pnl = defaultdict(float)
         for trade_id, exit_event in exits.items():
             if trade_id in entries:
-                exit_date = datetime.fromisoformat(exit_event['timestamp']).date()
-                daily_pnl[exit_date] += exit_event['outcome']['pnl_dollars']
+                exit_date = datetime.fromisoformat(exit_event["timestamp"]).date()
+                daily_pnl[exit_date] += exit_event["outcome"]["pnl_dollars"]
 
         # Sort by date and prepare chart data
         sorted_dates = sorted(daily_pnl.keys())
@@ -500,13 +502,11 @@ def get_daily_pnl():
         # Take last 30 days
         recent_dates = sorted_dates[-30:] if len(sorted_dates) > 30 else sorted_dates
 
-        return {
-            'dates': [d.strftime('%Y-%m-%d') for d in recent_dates],
-            'pnl': [daily_pnl[d] for d in recent_dates]
-        }
+        return {"dates": [d.strftime("%Y-%m-%d") for d in recent_dates], "pnl": [daily_pnl[d] for d in recent_dates]}
 
     except Exception:
-        return {'dates': [], 'pnl': []}
+        return {"dates": [], "pnl": []}
+
 
 def get_recent_errors(n=10):
     """Get recent ERROR and WARNING log entries"""
@@ -514,13 +514,13 @@ def get_recent_errors(n=10):
         return []
 
     try:
-        with open(LOG_FILE, 'r') as f:
+        with open(LOG_FILE) as f:
             lines = f.readlines()
 
         errors = []
         for line in reversed(lines[-200:]):  # Check last 200 lines
             parsed = parse_log_line(line)
-            if parsed['level'] in ['ERROR', 'WARNING']:
+            if parsed["level"] in ["ERROR", "WARNING"]:
                 errors.append(parsed)
                 if len(errors) >= n:
                     break
@@ -529,45 +529,49 @@ def get_recent_errors(n=10):
     except Exception:
         return []
 
+
 def get_market_status():
     """Determine current market status"""
     try:
         from datetime import datetime
+
         import pytz
 
         # Get current time in ET
-        et_tz = pytz.timezone('America/New_York')
+        et_tz = pytz.timezone("America/New_York")
         now_et = datetime.now(et_tz)
 
         # Market hours: 9:30 AM - 4:00 PM ET, Monday-Friday
         weekday = now_et.weekday()  # 0=Monday, 6=Sunday
 
         if weekday >= 5:  # Weekend
-            return 'closed'
+            return "closed"
 
         current_time = now_et.time()
 
         # Pre-market: 4:00 AM - 9:30 AM
         from datetime import time
+
         if time(4, 0) <= current_time < time(9, 30):
-            return 'pre-market'
+            return "pre-market"
 
         # Market open: 9:30 AM - 4:00 PM
         elif time(9, 30) <= current_time < time(16, 0):
-            return 'open'
+            return "open"
 
         # After-hours: 4:00 PM - 8:00 PM
         elif time(16, 0) <= current_time < time(20, 0):
-            return 'after-hours'
+            return "after-hours"
 
         # Closed
         else:
-            return 'closed'
+            return "closed"
 
     except Exception:
-        return 'unknown'
+        return "unknown"
 
-HTML_TEMPLATE = '''
+
+HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html>
 <head>
@@ -929,7 +933,7 @@ HTML_TEMPLATE = '''
             {% endif %}
         </div>
 
-        
+
 
         {% if symbol_performance %}
         <div class="card" style="margin-bottom: 30px;">
@@ -1301,9 +1305,10 @@ HTML_TEMPLATE = '''
     </script>
 </body>
 </html>
-'''
+"""
 
-@app.route('/')
+
+@app.route("/")
 def index():
     status = get_status()
     state = get_current_state()
@@ -1319,11 +1324,7 @@ def index():
     recent_errors = get_recent_errors(10)
     market_status = get_market_status()
 
-    status_class = {
-        'Running': 'running',
-        'Stopped': 'stopped',
-        'Unknown': 'unknown'
-    }.get(status, 'unknown')
+    status_class = {"Running": "running", "Stopped": "stopped", "Unknown": "unknown"}.get(status, "unknown")
 
     logs = [parse_log_line(line) for line in recent_logs]
 
@@ -1343,41 +1344,46 @@ def index():
         daily_pnl=daily_pnl,
         recent_errors=recent_errors,
         market_status=market_status,
-        now=datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        now=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     )
 
-@app.route('/api/status')
+
+@app.route("/api/status")
 def api_status():
     """JSON API endpoint"""
-    return jsonify({
-        'status': get_status(),
-        'state': get_current_state(),
-        'next_market_open': get_next_market_open(),
-        'health': get_system_health(),
-        'broker': get_broker_info(),
-        'symbols': get_active_symbols(),
-        'stats': get_trade_stats_from_log(),
-        'timestamp': datetime.now().isoformat()
-    })
+    return jsonify(
+        {
+            "status": get_status(),
+            "state": get_current_state(),
+            "next_market_open": get_next_market_open(),
+            "health": get_system_health(),
+            "broker": get_broker_info(),
+            "symbols": get_active_symbols(),
+            "stats": get_trade_stats_from_log(),
+            "timestamp": datetime.now().isoformat(),
+        }
+    )
 
 
 # ============================================================================
 # EMERGENCY CONTROL ENDPOINTS
 # ============================================================================
 
-@app.route('/api/emergency/stop-bot', methods=['POST'])
+
+@app.route("/api/emergency/stop-bot", methods=["POST"])
 def emergency_stop_bot():
     """Emergency stop the trading bot"""
     try:
         if PID_FILE.exists():
             pid = int(PID_FILE.read_text().strip())
             os.kill(pid, 15)  # SIGTERM
-            return jsonify({'success': True, 'message': 'Bot stop signal sent'})
-        return jsonify({'success': False, 'message': 'Bot not running'})
+            return jsonify({"success": True, "message": "Bot stop signal sent"})
+        return jsonify({"success": False, "message": "Bot not running"})
     except Exception as e:
-        return jsonify({'success': False, 'message': str(e)})
+        return jsonify({"success": False, "message": str(e)})
 
-@app.route('/api/emergency/close-all', methods=['POST'])
+
+@app.route("/api/emergency/close-all", methods=["POST"])
 def emergency_close_all():
     """Close all open positions"""
     try:
@@ -1385,21 +1391,19 @@ def emergency_close_all():
         secret_key = os.getenv("ALPACA_SECRET_KEY")
 
         if not api_key or not secret_key:
-            return jsonify({'success': False, 'message': 'API credentials not found'})
+            return jsonify({"success": False, "message": "API credentials not found"})
 
         from alpaca.trading.client import TradingClient
 
         client = TradingClient(api_key, secret_key, paper=True)
         result = client.close_all_positions(cancel_orders=True)
 
-        return jsonify({
-            'success': True,
-            'message': 'Closed all positions',
-            'closed_count': len(result) if result else 0
-        })
+        return jsonify(
+            {"success": True, "message": "Closed all positions", "closed_count": len(result) if result else 0}
+        )
     except Exception as e:
-        return jsonify({'success': False, 'message': str(e)})
+        return jsonify({"success": False, "message": str(e)})
 
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8080)
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8080)

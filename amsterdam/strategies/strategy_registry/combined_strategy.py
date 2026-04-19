@@ -1,7 +1,8 @@
+import inspect
+
 import numpy as np
 import pandas as pd
-import inspect
-from typing import Optional, List
+
 from core.base.base_strategy import BaseStrategy
 
 
@@ -47,7 +48,7 @@ class CombinedStrategy(BaseStrategy):
             return 0
         return int(data["Signal"].iloc[-1])
 
-    def generate_signals_vectorized(self, data: pd.DataFrame) -> Optional[List[int]]:
+    def generate_signals_vectorized(self, data: pd.DataFrame) -> list[int] | None:
         """Vectorized combined signal generation for fast backtesting."""
         strategy_instances = self.params.get("strategy_instances", [])
         weights = self.params.get("weights", None)
@@ -59,7 +60,7 @@ class CombinedStrategy(BaseStrategy):
         # Collect vectorized signals from each sub-strategy
         all_signals = []
         for strategy in strategy_instances:
-            if hasattr(strategy, 'generate_signals_vectorized'):
+            if hasattr(strategy, "generate_signals_vectorized"):
                 sig = strategy.generate_signals_vectorized(data.copy())
                 if sig is not None:
                     all_signals.append(np.array(sig))

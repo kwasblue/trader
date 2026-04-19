@@ -20,14 +20,14 @@ Usage:
     amsterdam gui --mode schwab               # Schwab live trading
     amsterdam gui -s AAPL,MSFT,GOOGL          # Custom symbols
 """
-import sys
-import asyncio
+
 import argparse
+import asyncio
 import logging
 import os
-from pathlib import Path
-from typing import Optional, List
+import sys
 from enum import Enum
+from pathlib import Path
 
 # Project root setup (gui_app.py is in monitoring/, so parent.parent is project root)
 ROOT = Path(__file__).resolve().parent.parent
@@ -48,36 +48,19 @@ class TradingMode(Enum):
 def parse_args():
     parser = argparse.ArgumentParser(description="Run trading system with GUI")
     parser.add_argument(
-        "--mode", "-m",
+        "--mode",
+        "-m",
         type=str,
         choices=["simulation", "alpaca", "schwab"],
         default="simulation",
-        help="Trading mode (default: simulation)"
+        help="Trading mode (default: simulation)",
     )
+    parser.add_argument("--symbols", "-s", type=str, default="AAPL,MSFT", help="Comma-separated list of symbols")
     parser.add_argument(
-        "--symbols", "-s",
-        type=str,
-        default="AAPL,MSFT",
-        help="Comma-separated list of symbols"
+        "--paper", action="store_true", default=True, help="Use paper trading for Alpaca (default: True)"
     )
-    parser.add_argument(
-        "--paper",
-        action="store_true",
-        default=True,
-        help="Use paper trading for Alpaca (default: True)"
-    )
-    parser.add_argument(
-        "--speed",
-        type=float,
-        default=0.1,
-        help="Simulation speed in seconds per bar (default: 0.1)"
-    )
-    parser.add_argument(
-        "--steps",
-        type=int,
-        default=600,
-        help="Number of bars to simulate (default: 600 = ~2 min)"
-    )
+    parser.add_argument("--speed", type=float, default=0.1, help="Simulation speed in seconds per bar (default: 0.1)")
+    parser.add_argument("--steps", type=int, default=600, help="Number of bars to simulate (default: 600 = ~2 min)")
     return parser.parse_args()
 
 
@@ -87,16 +70,17 @@ class TradingBackend:
     All backends emit events to the shared EventHandler.
     """
 
-    def __init__(self, mode: TradingMode, symbols: List[str], **kwargs):
+    def __init__(self, mode: TradingMode, symbols: list[str], **kwargs):
         self.mode = mode
         self.symbols = symbols
         self.kwargs = kwargs
-        self._task: Optional[asyncio.Task] = None
+        self._task: asyncio.Task | None = None
         self._running = False
         self._runner = None  # Store runner reference for clean shutdown
 
         # Import here to avoid circular deps
         from core.events.eventhandler import get_event_handler
+
         self.event_handler = get_event_handler()
 
     async def start(self):
@@ -118,7 +102,7 @@ class TradingBackend:
 
         # Stop the runner first (graceful shutdown)
         if self._runner is not None:
-            if hasattr(self._runner, 'stop'):
+            if hasattr(self._runner, "stop"):
                 self._runner.stop()
                 logger.info("Runner stop requested")
 
@@ -134,16 +118,14 @@ class TradingBackend:
 
     async def _run_simulation(self):
         """Run GBM price simulation."""
-        from core.simulator.gbm_simulator import GBMSimulator
-        from core.simulator.simulation import SimConfig, SimulationRunner
-        from core.events import events
-        from datetime import datetime, timezone
 
-        speed = self.kwargs.get('speed', 0.1)
+        from core.simulator.simulation import SimConfig, SimulationRunner
+
+        speed = self.kwargs.get("speed", 0.1)
 
         # Create simulation config
         # Use config file settings or default (600 steps = ~2 min at 0.1s/bar)
-        steps = self.kwargs.get('steps', 600)
+        steps = self.kwargs.get("steps", 600)
         config = SimConfig(
             symbols=self.symbols,
             steps=steps,
@@ -169,10 +151,11 @@ class TradingBackend:
     async def _run_alpaca(self):
         """Run Alpaca live/paper trading."""
         from dataclasses import replace
-        from core.config_loader import get_config
-        from core.alpaca_runner import AlpacaLiveRunner
 
-        paper = self.kwargs.get('paper', True)
+        from core.alpaca_runner import AlpacaLiveRunner
+        from core.config_loader import get_config
+
+        paper = self.kwargs.get("paper", True)
 
         # Get config and override paper mode if specified
         config = get_config()
@@ -191,7 +174,6 @@ class TradingBackend:
     async def _run_schwab(self):
         """Run Schwab live trading using SchwabLiveRunner."""
         from core.schwab_runner import SchwabLiveRunner
-        import os
 
         logger.info("[SCHWAB] Initializing Schwab connection...")
 
@@ -210,7 +192,7 @@ class TradingBackend:
 
         except asyncio.CancelledError:
             logger.info("[SCHWAB] Runner stopped")
-            if hasattr(self, '_schwab_runner'):
+            if hasattr(self, "_schwab_runner"):
                 await self._schwab_runner.stop()
         except ValueError as e:
             logger.error(f"[SCHWAB] Configuration error: {e}")
@@ -226,7 +208,7 @@ class TradingApplication:
     - TradingBackend for market data generation
     """
 
-    def __init__(self, mode: TradingMode, symbols: List[str], **kwargs):
+    def __init__(self, mode: TradingMode, symbols: list[str], **kwargs):
         self.mode = mode
         self.symbols = symbols
         self.kwargs = kwargs
@@ -239,7 +221,7 @@ class TradingApplication:
 
     def run(self):
         """Main entry point - sets up Qt + asyncio and runs the app."""
-        from PySide6 import QtWidgets, QtCore
+        from PySide6 import QtWidgets
         from qasync import QEventLoop
 
         # Create Qt application first
@@ -247,6 +229,7 @@ class TradingApplication:
 
         # Apply dark theme
         from monitoring.theme import apply_dark_palette
+
         apply_dark_palette(self.app)
 
         # Create qasync event loop - bridges Qt and asyncio
@@ -255,7 +238,6 @@ class TradingApplication:
 
         # Import after event loop is set
         from monitoring.views.main_window import MainWindow
-        from core.events.eventhandler import get_event_handler
 
         # Create window and data feeder
         self.window = MainWindow()
@@ -294,27 +276,32 @@ class TradingApplication:
 
             # Start the data feeder (already subscribed in __init__, this is for legacy compatibility)
             await self.window.feeder.start()
-            self.window._append_log(f"[INIT] Data feeder connected to event bus")
+            self.window._append_log("[INIT] Data feeder connected to event bus")
 
             # Pre-populate the symbol input with command-line symbols
-            if hasattr(self.window, 'symbol_input'):
-                self.window.symbol_input.setText(','.join(self.symbols))
+            if hasattr(self.window, "symbol_input"):
+                self.window.symbol_input.setText(",".join(self.symbols))
 
             # Set the mode dropdown to match command-line mode
-            if hasattr(self.window, 'mode_combo'):
-                mode_map = {'simulation': 0, 'alpaca': 1, 'schwab': 2}
+            if hasattr(self.window, "mode_combo"):
+                mode_map = {"simulation": 0, "alpaca": 1, "schwab": 2}
                 idx = mode_map.get(self.mode.value, 0)
                 self.window.mode_combo.setCurrentIndex(idx)
 
             # Emit initial health status (system ready, not trading yet)
-            from core.events import events
             from datetime import datetime, timezone
-            await self.backend.event_handler.emit(events.EVENT_HEALTH_UPDATE, {
-                "broker": self.mode.value,
-                "status": "ready",
-                "details": {"symbols": self.symbols},
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-            })
+
+            from core.events import events
+
+            await self.backend.event_handler.emit(
+                events.EVENT_HEALTH_UPDATE,
+                {
+                    "broker": self.mode.value,
+                    "status": "ready",
+                    "details": {"symbols": self.symbols},
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                },
+            )
 
             self.window._append_log(f"[INIT] Mode: {self.mode.value.upper()}")
             self.window._append_log(f"[INIT] Symbols: {', '.join(self.symbols)}")
@@ -343,11 +330,7 @@ def main():
     from app.bootstrap import bootstrap_app
 
     ctx = bootstrap_app(
-        mode='gui',
-        symbols=symbols,
-        trading_mode=mode.value,
-        log_level=logging.DEBUG,
-        console_logging=True
+        mode="gui", symbols=symbols, trading_mode=mode.value, log_level=logging.DEBUG, console_logging=True
     )
     logger = ctx.logger
 

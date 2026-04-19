@@ -34,6 +34,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 import pandas as pd
+
 from data.processor import Processor
 
 
@@ -51,7 +52,7 @@ def get_raw_data_files(raw_path: Path) -> dict[str, Path]:
 
 def load_raw_data(filepath: Path) -> list[dict]:
     """Load raw candle data from JSON file."""
-    with open(filepath, "r") as f:
+    with open(filepath) as f:
         data = json.load(f)
 
     # Handle different formats
@@ -90,7 +91,7 @@ def process_symbol(symbol: str, raw_path: Path, proc_path: Path, dry_run: bool =
     proc_bars = 0
     if proc_file.exists():
         try:
-            with open(proc_file, "r") as f:
+            with open(proc_file) as f:
                 proc_data = json.load(f)
                 proc_bars = len(proc_data.get("bars", proc_data) if isinstance(proc_data, dict) else proc_data)
         except Exception:
@@ -155,9 +156,7 @@ def save_processed_data(symbol: str, df: pd.DataFrame, proc_path: Path) -> None:
         if pd.api.types.is_datetime64_any_dtype(df_copy[col]):
             df_copy[col] = df_copy[col].dt.strftime("%Y-%m-%dT%H:%M:%S")
         elif df_copy[col].dtype == "object":
-            df_copy[col] = df_copy[col].apply(
-                lambda x: x.isoformat() if hasattr(x, "isoformat") else x
-            )
+            df_copy[col] = df_copy[col].apply(lambda x: x.isoformat() if hasattr(x, "isoformat") else x)
 
     # Handle NaN and infinity
     df_copy = df_copy.where(df_copy.notna(), None)
@@ -174,31 +173,11 @@ def main():
         description="Reprocess raw data to create complete processed data files",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument(
-        "--symbols", "-s",
-        nargs="+",
-        help="Symbols to reprocess"
-    )
-    parser.add_argument(
-        "--all", "-a",
-        action="store_true",
-        help="Process all symbols with raw data"
-    )
-    parser.add_argument(
-        "--dry-run", "-n",
-        action="store_true",
-        help="Show what would be processed without doing it"
-    )
-    parser.add_argument(
-        "--raw-path",
-        default="data/data_storage/raw_data",
-        help="Path to raw data files"
-    )
-    parser.add_argument(
-        "--proc-path",
-        default="data/data_storage/proc_data",
-        help="Path to processed data files"
-    )
+    parser.add_argument("--symbols", "-s", nargs="+", help="Symbols to reprocess")
+    parser.add_argument("--all", "-a", action="store_true", help="Process all symbols with raw data")
+    parser.add_argument("--dry-run", "-n", action="store_true", help="Show what would be processed without doing it")
+    parser.add_argument("--raw-path", default="data/data_storage/raw_data", help="Path to raw data files")
+    parser.add_argument("--proc-path", default="data/data_storage/proc_data", help="Path to processed data files")
 
     args = parser.parse_args()
 

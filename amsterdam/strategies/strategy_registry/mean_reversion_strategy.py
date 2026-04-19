@@ -1,8 +1,9 @@
 # strategies/strategy_registry/mean_reversion_strategy.py
+
 import numpy as np
-from typing import Optional, List
-from core.base.base_strategy import BaseStrategy
 import pandas as pd
+
+from core.base.base_strategy import BaseStrategy
 
 
 class MeanReversionStrategy(BaseStrategy):
@@ -39,10 +40,10 @@ class MeanReversionStrategy(BaseStrategy):
         if last_z > self.threshold:
             return -1  # Overbought -> Sell
         if last_z < -self.threshold:
-            return 1   # Oversold -> Buy
+            return 1  # Oversold -> Buy
         return 0
 
-    def generate_signals_vectorized(self, data: pd.DataFrame) -> Optional[List[int]]:
+    def generate_signals_vectorized(self, data: pd.DataFrame) -> list[int] | None:
         """
         Vectorized signal generation for fast backtesting.
         """
@@ -59,10 +60,9 @@ class MeanReversionStrategy(BaseStrategy):
         z = (close - mean) / (std + 1e-10)
 
         # Vectorized signal generation
-        signals = np.where(z > self.threshold, -1,
-                  np.where(z < -self.threshold, 1, 0))
+        signals = np.where(z > self.threshold, -1, np.where(z < -self.threshold, 1, 0))
 
         # Set early signals to 0 (not enough data)
-        signals[:self.window] = 0
+        signals[: self.window] = 0
 
         return signals.tolist()

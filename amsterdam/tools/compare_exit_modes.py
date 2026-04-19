@@ -10,8 +10,8 @@ Usage:
     python tools/compare_exit_modes.py AAPL --days 60
 """
 
-import sys
 import argparse
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -19,6 +19,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 import asyncio
+
 import pandas as pd
 from dotenv import load_dotenv
 
@@ -52,7 +53,7 @@ def load_data(symbol: str, days: int) -> pd.DataFrame:
 
 def run_comparison(symbols: list, strategies: list, days: int):
     """Run comparison between exit modes."""
-    from core.backtest.unified_backtest_runner import UnifiedBacktestRunner, BacktestConfig
+    from core.backtest.unified_backtest_runner import BacktestConfig, UnifiedBacktestRunner
     from core.config_loader import get_config
 
     cfg = get_config()
@@ -111,21 +112,23 @@ def run_comparison(symbols: list, strategies: list, days: int):
                     tp_exits = len([t for t in trades if t.exit_reason == "take_profit"])
                     eod_exits = len([t for t in trades if t.exit_reason == "end_of_data"])
 
-                    results.append({
-                        "Symbol": symbol,
-                        "Strategy": strategy,
-                        "Mode": mode,
-                        "Trades": total_trades,
-                        "Win%": win_rate,
-                        "R:R": rr_ratio,
-                        "Total PnL": total_pnl,
-                        "Avg Win": avg_win,
-                        "Avg Loss": avg_loss,
-                        "Signal Exits": signal_exits_count,
-                        "SL Exits": sl_exits,
-                        "TP Exits": tp_exits,
-                        "EOD Exits": eod_exits,
-                    })
+                    results.append(
+                        {
+                            "Symbol": symbol,
+                            "Strategy": strategy,
+                            "Mode": mode,
+                            "Trades": total_trades,
+                            "Win%": win_rate,
+                            "R:R": rr_ratio,
+                            "Total PnL": total_pnl,
+                            "Avg Win": avg_win,
+                            "Avg Loss": avg_loss,
+                            "Signal Exits": signal_exits_count,
+                            "SL Exits": sl_exits,
+                            "TP Exits": tp_exits,
+                            "EOD Exits": eod_exits,
+                        }
+                    )
 
                 except Exception as e:
                     print(f"  Error running {strategy} ({mode}): {e}")
@@ -155,8 +158,10 @@ def print_results(results: list, symbols: list):
 
         print(f"\n  {strategy.upper()}")
         print("-" * 90)
-        print(f"  {'Mode':<15} {'Trades':>7} {'Win%':>7} {'R:R':>6} {'Total PnL':>12} "
-              f"{'Signal':>7} {'SL':>5} {'TP':>5} {'EOD':>5}")
+        print(
+            f"  {'Mode':<15} {'Trades':>7} {'Win%':>7} {'R:R':>6} {'Total PnL':>12} "
+            f"{'Signal':>7} {'SL':>5} {'TP':>5} {'EOD':>5}"
+        )
         print("-" * 90)
 
         for mode_name, mode_results in [("Signal+SL/TP", signal_results), ("SL/TP Only", sltp_results)]:
@@ -175,9 +180,11 @@ def print_results(results: list, symbols: list):
             tp_exits = sum(r["TP Exits"] for r in mode_results)
             eod_exits = sum(r["EOD Exits"] for r in mode_results)
 
-            print(f"  {mode_name:<15} {total_trades:>7} {win_pct:>6.1f}% {avg_rr:>6.2f} "
-                  f"${total_pnl:>11,.2f} {signal_exits:>7} {sl_exits:>5} "
-                  f"{tp_exits:>5} {eod_exits:>5}")
+            print(
+                f"  {mode_name:<15} {total_trades:>7} {win_pct:>6.1f}% {avg_rr:>6.2f} "
+                f"${total_pnl:>11,.2f} {signal_exits:>7} {sl_exits:>5} "
+                f"{tp_exits:>5} {eod_exits:>5}"
+            )
 
         # Show delta
         if signal_results and sltp_results:
@@ -188,16 +195,21 @@ def print_results(results: list, symbols: list):
             signal_trades = sum(r["Trades"] for r in signal_results)
             sltp_trades = sum(r["Trades"] for r in sltp_results)
 
-            signal_wr = sum(r["Trades"] * r["Win%"] / 100 for r in signal_results) / signal_trades * 100 if signal_trades > 0 else 0
-            sltp_wr = sum(r["Trades"] * r["Win%"] / 100 for r in sltp_results) / sltp_trades * 100 if sltp_trades > 0 else 0
+            signal_wr = (
+                sum(r["Trades"] * r["Win%"] / 100 for r in signal_results) / signal_trades * 100
+                if signal_trades > 0
+                else 0
+            )
+            sltp_wr = (
+                sum(r["Trades"] * r["Win%"] / 100 for r in sltp_results) / sltp_trades * 100 if sltp_trades > 0 else 0
+            )
             wr_delta = sltp_wr - signal_wr
 
             print("-" * 90)
             improved = pnl_delta > 0
             symbol_char = "+" if pnl_delta >= 0 else ""
             wr_char = "+" if wr_delta >= 0 else ""
-            print(f"  {'DELTA':<15} {'':>7} {wr_char}{wr_delta:>6.1f}% {'':>6} "
-                  f"${symbol_char}{pnl_delta:>11,.2f}")
+            print(f"  {'DELTA':<15} {'':>7} {wr_char}{wr_delta:>6.1f}% {'':>6} ${symbol_char}{pnl_delta:>11,.2f}")
             print(f"  {'VERDICT':<15} {'SL/TP Only is BETTER' if improved else 'Signal+SL/TP is better'}")
 
     # Overall summary
@@ -219,10 +231,8 @@ def print_results(results: list, symbols: list):
 def main():
     parser = argparse.ArgumentParser(description="Compare exit modes")
     parser.add_argument("symbols", help="Symbol(s) to test (comma-separated)")
-    parser.add_argument("-s", "--strategies", default="sma,momentum,macd",
-                        help="Strategies to test (comma-separated)")
-    parser.add_argument("-d", "--days", type=int, default=90,
-                        help="Days of historical data")
+    parser.add_argument("-s", "--strategies", default="sma,momentum,macd", help="Strategies to test (comma-separated)")
+    parser.add_argument("-d", "--days", type=int, default=90, help="Days of historical data")
 
     args = parser.parse_args()
 

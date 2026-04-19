@@ -31,22 +31,18 @@ DEPRECATED NAMES (backwards compatibility):
 
 For live trading and simulation, use PositionSizer (KellyPositionSizer).
 """
-import logging
-import threading
-from core.base.position_sizer_base import PositionSizerBase
-from core.logic.portfolio_state import PortfolioState
-from loggers.logger import Logger
-from core.tracing import trace
-from typing import Optional
+
 import math
+import threading
+
+from core.base.position_sizer_base import PositionSizerBase
+from core.tracing import trace
+from loggers.logger import Logger
 
 # Logger - own file with propagation to app.log
-_logger_instance = Logger(
-    log_file="position_sizer.log",
-    logger_name="PositionSizer",
-    propagate=True
-)
+_logger_instance = Logger(log_file="position_sizer.log", logger_name="PositionSizer", propagate=True)
 logger = _logger_instance.get_logger()
+
 
 class SimplePositionSizer(PositionSizerBase):
     """
@@ -63,7 +59,7 @@ class SimplePositionSizer(PositionSizerBase):
     For production trading, use KellyPositionSizer instead.
     """
 
-    def __init__(self, risk_percentage: float): 
+    def __init__(self, risk_percentage: float):
         if not (0 < risk_percentage < 1):
             raise ValueError("risk_percentage must be between 0 and 1 (non-inclusive).")
         self.risk_per_trade = risk_percentage
@@ -93,9 +89,9 @@ class SimplePositionSizer(PositionSizerBase):
         price: float = None,
         account_value: float = None,
         signal_strength: float = 1.0,
-        atr: Optional[float] = None,
-        stop_loss_price: Optional[float] = None,
-        **kwargs
+        atr: float | None = None,
+        stop_loss_price: float | None = None,
+        **kwargs,
     ) -> int:
         """
         Calculates how many shares to buy/sell based on capital and volatility.
@@ -116,9 +112,9 @@ class SimplePositionSizer(PositionSizerBase):
             int: Number of shares to trade
         """
         # Extract kwargs with defaults
-        signal = kwargs.get('signal', 1)
-        market_conditions = kwargs.get('market_conditions', 'normal')
-        current_cash = kwargs.get('current_cash', account_value)
+        signal = kwargs.get("signal", 1)
+        market_conditions = kwargs.get("market_conditions", "normal")
+        current_cash = kwargs.get("current_cash", account_value)
 
         if signal == 0:
             return 0
@@ -177,8 +173,7 @@ class SimplePositionSizer(PositionSizerBase):
         min_risk_per_share = price * 0.005  # At least 0.5% of price
         if risk_per_share < min_risk_per_share:
             logger.warning(
-                f"[{symbol}] Risk/share too small (${risk_per_share:.2f}), "
-                f"using floor ${min_risk_per_share:.2f}"
+                f"[{symbol}] Risk/share too small (${risk_per_share:.2f}), using floor ${min_risk_per_share:.2f}"
             )
             risk_per_share = min_risk_per_share
             position_size = risk_per_trade / risk_per_share
@@ -192,7 +187,6 @@ class SimplePositionSizer(PositionSizerBase):
         )
 
         return final_size
-        
 
     def update_capital(self, new_capital: float) -> None:
         self.capital = new_capital
@@ -233,8 +227,8 @@ class KellyPositionSizer(PositionSizerBase):
         risk_percentage: float,
         *,
         fee_rate: float = 0.001,
-        max_trade_pct: Optional[float] = None,
-        max_holding_pct: Optional[float] = None,
+        max_trade_pct: float | None = None,
+        max_holding_pct: float | None = None,
         allow_fractional: bool = False,
         lot_size: int = 1,
     ):
@@ -255,7 +249,9 @@ class KellyPositionSizer(PositionSizerBase):
         self._reserved_notional: dict[str, float] = {}
         self._reservation_lock = threading.RLock()
 
-        logger.info(f"KellyPositionSizer initialized: risk={risk_percentage:.1%}, max_trade={max_trade_pct}, max_holding={max_holding_pct}")
+        logger.info(
+            f"KellyPositionSizer initialized: risk={risk_percentage:.1%}, max_trade={max_trade_pct}, max_holding={max_holding_pct}"
+        )
 
     # ---- risk adaptation ----
     def adjust_risk_percentage(self, market_conditions: str) -> float:
@@ -272,13 +268,13 @@ class KellyPositionSizer(PositionSizerBase):
         price: float,
         account_value: float,
         signal_strength: float = 1.0,
-        atr: Optional[float] = None,
-        stop_loss_price: Optional[float] = None,
-        **kwargs
+        atr: float | None = None,
+        stop_loss_price: float | None = None,
+        **kwargs,
     ) -> int:
         """
         Calculate position size based on risk management rules.
-        
+
         Args:
             symbol: Trading symbol
             price: Current price
@@ -290,20 +286,20 @@ class KellyPositionSizer(PositionSizerBase):
                 - signal: Trade signal (1, -1)
                 - portfolio: PortfolioState instance
                 - market_conditions: Market regime
-                
+
         Returns:
             Position size in shares
         """
-        signal = kwargs.get('signal', 0)
-        portfolio = kwargs.get('portfolio')
-        market_conditions = kwargs.get('market_conditions', 'normal')
-        
+        signal = kwargs.get("signal", 0)
+        portfolio = kwargs.get("portfolio")
+        market_conditions = kwargs.get("market_conditions", "normal")
+
         if signal == 0:
             return 0
-        
+
         if portfolio is None:
             raise ValueError("portfolio must be provided in kwargs")
-        
+
         if stop_loss_price is None:
             raise ValueError("stop_loss_price must be provided")
 
@@ -322,7 +318,7 @@ class KellyPositionSizer(PositionSizerBase):
             return 0
 
         with self._reservation_lock:
-            reserved = self._reserved_notional.get(symbol, 0.0)
+            self._reserved_notional.get(symbol, 0.0)
             total_reserved = sum(self._reserved_notional.values())
         avail_bp = max(0.0, cash - total_reserved)
 
@@ -337,7 +333,7 @@ class KellyPositionSizer(PositionSizerBase):
         # per-share risk
         if signal > 0:  # long
             risk_per_share = price - stop_loss_price
-        else:           # short
+        else:  # short
             risk_per_share = stop_loss_price - price
         if risk_per_share <= 0:
             return 0
@@ -371,10 +367,12 @@ class KellyPositionSizer(PositionSizerBase):
 
         qty_int = int(qty_final) if not self.allow_fractional else qty_final
         if qty_int <= 0:
-            logger.debug(f"[Sizer] {symbol} => No position (qty<=0). "
-                  f"Risk={qty_risk:.2f}, BP={qty_cap_bp:.2f}, TradeCap={qty_cap_trade:.2f}, HoldCap={qty_cap_holding:.2f}")
+            logger.debug(
+                f"[Sizer] {symbol} => No position (qty<=0). "
+                f"Risk={qty_risk:.2f}, BP={qty_cap_bp:.2f}, TradeCap={qty_cap_trade:.2f}, HoldCap={qty_cap_holding:.2f}"
+            )
             return 0
-        
+
         if self.max_holding_pct and self.max_holding_pct > 0:
             max_holding_notional = equity * self.max_holding_pct
             total_notional = existing_notional + (qty_int * px_gross)
@@ -396,11 +394,13 @@ class KellyPositionSizer(PositionSizerBase):
         with self._reservation_lock:
             self._reserved_notional[symbol] = self._reserved_notional.get(symbol, 0.0) + new_trade_notional
 
-        logger.info(f"[Sizer] {symbol} => Qty={qty_int} "
-              f"(Risk={qty_risk:.2f}, BP={qty_cap_bp:.2f}, TradeCap={qty_cap_trade:.2f}, HoldCap={qty_cap_holding:.2f})")
+        logger.info(
+            f"[Sizer] {symbol} => Qty={qty_int} "
+            f"(Risk={qty_risk:.2f}, BP={qty_cap_bp:.2f}, TradeCap={qty_cap_trade:.2f}, HoldCap={qty_cap_holding:.2f})"
+        )
         return qty_int
 
-    def reset_reserved(self, symbol: Optional[str] = None):
+    def reset_reserved(self, symbol: str | None = None):
         """Reset reserved notional (per symbol or all)."""
         with self._reservation_lock:
             if symbol is None:
@@ -428,19 +428,19 @@ PositionSizer = KellyPositionSizer
 # ============================================================================
 import warnings
 
+
 def _deprecated_alias(name: str, new_name: str, cls):
     """Create a deprecated alias that warns on use."""
+
     class DeprecatedAlias(cls):
         def __init__(self, *args, **kwargs):
-            warnings.warn(
-                f"{name} is deprecated. Use {new_name} instead.",
-                DeprecationWarning,
-                stacklevel=2
-            )
+            warnings.warn(f"{name} is deprecated. Use {new_name} instead.", DeprecationWarning, stacklevel=2)
             super().__init__(*args, **kwargs)
+
     DeprecatedAlias.__name__ = name
     DeprecatedAlias.__qualname__ = name
     return DeprecatedAlias
+
 
 # Deprecated names - emit warning when instantiated
 DynamicPositionSizer2 = _deprecated_alias("DynamicPositionSizer2", "KellyPositionSizer", KellyPositionSizer)
@@ -449,11 +449,11 @@ LegacyPositionSizer = _deprecated_alias("LegacyPositionSizer", "SimplePositionSi
 
 __all__ = [
     # Recommended names
-    'PositionSizer',           # Alias for KellyPositionSizer
-    'KellyPositionSizer',      # Production sizer with portfolio awareness
-    'SimplePositionSizer',     # Simple sizer for backtests
+    "PositionSizer",  # Alias for KellyPositionSizer
+    "KellyPositionSizer",  # Production sizer with portfolio awareness
+    "SimplePositionSizer",  # Simple sizer for backtests
     # Deprecated names (backwards compatibility)
-    'DynamicPositionSizer2',   # DEPRECATED: Use KellyPositionSizer
-    'DynamicPositionSizer',    # DEPRECATED: Use SimplePositionSizer
-    'LegacyPositionSizer',     # DEPRECATED: Use SimplePositionSizer
+    "DynamicPositionSizer2",  # DEPRECATED: Use KellyPositionSizer
+    "DynamicPositionSizer",  # DEPRECATED: Use SimplePositionSizer
+    "LegacyPositionSizer",  # DEPRECATED: Use SimplePositionSizer
 ]

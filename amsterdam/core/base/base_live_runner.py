@@ -15,6 +15,7 @@ Subclasses implement broker-specific:
 - Bar canonicalization
 - Streaming setup and subscriptions
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -23,44 +24,53 @@ import os
 from abc import ABC, abstractmethod
 from collections import defaultdict, deque
 from dataclasses import asdict
-from datetime import datetime, date, timezone
-from zoneinfo import ZoneInfo
+from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Deque, List, Optional, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
 
-from loggers.factory import get_module_logger
-from loggers.file_trade_logger import FileTradeLogger
-
+from core.app_types import SignalContext
+from core.config_loader import (
+    TradingConfig,
+    create_drawdown_monitor,
+    create_position_manager,
+    create_position_sizer,
+    get_config,
+)
+from core.contracts.events import (
+    EVENT_HISTORY_UPDATE,
+    EVENT_NEW_BAR,
+    EVENT_PNL_UPDATE,
+    EVENT_POSITION_UPDATE,
+    EVENT_REGIME_UPDATE,
+    EVENT_STRATEGY_SIGNAL,
+    BarPayload,
+    HistoryPayload,
+    PnLPayload,
+    PositionPayload,
+    RegimePayload,
+    StrategySignalPayload,
+)
+from core.events.eventhandler import get_event_handler
+from core.executor import LiveExecutor
+from core.historical_data_updater import HistoricalDataUpdater
+from core.historical_loader import HistoricalBarLoader
+from core.logic.hybrid_position_sizer import HybridPositionSizer
+from core.logic.live_execution_engine import LiveExecutionEngine
 from core.logic.portfolio_state import PortfolioState
+from core.logic.strategy_routing_manager import StrategyRoutingManager
 from core.logic.symbol_state import SymbolState
 from core.logic.trade_gate import TradeGate
-from core.logic.strategy_routing_manager import StrategyRoutingManager
-from core.logic.hybrid_position_sizer import HybridPositionSizer
-from core.drawdown_monitor import DrawdownMonitor
-from core.historical_loader import HistoricalBarLoader
-from core.historical_data_updater import HistoricalDataUpdater
-from core.unified_data_pipeline import UnifiedDataPipeline
-from core.events.eventhandler import get_event_handler
-from core.contracts.events import (
-    EVENT_NEW_BAR, BarPayload,
-    EVENT_STRATEGY_SIGNAL, StrategySignalPayload,
-    EVENT_PNL_UPDATE, PnLPayload,
-    EVENT_POSITION_UPDATE, PositionPayload,
-    EVENT_HEALTH_UPDATE,
-    EVENT_REGIME_UPDATE, RegimePayload,
-    EVENT_HISTORY_UPDATE, HistoryPayload,
-)
-from core.config_loader import get_config, create_position_sizer, create_drawdown_monitor, create_position_manager, TradingConfig
-from core.simulator.simulation import classify_regime, IncrementalATR
-from core.logic.live_execution_engine import LiveExecutionEngine
 from core.logic.trade_logic_manager import DynamicTradeLogicManager
-from core.app_types import SignalContext
-from core.executor import LiveExecutor
-from core.state_reconciler import StateReconciler, ReconcilerConfig
+from core.simulator.simulation import IncrementalATR, classify_regime
+from core.state_reconciler import ReconcilerConfig, StateReconciler
 from core.tracing import trace
+from core.unified_data_pipeline import UnifiedDataPipeline
+from loggers.factory import get_module_logger
+from loggers.file_trade_logger import FileTradeLogger
 
 if TYPE_CHECKING:
     from core.base.base_broker_interface import BaseBrokerInterface
@@ -98,15 +108,15 @@ class NumpyBarBuffer:
         self.low = np.zeros(maxlen, dtype=np.float64)
         self.close = np.zeros(maxlen, dtype=np.float64)
         self.volume = np.zeros(maxlen, dtype=np.int64)
-        self.timestamps = np.empty(maxlen, dtype='datetime64[ns]')
+        self.timestamps = np.empty(maxlen, dtype="datetime64[ns]")
         self._idx = 0  # Next write position
         self._count = 0  # Number of items stored
         # Caching for get_arrays() and to_dataframe()
-        self._cached_arrays: Optional[Tuple[np.ndarray, ...]] = None
-        self._cached_df: Optional[pd.DataFrame] = None
+        self._cached_arrays: tuple[np.ndarray, ...] | None = None
+        self._cached_df: pd.DataFrame | None = None
         self._cache_idx = -1  # Index when cache was last valid
 
-    def append(self, bar: Dict) -> None:
+    def append(self, bar: dict) -> None:
         """
         Append a bar to the circular buffer.
 
@@ -126,7 +136,7 @@ class NumpyBarBuffer:
             # Convert tz-aware datetime to UTC and strip tzinfo for np.datetime64
             if ts.tzinfo is not None:
                 ts = ts.astimezone(timezone.utc).replace(tzinfo=None)
-            self.timestamps[idx] = np.datetime64(ts, 'ns')
+            self.timestamps[idx] = np.datetime64(ts, "ns")
         else:
             self.timestamps[idx] = ts
 
@@ -140,7 +150,7 @@ class NumpyBarBuffer:
         """Return the number of bars in the buffer."""
         return self._count
 
-    def get_arrays(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    def get_arrays(self) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """
         Get ordered OHLCV arrays for calculations.
 
@@ -161,11 +171,11 @@ class NumpyBarBuffer:
         if self._count < self.maxlen:
             # Buffer not yet full - return views (no copy needed for read-only)
             result = (
-                self.open[:self._count],
-                self.high[:self._count],
-                self.low[:self._count],
-                self.close[:self._count],
-                self.volume[:self._count],
+                self.open[: self._count],
+                self.high[: self._count],
+                self.low[: self._count],
+                self.close[: self._count],
+                self.volume[: self._count],
             )
         else:
             # Buffer is full - use concatenation (faster than np.roll for this case)
@@ -184,10 +194,10 @@ class NumpyBarBuffer:
     def get_timestamps(self) -> np.ndarray:
         """Get ordered timestamp array."""
         if self._count == 0:
-            return np.array([], dtype='datetime64[ns]')
+            return np.array([], dtype="datetime64[ns]")
 
         if self._count < self.maxlen:
-            return self.timestamps[:self._count]
+            return self.timestamps[: self._count]
         else:
             start = self._idx % self.maxlen
             return np.concatenate([self.timestamps[start:], self.timestamps[:start]])
@@ -208,14 +218,16 @@ class NumpyBarBuffer:
         o, h, l, c, v = self.get_arrays()
         ts = self.get_timestamps()
 
-        df = pd.DataFrame({
-            'timestamp': pd.to_datetime(ts),
-            'Open': o,
-            'High': h,
-            'Low': l,
-            'Close': c,
-            'Volume': v,
-        })
+        df = pd.DataFrame(
+            {
+                "timestamp": pd.to_datetime(ts),
+                "Open": o,
+                "High": h,
+                "Low": l,
+                "Close": c,
+                "Volume": v,
+            }
+        )
         self._cached_df = df
         return df
 
@@ -239,7 +251,7 @@ class BaseLiveRunner(ABC):
     LOG_FILE_KEY: str = "LiveRunner"
     TRADE_LOG_FILE: str = "live_trades.csv"
 
-    def __init__(self, symbols: List[str], config: Optional[TradingConfig] = None):
+    def __init__(self, symbols: list[str], config: TradingConfig | None = None):
         """
         Initialize the live runner.
 
@@ -254,27 +266,21 @@ class BaseLiveRunner(ABC):
         self.config = config or get_config()
 
         # Logging + trade log
-        self.logger = get_module_logger(
-            module_name=f'{self.BROKER_NAME}LiveRunner',
-            file_key=self.LOG_FILE_KEY
-        )
-        self.trade_logger = FileTradeLogger(
-            log_file=self.TRADE_LOG_FILE,
-            logger_name=f'{self.BROKER_NAME}TradeLogger'
-        )
+        self.logger = get_module_logger(module_name=f"{self.BROKER_NAME}LiveRunner", file_key=self.LOG_FILE_KEY)
+        self.trade_logger = FileTradeLogger(log_file=self.TRADE_LOG_FILE, logger_name=f"{self.BROKER_NAME}TradeLogger")
 
         # Create broker (subclass implements this)
         self.broker: BaseBrokerInterface = self._create_broker()
 
         # State tracking
         self.portfolio = PortfolioState()
-        self.symbol_state: Dict[str, SymbolState] = defaultdict(SymbolState)
+        self.symbol_state: dict[str, SymbolState] = defaultdict(SymbolState)
         # ATR history for regime classification
-        self.atr_hist: Dict[str, Deque[float]] = defaultdict(lambda: deque(maxlen=300))
+        self.atr_hist: dict[str, deque[float]] = defaultdict(lambda: deque(maxlen=300))
         # NumPy bar buffers for efficient OHLCV storage (replaces history deque)
-        self.np_buffers: Dict[str, NumpyBarBuffer] = defaultdict(NumpyBarBuffer)
+        self.np_buffers: dict[str, NumpyBarBuffer] = defaultdict(NumpyBarBuffer)
         # Incremental ATR calculators for O(1) updates
-        self.atr_calc: Dict[str, IncrementalATR] = defaultdict(IncrementalATR)
+        self.atr_calc: dict[str, IncrementalATR] = defaultdict(IncrementalATR)
 
         risk_cfg = self.config.risk
         trade_logic_cfg = self.config.trade_logic
@@ -295,15 +301,12 @@ class BaseLiveRunner(ABC):
 
         # Strategy router with optional Sharpe filter
         min_sharpe = None
-        strategy_filter = getattr(self.config, '_raw', {}).get("strategy_quality_filter", {})
+        strategy_filter = getattr(self.config, "_raw", {}).get("strategy_quality_filter", {})
         if strategy_filter.get("enabled", False):
             min_sharpe = strategy_filter.get("min_sharpe", 0.5)
             self.logger.info(f"Strategy quality filter enabled: min_sharpe={min_sharpe}")
 
-        self.router = StrategyRoutingManager(
-            str(ROOT / "config" / "strategy_routing.json"),
-            min_sharpe=min_sharpe
-        )
+        self.router = StrategyRoutingManager(str(ROOT / "config" / "strategy_routing.json"), min_sharpe=min_sharpe)
         self.executor = LiveExecutor(broker=self.broker)
         # Create PositionManager with config values (min_bars_to_hold, swing_mode, etc.)
         self.position_manager = create_position_manager(self.config)
@@ -325,7 +328,7 @@ class BaseLiveRunner(ABC):
 
         # Log trading rules
         tl = self.config.trade_logic
-        cutoff_minute = getattr(tl, 'trading_cutoff_minute_et', 0)
+        cutoff_minute = getattr(tl, "trading_cutoff_minute_et", 0)
         self.logger.info(
             f"Trading rules: min_bars_to_hold={tl.min_bars_to_hold}, "
             f"cutoff={tl.trading_cutoff_hour_et:02d}:{cutoff_minute:02d} ET, "
@@ -350,9 +353,9 @@ class BaseLiveRunner(ABC):
         )
 
         # Bar tracking
-        self._last_bar_id: Dict[str, int] = {}
-        self._last_ddm_date: Optional[datetime] = None
-        self._last_reset_minute: Optional[int] = None  # Track when reservations were last reset
+        self._last_bar_id: dict[str, int] = {}
+        self._last_ddm_date: datetime | None = None
+        self._last_reset_minute: int | None = None  # Track when reservations were last reset
         self._running = False
         self._eod_close_triggered: bool = False  # Track if EOD close has been triggered today
 
@@ -370,20 +373,17 @@ class BaseLiveRunner(ABC):
         )
 
         # Background update task reference
-        self._update_task: Optional[asyncio.Task] = None
+        self._update_task: asyncio.Task | None = None
 
         # Daily indicator context for hybrid position sizing
         # Maps symbol -> dict of daily indicator values (RSI, MACD, SMA_200, etc.)
-        self.daily_context: Dict[str, Dict[str, Any]] = {}
-        self._last_daily_refresh: Optional[date] = None
+        self.daily_context: dict[str, dict[str, Any]] = {}
+        self._last_daily_refresh: date | None = None
 
         # Hybrid position sizer for confidence + trend-based sizing
-        hybrid_config = getattr(self.config, 'hybrid_sizing', None)
+        hybrid_config = getattr(self.config, "hybrid_sizing", None)
         if hybrid_config and hybrid_config.enabled:
-            self.hybrid_sizer = HybridPositionSizer(
-                enabled=True,
-                config=asdict(hybrid_config)
-            )
+            self.hybrid_sizer = HybridPositionSizer(enabled=True, config=asdict(hybrid_config))
             self.logger.info(
                 f"Hybrid position sizing ENABLED: "
                 f"high_conf={hybrid_config.high_confidence_threshold}, "
@@ -401,7 +401,7 @@ class BaseLiveRunner(ABC):
     # ==========================================================================
 
     @abstractmethod
-    def _create_broker(self) -> "BaseBrokerInterface":
+    def _create_broker(self) -> BaseBrokerInterface:
         """
         Create and configure the broker instance.
 
@@ -411,7 +411,7 @@ class BaseLiveRunner(ABC):
         pass
 
     @abstractmethod
-    def _canonicalize_bar(self, raw_data: Any) -> Dict:
+    def _canonicalize_bar(self, raw_data: Any) -> dict:
         """
         Convert broker-specific bar/quote data to canonical format.
 
@@ -562,11 +562,7 @@ class BaseLiveRunner(ABC):
 
                 self.logger.info(f"[{pos.symbol}] EOD closing: {side} {qty} shares")
 
-                await self.broker.place_market_order(
-                    symbol=pos.symbol,
-                    qty=qty,
-                    side=side
-                )
+                await self.broker.place_market_order(symbol=pos.symbol, qty=qty, side=side)
                 closed_count += 1
 
                 # Update local state
@@ -594,7 +590,7 @@ class BaseLiveRunner(ABC):
         pos = self.portfolio.positions.get(symbol)
         return (pos.qty * last_px) if pos else 0.0
 
-    async def _bar_debug_logger(self, payload: Dict):
+    async def _bar_debug_logger(self, payload: dict):
         """Debug logger for bar events."""
         try:
             self.logger.debug(
@@ -623,7 +619,7 @@ class BaseLiveRunner(ABC):
         sources = await self.data_pipeline.check_sources()
         self.logger.info(f"Recommended data source: {sources['recommended']}")
 
-        if sources['recommended'] == 'none':
+        if sources["recommended"] == "none":
             self.logger.error("No data sources available! Check credentials.")
 
         # Check data freshness and update if needed
@@ -633,15 +629,12 @@ class BaseLiveRunner(ABC):
             if freshness is None:
                 self.logger.warning(f"[{sym}] No historical data found - will fetch")
                 symbols_to_update.append(sym)
-            elif freshness['age_minutes'] > max_stale_minutes:
-                self.logger.info(
-                    f"[{sym}] Data is stale ({freshness['age_minutes']} min old) - will update"
-                )
+            elif freshness["age_minutes"] > max_stale_minutes:
+                self.logger.info(f"[{sym}] Data is stale ({freshness['age_minutes']} min old) - will update")
                 symbols_to_update.append(sym)
             else:
                 self.logger.info(
-                    f"[{sym}] Data is fresh ({freshness['age_minutes']} min old, "
-                    f"{freshness['bar_count']} bars)"
+                    f"[{sym}] Data is fresh ({freshness['age_minutes']} min old, {freshness['bar_count']} bars)"
                 )
 
         # Fetch fresh data for stale symbols
@@ -666,17 +659,16 @@ class BaseLiveRunner(ABC):
                 bar_dict = {
                     "timestamp": b["timestamp"],
                     "symbol": b["symbol"],
-                    "Open": b["Open"], "High": b["High"], "Low": b["Low"],
-                    "Close": b["Close"], "Volume": b.get("Volume", 0),
+                    "Open": b["Open"],
+                    "High": b["High"],
+                    "Low": b["Low"],
+                    "Close": b["Close"],
+                    "Volume": b.get("Volume", 0),
                 }
                 # Populate NumPy buffer (single source of truth for history)
                 self.np_buffers[sym].append(bar_dict)
                 # Warm up incremental ATR calculator
-                self.atr_calc[sym].update(
-                    float(b["High"]),
-                    float(b["Low"]),
-                    float(b["Close"])
-                )
+                self.atr_calc[sym].update(float(b["High"]), float(b["Low"]), float(b["Close"]))
 
             # Get final ATR after seeding
             atr = self.atr_calc[sym].current_atr
@@ -688,13 +680,13 @@ class BaseLiveRunner(ABC):
             if bars:
                 last_bar = bars[-1]
                 self.daily_context[sym] = {
-                    'RSI': last_bar.get('RSI'),
-                    'MACD': last_bar.get('MACD'),
-                    'MACD_Signal': last_bar.get('MACD_Signal'),
-                    'SMA_200': last_bar.get('SMA_200'),
-                    'Close': last_bar.get('Close'),
+                    "RSI": last_bar.get("RSI"),
+                    "MACD": last_bar.get("MACD"),
+                    "MACD_Signal": last_bar.get("MACD_Signal"),
+                    "SMA_200": last_bar.get("SMA_200"),
+                    "Close": last_bar.get("Close"),
                 }
-                rsi_val = self.daily_context[sym].get('RSI')
+                rsi_val = self.daily_context[sym].get("RSI")
                 if rsi_val is not None:
                     self.logger.info(f"[{sym}] Loaded daily context: RSI={rsi_val:.1f}")
                 else:
@@ -706,7 +698,7 @@ class BaseLiveRunner(ABC):
         self.logger.info(f"Seeded {len(self.symbols)} symbols with up to {lookback_bars} bars.")
 
     @trace
-    async def _process_bar(self, bar: Dict) -> None:
+    async def _process_bar(self, bar: dict) -> None:
         """
         Process a canonicalized bar through the strategy pipeline.
 
@@ -720,8 +712,8 @@ class BaseLiveRunner(ABC):
         ts: datetime = bar["timestamp"]
 
         # Check trading cutoff time (convert to ET for comparison)
-        cutoff_hour_et = getattr(self.config.trade_logic, 'trading_cutoff_hour_et', 15)
-        cutoff_minute_et = getattr(self.config.trade_logic, 'trading_cutoff_minute_et', 45)
+        cutoff_hour_et = getattr(self.config.trade_logic, "trading_cutoff_hour_et", 15)
+        cutoff_minute_et = getattr(self.config.trade_logic, "trading_cutoff_minute_et", 45)
 
         # Proper timezone conversion to Eastern Time (handles DST automatically)
         et_tz = ZoneInfo("America/New_York")
@@ -742,7 +734,7 @@ class BaseLiveRunner(ABC):
             self._eod_close_triggered = False
 
         # Close all positions at EOD if enabled and past cutoff
-        close_eod = getattr(self.config.trade_logic, 'close_positions_eod', False)
+        close_eod = getattr(self.config.trade_logic, "close_positions_eod", False)
         if past_cutoff and close_eod and not self._eod_close_triggered:
             self.logger.info(
                 f"EOD TRIGGER: Bar time {ts_et.strftime('%H:%M:%S')} ET >= cutoff {cutoff_hour_et:02d}:{cutoff_minute_et:02d} ET"
@@ -775,11 +767,7 @@ class BaseLiveRunner(ABC):
         state.bar_closed = bar_closed
 
         # Incremental ATR calculation - O(1) instead of O(period) per bar
-        atr = self.atr_calc[symbol].update(
-            float(bar["High"]),
-            float(bar["Low"]),
-            float(bar["Close"])
-        )
+        atr = self.atr_calc[symbol].update(float(bar["High"]), float(bar["Low"]), float(bar["Close"]))
         if atr is not None:
             self.atr_hist[symbol].append(atr)
         regime = classify_regime(atr, list(self.atr_hist[symbol]))
@@ -865,8 +853,7 @@ class BaseLiveRunner(ABC):
         if past_cutoff and not state.is_in_position:
             if signal != 0:
                 self.logger.info(
-                    f"[{symbol}] Entry blocked: past {cutoff_hour_et}:00 ET cutoff "
-                    f"(current ET hour: {ts_et.hour})"
+                    f"[{symbol}] Entry blocked: past {cutoff_hour_et}:00 ET cutoff (current ET hour: {ts_et.hour})"
                 )
                 adjusted_signal = 0
 
@@ -881,12 +868,12 @@ class BaseLiveRunner(ABC):
             strategy_name=strategy_name,
             market_open=True,
             metadata={
-                'state': state,
-                'daily_context': daily_ctx,
-                'past_cutoff': past_cutoff,
-                'regime_persist': gs.regime_persist,
-                'min_regime_persist': self.trade_gate.regime_min_persist_bars,
-            }
+                "state": state,
+                "daily_context": daily_ctx,
+                "past_cutoff": past_cutoff,
+                "regime_persist": gs.regime_persist,
+                "min_regime_persist": self.trade_gate.regime_min_persist_bars,
+            },
         )
         await self.engine.handle_signal_context(context)
 
@@ -947,8 +934,7 @@ class BaseLiveRunner(ABC):
             return False
 
         self.logger.info(
-            f"Portfolio synced: {sync_result.broker_positions} positions, "
-            f"${sync_result.broker_cash:,.2f} cash"
+            f"Portfolio synced: {sync_result.broker_positions} positions, ${sync_result.broker_cash:,.2f} cash"
         )
 
         # Get actual broker values for GUI
@@ -958,31 +944,37 @@ class BaseLiveRunner(ABC):
         for symbol, pos_view in broker_snapshot.positions.items():
             last_price = pos_view.market_price or pos_view.avg_entry_price
             unrealized = pos_view.unrealized_pl or 0.0
-            await self.event_handler.emit(EVENT_POSITION_UPDATE, PositionPayload(
-                symbol=symbol,
-                qty=pos_view.qty,
-                avg_price=pos_view.avg_entry_price,
-                avg=pos_view.avg_entry_price,
-                last=last_price,
-                unrealized=unrealized,
-                unreal=unrealized,
-                realized=0.0,
-                market_value=pos_view.qty * last_price,
-                side=pos_view.side or ("long" if pos_view.qty > 0 else "short"),
-                timestamp=datetime.now(timezone.utc).isoformat(),
-            ))
+            await self.event_handler.emit(
+                EVENT_POSITION_UPDATE,
+                PositionPayload(
+                    symbol=symbol,
+                    qty=pos_view.qty,
+                    avg_price=pos_view.avg_entry_price,
+                    avg=pos_view.avg_entry_price,
+                    last=last_price,
+                    unrealized=unrealized,
+                    unreal=unrealized,
+                    realized=0.0,
+                    market_value=pos_view.qty * last_price,
+                    side=pos_view.side or ("long" if pos_view.qty > 0 else "short"),
+                    timestamp=datetime.now(timezone.utc).isoformat(),
+                ),
+            )
 
         # Emit initial PnL for GUI
-        await self.event_handler.emit(EVENT_PNL_UPDATE, PnLPayload(
-            portfolio_value=broker_snapshot.equity,
-            equity_curve=[broker_snapshot.equity],
-            unrealized=sum(p.unrealized_pl or 0.0 for p in broker_snapshot.positions.values()),
-            realized=0.0,
-            drawdown=0.0,
-            cash=broker_snapshot.cash,
-            buying_power=broker_snapshot.buying_power,
-            timestamp=datetime.now(timezone.utc).isoformat(),
-        ))
+        await self.event_handler.emit(
+            EVENT_PNL_UPDATE,
+            PnLPayload(
+                portfolio_value=broker_snapshot.equity,
+                equity_curve=[broker_snapshot.equity],
+                unrealized=sum(p.unrealized_pl or 0.0 for p in broker_snapshot.positions.values()),
+                realized=0.0,
+                drawdown=0.0,
+                cash=broker_snapshot.cash,
+                buying_power=broker_snapshot.buying_power,
+                timestamp=datetime.now(timezone.utc).isoformat(),
+            ),
+        )
 
         self.logger.info(
             f"[GUI] Emitted initial state: equity=${broker_snapshot.equity:,.2f}, "
@@ -1010,16 +1002,16 @@ class BaseLiveRunner(ABC):
             self.logger.warning("No trade log found for historical P&L")
             return
 
-        pnl_by_day: Dict[str, float] = defaultdict(float)
+        pnl_by_day: dict[str, float] = defaultdict(float)
         cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat()
 
         try:
-            with open(trade_log, 'r') as f:
+            with open(trade_log) as f:
                 reader = csv.DictReader(f)
                 for row in reader:
                     try:
-                        ts = row.get('timestamp', '')
-                        pnl_str = row.get('pnl', '')
+                        ts = row.get("timestamp", "")
+                        pnl_str = row.get("pnl", "")
 
                         if not ts or not pnl_str:
                             continue
@@ -1034,15 +1026,15 @@ class BaseLiveRunner(ABC):
                         continue
 
             if pnl_by_day:
-                await self.event_handler.emit(EVENT_HISTORY_UPDATE, HistoryPayload(
-                    pnl_by_day=dict(pnl_by_day),
-                    timestamp=datetime.now(timezone.utc).isoformat(),
-                ))
-                total_pnl = sum(pnl_by_day.values())
-                self.logger.info(
-                    f"[GUI] Emitted {len(pnl_by_day)} days of P&L history "
-                    f"(total: ${total_pnl:,.2f})"
+                await self.event_handler.emit(
+                    EVENT_HISTORY_UPDATE,
+                    HistoryPayload(
+                        pnl_by_day=dict(pnl_by_day),
+                        timestamp=datetime.now(timezone.utc).isoformat(),
+                    ),
                 )
+                total_pnl = sum(pnl_by_day.values())
+                self.logger.info(f"[GUI] Emitted {len(pnl_by_day)} days of P&L history (total: ${total_pnl:,.2f})")
             else:
                 self.logger.info("[GUI] No historical P&L data to emit")
 
@@ -1098,9 +1090,7 @@ class BaseLiveRunner(ABC):
         # Start periodic historical data updates
         update_interval = self.config.data.historical_update_interval_minutes
         if update_interval > 0:
-            self._update_task = asyncio.create_task(
-                self._periodic_data_update(interval_minutes=update_interval)
-            )
+            self._update_task = asyncio.create_task(self._periodic_data_update(interval_minutes=update_interval))
             self.logger.info(f"Periodic data updates enabled (every {update_interval} min)")
 
         try:

@@ -6,8 +6,8 @@ This script refreshes the Schwab access token by using the refresh token.
 If the refresh token is also expired, it will open a browser for full re-authentication.
 """
 
-import sys
 import argparse
+import sys
 from pathlib import Path
 
 # Ensure project root is in path
@@ -20,20 +20,16 @@ from data.streaming.authenticator import Authenticator
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Refresh Schwab authentication token',
+        description="Refresh Schwab authentication token",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
     python refresh_schwab_token.py            # Refresh using refresh token
     python refresh_schwab_token.py --force    # Force full re-authentication
-        """
+        """,
     )
 
-    parser.add_argument(
-        '--force', '-f',
-        action='store_true',
-        help='Force full re-authentication (opens browser)'
-    )
+    parser.add_argument("--force", "-f", action="store_true", help="Force full re-authentication (opens browser)")
 
     args = parser.parse_args()
 
@@ -55,6 +51,7 @@ Examples:
             # Force new authentication
             # The authenticator will handle browser authentication flow
             import asyncio
+
             result = asyncio.run(auth.manual_refresh_token(use_gui=False))
 
             if result is True:
@@ -96,8 +93,9 @@ Examples:
 
     # Show token expiry info
     try:
-        from core.credential_validator import CredentialValidator
         import asyncio
+
+        from core.credential_validator import CredentialValidator
 
         async def check_status():
             validator = CredentialValidator()
@@ -106,7 +104,7 @@ Examples:
             print(f"Status: {result.status.name}")
             print(f"Message: {result.message}")
 
-            if hasattr(result, 'expires_in_hours') and result.expires_in_hours:
+            if hasattr(result, "expires_in_hours") and result.expires_in_hours:
                 print(f"Expires in: {result.expires_in_hours:.1f} hours")
 
         asyncio.run(check_status())
@@ -118,5 +116,5 @@ Examples:
     return 0
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

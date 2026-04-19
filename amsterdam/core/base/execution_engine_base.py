@@ -7,21 +7,21 @@ executors, risk management, position sizing, and brokers.
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
-from typing import Any, Optional, Dict, List, Tuple
-from datetime import datetime, timezone
 import logging
+from abc import ABC, abstractmethod
+from datetime import datetime, timezone
+from typing import Any
 
+from core.app_types import OrderResult, SignalContext
 from core.base.base_broker_interface import BaseBrokerInterface
 from core.base.executor_base import BaseExecutor
 from core.base.position_sizer_base import PositionSizerBase
 from core.base.trade_logger_base import TradeLoggerBase
 from core.base.trade_logic_manager_base import TradeApprover, TradeLogicManagerBase
+from core.enums import OrderSide
 from core.logic.portfolio_state import PortfolioState
 from core.logic.position_manager import PositionManager
 from core.logic.symbol_state import SymbolState
-from core.app_types import OrderResult, SignalContext
-from core.enums import OrderSide
 from core.tracing import trace
 
 logger = logging.getLogger(__name__)
@@ -30,14 +30,14 @@ logger = logging.getLogger(__name__)
 class ExecutionEngineBase(ABC):
     """
     Abstract base class for execution engines.
-    
+
     The execution engine is the orchestration layer that coordinates:
     - Strategy signals → Execution decisions
     - Position sizing → Order quantities
     - Risk management → Trade approval
     - Broker interface → Order execution
     - Performance tracking → Trade logging
-    
+
     Architecture Flow:
         Strategy generates signal (1, -1, 0)
               ↓
@@ -48,13 +48,13 @@ class ExecutionEngineBase(ABC):
         3. Executor → Execute the trade
         4. Broker → Route the order
         5. Trade Logger → Record the result
-    
+
     Design Philosophy:
     - Engine is the conductor, not the performer
     - Delegates to specialized components
     - Maintains no trading logic itself
     - Coordinates state updates across components
-    
+
     Example:
         class MyExecutionEngine(ExecutionEngineBase):
             def handle_signal(self, symbol, state, signal, price, atr, regime, **kwargs):
@@ -76,7 +76,7 @@ class ExecutionEngineBase(ABC):
 
                 return result
     """
-    
+
     def __init__(
         self,
         broker: BaseBrokerInterface,
@@ -85,7 +85,7 @@ class ExecutionEngineBase(ABC):
         performance_tracker: TradeLoggerBase,
         trade_logic_manager: TradeLogicManagerBase,
         portfolio: PortfolioState,
-        position_manager: Optional[PositionManager] = None,
+        position_manager: PositionManager | None = None,
     ):
         """
         Initialize execution engine with all required components.
@@ -109,19 +109,16 @@ class ExecutionEngineBase(ABC):
         self.position_manager = position_manager or PositionManager()
 
         # Symbol state tracking - shared by all engine implementations
-        self.symbol_states: Dict[str, SymbolState] = {}
+        self.symbol_states: dict[str, SymbolState] = {}
 
         logger.info("ExecutionEngine initialized")
-    
+
     # ========================================================================
     # ABSTRACT METHODS
     # ========================================================================
 
     @abstractmethod
-    async def handle_signal_context(
-        self,
-        context: SignalContext
-    ) -> Optional[OrderResult]:
+    async def handle_signal_context(self, context: SignalContext) -> OrderResult | None:
         """
         Process signal using unified context object.
 
@@ -167,7 +164,7 @@ class ExecutionEngineBase(ABC):
         self,
         context: SignalContext,
         state: Any,
-    ) -> Optional[OrderResult]:
+    ) -> OrderResult | None:
         """
         Handle signal from strategy - PRIMARY ENTRY POINT.
 
@@ -190,25 +187,18 @@ class ExecutionEngineBase(ABC):
         import asyncio
 
         # Store state in metadata for handle_signal_context
-        context.metadata['state'] = state
+        context.metadata["state"] = state
 
         # Run async method (for Live/Mock compatibility)
         loop = asyncio.get_event_loop()
         return loop.run_until_complete(self.handle_signal_context(context))
-
 
     # ========================================================================
     # SHARED IMPLEMENTATIONS
     # ========================================================================
 
     @trace
-    def _determine_action(
-        self,
-        symbol: str,
-        state: Any,
-        signal: int,
-        reason: Optional[str]
-    ) -> Tuple[str, OrderSide]:
+    def _determine_action(self, symbol: str, state: Any, signal: int, reason: str | None) -> tuple[str, OrderSide]:
         """
         Determine action type and order side from signal.
 
@@ -230,20 +220,13 @@ class ExecutionEngineBase(ABC):
         if not in_position:
             return "entry", OrderSide.BUY if signal == 1 else OrderSide.SELL
         elif reason and "partial" in reason.lower():
-            return "partial_exit", (OrderSide.SELL if state.side == "long"
-                                   else OrderSide.BUY)
+            return "partial_exit", (OrderSide.SELL if state.side == "long" else OrderSide.BUY)
         elif reason and "reversal" in reason.lower():
-            return "reversal", (OrderSide.SELL if state.side == "long"
-                               else OrderSide.BUY)
+            return "reversal", (OrderSide.SELL if state.side == "long" else OrderSide.BUY)
         else:
-            return "exit", (OrderSide.SELL if state.side == "long"
-                           else OrderSide.BUY)
+            return "exit", (OrderSide.SELL if state.side == "long" else OrderSide.BUY)
 
-    def _setup_approval_state(
-        self,
-        symbol: str,
-        state: Any
-    ) -> Tuple[int, Optional[float]]:
+    def _setup_approval_state(self, symbol: str, state: Any) -> tuple[int, float | None]:
         """
         Set up state for trade approval check.
 
@@ -261,8 +244,7 @@ class ExecutionEngineBase(ABC):
         avg_price = None if not position else position.avg_price
 
         state.current_position = current_qty
-        state.side = ("long" if current_qty > 0 else
-                     "short" if current_qty < 0 else None)
+        state.side = "long" if current_qty > 0 else "short" if current_qty < 0 else None
 
         return current_qty, avg_price
 
@@ -288,7 +270,7 @@ class ExecutionEngineBase(ABC):
         trade_approver: TradeApprover,
         context: SignalContext,
         state: Any,
-    ) -> Tuple[bool, Optional[str]]:
+    ) -> tuple[bool, str | None]:
         """
         Check if trade should be executed using approver.
 
@@ -308,25 +290,23 @@ class ExecutionEngineBase(ABC):
         # STRATEGY LOCK CHECK: Prevent strategy churn (with regime-based override)
         # If in position and a strategy owns it, only that strategy can manage
         # UNLESS the regime has changed (regime-based strategy switching)
-        if hasattr(state, 'is_in_position') and state.is_in_position:
-            locked_strategy = getattr(state, 'strategy_name', None)
+        if hasattr(state, "is_in_position") and state.is_in_position:
+            locked_strategy = getattr(state, "strategy_name", None)
             incoming_strategy = context.strategy_name
-            entry_regime = getattr(state, 'entry_regime', None)
+            entry_regime = getattr(state, "entry_regime", None)
             current_regime = context.regime
 
             # Only enforce if both strategies are known (non-None)
             if locked_strategy and incoming_strategy and locked_strategy != incoming_strategy:
                 # Check for regime change - allow switch if regime changed
                 regime_changed = (
-                    entry_regime is not None and
-                    current_regime is not None and
-                    entry_regime != current_regime
+                    entry_regime is not None and current_regime is not None and entry_regime != current_regime
                 )
 
                 # Get regime persistence from metadata if available
                 # (set by runner/strategy via context.metadata['regime_persist'])
-                regime_persist = context.metadata.get('regime_persist', 0)
-                min_regime_persist = context.metadata.get('min_regime_persist', 3)
+                regime_persist = context.metadata.get("regime_persist", 0)
+                min_regime_persist = context.metadata.get("min_regime_persist", 3)
 
                 if regime_changed and regime_persist >= min_regime_persist:
                     # Regime changed and persisted - allow strategy switch
@@ -341,8 +321,8 @@ class ExecutionEngineBase(ABC):
                     # Block - either same regime or not persisted enough
                     reason = (
                         f"Strategy lock: position owned by {locked_strategy}"
-                        if not regime_changed else
-                        f"Regime change not persisted ({regime_persist}/{min_regime_persist} bars)"
+                        if not regime_changed
+                        else f"Regime change not persisted ({regime_persist}/{min_regime_persist} bars)"
                     )
                     logger.debug(f"[{context.symbol}] {reason}")
                     return (False, reason)
@@ -352,9 +332,7 @@ class ExecutionEngineBase(ABC):
 
         # Delegate to approver (pass context directly)
         result = trade_approver.should_trade(
-            context=context,
-            state=state,
-            account_positions=len(self.portfolio.positions)
+            context=context, state=state, account_positions=len(self.portfolio.positions)
         )
 
         # Defensive: ensure we have a valid tuple
@@ -364,12 +342,7 @@ class ExecutionEngineBase(ABC):
 
         return result
 
-    def _get_exit_quantity(
-        self,
-        symbol: str,
-        action_type: str,
-        trade_logic: Any
-    ) -> int:
+    def _get_exit_quantity(self, symbol: str, action_type: str, trade_logic: Any) -> int:
         """
         Calculate quantity for exit/partial_exit actions.
 
@@ -389,9 +362,9 @@ class ExecutionEngineBase(ABC):
         if action_type == "partial_exit":
             if not position:
                 return 0
-            if hasattr(trade_logic, 'get_exit_quantity'):
+            if hasattr(trade_logic, "get_exit_quantity"):
                 return trade_logic.get_exit_quantity(position.qty, is_partial=True)
-            exit_fraction = trade_logic.get_param('exit_fraction', 0.25)
+            exit_fraction = trade_logic.get_param("exit_fraction", 0.25)
             return max(int(abs(position.qty) * exit_fraction), 1)
 
         return 0  # Not an exit action
@@ -403,8 +376,8 @@ class ExecutionEngineBase(ABC):
         result: OrderResult,
         action_type: str,
         regime: str,
-        strategy_name: Optional[str],
-        pre_state: Optional[Dict[str, Any]] = None
+        strategy_name: str | None,
+        pre_state: dict[str, Any] | None = None,
     ) -> None:
         """
         Post-execution logging and state updates.
@@ -430,9 +403,9 @@ class ExecutionEngineBase(ABC):
         """
         # Use pre_state if provided (LiveExecutionEngine), otherwise capture now
         if pre_state:
-            cash_before = pre_state.get('cash', 0.0)
-            position_qty_before = pre_state.get('position_qty', 0)
-            position_avg_price = pre_state.get('avg_price')
+            cash_before = pre_state.get("cash", 0.0)
+            position_qty_before = pre_state.get("position_qty", 0)
+            position_avg_price = pre_state.get("avg_price")
         else:
             # Capture state BEFORE portfolio update (for MockExecutionEngine)
             cash_before = self.portfolio.cash
@@ -451,7 +424,7 @@ class ExecutionEngineBase(ABC):
         # Calculate P&L for closing trades (exits, partial exits, reversals)
         # Use state.entry_price as primary source (more reliable than position avg_price)
         pnl = None
-        entry_price = getattr(state, 'entry_price', None) or position_avg_price
+        entry_price = getattr(state, "entry_price", None) or position_avg_price
         if action_type in ("exit", "partial_exit", "reversal") and entry_price is not None:
             # For exits: calculate realized P&L from entry price
             filled_qty = result.filled_qty
@@ -463,10 +436,10 @@ class ExecutionEngineBase(ABC):
                 pnl = (entry_price - result.avg_price) * filled_qty
 
         # Extract commission from result (if broker provides it)
-        commission = getattr(result, 'commission', None)
+        commission = getattr(result, "commission", None)
 
         # Calculate slippage (difference between expected and actual fill price)
-        expected_price = getattr(result, 'limit_price', None)
+        expected_price = getattr(result, "limit_price", None)
         slippage = None
         if expected_price:
             slippage = abs(result.avg_price - expected_price)
@@ -482,8 +455,8 @@ class ExecutionEngineBase(ABC):
             order_id=result.order_id,
             strategy=strategy_name,
             regime=regime,
-            sl=getattr(state, 'stop_loss', None),
-            tp=getattr(state, 'take_profit', None),
+            sl=getattr(state, "stop_loss", None),
+            tp=getattr(state, "take_profit", None),
             commission=commission,
             slippage=slippage,
             cash_before=cash_before,
@@ -491,17 +464,13 @@ class ExecutionEngineBase(ABC):
             position_before=position_qty_before,
             position_after=position_qty_after,
             pnl=pnl,
-            notes=f"action={action_type}, bars_held={getattr(state, 'bars_held', 0)}"
+            notes=f"action={action_type}, bars_held={getattr(state, 'bars_held', 0)}",
         )
 
         if action_type in ("exit", "reversal"):
             state.reset()
 
-    def _update_portfolio_after_execution(
-        self,
-        symbol: str,
-        result: OrderResult
-    ) -> None:
+    def _update_portfolio_after_execution(self, symbol: str, result: OrderResult) -> None:
         """
         Hook for portfolio updates after execution.
 
@@ -517,22 +486,22 @@ class ExecutionEngineBase(ABC):
     # ========================================================================
     # OPTIONAL METHODS (Can be overridden)
     # ========================================================================
-    
+
     def on_market_open(self) -> None:
         """
         Called when market opens.
-        
+
         Override to implement open-of-day logic like:
         - Cancel all pending orders
         - Reset daily counters
         - Apply gap adjustments
         """
         pass
-    
+
     def on_market_close(self) -> None:
         """
         Called when market closes.
-        
+
         Override to implement close-of-day logic like:
         - Close all positions (if day trading)
         - Cancel open orders
@@ -540,22 +509,22 @@ class ExecutionEngineBase(ABC):
         - Save state
         """
         pass
-    
-    def on_new_bar(self, symbol: str, bar: Dict[str, Any]) -> None:
+
+    def on_new_bar(self, symbol: str, bar: dict[str, Any]) -> None:
         """
         Called when new bar data arrives.
-        
+
         Override to implement bar-level logic like:
         - Update indicators
         - Check stop losses
         - Adjust trailing stops
-        
+
         Args:
             symbol: Trading symbol
             bar: New bar data with OHLCV fields
         """
         pass
-    
+
     def emergency_stop(self) -> None:
         """
         Emergency stop - cancel all orders and close all positions.
@@ -581,11 +550,7 @@ class ExecutionEngineBase(ABC):
                         # Determine side: sell to close long, buy to close short
                         qty = abs(position.qty)
                         side = OrderSide.SELL if position.qty > 0 else OrderSide.BUY
-                        self.broker.place_market_order(
-                            symbol=symbol,
-                            qty=qty,
-                            side=side
-                        )
+                        self.broker.place_market_order(symbol=symbol, qty=qty, side=side)
                         logger.info(f"Emergency close: {side.value} {qty} {symbol}")
                     except Exception as e:
                         logger.error(f"Failed to close position {symbol}: {e}")
@@ -594,15 +559,15 @@ class ExecutionEngineBase(ABC):
 
         except Exception as e:
             logger.critical(f"Emergency stop failed: {e}")
-    
+
     # ========================================================================
     # UTILITY METHODS
     # ========================================================================
-    
-    def get_portfolio_summary(self) -> Dict[str, Any]:
+
+    def get_portfolio_summary(self) -> dict[str, Any]:
         """
         Get current portfolio summary.
-        
+
         Returns:
             Dictionary with portfolio metrics:
             - total_value: Total portfolio value
@@ -613,18 +578,18 @@ class ExecutionEngineBase(ABC):
             - daily_pnl: Today's P&L
         """
         return {
-            'total_value': self.portfolio.total_value,
-            'cash': self.portfolio.cash,
-            'positions': self.portfolio.get_positions(),
-            'unrealized_pnl': self.portfolio.unrealized_pnl,
-            'realized_pnl': self.portfolio.realized_pnl,
-            'daily_pnl': self.portfolio.get_daily_pnl(),
+            "total_value": self.portfolio.total_value,
+            "cash": self.portfolio.cash,
+            "positions": self.portfolio.get_positions(),
+            "unrealized_pnl": self.portfolio.unrealized_pnl,
+            "realized_pnl": self.portfolio.realized_pnl,
+            "daily_pnl": self.portfolio.get_daily_pnl(),
         }
-    
-    def get_performance_metrics(self) -> Dict[str, Any]:
+
+    def get_performance_metrics(self) -> dict[str, Any]:
         """
         Get performance metrics from tracker.
-        
+
         Returns:
             Dictionary with performance metrics:
             - total_trades: Number of trades
@@ -635,40 +600,39 @@ class ExecutionEngineBase(ABC):
             - ... other metrics from tracker
         """
         return self.performance_tracker.get_metrics()
-    
+
     def validate_state(self) -> bool:
         """
         Validate internal state consistency.
-        
+
         Returns:
             True if state is valid
-            
+
         Raises:
             ValueError: If state is inconsistent
         """
         # Check broker connection
         if not self.broker:
             raise ValueError("Broker not initialized")
-        
+
         # Check portfolio state
         if self.portfolio.total_value < 0:
             raise ValueError("Portfolio value is negative")
-        
+
         # Check position sizes match broker
         for symbol, position in self.portfolio.positions.items():
             broker_position = self.broker.get_position(symbol)
             if broker_position and abs(broker_position.qty - position.qty) > 0.01:
                 logger.warning(
-                    f"Position mismatch for {symbol}: "
-                    f"portfolio={position.qty}, broker={broker_position.qty}"
+                    f"Position mismatch for {symbol}: portfolio={position.qty}, broker={broker_position.qty}"
                 )
-        
+
         return True
-    
+
     # ========================================================================
     # SPECIAL METHODS
     # ========================================================================
-    
+
     def __repr__(self) -> str:
         """String representation of execution engine."""
         return (

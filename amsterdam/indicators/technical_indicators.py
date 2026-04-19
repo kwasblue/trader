@@ -1,20 +1,19 @@
-import pandas as pd
 import numpy as np
-from typing import Optional
+import pandas as pd
 
-from indicators.ema import EMAIndicator
-from indicators.sma import SMAIndicator
-from indicators.macd import MACDIndicator
-from indicators.rsi import RSIIndicator
 from indicators.atr import ATRIndicator
-from indicators.vwap import VWAPIndicator
-from indicators.obv import OBVIndicator
-from indicators.momentum import MomentumIndicator
-from indicators.roc import ROCIndicator
 from indicators.bollinger import BollingerBandsIndicator
-from indicators.psar import PSARIndicator
-from indicators.price_change import PriceChangeIndicator
+from indicators.ema import EMAIndicator
+from indicators.macd import MACDIndicator
+from indicators.momentum import MomentumIndicator
+from indicators.obv import OBVIndicator
 from indicators.percent_change import PercentChangeIndicator
+from indicators.price_change import PriceChangeIndicator
+from indicators.psar import PSARIndicator
+from indicators.roc import ROCIndicator
+from indicators.rsi import RSIIndicator
+from indicators.sma import SMAIndicator
+from indicators.vwap import VWAPIndicator
 
 
 class TechnicalIndicators:
@@ -80,26 +79,26 @@ class TechnicalIndicators:
         df = self.df if inplace else self.df.copy()
 
         # Extract arrays once for efficiency
-        close = df['Close'].values
-        high = df['High'].values
-        low = df['Low'].values
-        volume = df['Volume'].values if 'Volume' in df.columns else np.zeros(len(df))
+        close = df["Close"].values
+        high = df["High"].values
+        low = df["Low"].values
+        volume = df["Volume"].values if "Volume" in df.columns else np.zeros(len(df))
         n = len(close)
 
         # --- SMA ---
-        df[f'SMA_{sma_window}'] = pd.Series(close).rolling(window=sma_window).mean().values
+        df[f"SMA_{sma_window}"] = pd.Series(close).rolling(window=sma_window).mean().values
 
         # --- EMA ---
-        df[f'EMA_{ema_window}'] = pd.Series(close).ewm(span=ema_window, adjust=False).mean().values
+        df[f"EMA_{ema_window}"] = pd.Series(close).ewm(span=ema_window, adjust=False).mean().values
 
         # --- MACD (vectorized) ---
         ema_fast = pd.Series(close).ewm(span=macd_fast, adjust=False).mean()
         ema_slow = pd.Series(close).ewm(span=macd_slow, adjust=False).mean()
         macd_line = ema_fast - ema_slow
         signal_line = macd_line.ewm(span=macd_signal, adjust=False).mean()
-        df['MACD'] = macd_line.values
-        df['MACD_Signal'] = signal_line.values
-        df['MACD_Histogram'] = (macd_line - signal_line).values
+        df["MACD"] = macd_line.values
+        df["MACD_Signal"] = signal_line.values
+        df["MACD_Histogram"] = (macd_line - signal_line).values
 
         # --- RSI (vectorized) ---
         delta = np.diff(close, prepend=close[0])
@@ -108,7 +107,7 @@ class TechnicalIndicators:
         avg_gain = pd.Series(gains).ewm(com=rsi_period - 1, adjust=False).mean().values
         avg_loss = pd.Series(losses).ewm(com=rsi_period - 1, adjust=False).mean().values
         rs = np.divide(avg_gain, avg_loss, out=np.zeros_like(avg_gain), where=avg_loss != 0)
-        df['RSI'] = 100.0 - (100.0 / (1.0 + rs))
+        df["RSI"] = 100.0 - (100.0 / (1.0 + rs))
 
         # --- ATR (vectorized - avoid pd.concat) ---
         if n > 1:
@@ -117,50 +116,50 @@ class TechnicalIndicators:
             tr3 = np.abs(low[1:] - close[:-1])
             tr = np.maximum(np.maximum(tr1, tr2), tr3)
             tr_full = np.concatenate([[np.nan], tr])
-            df['ATR'] = pd.Series(tr_full).rolling(window=atr_window).mean().values
+            df["ATR"] = pd.Series(tr_full).rolling(window=atr_window).mean().values
         else:
-            df['ATR'] = np.nan
+            df["ATR"] = np.nan
 
         # --- VWAP (vectorized) ---
         typical_price = (high + low + close) / 3.0
         cum_tp_vol = np.cumsum(typical_price * volume)
         cum_vol = np.cumsum(volume)
-        df['VWAP'] = np.divide(cum_tp_vol, cum_vol, out=np.zeros_like(cum_tp_vol), where=cum_vol != 0)
+        df["VWAP"] = np.divide(cum_tp_vol, cum_vol, out=np.zeros_like(cum_tp_vol), where=cum_vol != 0)
 
         # --- OBV (vectorized) ---
         obv = np.zeros(n)
         if n > 1:
             price_change = np.sign(np.diff(close))
             obv[1:] = np.cumsum(price_change * volume[1:])
-        df['OBV'] = obv
+        df["OBV"] = obv
 
         # --- Momentum ---
         momentum = np.full(n, np.nan)
         if n > momentum_period:
             momentum[momentum_period:] = close[momentum_period:] - close[:-momentum_period]
-        df['Momentum'] = momentum
+        df["Momentum"] = momentum
 
         # --- ROC (Rate of Change) ---
         roc = np.full(n, np.nan)
         if n > roc_period:
             prev_close = close[:-roc_period]
             roc[roc_period:] = ((close[roc_period:] - prev_close) / prev_close) * 100.0
-        df['ROC'] = roc
+        df["ROC"] = roc
 
         # --- Bollinger Bands ---
         sma_bb = pd.Series(close).rolling(window=bb_window).mean()
         std_bb = pd.Series(close).rolling(window=bb_window).std()
-        df['Bollinger_Middle'] = sma_bb.values
-        df['Bollinger_Upper'] = (sma_bb + bb_std * std_bb).values
-        df['Bollinger_Lower'] = (sma_bb - bb_std * std_bb).values
+        df["Bollinger_Middle"] = sma_bb.values
+        df["Bollinger_Upper"] = (sma_bb + bb_std * std_bb).values
+        df["Bollinger_Lower"] = (sma_bb - bb_std * std_bb).values
 
         # --- Price Change ---
-        df['Price_Change'] = np.concatenate([[0], np.diff(close)])
+        df["Price_Change"] = np.concatenate([[0], np.diff(close)])
 
         # --- Percent Change ---
         pct_change = np.zeros(n)
         if n > 1:
             pct_change[1:] = (close[1:] - close[:-1]) / close[:-1] * 100.0
-        df['Percent_Change'] = pct_change
+        df["Percent_Change"] = pct_change
 
         return df

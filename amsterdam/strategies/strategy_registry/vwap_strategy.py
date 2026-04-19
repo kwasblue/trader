@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from typing import Optional, List
+
 from core.base.base_strategy import BaseStrategy
 
 
@@ -12,10 +12,10 @@ class VWAPStrategy(BaseStrategy):
             return 0
         return int(data["Signal"].iloc[-1])
 
-    def generate_signals_vectorized(self, data: pd.DataFrame) -> Optional[List[int]]:
+    def generate_signals_vectorized(self, data: pd.DataFrame) -> list[int] | None:
         """Vectorized VWAP signal generation for fast backtesting."""
-        close = data['Close'] if 'Close' in data.columns else data['close']
-        volume = data['Volume'] if 'Volume' in data.columns else data['volume']
+        close = data["Close"] if "Close" in data.columns else data["close"]
+        volume = data["Volume"] if "Volume" in data.columns else data["volume"]
 
         # Calculate VWAP using numpy for speed
         close_vals = close.values

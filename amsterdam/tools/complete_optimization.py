@@ -17,17 +17,17 @@ Usage:
 
 import asyncio
 import sys
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from core.symbol_list_manager import get_list_manager
-from tools.unified_optimizer import UnifiedOptimizer
 from tools.optimize_strategy_params import StrategyParamOptimizer
 from tools.test_hybrid_sizing import HybridSizingTester
+from tools.unified_optimizer import UnifiedOptimizer
 
 
 async def main():
@@ -35,7 +35,7 @@ async def main():
     import argparse
 
     parser = argparse.ArgumentParser(
-        description='Complete optimization workflow - all steps',
+        description="Complete optimization workflow - all steps",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -53,33 +53,15 @@ Examples:
 
   # Quick optimization (skip both)
   python tools/complete_optimization.py --skip-params --skip-hybrid --save
-        """
+        """,
     )
 
-    parser.add_argument(
-        '--symbols', nargs='+',
-        help='Symbols to optimize (default: all from trade list)'
-    )
-    parser.add_argument(
-        '--days', type=int, default=750,
-        help='Days of historical data (default: 750)'
-    )
-    parser.add_argument(
-        '--skip-params', action='store_true',
-        help='Skip parameter optimization (faster)'
-    )
-    parser.add_argument(
-        '--skip-hybrid', action='store_true',
-        help='Skip hybrid sizing test'
-    )
-    parser.add_argument(
-        '--save', action='store_true',
-        help='Save results to config files'
-    )
-    parser.add_argument(
-        '--dry-run', action='store_true',
-        help='Preview without running'
-    )
+    parser.add_argument("--symbols", nargs="+", help="Symbols to optimize (default: all from trade list)")
+    parser.add_argument("--days", type=int, default=750, help="Days of historical data (default: 750)")
+    parser.add_argument("--skip-params", action="store_true", help="Skip parameter optimization (faster)")
+    parser.add_argument("--skip-hybrid", action="store_true", help="Skip hybrid sizing test")
+    parser.add_argument("--save", action="store_true", help="Save results to config files")
+    parser.add_argument("--dry-run", action="store_true", help="Preview without running")
 
     args = parser.parse_args()
 
@@ -98,16 +80,16 @@ Examples:
     print("COMPLETE OPTIMIZATION WORKFLOW")
     print("=" * 80)
     print(f"\nSymbols: {len(symbols)}")
-    print(f"Steps:")
-    print(f"  1. ✓ Strategy/Timeframe Selection")
+    print("Steps:")
+    print("  1. ✓ Strategy/Timeframe Selection")
     if args.skip_params:
-        print(f"  2. ⊘ Parameter Optimization (SKIPPED)")
+        print("  2. ⊘ Parameter Optimization (SKIPPED)")
     else:
-        print(f"  2. ✓ Parameter Optimization")
+        print("  2. ✓ Parameter Optimization")
     if args.skip_hybrid:
-        print(f"  3. ⊘ Hybrid Sizing Test (SKIPPED)")
+        print("  3. ⊘ Hybrid Sizing Test (SKIPPED)")
     else:
-        print(f"  3. ✓ Hybrid Sizing Test")
+        print("  3. ✓ Hybrid Sizing Test")
     print(f"\nDays of data: {args.days}")
     print(f"Save results: {args.save}")
     print("=" * 80)
@@ -119,7 +101,7 @@ Examples:
     if not args.save:
         print("\n⚠️  WARNING: Results will not be saved (use --save)")
         response = input("Continue? [y/N]: ")
-        if response.lower() not in ('y', 'yes'):
+        if response.lower() not in ("y", "yes"):
             print("Cancelled.")
             return 0
 
@@ -133,12 +115,9 @@ Examples:
     print("=" * 80)
 
     try:
-        optimizer = UnifiedOptimizer(
-            symbols=symbols,
-            timeframes=['5min', '15min', '30min', '1hour', 'day']
-        )
+        optimizer = UnifiedOptimizer(symbols=symbols, timeframes=["5min", "15min", "30min", "1hour", "day"])
 
-        await optimizer.run_optimization(days=args.days, metric='sharpe_ratio')
+        await optimizer.run_optimization(days=args.days, metric="sharpe_ratio")
 
         if args.save:
             optimizer.save_config()
@@ -163,7 +142,7 @@ Examples:
         try:
             param_optimizer = StrategyParamOptimizer(symbols=symbols)
 
-            await param_optimizer.optimize_all(days=365, metric='sharpe_ratio')
+            await param_optimizer.optimize_all(days=365, metric="sharpe_ratio")
 
             if args.save:
                 param_optimizer.save_params()
@@ -232,5 +211,5 @@ Examples:
     return 0
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(asyncio.run(main()))

@@ -1,15 +1,15 @@
 # ============================================================================
 # 2. state_aggregator.py - State Management (Refactored)
 # ============================================================================
-from PySide6 import QtCore
+import logging
+import time
+from collections import deque
+from copy import deepcopy
+from datetime import datetime, timezone
+
 import numpy as np
 import pandas as pd
-import time
-import logging
-from copy import deepcopy
-from collections import deque
-from datetime import datetime, timezone
-from typing import Dict, Deque, Any, Optional, List
+from PySide6 import QtCore
 
 
 class StateAggregator(QtCore.QObject):
@@ -43,8 +43,8 @@ class StateAggregator(QtCore.QObject):
         self.cache = self._init_cache()
 
         # Rolling arrays for performance metrics
-        self._returns: Deque[float] = deque(maxlen=window)
-        self._equity_hist: Deque[float] = deque(maxlen=window)
+        self._returns: deque[float] = deque(maxlen=window)
+        self._equity_hist: deque[float] = deque(maxlen=window)
 
         # Time-series buffers for charts
         self.buffers = {
@@ -57,7 +57,7 @@ class StateAggregator(QtCore.QObject):
         }
 
         # Symbol activity tracking
-        self._last_seen: Dict[str, float] = {}
+        self._last_seen: dict[str, float] = {}
 
         # Timers
         self._last_emit = time.time()
@@ -72,7 +72,7 @@ class StateAggregator(QtCore.QObject):
         # Wire signals
         self._connect_signals()
 
-    def _init_cache(self) -> Dict:
+    def _init_cache(self) -> dict:
         """Initialize empty cache structure"""
         return {
             "positions": {},
@@ -124,39 +124,34 @@ class StateAggregator(QtCore.QObject):
     def _iso_now() -> str:
         return datetime.now(timezone.utc).isoformat()
 
-    def _mark_seen(self, sym: Optional[str]):
+    def _mark_seen(self, sym: str | None):
         """Track symbol activity for pruning"""
         if sym:
             self._last_seen[sym] = time.time()
 
-    def _append_price_point(self, sym: str, ts: str, price: float,
-                           ma20: Optional[float] = None, ma50: Optional[float] = None):
+    def _append_price_point(
+        self, sym: str, ts: str, price: float, ma20: float | None = None, ma50: float | None = None
+    ):
         """Add price tick to rolling buffer"""
         try:
             dq = self.buffers["price"].setdefault(sym, deque(maxlen=self.PRICE_MAXLEN))
-            dq.append({
-                "t": ts,
-                "p": float(price),
-                "ma20": float(ma20) if ma20 is not None else None,
-                "ma50": float(ma50) if ma50 is not None else None
-            })
+            dq.append(
+                {
+                    "t": ts,
+                    "p": float(price),
+                    "ma20": float(ma20) if ma20 is not None else None,
+                    "ma50": float(ma50) if ma50 is not None else None,
+                }
+            )
             self._mark_seen(sym)
         except (ValueError, TypeError) as e:
             self._logger.warning(f"Invalid price data for {sym}: {e}")
 
-    def _append_ohlc_point(self, sym: str, ts: str, o: float, h: float, 
-                          l: float, c: float, v: float):
+    def _append_ohlc_point(self, sym: str, ts: str, o: float, h: float, l: float, c: float, v: float):
         """Add OHLC bar to rolling buffer"""
         try:
             dq = self.buffers["ohlc"].setdefault(sym, deque(maxlen=self.OHLC_MAXLEN))
-            dq.append({
-                "t": ts,
-                "o": float(o),
-                "h": float(h),
-                "l": float(l),
-                "c": float(c),
-                "v": float(v)
-            })
+            dq.append({"t": ts, "o": float(o), "h": float(h), "l": float(l), "c": float(c), "v": float(v)})
             self._mark_seen(sym)
         except (ValueError, TypeError) as e:
             self._logger.warning(f"Invalid OHLC data for {sym}: {e}")
@@ -195,11 +190,11 @@ class StateAggregator(QtCore.QObject):
         try:
             if not isinstance(rows, list):
                 rows = [rows]
-            
+
             # Update cache (small)
             self.cache["trades"].extend(rows)
-            self.cache["trades"] = self.cache["trades"][-self.TRADES_MAX_CACHE:]
-            
+            self.cache["trades"] = self.cache["trades"][-self.TRADES_MAX_CACHE :]
+
             # Update buffer (larger)
             for t in rows:
                 payload = {
@@ -223,10 +218,10 @@ class StateAggregator(QtCore.QObject):
 
             prev_val = float(self.cache["pnl"].get("portfolio_value") or 0.0)
             new_val = float(data.get("portfolio_value") or prev_val)
-            
+
             # Update cache
             self.cache["pnl"].update(data)
-            
+
             # Compute returns for metrics
             if prev_val > 0 and new_val > 0 and new_val != prev_val:
                 ret = (new_val - prev_val) / max(prev_val, 1e-9)
@@ -237,10 +232,10 @@ class StateAggregator(QtCore.QObject):
             ts = data.get("timestamp") or self._iso_now()
             self.cache["pnl"]["timestamp"] = ts
             self.buffers["equity"].append({"t": ts, "v": new_val})
-            
+
             # Update drawdown
             self._update_drawdown()
-            
+
         except Exception as e:
             self._logger.error(f"PnL update error: {e}")
 
@@ -250,7 +245,7 @@ class StateAggregator(QtCore.QObject):
             if not isinstance(alerts, list):
                 alerts = [alerts]
             self.cache["alerts"].extend(alerts)
-            self.cache["alerts"] = self.cache["alerts"][-self.ALERTS_MAX_CACHE:]
+            self.cache["alerts"] = self.cache["alerts"][-self.ALERTS_MAX_CACHE :]
         except Exception as e:
             self._logger.error(f"Alert update error: {e}")
 
@@ -279,7 +274,7 @@ class StateAggregator(QtCore.QObject):
             # Normalize column names (case-insensitive)
             cols = {c.lower(): c for c in df.columns}
             required = ["open", "high", "low", "close"]
-            
+
             if not all(k in cols for k in required):
                 self._logger.warning(f"Missing OHLC columns for {sym}: {df.columns.tolist()}")
                 return
@@ -291,12 +286,12 @@ class StateAggregator(QtCore.QObject):
             l = float(last_row[cols["low"]])
             c = float(last_row[cols["close"]])
             v = float(last_row[cols.get("volume", cols["close"])]) if "volume" in cols else 0.0
-            
+
             # Get timestamp
-            if hasattr(df.index, 'name') and df.index.name == 'timestamp':
+            if hasattr(df.index, "name") and df.index.name == "timestamp":
                 ts = str(df.index[-1])
-            elif 'timestamp' in cols:
-                ts = str(last_row[cols['timestamp']])
+            elif "timestamp" in cols:
+                ts = str(last_row[cols["timestamp"]])
             else:
                 ts = self._iso_now()
 
@@ -315,12 +310,14 @@ class StateAggregator(QtCore.QObject):
                 news_list = [news_list]
 
             for n in news_list:
-                self.buffers["news"].append({
-                    "t": n.get("timestamp") or self._iso_now(),
-                    "headline": n.get("headline"),
-                    "source": n.get("source"),
-                    "sentiment": n.get("sentiment"),
-                })
+                self.buffers["news"].append(
+                    {
+                        "t": n.get("timestamp") or self._iso_now(),
+                        "headline": n.get("headline"),
+                        "source": n.get("source"),
+                        "sentiment": n.get("sentiment"),
+                    }
+                )
         except Exception as e:
             self._logger.error(f"News update error: {e}")
 
@@ -333,16 +330,16 @@ class StateAggregator(QtCore.QObject):
         try:
             if len(self._equity_hist) < 2:
                 return
-            
+
             peak = max(self._equity_hist)
             current = self._equity_hist[-1]
             dd = (current - peak) / peak if peak > 0 else 0.0
             self.cache["pnl"]["drawdown"] = float(dd)
-            
+
         except Exception as e:
             self._logger.error(f"Drawdown calculation error: {e}")
 
-    def _compute_metrics(self) -> Dict:
+    def _compute_metrics(self) -> dict:
         """Compute rolling performance metrics"""
         try:
             if len(self._returns) < 5:
@@ -351,7 +348,7 @@ class StateAggregator(QtCore.QObject):
             rets = np.array(self._returns, dtype=float)
             mean_ret = float(np.mean(rets))
             std_ret = float(np.std(rets, ddof=1))
-            
+
             # Downside deviation
             downside_rets = rets[rets < 0]
             downside = float(np.std(downside_rets, ddof=1)) if len(downside_rets) > 0 else 0.0
@@ -359,7 +356,7 @@ class StateAggregator(QtCore.QObject):
             # Annualized ratios
             sharpe = mean_ret / std_ret * np.sqrt(252) if std_ret > 0 else 0.0
             sortino = mean_ret / downside * np.sqrt(252) if downside > 0 else 0.0
-            kelly = mean_ret / (std_ret ** 2) if std_ret > 0 else 0.0
+            kelly = mean_ret / (std_ret**2) if std_ret > 0 else 0.0
 
             # Risk metrics
             var_5 = float(np.percentile(rets, 5))
@@ -402,7 +399,7 @@ class StateAggregator(QtCore.QObject):
     # Snapshot Emission & Memory Management
     # ========================================================================
 
-    def _serialize_buffers(self) -> Dict:
+    def _serialize_buffers(self) -> dict:
         """Convert deques to lists for JSON-friendly snapshots"""
         try:
             return {
@@ -444,17 +441,14 @@ class StateAggregator(QtCore.QObject):
                 return
 
             now = time.time()
-            stale = [
-                sym for sym, last in self._last_seen.items()
-                if (now - last) > self.SYMBOL_STALE_SECS
-            ]
+            stale = [sym for sym, last in self._last_seen.items() if (now - last) > self.SYMBOL_STALE_SECS]
 
             if stale:
                 for sym in stale:
                     self.buffers["price"].pop(sym, None)
                     self.buffers["ohlc"].pop(sym, None)
                     self._last_seen.pop(sym, None)
-                
+
                 self._logger.info(f"Pruned {len(stale)} stale symbols")
 
         except Exception as e:

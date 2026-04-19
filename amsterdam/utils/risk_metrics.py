@@ -13,4 +13,4 @@ Preferred (new code):
 
 from core.risk.metrics import RiskQuantifier
 
-__all__ = ['RiskQuantifier']
+__all__ = ["RiskQuantifier"]

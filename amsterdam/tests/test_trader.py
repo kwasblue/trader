@@ -3,13 +3,13 @@ Test suite for main trader orchestration.
 
 Tests trader initialization, lifecycle, and coordination.
 """
-import sys
+
 import os
+import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import unittest
-from unittest.mock import Mock, MagicMock, patch, AsyncMock
-import asyncio
 
 
 class TestTraderInitialization(unittest.TestCase):
@@ -17,32 +17,29 @@ class TestTraderInitialization(unittest.TestCase):
 
     def test_trader_requires_broker(self):
         """Trader should require a broker instance."""
-        config = {
-            'broker': None,
-            'symbols': ['AAPL', 'MSFT']
-        }
+        config = {"broker": None, "symbols": ["AAPL", "MSFT"]}
 
         # Without broker, should fail
-        self.assertIsNone(config['broker'])
+        self.assertIsNone(config["broker"])
 
     def test_trader_accepts_symbols(self):
         """Trader should accept list of symbols."""
-        symbols = ['AAPL', 'MSFT', 'GOOGL']
+        symbols = ["AAPL", "MSFT", "GOOGL"]
 
         self.assertEqual(len(symbols), 3)
-        self.assertIn('AAPL', symbols)
+        self.assertIn("AAPL", symbols)
 
     def test_trader_default_config(self):
         """Trader should have sensible defaults."""
         default_config = {
-            'max_positions': 10,
-            'risk_per_trade': 0.02,
-            'heartbeat_interval': 0.2,
-            'connection_timeout': 1.0
+            "max_positions": 10,
+            "risk_per_trade": 0.02,
+            "heartbeat_interval": 0.2,
+            "connection_timeout": 1.0,
         }
 
-        self.assertEqual(default_config['max_positions'], 10)
-        self.assertEqual(default_config['risk_per_trade'], 0.02)
+        self.assertEqual(default_config["max_positions"], 10)
+        self.assertEqual(default_config["risk_per_trade"], 0.02)
 
 
 class TestTraderLifecycle(unittest.TestCase):
@@ -53,33 +50,33 @@ class TestTraderLifecycle(unittest.TestCase):
         sequence = []
 
         def mock_connect():
-            sequence.append('connect')
+            sequence.append("connect")
 
         def mock_seed():
-            sequence.append('seed')
+            sequence.append("seed")
 
         def mock_subscribe():
-            sequence.append('subscribe')
+            sequence.append("subscribe")
 
         # Simulate startup
         mock_connect()
         mock_seed()
         mock_subscribe()
 
-        self.assertEqual(sequence, ['connect', 'seed', 'subscribe'])
+        self.assertEqual(sequence, ["connect", "seed", "subscribe"])
 
     def test_trader_stop_sequence(self):
         """Trader stop should cleanup properly."""
         cleanup_actions = []
 
         def mock_unsubscribe():
-            cleanup_actions.append('unsubscribe')
+            cleanup_actions.append("unsubscribe")
 
         def mock_close_positions():
-            cleanup_actions.append('close_positions')
+            cleanup_actions.append("close_positions")
 
         def mock_disconnect():
-            cleanup_actions.append('disconnect')
+            cleanup_actions.append("disconnect")
 
         # Simulate shutdown
         mock_unsubscribe()
@@ -95,7 +92,7 @@ class TestTraderSignalProcessing(unittest.TestCase):
     def test_signal_validation(self):
         """Trader should validate signals."""
         valid_signals = [1, -1, 0]
-        invalid_signals = [2, 1.5, 'buy', None]
+        invalid_signals = [2, 1.5, "buy", None]
 
         for signal in valid_signals:
             self.assertIn(signal, [-1, 0, 1])
@@ -105,15 +102,11 @@ class TestTraderSignalProcessing(unittest.TestCase):
 
     def test_signal_to_action_mapping(self):
         """Signals should map to correct actions."""
-        signal_actions = {
-            1: 'buy',
-            -1: 'sell',
-            0: 'hold'
-        }
+        signal_actions = {1: "buy", -1: "sell", 0: "hold"}
 
-        self.assertEqual(signal_actions[1], 'buy')
-        self.assertEqual(signal_actions[-1], 'sell')
-        self.assertEqual(signal_actions[0], 'hold')
+        self.assertEqual(signal_actions[1], "buy")
+        self.assertEqual(signal_actions[-1], "sell")
+        self.assertEqual(signal_actions[0], "hold")
 
 
 class TestTraderRiskManagement(unittest.TestCase):
@@ -160,44 +153,37 @@ class TestTraderEventHandling(unittest.TestCase):
         bars_received = []
 
         def on_bar(symbol, bar):
-            bars_received.append({'symbol': symbol, 'bar': bar})
+            bars_received.append({"symbol": symbol, "bar": bar})
 
-        bar_data = {'Open': 150, 'High': 152, 'Low': 149, 'Close': 151}
-        on_bar('AAPL', bar_data)
+        bar_data = {"Open": 150, "High": 152, "Low": 149, "Close": 151}
+        on_bar("AAPL", bar_data)
 
         self.assertEqual(len(bars_received), 1)
-        self.assertEqual(bars_received[0]['symbol'], 'AAPL')
+        self.assertEqual(bars_received[0]["symbol"], "AAPL")
 
     def test_on_signal_event(self):
         """Trader should handle signal events."""
         signals_received = []
 
         def on_signal(symbol, signal, strategy):
-            signals_received.append({
-                'symbol': symbol,
-                'signal': signal,
-                'strategy': strategy
-            })
+            signals_received.append({"symbol": symbol, "signal": signal, "strategy": strategy})
 
-        on_signal('AAPL', 1, 'EMA_Crossover')
+        on_signal("AAPL", 1, "EMA_Crossover")
 
         self.assertEqual(len(signals_received), 1)
-        self.assertEqual(signals_received[0]['signal'], 1)
+        self.assertEqual(signals_received[0]["signal"], 1)
 
     def test_on_trade_event(self):
         """Trader should handle trade events."""
         trades = []
 
         def on_trade(symbol, side, qty, price):
-            trades.append({
-                'symbol': symbol, 'side': side,
-                'qty': qty, 'price': price
-            })
+            trades.append({"symbol": symbol, "side": side, "qty": qty, "price": price})
 
-        on_trade('AAPL', 'buy', 100, 150.25)
+        on_trade("AAPL", "buy", 100, 150.25)
 
         self.assertEqual(len(trades), 1)
-        self.assertEqual(trades[0]['side'], 'buy')
+        self.assertEqual(trades[0]["side"], "buy")
 
 
 class TestTraderStateManagement(unittest.TestCase):
@@ -208,34 +194,33 @@ class TestTraderStateManagement(unittest.TestCase):
         positions = {}
 
         # Open position
-        positions['AAPL'] = {'qty': 100, 'entry_price': 150.0}
+        positions["AAPL"] = {"qty": 100, "entry_price": 150.0}
 
-        self.assertEqual(positions['AAPL']['qty'], 100)
+        self.assertEqual(positions["AAPL"]["qty"], 100)
 
         # Close position
-        del positions['AAPL']
-        self.assertNotIn('AAPL', positions)
+        del positions["AAPL"]
+        self.assertNotIn("AAPL", positions)
 
     def test_mode_transitions(self):
         """Trader should handle mode transitions."""
-        valid_modes = ['idle', 'armed', 'active', 'estop']
         valid_transitions = {
-            'idle': ['armed'],
-            'armed': ['active', 'idle'],
-            'active': ['armed', 'estop'],
-            'estop': ['idle']
+            "idle": ["armed"],
+            "armed": ["active", "idle"],
+            "active": ["armed", "estop"],
+            "estop": ["idle"],
         }
 
         # Test valid transition
-        current_mode = 'idle'
-        next_mode = 'armed'
+        current_mode = "idle"
+        next_mode = "armed"
         self.assertIn(next_mode, valid_transitions[current_mode])
 
         # Test invalid transition
-        current_mode = 'idle'
-        next_mode = 'active'
+        current_mode = "idle"
+        next_mode = "active"
         self.assertNotIn(next_mode, valid_transitions[current_mode])
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

@@ -5,22 +5,24 @@ Example 4: Walk-Forward Analysis
 Demonstrates robust out-of-sample testing with rolling train/test windows.
 """
 
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import pandas as pd
-import numpy as np
 from datetime import datetime
 
-from core.backtest_suite import walk_forward_analysis, validate_ohlcv_data
+import numpy as np
+import pandas as pd
+
+from core.backtest_suite import validate_ohlcv_data, walk_forward_analysis
 
 
 def generate_sample_data(days: int = 1000) -> pd.DataFrame:
     """Generate synthetic price data with regime changes."""
     np.random.seed(42)
 
-    dates = pd.date_range(end=datetime.now(), periods=days, freq='D')
+    dates = pd.date_range(end=datetime.now(), periods=days, freq="D")
 
     # Create price with different regimes
     returns = np.zeros(days)
@@ -30,27 +32,29 @@ def generate_sample_data(days: int = 1000) -> pd.DataFrame:
     returns[:regime_length] = np.random.randn(regime_length) * 0.01 + 0.0008
 
     # Regime 2: High volatility
-    returns[regime_length:2*regime_length] = np.random.randn(regime_length) * 0.025
+    returns[regime_length : 2 * regime_length] = np.random.randn(regime_length) * 0.025
 
     # Regime 3: Downtrend
-    returns[2*regime_length:3*regime_length] = np.random.randn(regime_length) * 0.015 - 0.0005
+    returns[2 * regime_length : 3 * regime_length] = np.random.randn(regime_length) * 0.015 - 0.0005
 
     # Regime 4: Recovery
-    returns[3*regime_length:] = np.random.randn(days - 3*regime_length) * 0.012 + 0.0006
+    returns[3 * regime_length :] = np.random.randn(days - 3 * regime_length) * 0.012 + 0.0006
 
     prices = 100 * np.exp(np.cumsum(returns))
 
-    data = pd.DataFrame({
-        'Date': dates,
-        'Open': prices * (1 + np.random.randn(days) * 0.005),
-        'High': prices * (1 + np.abs(np.random.randn(days) * 0.01)),
-        'Low': prices * (1 - np.abs(np.random.randn(days) * 0.01)),
-        'Close': prices,
-        'Volume': np.random.randint(100000, 1000000, days)
-    })
+    data = pd.DataFrame(
+        {
+            "Date": dates,
+            "Open": prices * (1 + np.random.randn(days) * 0.005),
+            "High": prices * (1 + np.abs(np.random.randn(days) * 0.01)),
+            "Low": prices * (1 - np.abs(np.random.randn(days) * 0.01)),
+            "Close": prices,
+            "Volume": np.random.randint(100000, 1000000, days),
+        }
+    )
 
-    data['High'] = data[['Open', 'High', 'Low', 'Close']].max(axis=1)
-    data['Low'] = data[['Open', 'High', 'Low', 'Close']].min(axis=1)
+    data["High"] = data[["Open", "High", "Low", "Close"]].max(axis=1)
+    data["Low"] = data[["Open", "High", "Low", "Close"]].min(axis=1)
 
     return data
 
@@ -69,10 +73,7 @@ def main():
     print(f"   Data: {len(data)} bars (~4 years of daily data)")
 
     # Define parameter grid
-    param_grid = {
-        'fast': [5, 10, 15, 20],
-        'slow': [25, 35, 45]
-    }
+    param_grid = {"fast": [5, 10, 15, 20], "slow": [25, 35, 45]}
 
     print("\n2. Walk-Forward Configuration:")
     print("   Training window: 252 bars (~1 year)")
@@ -87,14 +88,14 @@ def main():
 
     result = walk_forward_analysis(
         data=data,
-        strategy_name='sma',
+        strategy_name="sma",
         param_grid=param_grid,
-        train_size=252,    # 1 year training
-        test_size=63,      # 3 months testing
-        step_size=63,      # Roll quarterly
-        metric='sharpe_ratio',
+        train_size=252,  # 1 year training
+        test_size=63,  # 3 months testing
+        step_size=63,  # Roll quarterly
+        metric="sharpe_ratio",
         initial_capital=10000,
-        verbose=True
+        verbose=True,
     )
 
     # Display results
@@ -102,7 +103,7 @@ def main():
     print("WALK-FORWARD RESULTS")
     print("=" * 70)
 
-    print(f"\nOverall Performance:")
+    print("\nOverall Performance:")
     print(f"   Total Out-of-Sample Return: {result.overall_return:+.2%}")
     print(f"   Average OOS Sharpe Ratio:   {result.overall_sharpe:.4f}")
     print(f"   Windows Tested:             {len(result.windows)}")
@@ -125,8 +126,8 @@ def main():
     fast_counts = {}
     slow_counts = {}
     for params in result.in_sample_params:
-        fast = params['fast']
-        slow = params['slow']
+        fast = params["fast"]
+        slow = params["slow"]
         fast_counts[fast] = fast_counts.get(fast, 0) + 1
         slow_counts[slow] = slow_counts.get(slow, 0) + 1
 
@@ -154,10 +155,10 @@ def main():
     print(f"   Max:     {np.max(oos_returns):+.2%}")
 
     positive = sum(1 for r in oos_returns if r > 0)
-    print(f"   Positive: {positive}/{len(oos_returns)} ({positive/len(oos_returns)*100:.0f}%)")
+    print(f"   Positive: {positive}/{len(oos_returns)} ({positive / len(oos_returns) * 100:.0f}%)")
 
     print("\n" + "=" * 70)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

@@ -9,15 +9,16 @@ Coverage:
 - Event validation
 - Circuit breaker in event handler
 """
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+
 import asyncio
 
-from core.events.eventhandler import EventHandler, get_event_handler, MAX_CONCURRENT_HANDLERS
-from core.base.event_handler_base import Event
+import pytest
+
+from core.events.eventhandler import MAX_CONCURRENT_HANDLERS, EventHandler, get_event_handler
 from core.events.events import (
-    EVENT_NEW_BAR, EVENT_PNL_UPDATE, EVENT_ORDER_STATUS,
-    EVENT_STRATEGY_SIGNAL, EVENT_HEALTH_UPDATE
+    EVENT_NEW_BAR,
+    EVENT_ORDER_STATUS,
+    EVENT_PNL_UPDATE,
 )
 
 
@@ -105,6 +106,7 @@ class TestEventHandlerBasics:
     @pytest.mark.asyncio
     async def test_has_subscribers(self, event_handler, reset_singleton):
         """Test checking if event has subscribers."""
+
         async def handler(event):
             pass
 
@@ -211,15 +213,18 @@ class TestEventPayloads:
             received.append(event)
 
         await event_handler.subscribe(EVENT_NEW_BAR, handler)
-        await event_handler.emit(EVENT_NEW_BAR, {
-            "symbol": "AAPL",
-            "open": 150.0,
-            "high": 152.0,
-            "low": 149.0,
-            "close": 151.0,
-            "volume": 1000000,
-            "timestamp": "2024-01-01T10:00:00Z",
-        })
+        await event_handler.emit(
+            EVENT_NEW_BAR,
+            {
+                "symbol": "AAPL",
+                "open": 150.0,
+                "high": 152.0,
+                "low": 149.0,
+                "close": 151.0,
+                "volume": 1000000,
+                "timestamp": "2024-01-01T10:00:00Z",
+            },
+        )
 
         await asyncio.sleep(0.1)
 
@@ -237,16 +242,19 @@ class TestEventPayloads:
             received.append(event)
 
         await event_handler.subscribe(EVENT_PNL_UPDATE, handler)
-        await event_handler.emit(EVENT_PNL_UPDATE, {
-            "portfolio_value": 100000.0,
-            "equity_curve": [100000.0, 100500.0, 100800.0],
-            "unrealized": 500.0,
-            "realized": 1000.0,
-            "drawdown": 0.02,
-            "timestamp": "2024-01-01T10:00:00Z",
-            "cash": 50000.0,
-            "buying_power": 100000.0,
-        })
+        await event_handler.emit(
+            EVENT_PNL_UPDATE,
+            {
+                "portfolio_value": 100000.0,
+                "equity_curve": [100000.0, 100500.0, 100800.0],
+                "unrealized": 500.0,
+                "realized": 1000.0,
+                "drawdown": 0.02,
+                "timestamp": "2024-01-01T10:00:00Z",
+                "cash": 50000.0,
+                "buying_power": 100000.0,
+            },
+        )
 
         await asyncio.sleep(0.1)
 
@@ -263,16 +271,19 @@ class TestEventPayloads:
             received.append(event)
 
         await event_handler.subscribe(EVENT_ORDER_STATUS, handler)
-        await event_handler.emit(EVENT_ORDER_STATUS, {
-            "order_id": "ORD123",
-            "symbol": "AAPL",
-            "side": "buy",
-            "qty": 10,
-            "status": "filled",
-            "filled_qty": 10,
-            "avg_fill_price": 150.0,
-            "timestamp": "2024-01-01T10:00:00Z",
-        })
+        await event_handler.emit(
+            EVENT_ORDER_STATUS,
+            {
+                "order_id": "ORD123",
+                "symbol": "AAPL",
+                "side": "buy",
+                "qty": 10,
+                "status": "filled",
+                "filled_qty": 10,
+                "avg_fill_price": 150.0,
+                "timestamp": "2024-01-01T10:00:00Z",
+            },
+        )
 
         await asyncio.sleep(0.1)
 
@@ -321,6 +332,7 @@ class TestEventHandlerShutdown:
     @pytest.mark.asyncio
     async def test_shutdown(self, event_handler, reset_singleton):
         """Test graceful shutdown of event handler."""
+
         async def slow_handler(event):
             await asyncio.sleep(0.5)
 
@@ -347,10 +359,7 @@ class TestEventHandlerConcurrency:
         await event_handler.subscribe("test_event", handler)
 
         # Emit many events concurrently
-        tasks = [
-            event_handler.emit("test_event", {"index": i})
-            for i in range(100)
-        ]
+        tasks = [event_handler.emit("test_event", {"index": i}) for i in range(100)]
         await asyncio.gather(*tasks)
 
         await asyncio.sleep(0.5)
@@ -373,10 +382,7 @@ class TestEventHandlerConcurrency:
         await event_handler.subscribe("test_event", slow_handler)
 
         # Emit many events
-        tasks = [
-            event_handler.emit("test_event", {"index": i})
-            for i in range(100)
-        ]
+        tasks = [event_handler.emit("test_event", {"index": i}) for i in range(100)]
         await asyncio.gather(*tasks)
 
         await asyncio.sleep(2)

@@ -7,20 +7,21 @@ NOTE: This module is used internally by optimization utilities (grid_search, wal
 For user-facing backtests, use core.backtest.unified_backtest_runner instead.
 """
 
-import numpy as np
-import pandas as pd
-from typing import Dict, Optional
 from dataclasses import dataclass
 
-from strategies.strategy_registry import load_strategy
+import numpy as np
+import pandas as pd
+
+from core.backtest.slippage_models import FixedSlippage, SlippageModel
 from core.backtest.validation import validate_ohlcv_data
-from core.backtest.slippage_models import SlippageModel, FixedSlippage
+from strategies.strategy_registry import load_strategy
 
 
 @dataclass
 class BacktestConfig:
     """Configuration for backtesting."""
-    position_sizing: str = 'fixed'
+
+    position_sizing: str = "fixed"
     position_size: float = 0.1
     stop_loss_atr: float = 2.0
     take_profit_atr: float = 3.0
@@ -40,7 +41,7 @@ class VectorizedBacktester:
         data: pd.DataFrame,
         initial_capital: float = 10000,
         transaction_cost: float = 0.001,
-        slippage_model: SlippageModel = None
+        slippage_model: SlippageModel = None,
     ):
         self.data = data.copy()
         self.initial_capital = initial_capital
@@ -57,11 +58,11 @@ class VectorizedBacktester:
     def run(
         self,
         strategy_name: str,
-        strategy_params: Dict = None,
-        position_sizing: str = 'fixed',  # 'fixed', 'risk_parity', 'volatility_scaled'
+        strategy_params: dict = None,
+        position_sizing: str = "fixed",  # 'fixed', 'risk_parity', 'volatility_scaled'
         position_size: float = 0.1,  # Fraction of capital per trade
         stop_loss_atr: float = 2.0,
-        take_profit_atr: float = 3.0
+        take_profit_atr: float = 3.0,
     ) -> pd.DataFrame:
         """
         Run vectorized backtest.
@@ -84,41 +85,39 @@ class VectorizedBacktester:
         strategy = load_strategy(strategy_name, params=strategy_params)
 
         # Use vectorized signal generation if available
-        if hasattr(strategy, 'generate_signals_vectorized'):
+        if hasattr(strategy, "generate_signals_vectorized"):
             signals = strategy.generate_signals_vectorized(self.data)
             if signals is not None:
-                self.data['Signal'] = signals
+                self.data["Signal"] = signals
 
-        if 'Signal' not in self.data.columns:
+        if "Signal" not in self.data.columns:
             # Fall back to row-by-row
             result = strategy.generate_signal(self.data.copy())
             if isinstance(result, int):
                 # Single signal - need to iterate
                 signals = []
                 for i in range(len(self.data)):
-                    sig = strategy.generate_signal(self.data.iloc[:i+1])
+                    sig = strategy.generate_signal(self.data.iloc[: i + 1])
                     signals.append(sig)
-                self.data['Signal'] = signals
-            elif isinstance(result, pd.DataFrame) and 'Signal' in result.columns:
-                self.data['Signal'] = result['Signal'].values
+                self.data["Signal"] = signals
+            elif isinstance(result, pd.DataFrame) and "Signal" in result.columns:
+                self.data["Signal"] = result["Signal"].values
 
         # Calculate ATR for position sizing
-        if 'ATR' not in self.data.columns:
-            high = self.data['High'].values
-            low = self.data['Low'].values
-            close = self.data['Close'].values
+        if "ATR" not in self.data.columns:
+            high = self.data["High"].values
+            low = self.data["Low"].values
+            close = self.data["Close"].values
 
-            tr = np.maximum(high - low,
-                           np.maximum(np.abs(high - np.roll(close, 1)),
-                                     np.abs(low - np.roll(close, 1))))
+            tr = np.maximum(high - low, np.maximum(np.abs(high - np.roll(close, 1)), np.abs(low - np.roll(close, 1))))
             tr[0] = high[0] - low[0]
-            self.data['ATR'] = pd.Series(tr).rolling(14).mean().values
+            self.data["ATR"] = pd.Series(tr).rolling(14).mean().values
 
         # Vectorized position simulation
-        close = self.data['Close'].values
-        signals = self.data['Signal'].values
-        atr = self.data['ATR'].values
-        volume = self.data['Volume'].values if 'Volume' in self.data.columns else np.ones(len(close)) * 1000000
+        close = self.data["Close"].values
+        signals = self.data["Signal"].values
+        atr = self.data["ATR"].values
+        volume = self.data["Volume"].values if "Volume" in self.data.columns else np.ones(len(close)) * 1000000
 
         n = len(close)
         position = np.zeros(n)
@@ -129,15 +128,15 @@ class VectorizedBacktester:
         cash[0] = self.initial_capital
 
         for i in range(1, n):
-            cash[i] = cash[i-1]
-            position[i] = position[i-1]
+            cash[i] = cash[i - 1]
+            position[i] = position[i - 1]
 
             current_price = close[i]
             current_atr = atr[i] if not np.isnan(atr[i]) else close[i] * 0.02
             signal = signals[i]
 
             # Position sizing
-            if position_sizing == 'volatility_scaled':
+            if position_sizing == "volatility_scaled":
                 target_vol = 0.15  # 15% annual vol target
                 daily_vol = current_atr / current_price
                 size_multiplier = target_vol / (daily_vol * np.sqrt(252)) if daily_vol > 0 else 1
@@ -153,7 +152,7 @@ class VectorizedBacktester:
                 # Close short if any
                 if position[i] < 0:
                     exec_price = self.slippage.calculate_slippage(
-                        current_price, abs(int(position[i])), 'buy', volume[i], current_atr/current_price*100
+                        current_price, abs(int(position[i])), "buy", volume[i], current_atr / current_price * 100
                     )
                     cost = abs(position[i]) * exec_price * (1 + self.transaction_cost)
                     cash[i] -= cost
@@ -161,50 +160,44 @@ class VectorizedBacktester:
 
                 # Open long
                 exec_price = self.slippage.calculate_slippage(
-                    current_price, quantity, 'buy', volume[i], current_atr/current_price*100
+                    current_price, quantity, "buy", volume[i], current_atr / current_price * 100
                 )
                 cost = quantity * exec_price * (1 + self.transaction_cost)
                 if cost <= cash[i]:
                     cash[i] -= cost
                     position[i] = quantity
-                    trades.append({
-                        'idx': i,
-                        'action': 'BUY',
-                        'price': exec_price,
-                        'quantity': quantity,
-                        'stop_loss': current_price - stop_loss_atr * current_atr
-                    })
+                    trades.append(
+                        {
+                            "idx": i,
+                            "action": "BUY",
+                            "price": exec_price,
+                            "quantity": quantity,
+                            "stop_loss": current_price - stop_loss_atr * current_atr,
+                        }
+                    )
 
             elif signal == -1 and position[i] >= 0 and quantity > 0:
                 # Close long if any
                 if position[i] > 0:
                     exec_price = self.slippage.calculate_slippage(
-                        current_price, int(position[i]), 'sell', volume[i], current_atr/current_price*100
+                        current_price, int(position[i]), "sell", volume[i], current_atr / current_price * 100
                     )
                     proceeds = position[i] * exec_price * (1 - self.transaction_cost)
                     cash[i] += proceeds
                     position[i] = 0
-                    trades.append({
-                        'idx': i,
-                        'action': 'SELL',
-                        'price': exec_price,
-                        'quantity': int(position[i-1])
-                    })
+                    trades.append({"idx": i, "action": "SELL", "price": exec_price, "quantity": int(position[i - 1])})
 
             # Check stop loss
             if len(trades) > 0 and position[i] > 0:
                 last_trade = trades[-1]
-                if 'stop_loss' in last_trade and current_price <= last_trade['stop_loss']:
+                if "stop_loss" in last_trade and current_price <= last_trade["stop_loss"]:
                     exec_price = current_price * (1 - 0.001)  # Extra slippage on stop
                     proceeds = position[i] * exec_price * (1 - self.transaction_cost)
                     cash[i] += proceeds
                     position[i] = 0
-                    trades.append({
-                        'idx': i,
-                        'action': 'STOP_LOSS',
-                        'price': exec_price,
-                        'quantity': int(position[i-1])
-                    })
+                    trades.append(
+                        {"idx": i, "action": "STOP_LOSS", "price": exec_price, "quantity": int(position[i - 1])}
+                    )
 
             portfolio_value[i] = cash[i] + position[i] * current_price
 
@@ -213,21 +206,21 @@ class VectorizedBacktester:
 
         # Build result DataFrame
         result = self.data.copy()
-        result['Position'] = position
-        result['Cash'] = cash
-        result['Portfolio_Value'] = portfolio_value
-        result['Strategy_Return'] = pd.Series(portfolio_value).pct_change().fillna(0)
+        result["Position"] = position
+        result["Cash"] = cash
+        result["Portfolio_Value"] = portfolio_value
+        result["Strategy_Return"] = pd.Series(portfolio_value).pct_change().fillna(0)
 
         # Calculate drawdown
         peak = np.maximum.accumulate(portfolio_value)
-        result['Drawdown'] = (peak - portfolio_value) / peak
+        result["Drawdown"] = (peak - portfolio_value) / peak
 
         return result
 
-    def get_metrics(self, result: pd.DataFrame) -> Dict[str, float]:
+    def get_metrics(self, result: pd.DataFrame) -> dict[str, float]:
         """Calculate performance metrics from backtest result."""
-        returns = result['Strategy_Return'].values
-        portfolio_value = result['Portfolio_Value'].values
+        returns = result["Strategy_Return"].values
+        portfolio_value = result["Portfolio_Value"].values
 
         total_return = (portfolio_value[-1] - self.initial_capital) / self.initial_capital
 
@@ -259,15 +252,15 @@ class VectorizedBacktester:
         # Profit factor
         gains = np.sum(returns[returns > 0])
         losses = abs(np.sum(returns[returns < 0]))
-        profit_factor = gains / losses if losses > 0 else float('inf')
+        profit_factor = gains / losses if losses > 0 else float("inf")
 
         return {
-            'total_return': total_return,
-            'sharpe_ratio': sharpe,
-            'sortino_ratio': sortino,
-            'max_drawdown': max_drawdown,
-            'win_rate': win_rate,
-            'profit_factor': profit_factor,
-            'num_trades': len(trade_returns),
-            'final_value': portfolio_value[-1]
+            "total_return": total_return,
+            "sharpe_ratio": sharpe,
+            "sortino_ratio": sortino,
+            "max_drawdown": max_drawdown,
+            "win_rate": win_rate,
+            "profit_factor": profit_factor,
+            "num_trades": len(trade_returns),
+            "final_value": portfolio_value[-1],
         }

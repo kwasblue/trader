@@ -6,10 +6,11 @@ Tests Phase 0 implementation:
 - OrderResult commission field and filled_value property
 """
 
-import pytest
 from datetime import datetime, timezone
 
-from core.app_types import SignalContext, OrderResult
+import pytest
+
+from core.app_types import OrderResult, SignalContext
 
 
 class TestSignalContext:
@@ -27,7 +28,7 @@ class TestSignalContext:
             timestamp=ts,
             strategy_name="momentum",
             confidence=0.85,
-            market_open=True
+            market_open=True,
         )
 
         assert context.symbol == "AAPL"
@@ -45,14 +46,7 @@ class TestSignalContext:
     def test_signal_context_defaults(self):
         """Test SignalContext default values."""
         ts = datetime.now(timezone.utc)
-        context = SignalContext(
-            symbol="MSFT",
-            signal=0,
-            price=300.0,
-            atr=3.0,
-            regime="normal",
-            timestamp=ts
-        )
+        context = SignalContext(symbol="MSFT", signal=0, price=300.0, atr=3.0, regime="normal", timestamp=ts)
 
         # Check defaults
         assert context.strategy_name is None
@@ -64,12 +58,7 @@ class TestSignalContext:
     def test_signal_context_from_kwargs(self):
         """Test SignalContext.from_kwargs factory method."""
         context = SignalContext.from_kwargs(
-            symbol="AAPL",
-            signal=1,
-            price=150.25,
-            atr=2.5,
-            regime="trending",
-            strategy_name="momentum"
+            symbol="AAPL", signal=1, price=150.25, atr=2.5, regime="trending", strategy_name="momentum"
         )
 
         assert context.symbol == "AAPL"
@@ -82,10 +71,7 @@ class TestSignalContext:
 
     def test_signal_context_from_kwargs_with_defaults(self):
         """Test from_kwargs with minimal arguments."""
-        context = SignalContext.from_kwargs(
-            symbol="TSLA",
-            signal=-1
-        )
+        context = SignalContext.from_kwargs(symbol="TSLA", signal=-1)
 
         assert context.symbol == "TSLA"
         assert context.signal == -1
@@ -106,7 +92,7 @@ class TestSignalContext:
             # Extra kwargs that should go to metadata
             bar_id=12345,
             trade_gate_passed=True,
-            custom_indicator=0.75
+            custom_indicator=0.75,
         )
 
         assert context.metadata["bar_id"] == 12345
@@ -156,31 +142,20 @@ class TestOrderResultEnhancements:
             filled_qty=100,
             avg_fill_price=150.0,
             commission=1.50,
-            status="filled"
+            status="filled",
         )
 
         assert result.commission == 1.50
 
     def test_order_result_commission_default(self):
         """Test commission defaults to None."""
-        result = OrderResult(
-            order_id="ORD123",
-            symbol="AAPL",
-            filled_qty=100,
-            avg_fill_price=150.0
-        )
+        result = OrderResult(order_id="ORD123", symbol="AAPL", filled_qty=100, avg_fill_price=150.0)
 
         assert result.commission is None
 
     def test_order_result_filled_value(self):
         """Test filled_value property calculation."""
-        result = OrderResult(
-            order_id="ORD123",
-            symbol="AAPL",
-            filled_qty=100,
-            avg_fill_price=150.25,
-            status="filled"
-        )
+        result = OrderResult(order_id="ORD123", symbol="AAPL", filled_qty=100, avg_fill_price=150.25, status="filled")
 
         assert result.filled_value == 100 * 150.25
         assert result.filled_value == 15025.0
@@ -188,12 +163,7 @@ class TestOrderResultEnhancements:
     def test_order_result_filled_value_partial_fill(self):
         """Test filled_value with partial fill."""
         result = OrderResult(
-            order_id="ORD123",
-            symbol="AAPL",
-            qty=100,
-            filled_qty=50,
-            avg_fill_price=150.0,
-            status="partial_fill"
+            order_id="ORD123", symbol="AAPL", qty=100, filled_qty=50, avg_fill_price=150.0, status="partial_fill"
         )
 
         assert result.filled_value == 50 * 150.0
@@ -201,12 +171,7 @@ class TestOrderResultEnhancements:
 
     def test_order_result_filled_value_no_fill(self):
         """Test filled_value when no fill occurred."""
-        result = OrderResult(
-            order_id="ORD123",
-            symbol="AAPL",
-            qty=100,
-            status="pending"
-        )
+        result = OrderResult(order_id="ORD123", symbol="AAPL", qty=100, status="pending")
 
         # No filled_qty or avg_fill_price
         assert result.filled_value == 0.0
@@ -218,7 +183,7 @@ class TestOrderResultEnhancements:
             symbol="AAPL",
             filled_qty=100,
             avg_price=150.0,  # Legacy field
-            status="filled"
+            status="filled",
         )
 
         # Should use avg_price when avg_fill_price is None
@@ -226,13 +191,7 @@ class TestOrderResultEnhancements:
 
     def test_order_result_to_dict_includes_commission(self):
         """Test to_dict includes commission field."""
-        result = OrderResult(
-            order_id="ORD123",
-            symbol="AAPL",
-            filled_qty=100,
-            avg_fill_price=150.0,
-            commission=2.50
-        )
+        result = OrderResult(order_id="ORD123", symbol="AAPL", filled_qty=100, avg_fill_price=150.0, commission=2.50)
 
         d = result.to_dict()
         assert "commission" in d
@@ -266,7 +225,8 @@ class TestHandleSignalContextIntegration:
     @pytest.fixture
     def mock_engine_components(self):
         """Create minimal components for mock engine testing."""
-        from unittest.mock import Mock, AsyncMock, MagicMock
+        from unittest.mock import AsyncMock, MagicMock, Mock
+
         from core.logic.portfolio_state import PortfolioState
 
         # Create mocks
@@ -293,13 +253,13 @@ class TestHandleSignalContextIntegration:
         portfolio = PortfolioState(cash=100000, total_value=100000)
 
         return {
-            'broker': broker,
-            'executor': executor,
-            'sizer': sizer,
-            'performance_tracker': performance_tracker,
-            'trade_logic_manager': trade_logic_manager,
-            'trade_logic': trade_logic,
-            'portfolio': portfolio
+            "broker": broker,
+            "executor": executor,
+            "sizer": sizer,
+            "performance_tracker": performance_tracker,
+            "trade_logic_manager": trade_logic_manager,
+            "trade_logic": trade_logic,
+            "portfolio": portfolio,
         }
 
     @pytest.mark.asyncio
@@ -308,12 +268,12 @@ class TestHandleSignalContextIntegration:
         from core.logic.mock_execution_engine import MockExecutionEngine
 
         engine = MockExecutionEngine(
-            broker=mock_engine_components['broker'],
-            executor=mock_engine_components['executor'],
-            sizer=mock_engine_components['sizer'],
-            performance_tracker=mock_engine_components['performance_tracker'],
-            trade_logic_manager=mock_engine_components['trade_logic_manager'],
-            portfolio=mock_engine_components['portfolio']
+            broker=mock_engine_components["broker"],
+            executor=mock_engine_components["executor"],
+            sizer=mock_engine_components["sizer"],
+            performance_tracker=mock_engine_components["performance_tracker"],
+            trade_logic_manager=mock_engine_components["trade_logic_manager"],
+            portfolio=mock_engine_components["portfolio"],
         )
 
         # Set minimum confidence threshold
@@ -326,7 +286,7 @@ class TestHandleSignalContextIntegration:
             price=150.0,
             atr=2.0,
             regime="normal",
-            confidence=0.3  # Below threshold
+            confidence=0.3,  # Below threshold
         )
 
         result = await engine.handle_signal_context(context)
@@ -340,12 +300,12 @@ class TestHandleSignalContextIntegration:
         from core.logic.mock_execution_engine import MockExecutionEngine
 
         engine = MockExecutionEngine(
-            broker=mock_engine_components['broker'],
-            executor=mock_engine_components['executor'],
-            sizer=mock_engine_components['sizer'],
-            performance_tracker=mock_engine_components['performance_tracker'],
-            trade_logic_manager=mock_engine_components['trade_logic_manager'],
-            portfolio=mock_engine_components['portfolio']
+            broker=mock_engine_components["broker"],
+            executor=mock_engine_components["executor"],
+            sizer=mock_engine_components["sizer"],
+            performance_tracker=mock_engine_components["performance_tracker"],
+            trade_logic_manager=mock_engine_components["trade_logic_manager"],
+            portfolio=mock_engine_components["portfolio"],
         )
 
         # Set minimum confidence threshold
@@ -358,7 +318,7 @@ class TestHandleSignalContextIntegration:
             price=150.0,
             atr=2.0,
             regime="normal",
-            confidence=0.8  # Above threshold
+            confidence=0.8,  # Above threshold
         )
 
         result = await engine.handle_signal_context(context)
@@ -372,12 +332,12 @@ class TestHandleSignalContextIntegration:
         from core.logic.mock_execution_engine import MockExecutionEngine
 
         engine = MockExecutionEngine(
-            broker=mock_engine_components['broker'],
-            executor=mock_engine_components['executor'],
-            sizer=mock_engine_components['sizer'],
-            performance_tracker=mock_engine_components['performance_tracker'],
-            trade_logic_manager=mock_engine_components['trade_logic_manager'],
-            portfolio=mock_engine_components['portfolio']
+            broker=mock_engine_components["broker"],
+            executor=mock_engine_components["executor"],
+            sizer=mock_engine_components["sizer"],
+            performance_tracker=mock_engine_components["performance_tracker"],
+            trade_logic_manager=mock_engine_components["trade_logic_manager"],
+            portfolio=mock_engine_components["portfolio"],
         )
 
         context = SignalContext.from_kwargs(
@@ -385,7 +345,7 @@ class TestHandleSignalContextIntegration:
             signal=0,  # Hold
             price=150.0,
             atr=2.0,
-            regime="normal"
+            regime="normal",
         )
 
         result = await engine.handle_signal_context(context)
@@ -396,18 +356,19 @@ class TestHandleSignalContextIntegration:
     @pytest.mark.asyncio
     async def test_handle_signal_with_context_and_state(self, mock_engine_components):
         """Test that handle_signal works with context and state arguments."""
-        from core.logic.mock_execution_engine import MockExecutionEngine
-        from core.logic.symbol_state import SymbolState
-        from core.app_types import SignalContext
         from datetime import datetime, timezone
 
+        from core.app_types import SignalContext
+        from core.logic.mock_execution_engine import MockExecutionEngine
+        from core.logic.symbol_state import SymbolState
+
         engine = MockExecutionEngine(
-            broker=mock_engine_components['broker'],
-            executor=mock_engine_components['executor'],
-            sizer=mock_engine_components['sizer'],
-            performance_tracker=mock_engine_components['performance_tracker'],
-            trade_logic_manager=mock_engine_components['trade_logic_manager'],
-            portfolio=mock_engine_components['portfolio']
+            broker=mock_engine_components["broker"],
+            executor=mock_engine_components["executor"],
+            sizer=mock_engine_components["sizer"],
+            performance_tracker=mock_engine_components["performance_tracker"],
+            trade_logic_manager=mock_engine_components["trade_logic_manager"],
+            portfolio=mock_engine_components["portfolio"],
         )
 
         state = SymbolState(symbol="AAPL")
@@ -420,7 +381,7 @@ class TestHandleSignalContextIntegration:
             atr=2.0,
             regime="normal",
             timestamp=datetime.now(timezone.utc),
-            strategy_name="test_strategy"
+            strategy_name="test_strategy",
         )
         result = await engine.handle_signal(context, state)
 
@@ -435,12 +396,12 @@ class TestHandleSignalContextIntegration:
         from core.logic.symbol_state import SymbolState
 
         engine = MockExecutionEngine(
-            broker=mock_engine_components['broker'],
-            executor=mock_engine_components['executor'],
-            sizer=mock_engine_components['sizer'],
-            performance_tracker=mock_engine_components['performance_tracker'],
-            trade_logic_manager=mock_engine_components['trade_logic_manager'],
-            portfolio=mock_engine_components['portfolio']
+            broker=mock_engine_components["broker"],
+            executor=mock_engine_components["executor"],
+            sizer=mock_engine_components["sizer"],
+            performance_tracker=mock_engine_components["performance_tracker"],
+            trade_logic_manager=mock_engine_components["trade_logic_manager"],
+            portfolio=mock_engine_components["portfolio"],
         )
 
         # Create state with specific values
@@ -454,10 +415,10 @@ class TestHandleSignalContextIntegration:
             atr=2.0,
             regime="normal",
             strategy_name="new_strategy",
-            state=state  # Pass state in metadata
+            state=state,  # Pass state in metadata
         )
 
-        result = await engine.handle_signal_context(context)
+        await engine.handle_signal_context(context)
 
         # State should be updated with new strategy name
         assert state.strategy_name == "new_strategy"
@@ -468,12 +429,12 @@ class TestHandleSignalContextIntegration:
         from core.logic.mock_execution_engine import MockExecutionEngine
 
         engine = MockExecutionEngine(
-            broker=mock_engine_components['broker'],
-            executor=mock_engine_components['executor'],
-            sizer=mock_engine_components['sizer'],
-            performance_tracker=mock_engine_components['performance_tracker'],
-            trade_logic_manager=mock_engine_components['trade_logic_manager'],
-            portfolio=mock_engine_components['portfolio']
+            broker=mock_engine_components["broker"],
+            executor=mock_engine_components["executor"],
+            sizer=mock_engine_components["sizer"],
+            performance_tracker=mock_engine_components["performance_tracker"],
+            trade_logic_manager=mock_engine_components["trade_logic_manager"],
+            portfolio=mock_engine_components["portfolio"],
         )
 
         # Don't provide state
@@ -482,13 +443,13 @@ class TestHandleSignalContextIntegration:
             signal=1,
             price=200.0,
             atr=3.0,
-            regime="normal"
+            regime="normal",
         )
 
         # Before call, no state exists
         assert "TSLA" not in engine.symbol_states
 
-        result = await engine.handle_signal_context(context)
+        await engine.handle_signal_context(context)
 
         # State should be created
         assert "TSLA" in engine.symbol_states
@@ -496,16 +457,15 @@ class TestHandleSignalContextIntegration:
     @pytest.mark.asyncio
     async def test_handle_signal_context_passes_market_open(self, mock_engine_components):
         """Test that market_open from context is passed to trade logic."""
-        from unittest.mock import call
         from core.logic.mock_execution_engine import MockExecutionEngine
 
         engine = MockExecutionEngine(
-            broker=mock_engine_components['broker'],
-            executor=mock_engine_components['executor'],
-            sizer=mock_engine_components['sizer'],
-            performance_tracker=mock_engine_components['performance_tracker'],
-            trade_logic_manager=mock_engine_components['trade_logic_manager'],
-            portfolio=mock_engine_components['portfolio']
+            broker=mock_engine_components["broker"],
+            executor=mock_engine_components["executor"],
+            sizer=mock_engine_components["sizer"],
+            performance_tracker=mock_engine_components["performance_tracker"],
+            trade_logic_manager=mock_engine_components["trade_logic_manager"],
+            portfolio=mock_engine_components["portfolio"],
         )
 
         context = SignalContext.from_kwargs(
@@ -514,16 +474,16 @@ class TestHandleSignalContextIntegration:
             price=150.0,
             atr=2.0,
             regime="normal",
-            market_open=False  # Market closed
+            market_open=False,  # Market closed
         )
 
         await engine.handle_signal_context(context)
 
         # Check that should_trade was called with context containing market_open=False
-        trade_logic = mock_engine_components['trade_logic']
+        trade_logic = mock_engine_components["trade_logic"]
         call_kwargs = trade_logic.should_trade.call_args.kwargs
         # New API passes context object, check market_open from context
-        passed_context = call_kwargs.get('context')
+        passed_context = call_kwargs.get("context")
         assert passed_context is not None
         assert passed_context.market_open is False
 
@@ -533,42 +493,43 @@ class TestSignalContextAbstractMethod:
 
     def test_handle_signal_context_is_abstract(self):
         """Test that handle_signal_context is abstract in base class."""
+
         from core.base.execution_engine_base import ExecutionEngineBase
-        import inspect
 
         # Check that handle_signal_context is abstract
-        assert hasattr(ExecutionEngineBase, 'handle_signal_context')
-        method = getattr(ExecutionEngineBase, 'handle_signal_context')
-        assert getattr(method, '__isabstractmethod__', False)
+        assert hasattr(ExecutionEngineBase, "handle_signal_context")
+        method = getattr(ExecutionEngineBase, "handle_signal_context")
+        assert getattr(method, "__isabstractmethod__", False)
 
     def test_handle_signal_context_signature(self):
         """Test that handle_signal_context has correct signature."""
-        from core.base.execution_engine_base import ExecutionEngineBase
         import inspect
+
+        from core.base.execution_engine_base import ExecutionEngineBase
 
         sig = inspect.signature(ExecutionEngineBase.handle_signal_context)
         params = list(sig.parameters.keys())
 
         # Should have self and context
-        assert 'self' in params
-        assert 'context' in params
+        assert "self" in params
+        assert "context" in params
 
     def test_live_engine_implements_handle_signal_context(self):
         """Test that LiveExecutionEngine implements handle_signal_context."""
-        from core.logic.live_execution_engine import LiveExecutionEngine
-        import inspect
 
-        assert hasattr(LiveExecutionEngine, 'handle_signal_context')
+        from core.logic.live_execution_engine import LiveExecutionEngine
+
+        assert hasattr(LiveExecutionEngine, "handle_signal_context")
         # Check it's not abstract (overridden)
-        method = getattr(LiveExecutionEngine, 'handle_signal_context')
-        assert not getattr(method, '__isabstractmethod__', False)
+        method = getattr(LiveExecutionEngine, "handle_signal_context")
+        assert not getattr(method, "__isabstractmethod__", False)
 
     def test_mock_engine_implements_handle_signal_context(self):
         """Test that MockExecutionEngine implements handle_signal_context."""
-        from core.logic.mock_execution_engine import MockExecutionEngine
-        import inspect
 
-        assert hasattr(MockExecutionEngine, 'handle_signal_context')
+        from core.logic.mock_execution_engine import MockExecutionEngine
+
+        assert hasattr(MockExecutionEngine, "handle_signal_context")
         # Check it's not abstract (overridden)
-        method = getattr(MockExecutionEngine, 'handle_signal_context')
-        assert not getattr(method, '__isabstractmethod__', False)
+        method = getattr(MockExecutionEngine, "handle_signal_context")
+        assert not getattr(method, "__isabstractmethod__", False)

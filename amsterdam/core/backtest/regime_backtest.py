@@ -26,17 +26,16 @@ Usage:
 from __future__ import annotations
 
 import json
+import logging
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
 import numpy as np
 import pandas as pd
-from dataclasses import dataclass, field
-from typing import Dict, List, Any, Optional, Tuple
-from pathlib import Path
-from collections import defaultdict
-import logging
 
-from strategies.strategy_registry import load_strategy, list_strategies
 from core.backtest.validation import validate_ohlcv_data
-from core.backtest.slippage_models import FixedSlippage
+from strategies.strategy_registry import load_strategy
 
 logger = logging.getLogger(__name__)
 
@@ -45,32 +44,34 @@ REGIME_TYPES = ["low_volatility", "normal", "high_volatility"]
 
 # Default strategies to test
 DEFAULT_STRATEGIES = [
-    "sma", "ema", "macd", "rsi", "bollinger",
-    "momentum", "meanreversion", "stochastic", "adx", "donchian"
+    "sma",
+    "ema",
+    "macd",
+    "rsi",
+    "bollinger",
+    "momentum",
+    "meanreversion",
+    "stochastic",
+    "adx",
+    "donchian",
 ]
 
 
 def calculate_atr(high: np.ndarray, low: np.ndarray, close: np.ndarray, period: int = 14) -> np.ndarray:
     """Calculate ATR series."""
-    tr = np.maximum(
-        high - low,
-        np.maximum(
-            np.abs(high - np.roll(close, 1)),
-            np.abs(low - np.roll(close, 1))
-        )
-    )
+    tr = np.maximum(high - low, np.maximum(np.abs(high - np.roll(close, 1)), np.abs(low - np.roll(close, 1))))
     tr[0] = high[0] - low[0]
 
     atr = np.zeros(len(tr))
     atr[:period] = np.nan
 
     for i in range(period, len(tr)):
-        atr[i] = np.mean(tr[i-period+1:i+1])
+        atr[i] = np.mean(tr[i - period + 1 : i + 1])
 
     return atr
 
 
-def classify_regime(atr: float, atr_history: List[float]) -> str:
+def classify_regime(atr: float, atr_history: list[float]) -> str:
     """
     Classify market regime based on ATR relative to historical values.
     Matches the live system's classification logic.
@@ -96,6 +97,7 @@ def classify_regime(atr: float, atr_history: List[float]) -> str:
 @dataclass
 class RegimeStats:
     """Statistics for a single regime."""
+
     regime: str
     bar_count: int
     pct_of_total: float
@@ -106,6 +108,7 @@ class RegimeStats:
 @dataclass
 class StrategyRegimeResult:
     """Result of testing a strategy within a specific regime."""
+
     strategy: str
     regime: str
     total_return: float
@@ -120,21 +123,22 @@ class StrategyRegimeResult:
 @dataclass
 class RegimeAnalysisResult:
     """Complete result of regime analysis."""
+
     symbol: str
     data_period: str
     total_bars: int
 
     # Regime distribution
-    regime_stats: Dict[str, RegimeStats]
+    regime_stats: dict[str, RegimeStats]
 
     # Strategy performance by regime
-    strategy_results: Dict[str, Dict[str, StrategyRegimeResult]]  # regime -> strategy -> result
+    strategy_results: dict[str, dict[str, StrategyRegimeResult]]  # regime -> strategy -> result
 
     # Best strategy per regime
-    best_strategies: Dict[str, str]  # regime -> best strategy name
+    best_strategies: dict[str, str]  # regime -> best strategy name
 
     # Optimal routing config (ready for strategy_routing.json)
-    routing_config: Dict[str, Any]
+    routing_config: dict[str, Any]
 
 
 class RegimeBacktester:
@@ -153,7 +157,7 @@ class RegimeBacktester:
         symbol: str = "SYMBOL",
         initial_capital: float = 10000.0,
         transaction_cost: float = 0.001,
-        strategies: Optional[List[str]] = None,
+        strategies: list[str] | None = None,
     ):
         """
         Initialize the regime backtester.
@@ -185,10 +189,7 @@ class RegimeBacktester:
 
     def _normalize_columns(self) -> None:
         """Normalize column names."""
-        column_map = {
-            "open": "Open", "high": "High", "low": "Low",
-            "close": "Close", "volume": "Volume"
-        }
+        column_map = {"open": "Open", "high": "High", "low": "Low", "close": "Close", "volume": "Volume"}
         for old, new in column_map.items():
             if old in self.data.columns and new not in self.data.columns:
                 self.data = self.data.rename(columns={old: new})
@@ -212,15 +213,12 @@ class RegimeBacktester:
             if not np.isnan(current_atr):
                 atr_history.append(current_atr)
 
-            regime = classify_regime(
-                current_atr if not np.isnan(current_atr) else None,
-                atr_history
-            )
+            regime = classify_regime(current_atr if not np.isnan(current_atr) else None, atr_history)
             regimes.append(regime)
 
         self.data["Regime"] = regimes
 
-    def get_regime_distribution(self) -> Dict[str, RegimeStats]:
+    def get_regime_distribution(self) -> dict[str, RegimeStats]:
         """Get statistics about regime distribution in the data."""
         stats = {}
         total = len(self.data)
@@ -266,7 +264,7 @@ class RegimeBacktester:
             # Fall back to row-by-row
             for i in range(n):
                 try:
-                    sig = strategy.generate_signal(self.data.iloc[:i+1])
+                    sig = strategy.generate_signal(self.data.iloc[: i + 1])
                     signals[i] = int(sig) if sig in (-1, 0, 1) else 0
                 except Exception:
                     signals[i] = 0
@@ -420,13 +418,11 @@ class RegimeBacktester:
                 print(f"  {regime}: {stats.bar_count} bars ({stats.pct_of_total:.1f}%)")
 
         # Test each strategy
-        strategy_results: Dict[str, Dict[str, StrategyRegimeResult]] = {
-            regime: {} for regime in REGIME_TYPES
-        }
+        strategy_results: dict[str, dict[str, StrategyRegimeResult]] = {regime: {} for regime in REGIME_TYPES}
 
         for i, strategy_name in enumerate(self.strategies):
             if verbose:
-                print(f"\n[{i+1}/{len(self.strategies)}] Testing {strategy_name}...")
+                print(f"\n[{i + 1}/{len(self.strategies)}] Testing {strategy_name}...")
 
             # Generate signals once
             signals = self._generate_signals(strategy_name)
@@ -437,27 +433,21 @@ class RegimeBacktester:
                 strategy_results[regime][strategy_name] = result
 
                 if verbose:
-                    print(f"  {regime}: return={result.total_return:+.1%}, "
-                          f"sharpe={result.sharpe_ratio:.2f}, trades={result.num_trades}")
+                    print(
+                        f"  {regime}: return={result.total_return:+.1%}, "
+                        f"sharpe={result.sharpe_ratio:.2f}, trades={result.num_trades}"
+                    )
 
         # Find best strategy per regime
         best_strategies = {}
         for regime in REGIME_TYPES:
             regime_results = strategy_results[regime]
             if regime_results:
-                best = max(
-                    regime_results.keys(),
-                    key=lambda s: getattr(regime_results[s], metric, 0)
-                )
+                best = max(regime_results.keys(), key=lambda s: getattr(regime_results[s], metric, 0))
                 best_strategies[regime] = best
 
         # Build routing config
-        routing_config = {
-            self.symbol: {
-                regime: best_strategies.get(regime, "momentum")
-                for regime in REGIME_TYPES
-            }
-        }
+        routing_config = {self.symbol: {regime: best_strategies.get(regime, "momentum") for regime in REGIME_TYPES}}
         routing_config[self.symbol]["default"] = best_strategies.get("normal", "momentum")
 
         # Get data period
@@ -505,8 +495,7 @@ class RegimeBacktester:
             best = result.best_strategies.get(regime, "N/A")
             if best in result.strategy_results[regime]:
                 r = result.strategy_results[regime][best]
-                print(f"  {regime:<18} -> {best:<15} "
-                      f"(Sharpe: {r.sharpe_ratio:>5.2f}, Return: {r.total_return:>+6.1%})")
+                print(f"  {regime:<18} -> {best:<15} (Sharpe: {r.sharpe_ratio:>5.2f}, Return: {r.total_return:>+6.1%})")
             else:
                 print(f"  {regime:<18} -> {best:<15}")
         print()
@@ -530,8 +519,10 @@ class RegimeBacktester:
             for strat in sorted_strats[:5]:  # Top 5
                 r = result.strategy_results[regime][strat]
                 marker = " *" if strat == result.best_strategies.get(regime) else "  "
-                print(f"{marker}{strat:<14} {r.total_return:>+9.1%} {r.sharpe_ratio:>8.2f} "
-                      f"{r.win_rate:>9.1%} {r.num_trades:>8}")
+                print(
+                    f"{marker}{strat:<14} {r.total_return:>+9.1%} {r.sharpe_ratio:>8.2f} "
+                    f"{r.win_rate:>9.1%} {r.num_trades:>8}"
+                )
             print()
 
         # Routing config
@@ -544,7 +535,7 @@ class RegimeBacktester:
     def save_routing_config(
         self,
         result: RegimeAnalysisResult,
-        config_path: Optional[str] = None,
+        config_path: str | None = None,
         merge: bool = True,
     ) -> Path:
         """
@@ -582,13 +573,13 @@ class RegimeBacktester:
 
 
 def run_multi_symbol_regime_analysis(
-    symbols: List[str],
+    symbols: list[str],
     days: int = 365,
-    strategies: Optional[List[str]] = None,
+    strategies: list[str] | None = None,
     metric: str = "sharpe_ratio",
     save_config: bool = False,
     verbose: bool = True,
-) -> Dict[str, RegimeAnalysisResult]:
+) -> dict[str, RegimeAnalysisResult]:
     """
     Run regime analysis across multiple symbols.
 
@@ -611,9 +602,9 @@ def run_multi_symbol_regime_analysis(
 
     for symbol in symbols:
         if verbose:
-            print(f"\n{'='*60}")
+            print(f"\n{'=' * 60}")
             print(f"  Processing {symbol}")
-            print(f"{'='*60}")
+            print(f"{'=' * 60}")
 
         try:
             data = pipeline.get_data(symbol)
@@ -672,12 +663,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Regime-aware strategy backtesting")
     parser.add_argument("symbols", nargs="+", help="Symbols to analyze")
     parser.add_argument("-d", "--days", type=int, default=365, help="Days of data")
-    parser.add_argument("-s", "--strategies", default=None,
-                       help="Comma-separated strategies to test")
-    parser.add_argument("-m", "--metric", default="sharpe_ratio",
-                       choices=["sharpe_ratio", "total_return", "win_rate"])
-    parser.add_argument("--save", action="store_true",
-                       help="Save to strategy_routing.json")
+    parser.add_argument("-s", "--strategies", default=None, help="Comma-separated strategies to test")
+    parser.add_argument("-m", "--metric", default="sharpe_ratio", choices=["sharpe_ratio", "total_return", "win_rate"])
+    parser.add_argument("--save", action="store_true", help="Save to strategy_routing.json")
 
     args = parser.parse_args()
 

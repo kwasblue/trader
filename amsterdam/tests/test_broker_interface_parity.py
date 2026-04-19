@@ -9,16 +9,13 @@ Tests Phase 1 implementation:
 - Deprecated sync methods warn
 """
 
+from datetime import datetime
+
 import pytest
-import asyncio
-import warnings
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
-from datetime import datetime, timezone
 
 from core.app_types import OrderResult
-from core.enums import OrderSide, OrderStatus
 from core.broker.mock_broker import MockBroker
-from core.logic.portfolio_state import PortfolioState
+from core.enums import OrderSide, OrderStatus
 
 
 class TestMockBrokerInterface:
@@ -32,12 +29,7 @@ class TestMockBrokerInterface:
     @pytest.mark.asyncio
     async def test_place_market_order_returns_order_result(self, mock_broker):
         """Test that place_market_order returns OrderResult."""
-        result = await mock_broker.place_market_order(
-            symbol="AAPL",
-            qty=10,
-            side=OrderSide.BUY,
-            price=150.0
-        )
+        result = await mock_broker.place_market_order(symbol="AAPL", qty=10, side=OrderSide.BUY, price=150.0)
 
         assert isinstance(result, OrderResult)
         assert result.symbol == "AAPL"
@@ -48,17 +40,13 @@ class TestMockBrokerInterface:
     async def test_place_market_order_is_async(self, mock_broker):
         """Verify place_market_order is an async method."""
         import inspect
+
         assert inspect.iscoroutinefunction(mock_broker.place_market_order)
 
     @pytest.mark.asyncio
     async def test_place_oco_order_returns_order_result(self, mock_broker):
         """Test that place_oco_order returns OrderResult."""
-        result = await mock_broker.place_oco_order(
-            symbol="AAPL",
-            qty=10,
-            stop_price=145.0,
-            limit_price=160.0
-        )
+        result = await mock_broker.place_oco_order(symbol="AAPL", qty=10, stop_price=145.0, limit_price=160.0)
 
         assert isinstance(result, OrderResult)
         assert result.order_id is not None
@@ -67,17 +55,13 @@ class TestMockBrokerInterface:
     async def test_place_oco_order_is_async(self, mock_broker):
         """Verify place_oco_order is an async method."""
         import inspect
+
         assert inspect.iscoroutinefunction(mock_broker.place_oco_order)
 
     @pytest.mark.asyncio
     async def test_order_side_enum_buy(self, mock_broker):
         """Test OrderSide.BUY works correctly."""
-        result = await mock_broker.place_market_order(
-            symbol="AAPL",
-            qty=10,
-            side=OrderSide.BUY,
-            price=150.0
-        )
+        result = await mock_broker.place_market_order(symbol="AAPL", qty=10, side=OrderSide.BUY, price=150.0)
 
         assert result.success is True
         assert result.side == OrderSide.BUY
@@ -86,20 +70,10 @@ class TestMockBrokerInterface:
     async def test_order_side_enum_sell(self, mock_broker):
         """Test OrderSide.SELL works correctly."""
         # First buy to have a position
-        await mock_broker.place_market_order(
-            symbol="AAPL",
-            qty=10,
-            side=OrderSide.BUY,
-            price=150.0
-        )
+        await mock_broker.place_market_order(symbol="AAPL", qty=10, side=OrderSide.BUY, price=150.0)
 
         # Now sell
-        result = await mock_broker.place_market_order(
-            symbol="AAPL",
-            qty=10,
-            side=OrderSide.SELL,
-            price=155.0
-        )
+        result = await mock_broker.place_market_order(symbol="AAPL", qty=10, side=OrderSide.SELL, price=155.0)
 
         assert result.success is True
         assert result.side == OrderSide.SELL
@@ -111,7 +85,7 @@ class TestMockBrokerInterface:
             symbol="AAPL",
             qty=1000,
             side=OrderSide.BUY,
-            price=1000.0  # 1M cost > 100k cash
+            price=1000.0,  # 1M cost > 100k cash
         )
 
         assert result.success is False
@@ -120,12 +94,7 @@ class TestMockBrokerInterface:
     @pytest.mark.asyncio
     async def test_place_market_order_insufficient_position(self, mock_broker):
         """Test rejection when selling without position."""
-        result = await mock_broker.place_market_order(
-            symbol="AAPL",
-            qty=10,
-            side=OrderSide.SELL,
-            price=150.0
-        )
+        result = await mock_broker.place_market_order(symbol="AAPL", qty=10, side=OrderSide.SELL, price=150.0)
 
         assert result.success is False
         assert "Insufficient position" in result.message
@@ -173,24 +142,14 @@ class TestOrderResultFromBroker:
         """Test that OrderResult includes commission."""
         mock_broker.commission = 1.50
 
-        result = await mock_broker.place_market_order(
-            symbol="AAPL",
-            qty=10,
-            side=OrderSide.BUY,
-            price=150.0
-        )
+        result = await mock_broker.place_market_order(symbol="AAPL", qty=10, side=OrderSide.BUY, price=150.0)
 
         assert result.commission == 1.50
 
     @pytest.mark.asyncio
     async def test_order_result_filled_value(self, mock_broker):
         """Test filled_value property on OrderResult."""
-        result = await mock_broker.place_market_order(
-            symbol="AAPL",
-            qty=10,
-            side=OrderSide.BUY,
-            price=150.0
-        )
+        result = await mock_broker.place_market_order(symbol="AAPL", qty=10, side=OrderSide.BUY, price=150.0)
 
         # filled_value = filled_qty * avg_price
         expected_value = 10 * 150.0
@@ -199,12 +158,7 @@ class TestOrderResultFromBroker:
     @pytest.mark.asyncio
     async def test_order_result_status(self, mock_broker):
         """Test OrderResult has proper status."""
-        result = await mock_broker.place_market_order(
-            symbol="AAPL",
-            qty=10,
-            side=OrderSide.BUY,
-            price=150.0
-        )
+        result = await mock_broker.place_market_order(symbol="AAPL", qty=10, side=OrderSide.BUY, price=150.0)
 
         assert result.status == OrderStatus.FILLED
         assert result.is_filled is True
@@ -216,6 +170,7 @@ class TestAlpacaBrokerInterface:
     def test_alpaca_broker_has_async_connect(self):
         """Verify AlpacaBroker.connect is async (or wrapped async)."""
         import inspect
+
         from core.broker.alpaca_broker import AlpacaBroker
 
         # Check the method - may be wrapped by @retry decorator
@@ -223,7 +178,7 @@ class TestAlpacaBrokerInterface:
         # Check if it's async or has async inner function (decorated)
         is_async = inspect.iscoroutinefunction(method)
         # Also check wrapped function if decorator is applied
-        inner = getattr(method, '__wrapped__', None)
+        inner = getattr(method, "__wrapped__", None)
         inner_is_async = inspect.iscoroutinefunction(inner) if inner else False
 
         assert is_async or inner_is_async, "connect should be async or have async wrapped function"
@@ -232,11 +187,12 @@ class TestAlpacaBrokerInterface:
         """Verify AlpacaBroker has connect_sync for compatibility."""
         from core.broker.alpaca_broker import AlpacaBroker
 
-        assert hasattr(AlpacaBroker, 'connect_sync')
+        assert hasattr(AlpacaBroker, "connect_sync")
 
     def test_alpaca_broker_place_market_order_is_async(self):
         """Verify AlpacaBroker.place_market_order is async."""
         import inspect
+
         from core.broker.alpaca_broker import AlpacaBroker
 
         assert inspect.iscoroutinefunction(AlpacaBroker.place_market_order)
@@ -244,6 +200,7 @@ class TestAlpacaBrokerInterface:
     def test_alpaca_broker_place_oco_order_is_async(self):
         """Verify AlpacaBroker.place_oco_order is async."""
         import inspect
+
         from core.broker.alpaca_broker import AlpacaBroker
 
         assert inspect.iscoroutinefunction(AlpacaBroker.place_oco_order)
@@ -251,13 +208,15 @@ class TestAlpacaBrokerInterface:
     def test_alpaca_broker_place_order_returns_order_result(self):
         """Verify AlpacaBroker.place_order return type annotation."""
         import inspect
+
         from core.broker.alpaca_broker import AlpacaBroker
 
         sig = inspect.signature(AlpacaBroker.place_order)
         # Check it's annotated to return OrderResult (may be string due to annotations future import)
         annotation = sig.return_annotation
-        assert annotation == OrderResult or annotation == 'OrderResult', \
+        assert annotation == OrderResult or annotation == "OrderResult", (
             f"Expected OrderResult annotation, got {annotation}"
+        )
 
 
 class TestSchwabBrokerInterface:
@@ -266,23 +225,24 @@ class TestSchwabBrokerInterface:
     def test_schwab_broker_connect_returns_none(self):
         """Verify SchwabBroker.connect return type is None."""
         import inspect
+
         from core.broker.schwab_broker import SchwabBroker
 
         sig = inspect.signature(SchwabBroker.connect)
         # Check it's annotated to return None (may be string due to annotations future import)
         annotation = sig.return_annotation
-        assert annotation is None or annotation == 'None', \
-            f"Expected None annotation, got {annotation}"
+        assert annotation is None or annotation == "None", f"Expected None annotation, got {annotation}"
 
     def test_schwab_broker_has_is_connected_property(self):
         """Verify SchwabBroker has is_connected property."""
         from core.broker.schwab_broker import SchwabBroker
 
-        assert hasattr(SchwabBroker, 'is_connected')
+        assert hasattr(SchwabBroker, "is_connected")
 
     def test_schwab_broker_place_market_order_is_async(self):
         """Verify SchwabBroker.place_market_order is async."""
         import inspect
+
         from core.broker.schwab_broker import SchwabBroker
 
         assert inspect.iscoroutinefunction(SchwabBroker.place_market_order)
@@ -290,6 +250,7 @@ class TestSchwabBrokerInterface:
     def test_schwab_broker_place_oco_order_is_async(self):
         """Verify SchwabBroker.place_oco_order is async."""
         import inspect
+
         from core.broker.schwab_broker import SchwabBroker
 
         assert inspect.iscoroutinefunction(SchwabBroker.place_oco_order)
@@ -298,6 +259,7 @@ class TestSchwabBrokerInterface:
 # ==============================================================================
 # NEW FUNCTIONALITY TESTS
 # ==============================================================================
+
 
 class TestMockBrokerOpenOrderTracking:
     """Tests for MockBroker open order tracking functionality."""
@@ -319,11 +281,7 @@ class TestMockBrokerOpenOrderTracking:
         from core.enums import OrderType
 
         result = await mock_broker.place_order(
-            symbol="AAPL",
-            qty=10,
-            side=OrderSide.BUY,
-            order_type=OrderType.LIMIT,
-            limit_price=145.0
+            symbol="AAPL", qty=10, side=OrderSide.BUY, order_type=OrderType.LIMIT, limit_price=145.0
         )
 
         assert result.success is True
@@ -340,11 +298,7 @@ class TestMockBrokerOpenOrderTracking:
         await mock_broker.place_market_order("AAPL", 10, OrderSide.BUY, price=150.0)
 
         result = await mock_broker.place_order(
-            symbol="AAPL",
-            qty=10,
-            side=OrderSide.SELL,
-            order_type=OrderType.STOP,
-            stop_price=145.0
+            symbol="AAPL", qty=10, side=OrderSide.SELL, order_type=OrderType.STOP, stop_price=145.0
         )
 
         assert result.success is True
@@ -355,12 +309,7 @@ class TestMockBrokerOpenOrderTracking:
     @pytest.mark.asyncio
     async def test_market_order_not_in_open_orders(self, mock_broker):
         """Market orders fill immediately and should not be in open orders."""
-        result = await mock_broker.place_market_order(
-            symbol="AAPL",
-            qty=10,
-            side=OrderSide.BUY,
-            price=150.0
-        )
+        result = await mock_broker.place_market_order(symbol="AAPL", qty=10, side=OrderSide.BUY, price=150.0)
 
         assert result.success is True
         assert result.status == OrderStatus.FILLED
@@ -373,11 +322,7 @@ class TestMockBrokerOpenOrderTracking:
         from core.enums import OrderType
 
         result = await mock_broker.place_order(
-            symbol="AAPL",
-            qty=10,
-            side=OrderSide.BUY,
-            order_type=OrderType.LIMIT,
-            limit_price=145.0
+            symbol="AAPL", qty=10, side=OrderSide.BUY, order_type=OrderType.LIMIT, limit_price=145.0
         )
 
         # Cancel the order
@@ -419,11 +364,7 @@ class TestMockBrokerLimitOrders:
 
         # Place limit buy at $145
         result = await mock_broker.place_order(
-            symbol="AAPL",
-            qty=10,
-            side=OrderSide.BUY,
-            order_type=OrderType.LIMIT,
-            limit_price=145.0
+            symbol="AAPL", qty=10, side=OrderSide.BUY, order_type=OrderType.LIMIT, limit_price=145.0
         )
 
         assert result.status == OrderStatus.PENDING
@@ -443,12 +384,8 @@ class TestMockBrokerLimitOrders:
         from core.enums import OrderType
 
         # Place limit buy at $145
-        result = await mock_broker.place_order(
-            symbol="AAPL",
-            qty=10,
-            side=OrderSide.BUY,
-            order_type=OrderType.LIMIT,
-            limit_price=145.0
+        await mock_broker.place_order(
+            symbol="AAPL", qty=10, side=OrderSide.BUY, order_type=OrderType.LIMIT, limit_price=145.0
         )
 
         # Price below limit - should fill at limit price
@@ -466,11 +403,7 @@ class TestMockBrokerLimitOrders:
 
         # Place limit sell at $160
         result = await mock_broker.place_order(
-            symbol="AAPL",
-            qty=10,
-            side=OrderSide.SELL,
-            order_type=OrderType.LIMIT,
-            limit_price=160.0
+            symbol="AAPL", qty=10, side=OrderSide.SELL, order_type=OrderType.LIMIT, limit_price=160.0
         )
 
         assert result.status == OrderStatus.PENDING
@@ -490,11 +423,7 @@ class TestMockBrokerLimitOrders:
         from core.enums import OrderType
 
         result = await mock_broker.place_order(
-            symbol="AAPL",
-            qty=10,
-            side=OrderSide.BUY,
-            order_type=OrderType.LIMIT,
-            limit_price=None
+            symbol="AAPL", qty=10, side=OrderSide.BUY, order_type=OrderType.LIMIT, limit_price=None
         )
 
         assert result.success is False
@@ -519,11 +448,7 @@ class TestMockBrokerStopOrders:
 
         # Place stop sell at $140
         result = await mock_broker.place_order(
-            symbol="AAPL",
-            qty=10,
-            side=OrderSide.SELL,
-            order_type=OrderType.STOP,
-            stop_price=140.0
+            symbol="AAPL", qty=10, side=OrderSide.SELL, order_type=OrderType.STOP, stop_price=140.0
         )
 
         assert result.status == OrderStatus.PENDING
@@ -544,11 +469,7 @@ class TestMockBrokerStopOrders:
 
         # Place stop buy at $160
         result = await mock_broker.place_order(
-            symbol="AAPL",
-            qty=10,
-            side=OrderSide.BUY,
-            order_type=OrderType.STOP,
-            stop_price=160.0
+            symbol="AAPL", qty=10, side=OrderSide.BUY, order_type=OrderType.STOP, stop_price=160.0
         )
 
         assert result.status == OrderStatus.PENDING
@@ -567,11 +488,7 @@ class TestMockBrokerStopOrders:
         from core.enums import OrderType
 
         result = await mock_broker.place_order(
-            symbol="AAPL",
-            qty=10,
-            side=OrderSide.BUY,
-            order_type=OrderType.STOP,
-            stop_price=None
+            symbol="AAPL", qty=10, side=OrderSide.BUY, order_type=OrderType.STOP, stop_price=None
         )
 
         assert result.success is False
@@ -601,7 +518,7 @@ class TestMockBrokerStopLimitOrders:
             side=OrderSide.SELL,
             order_type=OrderType.STOP_LIMIT,
             stop_price=140.0,
-            limit_price=138.0
+            limit_price=138.0,
         )
 
         assert result.status == OrderStatus.PENDING
@@ -639,7 +556,7 @@ class TestMockBrokerStopLimitOrders:
             side=OrderSide.BUY,
             order_type=OrderType.STOP_LIMIT,
             stop_price=160.0,
-            limit_price=None
+            limit_price=None,
         )
         assert result1.success is False
         assert "Both stop and limit prices required" in result1.message
@@ -651,7 +568,7 @@ class TestMockBrokerStopLimitOrders:
             side=OrderSide.BUY,
             order_type=OrderType.STOP_LIMIT,
             stop_price=None,
-            limit_price=165.0
+            limit_price=165.0,
         )
         assert result2.success is False
         assert "Both stop and limit prices required" in result2.message
@@ -668,12 +585,7 @@ class TestMockBrokerOCOOrders:
     @pytest.mark.asyncio
     async def test_oco_creates_two_linked_orders(self, mock_broker):
         """OCO should create two linked orders in open orders."""
-        result = await mock_broker.place_oco_order(
-            symbol="AAPL",
-            qty=10,
-            stop_price=145.0,
-            limit_price=160.0
-        )
+        result = await mock_broker.place_oco_order(symbol="AAPL", qty=10, stop_price=145.0, limit_price=160.0)
 
         assert result.success is True
         assert "oco" in result.order_id.lower()
@@ -696,12 +608,7 @@ class TestMockBrokerOCOOrders:
         # First buy to have a position to sell
         await mock_broker.place_market_order("AAPL", 10, OrderSide.BUY, price=150.0)
 
-        result = await mock_broker.place_oco_order(
-            symbol="AAPL",
-            qty=10,
-            stop_price=145.0,
-            limit_price=160.0
-        )
+        await mock_broker.place_oco_order(symbol="AAPL", qty=10, stop_price=145.0, limit_price=160.0)
 
         # Verify two open orders
         open_orders = await mock_broker.get_open_orders()
@@ -731,12 +638,7 @@ class TestMockBrokerOCOOrders:
         # First buy to have a position to sell
         await mock_broker.place_market_order("AAPL", 10, OrderSide.BUY, price=150.0)
 
-        result = await mock_broker.place_oco_order(
-            symbol="AAPL",
-            qty=10,
-            stop_price=145.0,
-            limit_price=160.0
-        )
+        await mock_broker.place_oco_order(symbol="AAPL", qty=10, stop_price=145.0, limit_price=160.0)
 
         # Price rises to limit - limit leg should fill, stop should cancel
         filled = await mock_broker.check_pending_orders("AAPL", 160.0)
@@ -789,10 +691,9 @@ class TestMockBrokerMarketHours:
     @pytest.mark.asyncio
     async def test_market_closed_on_weekend_logic(self):
         """Verify weekend detection logic is correct."""
-        from datetime import datetime
         from zoneinfo import ZoneInfo
 
-        broker = MockBroker(starting_cash=100000.0, respect_market_hours=True)
+        MockBroker(starting_cash=100000.0, respect_market_hours=True)
         et = ZoneInfo("America/New_York")
 
         # Verify Saturday = weekday 5, Sunday = weekday 6
@@ -801,8 +702,8 @@ class TestMockBrokerMarketHours:
         monday = datetime(2024, 1, 8, 12, 0, 0, tzinfo=et)
 
         assert saturday.weekday() == 5  # Saturday
-        assert sunday.weekday() == 6    # Sunday
-        assert monday.weekday() == 0    # Monday
+        assert sunday.weekday() == 6  # Sunday
+        assert monday.weekday() == 0  # Monday
 
         # Verify the broker would correctly identify these as weekend days
         # (weekday >= 5 means closed)
@@ -853,44 +754,44 @@ class TestSchwabStreamerFieldMapping:
         """
         # Simulate raw Schwab streamer content
         raw_item = {
-            'key': 'AAPL',
-            '1': 150.25,   # Bid Price
-            '2': 150.30,   # Ask Price
-            '3': 150.27,   # Last Price
-            '4': 100,      # Bid Size
-            '5': 200,      # Ask Size
-            '8': 5000000,  # Volume
-            '10': 152.00,  # High Price
-            '11': 149.00,  # Low Price
-            '12': 149.50,  # Close Price (prev day)
-            '17': 149.75,  # Open Price
-            '35': 1704067200000,  # Trade Time
+            "key": "AAPL",
+            "1": 150.25,  # Bid Price
+            "2": 150.30,  # Ask Price
+            "3": 150.27,  # Last Price
+            "4": 100,  # Bid Size
+            "5": 200,  # Ask Size
+            "8": 5000000,  # Volume
+            "10": 152.00,  # High Price
+            "11": 149.00,  # Low Price
+            "12": 149.50,  # Close Price (prev day)
+            "17": 149.75,  # Open Price
+            "35": 1704067200000,  # Trade Time
         }
 
         # Transform using correct field mapping
         quote = {
-            'bid_price': raw_item.get('1'),
-            'ask_price': raw_item.get('2'),
-            'last_price': raw_item.get('3'),
-            'bid_size': raw_item.get('4'),
-            'ask_size': raw_item.get('5'),
-            'volume': raw_item.get('8'),
-            'high_price': raw_item.get('10'),
-            'low_price': raw_item.get('11'),
-            'close_price': raw_item.get('12'),
-            'open_price': raw_item.get('17'),
-            'trade_time': raw_item.get('35'),
+            "bid_price": raw_item.get("1"),
+            "ask_price": raw_item.get("2"),
+            "last_price": raw_item.get("3"),
+            "bid_size": raw_item.get("4"),
+            "ask_size": raw_item.get("5"),
+            "volume": raw_item.get("8"),
+            "high_price": raw_item.get("10"),
+            "low_price": raw_item.get("11"),
+            "close_price": raw_item.get("12"),
+            "open_price": raw_item.get("17"),
+            "trade_time": raw_item.get("35"),
         }
 
         # Assertions - verify correct mapping
-        assert quote['bid_price'] == 150.25
-        assert quote['ask_price'] == 150.30
-        assert quote['last_price'] == 150.27
-        assert quote['volume'] == 5000000
-        assert quote['high_price'] == 152.00
-        assert quote['low_price'] == 149.00
-        assert quote['close_price'] == 149.50
-        assert quote['open_price'] == 149.75
+        assert quote["bid_price"] == 150.25
+        assert quote["ask_price"] == 150.30
+        assert quote["last_price"] == 150.27
+        assert quote["volume"] == 5000000
+        assert quote["high_price"] == 152.00
+        assert quote["low_price"] == 149.00
+        assert quote["close_price"] == 149.50
+        assert quote["open_price"] == 149.75
 
     def test_chart_equity_field_mapping(self):
         """Verify Schwab CHART_EQUITY field numbers are correct.
@@ -904,41 +805,41 @@ class TestSchwabStreamerFieldMapping:
         - Field 7 = Chart Time (ms since midnight)
         """
         raw_bar = {
-            'key': 'AAPL',
-            '1': 150.00,   # Open
-            '2': 152.00,   # High
-            '3': 149.50,   # Low
-            '4': 151.50,   # Close
-            '5': 1000000,  # Volume
-            '7': 36000000, # Chart Time (10:00 AM as ms since midnight)
+            "key": "AAPL",
+            "1": 150.00,  # Open
+            "2": 152.00,  # High
+            "3": 149.50,  # Low
+            "4": 151.50,  # Close
+            "5": 1000000,  # Volume
+            "7": 36000000,  # Chart Time (10:00 AM as ms since midnight)
         }
 
         # Transform using correct field mapping
         bar = {
-            'open': raw_bar.get('1'),
-            'high': raw_bar.get('2'),
-            'low': raw_bar.get('3'),
-            'close': raw_bar.get('4'),
-            'volume': raw_bar.get('5'),
-            'chart_time': raw_bar.get('7'),
+            "open": raw_bar.get("1"),
+            "high": raw_bar.get("2"),
+            "low": raw_bar.get("3"),
+            "close": raw_bar.get("4"),
+            "volume": raw_bar.get("5"),
+            "chart_time": raw_bar.get("7"),
         }
 
         # Assertions
-        assert bar['open'] == 150.00
-        assert bar['high'] == 152.00
-        assert bar['low'] == 149.50
-        assert bar['close'] == 151.50
-        assert bar['volume'] == 1000000
+        assert bar["open"] == 150.00
+        assert bar["high"] == 152.00
+        assert bar["low"] == 149.50
+        assert bar["close"] == 151.50
+        assert bar["volume"] == 1000000
 
     def test_bid_ask_spread_calculation(self):
         """Verify spread can be calculated from correct fields."""
         raw_item = {
-            '1': 150.25,  # Bid
-            '2': 150.30,  # Ask
+            "1": 150.25,  # Bid
+            "2": 150.30,  # Ask
         }
 
-        bid = raw_item['1']
-        ask = raw_item['2']
+        bid = raw_item["1"]
+        ask = raw_item["2"]
         spread = ask - bid
 
         assert spread == pytest.approx(0.05)
@@ -947,19 +848,19 @@ class TestSchwabStreamerFieldMapping:
         """Streamer may send partial updates with only some fields."""
         # Partial update with only last price
         partial_item = {
-            'key': 'AAPL',
-            '3': 150.27,  # Only last price
+            "key": "AAPL",
+            "3": 150.27,  # Only last price
         }
 
         quote = {
-            'bid_price': partial_item.get('1'),
-            'ask_price': partial_item.get('2'),
-            'last_price': partial_item.get('3'),
+            "bid_price": partial_item.get("1"),
+            "ask_price": partial_item.get("2"),
+            "last_price": partial_item.get("3"),
         }
 
-        assert quote['last_price'] == 150.27
-        assert quote['bid_price'] is None
-        assert quote['ask_price'] is None
+        assert quote["last_price"] == 150.27
+        assert quote["bid_price"] is None
+        assert quote["ask_price"] is None
 
 
 class TestMockBrokerReset:

@@ -21,14 +21,14 @@ Output Schema:
     - All entry features (strategy, regime, atr, etc.)
     - All outcome metrics (pnl_dollars, pnl_percent, mae_percent, mfe_percent, etc.)
 """
+
 from __future__ import annotations
 
 import argparse
 import json
 import sys
-from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Any
 
 try:
     import pandas as pd
@@ -37,7 +37,7 @@ except ImportError:
     sys.exit(1)
 
 
-def load_jsonl(filepath: str) -> List[Dict[str, Any]]:
+def load_jsonl(filepath: str) -> list[dict[str, Any]]:
     """
     Load events from JSONL file.
 
@@ -48,7 +48,7 @@ def load_jsonl(filepath: str) -> List[Dict[str, Any]]:
         List of event dictionaries
     """
     events = []
-    with open(filepath, "r", encoding="utf-8") as f:
+    with open(filepath, encoding="utf-8") as f:
         for line_num, line in enumerate(f, 1):
             line = line.strip()
             if not line:
@@ -60,7 +60,7 @@ def load_jsonl(filepath: str) -> List[Dict[str, Any]]:
     return events
 
 
-def join_trades(events: List[Dict[str, Any]]) -> pd.DataFrame:
+def join_trades(events: list[dict[str, Any]]) -> pd.DataFrame:
     """
     Join entry and exit events by trade_id.
 
@@ -71,8 +71,8 @@ def join_trades(events: List[Dict[str, Any]]) -> pd.DataFrame:
         DataFrame with joined trade data
     """
     # Separate entries and exits
-    entries: Dict[str, Dict] = {}
-    exits: Dict[str, Dict] = {}
+    entries: dict[str, dict] = {}
+    exits: dict[str, dict] = {}
 
     for event in events:
         trade_id = event.get("trade_id")
@@ -155,12 +155,19 @@ def convert_types(df: pd.DataFrame) -> pd.DataFrame:
 
     # Convert numeric columns
     numeric_cols = [
-        "qty", "entry_price", "exit_price",
-        "feat_atr", "feat_atr_percentile",
-        "feat_drawdown_portfolio_pct", "feat_drawdown_symbol_pct",
-        "feat_position_size_pct", "feat_hours_since_last_trade",
-        "out_pnl_dollars", "out_pnl_percent",
-        "out_mae_percent", "out_mfe_percent",
+        "qty",
+        "entry_price",
+        "exit_price",
+        "feat_atr",
+        "feat_atr_percentile",
+        "feat_drawdown_portfolio_pct",
+        "feat_drawdown_symbol_pct",
+        "feat_position_size_pct",
+        "feat_hours_since_last_trade",
+        "out_pnl_dollars",
+        "out_pnl_percent",
+        "out_mae_percent",
+        "out_mfe_percent",
     ]
     for col in numeric_cols:
         if col in df.columns:
@@ -168,9 +175,12 @@ def convert_types(df: pd.DataFrame) -> pd.DataFrame:
 
     # Convert integer columns
     int_cols = [
-        "feat_hour_of_day", "feat_day_of_week",
-        "feat_minutes_since_open", "feat_bars_in_regime",
-        "feat_signal_strength", "out_hold_bars",
+        "feat_hour_of_day",
+        "feat_day_of_week",
+        "feat_minutes_since_open",
+        "feat_bars_in_regime",
+        "feat_signal_strength",
+        "out_hold_bars",
     ]
     for col in int_cols:
         if col in df.columns:
@@ -185,7 +195,7 @@ def convert_types(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def get_stats(df: pd.DataFrame) -> Dict[str, Any]:
+def get_stats(df: pd.DataFrame) -> dict[str, Any]:
     """
     Calculate summary statistics for the trade data.
 
@@ -210,7 +220,9 @@ def get_stats(df: pd.DataFrame) -> Dict[str, Any]:
             stats["total_pnl"] = pnl.sum()
             stats["avg_pnl"] = pnl.mean()
             stats["win_rate"] = (pnl > 0).mean()
-            stats["profit_factor"] = abs(pnl[pnl > 0].sum() / pnl[pnl < 0].sum()) if pnl[pnl < 0].sum() != 0 else float("inf")
+            stats["profit_factor"] = (
+                abs(pnl[pnl > 0].sum() / pnl[pnl < 0].sum()) if pnl[pnl < 0].sum() != 0 else float("inf")
+            )
 
     if "out_hold_bars" in complete.columns:
         hold_bars = complete["out_hold_bars"].dropna()
@@ -227,29 +239,23 @@ def get_stats(df: pd.DataFrame) -> Dict[str, Any]:
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Convert meta trades JSONL to Parquet for ML training"
-    )
+    parser = argparse.ArgumentParser(description="Convert meta trades JSONL to Parquet for ML training")
     parser.add_argument(
-        "--input", "-i",
+        "--input",
+        "-i",
         default="logs/meta_trades.jsonl",
-        help="Input JSONL file path (default: logs/meta_trades.jsonl)"
+        help="Input JSONL file path (default: logs/meta_trades.jsonl)",
     )
     parser.add_argument(
-        "--output", "-o",
+        "--output",
+        "-o",
         default="data/trades_for_training.parquet",
-        help="Output Parquet file path (default: data/trades_for_training.parquet)"
+        help="Output Parquet file path (default: data/trades_for_training.parquet)",
     )
     parser.add_argument(
-        "--complete-only",
-        action="store_true",
-        help="Only include complete trades (with both entry and exit)"
+        "--complete-only", action="store_true", help="Only include complete trades (with both entry and exit)"
     )
-    parser.add_argument(
-        "--stats",
-        action="store_true",
-        help="Print statistics after conversion"
-    )
+    parser.add_argument("--stats", action="store_true", help="Print statistics after conversion")
     args = parser.parse_args()
 
     # Resolve paths relative to script location

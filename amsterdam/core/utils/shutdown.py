@@ -3,28 +3,30 @@ Graceful shutdown handling for trading system.
 
 Ensures clean shutdown with position handling and state persistence.
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
 import signal
-import sys
 import uuid
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Awaitable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
 class ShutdownPhase(Enum):
     """Phases of graceful shutdown."""
+
     RUNNING = "running"
-    STOPPING = "stopping"          # Stop accepting new work
-    DRAINING = "draining"          # Wait for in-flight work
+    STOPPING = "stopping"  # Stop accepting new work
+    DRAINING = "draining"  # Wait for in-flight work
     CLOSING_POSITIONS = "closing"  # Close/flatten positions if configured
-    SAVING_STATE = "saving"        # Persist state
-    CLEANUP = "cleanup"            # Release resources
+    SAVING_STATE = "saving"  # Persist state
+    CLEANUP = "cleanup"  # Release resources
     STOPPED = "stopped"
 
 
@@ -60,7 +62,7 @@ class ShutdownManager:
 
         self.phase = ShutdownPhase.RUNNING
         self._shutdown_event = asyncio.Event()
-        self._handlers: Dict[ShutdownPhase, List[Callable[[], Awaitable[None]]]] = {
+        self._handlers: dict[ShutdownPhase, list[Callable[[], Awaitable[None]]]] = {
             phase: [] for phase in ShutdownPhase
         }
         self._signal_handlers_installed = False
@@ -124,10 +126,7 @@ class ShutdownManager:
             self.phase = ShutdownPhase.DRAINING
             logger.info(f"[Shutdown] Phase 2: Draining in-flight work (timeout: {self.drain_timeout}s)")
             try:
-                await asyncio.wait_for(
-                    self._run_handlers(ShutdownPhase.DRAINING),
-                    timeout=self.drain_timeout
-                )
+                await asyncio.wait_for(self._run_handlers(ShutdownPhase.DRAINING), timeout=self.drain_timeout)
             except asyncio.TimeoutError:
                 logger.warning("[Shutdown] Drain timeout reached, proceeding with shutdown")
 
@@ -176,9 +175,7 @@ class ShutdownManager:
 
         for handler, result in zip(handlers, results):
             if isinstance(result, Exception):
-                logger.error(
-                    f"[Shutdown] Handler {handler.__name__} failed: {result}"
-                )
+                logger.error(f"[Shutdown] Handler {handler.__name__} failed: {result}")
 
     async def wait_for_shutdown(self) -> None:
         """Wait for shutdown to complete."""
@@ -186,7 +183,7 @@ class ShutdownManager:
 
 
 # Global shutdown manager
-_shutdown_manager: Optional[ShutdownManager] = None
+_shutdown_manager: ShutdownManager | None = None
 
 
 def get_shutdown_manager(
@@ -227,18 +224,20 @@ def create_shutdown_handlers(
 
     # Handler: Stop event handler
     if event_handler:
+
         async def stop_events():
             logger.info("[Shutdown] Stopping event handler...")
-            if hasattr(event_handler, 'shutdown'):
+            if hasattr(event_handler, "shutdown"):
                 await event_handler.shutdown()
 
         manager.register_handler(ShutdownPhase.STOPPING, stop_events)
 
     # Handler: Wait for pending orders
     if broker:
+
         async def drain_orders():
             logger.info("[Shutdown] Waiting for pending orders...")
-            if hasattr(broker, 'get_pending_orders'):
+            if hasattr(broker, "get_pending_orders"):
                 pending = await broker.get_pending_orders()
                 if pending:
                     logger.info(f"[Shutdown] {len(pending)} pending orders")
@@ -249,9 +248,10 @@ def create_shutdown_handlers(
 
     # Handler: Close positions
     if broker and portfolio_state:
+
         async def close_positions():
             logger.info("[Shutdown] Closing all positions...")
-            if hasattr(portfolio_state, 'positions'):
+            if hasattr(portfolio_state, "positions"):
                 for symbol, pos in portfolio_state.positions.items():
                     if pos.qty != 0:
                         try:
@@ -269,24 +269,25 @@ def create_shutdown_handlers(
 
     # Handler: Save state
     if persistence and portfolio_state:
+
         async def save_state():
             logger.info("[Shutdown] Saving system state...")
             try:
                 state_id = f"shutdown_{uuid.uuid4().hex[:8]}"
                 positions = []
-                if hasattr(portfolio_state, 'positions'):
+                if hasattr(portfolio_state, "positions"):
                     positions = [
-                        {'symbol': s, 'qty': p.qty, 'avg_price': p.avg_price}
+                        {"symbol": s, "qty": p.qty, "avg_price": p.avg_price}
                         for s, p in portfolio_state.positions.items()
                     ]
 
                 persistence.save_system_state(
                     state_id=state_id,
-                    cash_balance=getattr(portfolio_state, 'cash', 0),
-                    total_equity=getattr(portfolio_state, 'total_equity', lambda: 0)(),
+                    cash_balance=getattr(portfolio_state, "cash", 0),
+                    total_equity=getattr(portfolio_state, "total_equity", lambda: 0)(),
                     positions=positions,
                     pending_orders=[],
-                    metadata={'shutdown_type': 'graceful'},
+                    metadata={"shutdown_type": "graceful"},
                 )
                 logger.info(f"[Shutdown] State saved: {state_id}")
             except Exception as e:
@@ -296,20 +297,22 @@ def create_shutdown_handlers(
 
     # Handler: Close broker connection
     if broker:
+
         async def close_broker():
             logger.info("[Shutdown] Closing broker connection...")
-            if hasattr(broker, 'disconnect'):
+            if hasattr(broker, "disconnect"):
                 await broker.disconnect()
-            elif hasattr(broker, 'close'):
+            elif hasattr(broker, "close"):
                 broker.close()
 
         manager.register_handler(ShutdownPhase.CLEANUP, close_broker)
 
     # Handler: Close persistence
     if persistence:
+
         async def close_persistence():
             logger.info("[Shutdown] Closing persistence...")
-            if hasattr(persistence, 'close'):
+            if hasattr(persistence, "close"):
                 persistence.close()
 
         manager.register_handler(ShutdownPhase.CLEANUP, close_persistence)

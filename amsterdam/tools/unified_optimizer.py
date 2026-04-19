@@ -26,30 +26,30 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
-from pathlib import Path
-from typing import List, Optional, Dict, Any
 from dataclasses import dataclass
-import pandas as pd
+from pathlib import Path
+from typing import Any
 
 # Add project root to path
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from loggers.logger import Logger
-from core.unified_data_pipeline import UnifiedDataPipeline
+from core.backtest.regime_backtest import REGIME_TYPES, RegimeAnalysisResult
 from core.backtest.strategy_selector import StrategySelector
-from core.backtest.timeframe_optimizer import TimeframeOptimizer, BacktestResult
-from core.backtest.regime_backtest import RegimeAnalysisResult, REGIME_TYPES
+from core.backtest.timeframe_optimizer import BacktestResult, TimeframeOptimizer
+from core.unified_data_pipeline import UnifiedDataPipeline
+from loggers.logger import Logger
 
 
 @dataclass
 class UnifiedOptimizationResult:
     """Result of unified optimization."""
+
     symbol: str
     regime_analysis: RegimeAnalysisResult
-    timeframe_results: List[BacktestResult]
-    optimal_config: Dict[str, Any]
+    timeframe_results: list[BacktestResult]
+    optimal_config: dict[str, Any]
 
 
 class UnifiedOptimizer:
@@ -63,10 +63,10 @@ class UnifiedOptimizer:
 
     def __init__(
         self,
-        symbols: List[str],
-        strategies: Optional[List[str]] = None,
-        timeframes: Optional[List[str]] = None,
-        data_pipeline: Optional[UnifiedDataPipeline] = None
+        symbols: list[str],
+        strategies: list[str] | None = None,
+        timeframes: list[str] | None = None,
+        data_pipeline: UnifiedDataPipeline | None = None,
     ):
         """
         Initialize unified optimizer.
@@ -79,28 +79,19 @@ class UnifiedOptimizer:
         """
         self.symbols = symbols
         self.strategies = strategies  # None = test all
-        self.timeframes = timeframes or ['5min', '15min', '30min', '1hour', 'day']
+        self.timeframes = timeframes or ["5min", "15min", "30min", "1hour", "day"]
 
         self.pipeline = data_pipeline or UnifiedDataPipeline()
 
-        self.logger = Logger(
-            "unified_optimizer.log",
-            "UnifiedOptimizer",
-            propagate=True,
-            level=10
-        ).get_logger()
+        self.logger = Logger("unified_optimizer.log", "UnifiedOptimizer", propagate=True, level=10).get_logger()
 
-        self.results: Dict[str, UnifiedOptimizationResult] = {}
+        self.results: dict[str, UnifiedOptimizationResult] = {}
 
-        self.logger.info(
-            f"UnifiedOptimizer initialized: {len(symbols)} symbols × {len(self.timeframes)} timeframes"
-        )
+        self.logger.info(f"UnifiedOptimizer initialized: {len(symbols)} symbols × {len(self.timeframes)} timeframes")
 
     async def run_optimization(
-        self,
-        days: int = 750,
-        metric: str = "sharpe_ratio"
-    ) -> Dict[str, UnifiedOptimizationResult]:
+        self, days: int = 750, metric: str = "sharpe_ratio"
+    ) -> dict[str, UnifiedOptimizationResult]:
         """
         Run complete optimization workflow.
 
@@ -121,9 +112,9 @@ class UnifiedOptimizer:
         self.logger.info("=" * 80)
 
         for symbol in self.symbols:
-            self.logger.info(f"\n{'='*60}")
+            self.logger.info(f"\n{'=' * 60}")
             self.logger.info(f"OPTIMIZING {symbol}")
-            self.logger.info(f"{'='*60}")
+            self.logger.info(f"{'=' * 60}")
 
             try:
                 result = await self._optimize_symbol(symbol, days, metric)
@@ -138,12 +129,7 @@ class UnifiedOptimizer:
 
         return self.results
 
-    async def _optimize_symbol(
-        self,
-        symbol: str,
-        days: int,
-        metric: str
-    ) -> UnifiedOptimizationResult:
+    async def _optimize_symbol(self, symbol: str, days: int, metric: str) -> UnifiedOptimizationResult:
         """
         Optimize a single symbol.
 
@@ -155,7 +141,7 @@ class UnifiedOptimizer:
         """
         # Step 1: Load data
         self.logger.info(f"[{symbol}] Loading historical data...")
-        data = self.pipeline.get_data(symbol, timeframe='day')
+        data = self.pipeline.get_data(symbol, timeframe="day")
 
         if data is None or data.empty:
             self.logger.warning(f"[{symbol}] No data available, skipping...")
@@ -169,17 +155,9 @@ class UnifiedOptimizer:
         # Step 2: Regime-aware strategy selection
         self.logger.info(f"[{symbol}] Running regime-aware strategy selection...")
 
-        selector = StrategySelector(
-            data=data,
-            initial_capital=100000,
-            transaction_cost=0.001
-        )
+        selector = StrategySelector(data=data, initial_capital=100000, transaction_cost=0.001)
 
-        regime_analysis = selector.select_best_strategies_by_regime(
-            symbol=symbol,
-            metric=metric,
-            verbose=False
-        )
+        regime_analysis = selector.select_best_strategies_by_regime(symbol=symbol, metric=metric, verbose=False)
 
         # Extract best strategies per regime
         best_strategies = regime_analysis.best_strategies
@@ -195,37 +173,26 @@ class UnifiedOptimizer:
         unique_strategies = list(set(best_strategies.values()))
 
         timeframe_optimizer = TimeframeOptimizer(
-            symbols=[symbol],
-            timeframes=self.timeframes,
-            strategies=unique_strategies,
-            data_pipeline=self.pipeline
+            symbols=[symbol], timeframes=self.timeframes, strategies=unique_strategies, data_pipeline=self.pipeline
         )
 
-        timeframe_results = await timeframe_optimizer.run_optimization(
-            days=days,
-            min_bars=100
-        )
+        timeframe_results = await timeframe_optimizer.run_optimization(days=days, min_bars=100)
 
         # Step 4: Combine into unified config
         optimal_config = self._build_unified_config(
-            symbol=symbol,
-            regime_analysis=regime_analysis,
-            timeframe_results=timeframe_results
+            symbol=symbol, regime_analysis=regime_analysis, timeframe_results=timeframe_results
         )
 
         return UnifiedOptimizationResult(
             symbol=symbol,
             regime_analysis=regime_analysis,
             timeframe_results=timeframe_results,
-            optimal_config=optimal_config
+            optimal_config=optimal_config,
         )
 
     def _build_unified_config(
-        self,
-        symbol: str,
-        regime_analysis: RegimeAnalysisResult,
-        timeframe_results: List[BacktestResult]
-    ) -> Dict[str, Any]:
+        self, symbol: str, regime_analysis: RegimeAnalysisResult, timeframe_results: list[BacktestResult]
+    ) -> dict[str, Any]:
         """
         Build unified config from regime analysis and timeframe results.
 
@@ -243,10 +210,7 @@ class UnifiedOptimizer:
 
             # Find best timeframe for this (regime, strategy) combination
             # Filter results for this strategy
-            strategy_results = [
-                r for r in timeframe_results
-                if r.strategy == best_strategy and r.symbol == symbol
-            ]
+            strategy_results = [r for r in timeframe_results if r.strategy == best_strategy and r.symbol == symbol]
 
             if not strategy_results:
                 # Fallback to default timeframe
@@ -260,29 +224,24 @@ class UnifiedOptimizer:
                 # Apply regime-appropriate timeframe filtering
                 if regime == "high_volatility":
                     # Prefer short timeframes
-                    filtered = [r for r in strategy_results if r.timeframe in ['5min', '15min']]
+                    filtered = [r for r in strategy_results if r.timeframe in ["5min", "15min"]]
                     candidates = filtered if filtered else strategy_results
                 elif regime == "low_volatility":
                     # Prefer long timeframes
-                    filtered = [r for r in strategy_results if r.timeframe in ['30min', '1hour', 'day']]
+                    filtered = [r for r in strategy_results if r.timeframe in ["30min", "1hour", "day"]]
                     candidates = filtered if filtered else strategy_results
                 else:
                     # Normal: prefer medium timeframes
-                    filtered = [r for r in strategy_results if r.timeframe in ['15min', '30min']]
+                    filtered = [r for r in strategy_results if r.timeframe in ["15min", "30min"]]
                     candidates = filtered if filtered else strategy_results
 
                 # Sort by score and take best
                 candidates.sort(key=lambda r: r.score, reverse=True)
                 best_timeframe = candidates[0].timeframe
 
-            config[regime] = {
-                "strategy": best_strategy,
-                "timeframe": best_timeframe
-            }
+            config[regime] = {"strategy": best_strategy, "timeframe": best_timeframe}
 
-            self.logger.info(
-                f"  {regime}: {best_strategy} @ {best_timeframe}"
-            )
+            self.logger.info(f"  {regime}: {best_strategy} @ {best_timeframe}")
 
         # Add default (use normal regime)
         if "normal" in config:
@@ -293,11 +252,7 @@ class UnifiedOptimizer:
 
         return {symbol: config}
 
-    def save_config(
-        self,
-        config_path: Optional[str] = None,
-        merge: bool = True
-    ) -> Path:
+    def save_config(self, config_path: str | None = None, merge: bool = True) -> Path:
         """
         Save unified config to strategy_routing.json.
 
@@ -366,8 +321,8 @@ class UnifiedOptimizer:
             config = result.optimal_config[symbol]
             for regime in REGIME_TYPES:
                 if regime in config:
-                    strat = config[regime]['strategy']
-                    tf = config[regime]['timeframe']
+                    strat = config[regime]["strategy"]
+                    tf = config[regime]["timeframe"]
                     print(f"  {regime:<18}: {strat:<15} @ {tf}")
 
         print("\n" + "=" * 80)
@@ -377,12 +332,13 @@ class UnifiedOptimizer:
 # CLI INTERFACE
 # ============================================================================
 
+
 async def main():
     """Command-line interface."""
     import argparse
 
     parser = argparse.ArgumentParser(
-        description='Unified strategy and timeframe optimization',
+        description="Unified strategy and timeframe optimization",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -397,62 +353,36 @@ Examples:
 
   # More historical data
   python tools/unified_optimizer.py AAPL TSLA --days 1000 --save
-        """
+        """,
     )
 
+    parser.add_argument("symbols", nargs="+", help="Symbols to optimize")
+    parser.add_argument("--strategies", help="Comma-separated strategies to test (default: all)")
+    parser.add_argument("--timeframes", default="5min,15min,30min,1hour,day", help="Comma-separated timeframes to test")
+    parser.add_argument("--days", type=int, default=750, help="Days of historical data")
     parser.add_argument(
-        'symbols', nargs='+',
-        help='Symbols to optimize'
+        "--metric", default="sharpe_ratio", choices=["sharpe_ratio", "total_return", "win_rate"], help="Ranking metric"
     )
-    parser.add_argument(
-        '--strategies',
-        help='Comma-separated strategies to test (default: all)'
-    )
-    parser.add_argument(
-        '--timeframes',
-        default='5min,15min,30min,1hour,day',
-        help='Comma-separated timeframes to test'
-    )
-    parser.add_argument(
-        '--days', type=int, default=750,
-        help='Days of historical data'
-    )
-    parser.add_argument(
-        '--metric', default='sharpe_ratio',
-        choices=['sharpe_ratio', 'total_return', 'win_rate'],
-        help='Ranking metric'
-    )
-    parser.add_argument(
-        '--save', action='store_true',
-        help='Save to config/strategy_routing.json'
-    )
-    parser.add_argument(
-        '--output',
-        help='Custom output path for config file'
-    )
+    parser.add_argument("--save", action="store_true", help="Save to config/strategy_routing.json")
+    parser.add_argument("--output", help="Custom output path for config file")
 
     args = parser.parse_args()
 
     # Parse strategies
     strategies = None
     if args.strategies:
-        strategies = [s.strip() for s in args.strategies.split(',')]
+        strategies = [s.strip() for s in args.strategies.split(",")]
 
     # Parse timeframes
-    timeframes = [tf.strip() for tf in args.timeframes.split(',')]
+    timeframes = [tf.strip() for tf in args.timeframes.split(",")]
 
     # Create optimizer
     optimizer = UnifiedOptimizer(
-        symbols=[s.upper() for s in args.symbols],
-        strategies=strategies,
-        timeframes=timeframes
+        symbols=[s.upper() for s in args.symbols], strategies=strategies, timeframes=timeframes
     )
 
     # Run optimization
-    await optimizer.run_optimization(
-        days=args.days,
-        metric=args.metric
-    )
+    await optimizer.run_optimization(days=args.days, metric=args.metric)
 
     # Print summary
     optimizer.print_summary()
@@ -460,14 +390,14 @@ Examples:
     # Save if requested
     if args.save:
         config_path = optimizer.save_config(config_path=args.output)
-        print(f"\n{'='*80}")
+        print(f"\n{'=' * 80}")
         print(f"SAVED TO: {config_path}")
-        print(f"{'='*80}")
+        print(f"{'=' * 80}")
         print("\nNext steps:")
         print("  1. Review the config file")
         print("  2. Restart the trader to use the new configuration")
         print("  3. Monitor performance and adjust as needed")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     asyncio.run(main())

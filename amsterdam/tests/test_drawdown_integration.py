@@ -4,15 +4,16 @@ Tests for DrawdownMonitor integration with LiveExecutionEngine.
 Verifies that drawdown limits are properly enforced during live trading.
 """
 
-import pytest
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
+from core.app_types import SignalContext
 from core.drawdown_monitor import DrawdownMonitor
 from core.logic.live_execution_engine import LiveExecutionEngine
 from core.logic.portfolio_state import PortfolioState
-from core.app_types import SignalContext
 
 
 @pytest.fixture
@@ -45,13 +46,9 @@ def mock_broker():
     broker.is_market_open = AsyncMock(return_value=True)
     broker.get_buying_power = MagicMock(return_value=100_000.0)
     broker.get_available_funds = MagicMock(return_value=100_000.0)
-    broker.place_order = AsyncMock(return_value=MagicMock(
-        order_id="test-123",
-        symbol="AAPL",
-        side="buy",
-        qty=100,
-        status="filled"
-    ))
+    broker.place_order = AsyncMock(
+        return_value=MagicMock(order_id="test-123", symbol="AAPL", side="buy", qty=100, status="filled")
+    )
     broker.get_open_orders = AsyncMock(return_value=[])
     return broker
 
@@ -87,8 +84,9 @@ def mock_trade_logic_manager():
 
 
 @pytest.fixture
-def engine(portfolio, mock_broker, mock_executor, mock_sizer,
-           mock_trade_logger, mock_trade_logic_manager, drawdown_monitor):
+def engine(
+    portfolio, mock_broker, mock_executor, mock_sizer, mock_trade_logger, mock_trade_logic_manager, drawdown_monitor
+):
     """Create a LiveExecutionEngine with DrawdownMonitor."""
     engine = LiveExecutionEngine(
         broker=mock_broker,
@@ -201,7 +199,6 @@ class TestDrawdownIntegration:
         """Test that drawdown monitor is updated after successful trade."""
         # Update portfolio to simulate gains
         portfolio.cash = 110_000.0
-        initial_equity = drawdown_monitor.portfolio_peak or 100_000.0
 
         # The _post_execution method should update the drawdown monitor
         # We'll test this by calling _post_execution directly
@@ -220,7 +217,7 @@ class TestDrawdownIntegration:
             result=mock_result,
             action_type="entry",
             regime="normal",
-            strategy_name="test_strategy"
+            strategy_name="test_strategy",
         )
 
         # Portfolio peak should have been updated

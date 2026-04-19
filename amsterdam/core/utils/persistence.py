@@ -3,6 +3,7 @@ State persistence for trading system recovery.
 
 Provides SQLite-based persistence for positions, orders, and system state.
 """
+
 from __future__ import annotations
 
 import json
@@ -11,19 +12,20 @@ import os
 import sqlite3
 import threading
 from contextlib import contextmanager
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, TypeVar
+from typing import Any, TypeVar
 
 logger = logging.getLogger(__name__)
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 @dataclass
 class PersistedPosition:
     """Persisted position record."""
+
     symbol: str
     quantity: float
     avg_price: float
@@ -34,21 +36,22 @@ class PersistedPosition:
     realized_pnl: float = 0.0
     metadata: str = "{}"  # JSON string
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
-        d['metadata'] = json.loads(d['metadata'])
+        d["metadata"] = json.loads(d["metadata"])
         return d
 
     @classmethod
-    def from_dict(cls, d: Dict[str, Any]) -> "PersistedPosition":
-        if isinstance(d.get('metadata'), dict):
-            d['metadata'] = json.dumps(d['metadata'])
+    def from_dict(cls, d: dict[str, Any]) -> PersistedPosition:
+        if isinstance(d.get("metadata"), dict):
+            d["metadata"] = json.dumps(d["metadata"])
         return cls(**d)
 
 
 @dataclass
 class PersistedOrder:
     """Persisted order record."""
+
     order_id: str
     symbol: str
     side: str
@@ -58,20 +61,21 @@ class PersistedOrder:
     created_at: str
     updated_at: str
     filled_quantity: float = 0.0
-    avg_fill_price: Optional[float] = None
-    limit_price: Optional[float] = None
-    stop_price: Optional[float] = None
+    avg_fill_price: float | None = None
+    limit_price: float | None = None
+    stop_price: float | None = None
     metadata: str = "{}"
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
-        d['metadata'] = json.loads(d['metadata'])
+        d["metadata"] = json.loads(d["metadata"])
         return d
 
 
 @dataclass
 class SystemState:
     """System state snapshot."""
+
     state_id: str
     timestamp: str
     cash_balance: float
@@ -80,15 +84,15 @@ class SystemState:
     pending_orders_json: str
     metadata: str = "{}"
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
-            'state_id': self.state_id,
-            'timestamp': self.timestamp,
-            'cash_balance': self.cash_balance,
-            'total_equity': self.total_equity,
-            'positions': json.loads(self.positions_json),
-            'pending_orders': json.loads(self.pending_orders_json),
-            'metadata': json.loads(self.metadata),
+            "state_id": self.state_id,
+            "timestamp": self.timestamp,
+            "cash_balance": self.cash_balance,
+            "total_equity": self.total_equity,
+            "positions": json.loads(self.positions_json),
+            "pending_orders": json.loads(self.pending_orders_json),
+            "metadata": json.loads(self.metadata),
         }
 
 
@@ -103,7 +107,7 @@ class StatePersistence:
     - Thread-safe operations
     """
 
-    def __init__(self, db_path: Optional[str] = None):
+    def __init__(self, db_path: str | None = None):
         """
         Initialize persistence layer.
 
@@ -124,7 +128,7 @@ class StatePersistence:
 
     def _get_connection(self) -> sqlite3.Connection:
         """Get thread-local database connection."""
-        if not hasattr(self._local, 'connection') or self._local.connection is None:
+        if not hasattr(self._local, "connection") or self._local.connection is None:
             self._local.connection = sqlite3.connect(self.db_path)
             self._local.connection.row_factory = sqlite3.Row
         return self._local.connection
@@ -212,33 +216,38 @@ class StatePersistence:
     def save_position(self, position: PersistedPosition) -> None:
         """Save or update a position."""
         with self._transaction() as conn:
-            conn.execute("""
+            conn.execute(
+                """
                 INSERT OR REPLACE INTO positions
                 (symbol, quantity, avg_price, side, opened_at, last_updated,
                  unrealized_pnl, realized_pnl, metadata)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                position.symbol, position.quantity, position.avg_price,
-                position.side, position.opened_at, position.last_updated,
-                position.unrealized_pnl, position.realized_pnl, position.metadata
-            ))
+            """,
+                (
+                    position.symbol,
+                    position.quantity,
+                    position.avg_price,
+                    position.side,
+                    position.opened_at,
+                    position.last_updated,
+                    position.unrealized_pnl,
+                    position.realized_pnl,
+                    position.metadata,
+                ),
+            )
 
-    def get_position(self, symbol: str) -> Optional[PersistedPosition]:
+    def get_position(self, symbol: str) -> PersistedPosition | None:
         """Get position by symbol."""
         conn = self._get_connection()
-        row = conn.execute(
-            "SELECT * FROM positions WHERE symbol = ?", (symbol,)
-        ).fetchone()
+        row = conn.execute("SELECT * FROM positions WHERE symbol = ?", (symbol,)).fetchone()
         if row:
             return PersistedPosition(**dict(row))
         return None
 
-    def get_all_positions(self) -> List[PersistedPosition]:
+    def get_all_positions(self) -> list[PersistedPosition]:
         """Get all open positions."""
         conn = self._get_connection()
-        rows = conn.execute(
-            "SELECT * FROM positions WHERE quantity != 0"
-        ).fetchall()
+        rows = conn.execute("SELECT * FROM positions WHERE quantity != 0").fetchall()
         return [PersistedPosition(**dict(row)) for row in rows]
 
     def delete_position(self, symbol: str) -> None:
@@ -251,33 +260,41 @@ class StatePersistence:
     def save_order(self, order: PersistedOrder) -> None:
         """Save or update an order."""
         with self._transaction() as conn:
-            conn.execute("""
+            conn.execute(
+                """
                 INSERT OR REPLACE INTO orders
                 (order_id, symbol, side, quantity, order_type, status,
                  created_at, updated_at, filled_quantity, avg_fill_price,
                  limit_price, stop_price, metadata)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                order.order_id, order.symbol, order.side, order.quantity,
-                order.order_type, order.status, order.created_at, order.updated_at,
-                order.filled_quantity, order.avg_fill_price, order.limit_price,
-                order.stop_price, order.metadata
-            ))
+            """,
+                (
+                    order.order_id,
+                    order.symbol,
+                    order.side,
+                    order.quantity,
+                    order.order_type,
+                    order.status,
+                    order.created_at,
+                    order.updated_at,
+                    order.filled_quantity,
+                    order.avg_fill_price,
+                    order.limit_price,
+                    order.stop_price,
+                    order.metadata,
+                ),
+            )
 
-    def get_pending_orders(self) -> List[PersistedOrder]:
+    def get_pending_orders(self) -> list[PersistedOrder]:
         """Get all pending orders."""
         conn = self._get_connection()
-        rows = conn.execute(
-            "SELECT * FROM orders WHERE status IN ('pending', 'open', 'partial')"
-        ).fetchall()
+        rows = conn.execute("SELECT * FROM orders WHERE status IN ('pending', 'open', 'partial')").fetchall()
         return [PersistedOrder(**dict(row)) for row in rows]
 
-    def get_order(self, order_id: str) -> Optional[PersistedOrder]:
+    def get_order(self, order_id: str) -> PersistedOrder | None:
         """Get order by ID."""
         conn = self._get_connection()
-        row = conn.execute(
-            "SELECT * FROM orders WHERE order_id = ?", (order_id,)
-        ).fetchone()
+        row = conn.execute("SELECT * FROM orders WHERE order_id = ?", (order_id,)).fetchone()
         if row:
             return PersistedOrder(**dict(row))
         return None
@@ -289,43 +306,42 @@ class StatePersistence:
         state_id: str,
         cash_balance: float,
         total_equity: float,
-        positions: List[Dict],
-        pending_orders: List[Dict],
-        metadata: Optional[Dict] = None,
+        positions: list[dict],
+        pending_orders: list[dict],
+        metadata: dict | None = None,
     ) -> None:
         """Save a system state snapshot."""
         with self._transaction() as conn:
-            conn.execute("""
+            conn.execute(
+                """
                 INSERT INTO system_state
                 (state_id, timestamp, cash_balance, total_equity,
                  positions_json, pending_orders_json, metadata)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (
-                state_id,
-                datetime.now(timezone.utc).isoformat(),
-                cash_balance,
-                total_equity,
-                json.dumps(positions),
-                json.dumps(pending_orders),
-                json.dumps(metadata or {}),
-            ))
+            """,
+                (
+                    state_id,
+                    datetime.now(timezone.utc).isoformat(),
+                    cash_balance,
+                    total_equity,
+                    json.dumps(positions),
+                    json.dumps(pending_orders),
+                    json.dumps(metadata or {}),
+                ),
+            )
 
-    def get_latest_state(self) -> Optional[SystemState]:
+    def get_latest_state(self) -> SystemState | None:
         """Get the most recent system state snapshot."""
         conn = self._get_connection()
-        row = conn.execute(
-            "SELECT * FROM system_state ORDER BY timestamp DESC LIMIT 1"
-        ).fetchone()
+        row = conn.execute("SELECT * FROM system_state ORDER BY timestamp DESC LIMIT 1").fetchone()
         if row:
             return SystemState(**dict(row))
         return None
 
-    def get_state_by_id(self, state_id: str) -> Optional[SystemState]:
+    def get_state_by_id(self, state_id: str) -> SystemState | None:
         """Get system state by ID."""
         conn = self._get_connection()
-        row = conn.execute(
-            "SELECT * FROM system_state WHERE state_id = ?", (state_id,)
-        ).fetchone()
+        row = conn.execute("SELECT * FROM system_state WHERE state_id = ?", (state_id,)).fetchone()
         if row:
             return SystemState(**dict(row))
         return None
@@ -339,38 +355,42 @@ class StatePersistence:
         side: str,
         quantity: float,
         price: float,
-        pnl: Optional[float] = None,
-        metadata: Optional[Dict] = None,
+        pnl: float | None = None,
+        metadata: dict | None = None,
     ) -> None:
         """Record a completed trade."""
         with self._transaction() as conn:
-            conn.execute("""
+            conn.execute(
+                """
                 INSERT INTO trade_history
                 (order_id, symbol, side, quantity, price, pnl, executed_at, metadata)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                order_id, symbol, side, quantity, price, pnl,
-                datetime.now(timezone.utc).isoformat(),
-                json.dumps(metadata or {}),
-            ))
+            """,
+                (
+                    order_id,
+                    symbol,
+                    side,
+                    quantity,
+                    price,
+                    pnl,
+                    datetime.now(timezone.utc).isoformat(),
+                    json.dumps(metadata or {}),
+                ),
+            )
 
     def get_trade_history(
         self,
-        symbol: Optional[str] = None,
+        symbol: str | None = None,
         limit: int = 100,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Get trade history."""
         conn = self._get_connection()
         if symbol:
             rows = conn.execute(
-                "SELECT * FROM trade_history WHERE symbol = ? ORDER BY executed_at DESC LIMIT ?",
-                (symbol, limit)
+                "SELECT * FROM trade_history WHERE symbol = ? ORDER BY executed_at DESC LIMIT ?", (symbol, limit)
             ).fetchall()
         else:
-            rows = conn.execute(
-                "SELECT * FROM trade_history ORDER BY executed_at DESC LIMIT ?",
-                (limit,)
-            ).fetchall()
+            rows = conn.execute("SELECT * FROM trade_history ORDER BY executed_at DESC LIMIT ?", (limit,)).fetchall()
         return [dict(row) for row in rows]
 
     # ========== Cleanup ==========
@@ -378,21 +398,24 @@ class StatePersistence:
     def cleanup_old_states(self, keep_days: int = 7) -> int:
         """Remove old state snapshots."""
         with self._transaction() as conn:
-            cursor = conn.execute("""
+            cursor = conn.execute(
+                """
                 DELETE FROM system_state
                 WHERE timestamp < datetime('now', ?)
-            """, (f'-{keep_days} days',))
+            """,
+                (f"-{keep_days} days",),
+            )
             return cursor.rowcount
 
     def close(self) -> None:
         """Close database connection."""
-        if hasattr(self._local, 'connection') and self._local.connection:
+        if hasattr(self._local, "connection") and self._local.connection:
             self._local.connection.close()
             self._local.connection = None
 
 
 # Singleton instance
-_persistence: Optional[StatePersistence] = None
+_persistence: StatePersistence | None = None
 
 
 def get_persistence() -> StatePersistence:

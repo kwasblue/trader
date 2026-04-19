@@ -4,13 +4,14 @@ Logistic Regression Strategy - ML-based trading signal generation.
 Uses a trained sklearn pipeline to predict price direction.
 Thresholds are configurable via params or config file.
 """
+
 import json
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
-from pathlib import Path
-from typing import Optional, List
-from core.base.base_strategy import BaseStrategy
 
+from core.base.base_strategy import BaseStrategy
 
 # Default thresholds (can be overridden via config or params)
 DEFAULT_BUY_THRESHOLD = 0.52
@@ -46,13 +47,9 @@ class LogisticRegressionStrategy(BaseStrategy):
         ml_config = _load_ml_config()
         prediction_config = ml_config.get("prediction", {})
 
-        self.buy_threshold = params.get(
-            "buy_threshold",
-            prediction_config.get("buy_threshold", DEFAULT_BUY_THRESHOLD)
-        )
+        self.buy_threshold = params.get("buy_threshold", prediction_config.get("buy_threshold", DEFAULT_BUY_THRESHOLD))
         self.sell_threshold = params.get(
-            "sell_threshold",
-            prediction_config.get("sell_threshold", DEFAULT_SELL_THRESHOLD)
+            "sell_threshold", prediction_config.get("sell_threshold", DEFAULT_SELL_THRESHOLD)
         )
 
     def generate_signal(self, data) -> int:
@@ -87,10 +84,7 @@ class LogisticRegressionStrategy(BaseStrategy):
             preds_proba = model.named_steps["model"].predict_proba(X_transformed)[:, 1]
 
             # Generate signals based on thresholds
-            signals = np.where(
-                preds_proba > self.buy_threshold, 1,
-                np.where(preds_proba < self.sell_threshold, -1, 0)
-            )
+            signals = np.where(preds_proba > self.buy_threshold, 1, np.where(preds_proba < self.sell_threshold, -1, 0))
 
             if len(signals) == 0:
                 return 0
@@ -101,7 +95,7 @@ class LogisticRegressionStrategy(BaseStrategy):
             print(f"Prediction failed: {e}")
             return 0
 
-    def generate_signals_vectorized(self, data: pd.DataFrame) -> Optional[List[int]]:
+    def generate_signals_vectorized(self, data: pd.DataFrame) -> list[int] | None:
         """Vectorized ML signal generation for fast backtesting."""
         model = self.params.get("model")
         if model is None:
@@ -123,10 +117,7 @@ class LogisticRegressionStrategy(BaseStrategy):
             preds_proba = model.named_steps["model"].predict_proba(X_transformed)[:, 1]
 
             # Generate signals based on thresholds (vectorized)
-            signals = np.where(
-                preds_proba > self.buy_threshold, 1,
-                np.where(preds_proba < self.sell_threshold, -1, 0)
-            )
+            signals = np.where(preds_proba > self.buy_threshold, 1, np.where(preds_proba < self.sell_threshold, -1, 0))
 
             return signals.tolist()
 

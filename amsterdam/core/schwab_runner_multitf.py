@@ -18,17 +18,16 @@ Usage:
 
     # Everything else stays the same!
 """
+
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Dict, List, Optional
-from datetime import datetime, timezone
 
-from core.schwab_runner import SchwabLiveRunner
-from core.multi_timeframe_integration import MultiTimeframeManager
 from core.bar_aggregator import Bar
-from data.streaming.schwab_client import SchwabClient
 from core.config_loader import TradingConfig
+from core.multi_timeframe_integration import MultiTimeframeManager
+from core.schwab_runner import SchwabLiveRunner
+from data.streaming.schwab_client import SchwabClient
 
 
 class SchwabLiveRunnerMultiTF(SchwabLiveRunner):
@@ -44,10 +43,10 @@ class SchwabLiveRunnerMultiTF(SchwabLiveRunner):
 
     def __init__(
         self,
-        symbols: List[str],
-        client: Optional[SchwabClient] = None,
-        config: Optional[TradingConfig] = None,
-        routing_config_path: str = "config/strategy_routing.json"
+        symbols: list[str],
+        client: SchwabClient | None = None,
+        config: TradingConfig | None = None,
+        routing_config_path: str = "config/strategy_routing.json",
     ):
         """
         Initialize multi-timeframe Schwab runner.
@@ -60,18 +59,14 @@ class SchwabLiveRunnerMultiTF(SchwabLiveRunner):
         """
         # Initialize multi-timeframe manager
         self.mtf_manager = MultiTimeframeManager(
-            symbols=symbols,
-            routing_config_path=routing_config_path,
-            initial_regime="normal"
+            symbols=symbols, routing_config_path=routing_config_path, initial_regime="normal"
         )
 
         # Register callback for aggregated bars
         self.mtf_manager.register_bar_callback(self._on_aggregated_bar)
 
         # Track regime for each symbol (for regime change detection)
-        self._current_regimes: Dict[str, str] = {
-            symbol: "normal" for symbol in symbols
-        }
+        self._current_regimes: dict[str, str] = {symbol: "normal" for symbol in symbols}
 
         # Call parent constructor
         super().__init__(symbols, client, config)
@@ -81,12 +76,10 @@ class SchwabLiveRunnerMultiTF(SchwabLiveRunner):
         self.logger.info("=" * 60)
         for symbol in symbols:
             routing = self.mtf_manager.get_routing(symbol)
-            self.logger.info(
-                f"  {symbol}: {routing['strategy']} @ {routing['timeframe']}"
-            )
+            self.logger.info(f"  {symbol}: {routing['strategy']} @ {routing['timeframe']}")
         self.logger.info("=" * 60)
 
-    async def _on_quote(self, symbol: str, quote: Dict) -> None:
+    async def _on_quote(self, symbol: str, quote: dict) -> None:
         """
         Handle incoming Schwab quote data with multi-timeframe aggregation.
 
@@ -102,18 +95,18 @@ class SchwabLiveRunnerMultiTF(SchwabLiveRunner):
 
         # Convert to Bar object format for MultiTimeframeManager
         bar_data = {
-            'symbol': symbol,
-            'timestamp': raw_bar.get('timestamp'),
-            'open': float(raw_bar.get('Open', 0)),
-            'high': float(raw_bar.get('High', 0)),
-            'low': float(raw_bar.get('Low', 0)),
-            'close': float(raw_bar.get('Close', 0)),
-            'volume': int(raw_bar.get('Volume', 0))
+            "symbol": symbol,
+            "timestamp": raw_bar.get("timestamp"),
+            "open": float(raw_bar.get("Open", 0)),
+            "high": float(raw_bar.get("High", 0)),
+            "low": float(raw_bar.get("Low", 0)),
+            "close": float(raw_bar.get("Close", 0)),
+            "volume": int(raw_bar.get("Volume", 0)),
         }
 
         # Process through multi-timeframe manager
         # This will aggregate to the configured timeframe and emit when window completes
-        completed_bars = self.mtf_manager.process_websocket_data(bar_data)
+        self.mtf_manager.process_websocket_data(bar_data)
 
         # Completed bars are handled via callback (_on_aggregated_bar)
         # We also update current price for MTM
@@ -134,14 +127,14 @@ class SchwabLiveRunnerMultiTF(SchwabLiveRunner):
 
         # Convert Bar to canonical format expected by strategy engine
         canonical_bar = {
-            'symbol': symbol,
-            'timestamp': bar.timestamp,
-            'Open': bar.open,
-            'High': bar.high,
-            'Low': bar.low,
-            'Close': bar.close,
-            'Volume': bar.volume,
-            'bar_closed': True  # Always true for aggregated bars
+            "symbol": symbol,
+            "timestamp": bar.timestamp,
+            "Open": bar.open,
+            "High": bar.high,
+            "Low": bar.low,
+            "Close": bar.close,
+            "Volume": bar.volume,
+            "bar_closed": True,  # Always true for aggregated bars
         }
 
         self.logger.info(
@@ -164,7 +157,7 @@ class SchwabLiveRunnerMultiTF(SchwabLiveRunner):
         Call this periodically (e.g., every 5 minutes) to detect regime changes
         and automatically switch timeframes.
         """
-        if not hasattr(self, 'regime_detector'):
+        if not hasattr(self, "regime_detector"):
             # Regime detector not available - skip check
             return
 
@@ -175,9 +168,7 @@ class SchwabLiveRunnerMultiTF(SchwabLiveRunner):
                 old_regime = self._current_regimes.get(symbol, "normal")
 
                 if new_regime != old_regime:
-                    self.logger.info(
-                        f"[{symbol}] Regime change detected: {old_regime} → {new_regime}"
-                    )
+                    self.logger.info(f"[{symbol}] Regime change detected: {old_regime} → {new_regime}")
 
                     # Update timeframe through manager
                     self.mtf_manager.update_regime(symbol, new_regime)
@@ -187,9 +178,7 @@ class SchwabLiveRunnerMultiTF(SchwabLiveRunner):
 
                     # Log new configuration
                     routing = self.mtf_manager.get_routing(symbol)
-                    self.logger.info(
-                        f"[{symbol}] New config: {routing['strategy']} @ {routing['timeframe']}"
-                    )
+                    self.logger.info(f"[{symbol}] New config: {routing['strategy']} @ {routing['timeframe']}")
 
             except Exception as e:
                 self.logger.exception(f"Error checking regime for {symbol}: {e}")
@@ -227,7 +216,8 @@ class SchwabLiveRunnerMultiTF(SchwabLiveRunner):
         """
         # Start regime checking task (every 5 minutes)
         regime_check_task = None
-        if hasattr(self, 'regime_detector'):
+        if hasattr(self, "regime_detector"):
+
             async def regime_check_loop():
                 while self.running:
                     await asyncio.sleep(300)  # 5 minutes
@@ -252,6 +242,7 @@ class SchwabLiveRunnerMultiTF(SchwabLiveRunner):
 # FACTORY REGISTRATION
 # ============================================================================
 
+
 def register_with_factory():
     """
     Register this runner with RunnerFactory.
@@ -265,13 +256,14 @@ def register_with_factory():
     """
     try:
         from core.runner_factory import RunnerFactory
-        RunnerFactory.register('schwab_multitf', SchwabLiveRunnerMultiTF)
+
+        RunnerFactory.register("schwab_multitf", SchwabLiveRunnerMultiTF)
         print("✓ Registered schwab_multitf runner with factory")
     except Exception as e:
         print(f"✗ Failed to register with factory: {e}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     """Quick test of multi-timeframe runner."""
     print("=" * 70)
     print("SchwabLiveRunnerMultiTF - Quick Test")
@@ -280,13 +272,12 @@ if __name__ == '__main__':
     # Test initialization
     try:
         runner = SchwabLiveRunnerMultiTF(
-            symbols=['AAPL', 'TSLA', 'MSFT'],
-            routing_config_path='config/strategy_routing.json'
+            symbols=["AAPL", "TSLA", "MSFT"], routing_config_path="config/strategy_routing.json"
         )
         print("✓ Runner initialized successfully")
 
         # Check configuration
-        for symbol in ['AAPL', 'TSLA', 'MSFT']:
+        for symbol in ["AAPL", "TSLA", "MSFT"]:
             routing = runner.mtf_manager.get_routing(symbol)
             print(f"  {symbol}: {routing}")
 
@@ -295,4 +286,5 @@ if __name__ == '__main__':
     except Exception as e:
         print(f"✗ Error: {e}")
         import traceback
+
         traceback.print_exc()

@@ -5,22 +5,23 @@ Example 6: Custom Strategy Implementation
 Demonstrates how to create and test a custom trading strategy.
 """
 
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import pandas as pd
-import numpy as np
 from datetime import datetime
-from typing import Optional, List
 
+import numpy as np
+import pandas as pd
+
+from core.backtest_suite import validate_ohlcv_data
 from core.base.base_strategy import BaseStrategy
-from core.backtest_suite import VectorizedBacktester, validate_ohlcv_data
-
 
 # =============================================================================
 # CUSTOM STRATEGY DEFINITION
 # =============================================================================
+
 
 class DualMomentumStrategy(BaseStrategy):
     """
@@ -42,13 +43,7 @@ class DualMomentumStrategy(BaseStrategy):
         roc_threshold: Minimum ROC for buy signal (default: 0)
     """
 
-    def __init__(
-        self,
-        ma_period: int = 50,
-        roc_period: int = 20,
-        roc_threshold: float = 0,
-        **kwargs
-    ):
+    def __init__(self, ma_period: int = 50, roc_period: int = 20, roc_threshold: float = 0, **kwargs):
         super().__init__(**kwargs)
         self.ma_period = ma_period
         self.roc_period = roc_period
@@ -59,7 +54,7 @@ class DualMomentumStrategy(BaseStrategy):
         if len(data) < max(self.ma_period, self.roc_period):
             return 0
 
-        close = data['Close'] if 'Close' in data.columns else data['close']
+        close = data["Close"] if "Close" in data.columns else data["close"]
 
         # Calculate indicators
         ma = close.rolling(self.ma_period).mean().iloc[-1]
@@ -72,15 +67,15 @@ class DualMomentumStrategy(BaseStrategy):
         positive_roc = roc > self.roc_threshold
 
         if above_ma and positive_roc:
-            return 1   # Buy: both momentums positive
+            return 1  # Buy: both momentums positive
         elif not above_ma or roc < -self.roc_threshold:
             return -1  # Sell: either momentum negative
-        return 0       # Hold
+        return 0  # Hold
 
-    def generate_signals_vectorized(self, data: pd.DataFrame) -> Optional[List[int]]:
+    def generate_signals_vectorized(self, data: pd.DataFrame) -> list[int] | None:
         """Vectorized signal generation for fast backtesting."""
-        close = data['Close'] if 'Close' in data.columns else data['close']
-        n = len(close)
+        close = data["Close"] if "Close" in data.columns else data["close"]
+        len(close)
 
         # Calculate moving average
         ma = close.rolling(self.ma_period).mean()
@@ -93,10 +88,7 @@ class DualMomentumStrategy(BaseStrategy):
         positive_roc = roc > self.roc_threshold
         negative_roc = roc < -self.roc_threshold
 
-        signals = np.where(
-            above_ma & positive_roc, 1,
-            np.where(~above_ma | negative_roc, -1, 0)
-        )
+        signals = np.where(above_ma & positive_roc, 1, np.where(~above_ma | negative_roc, -1, 0))
 
         # No signal during warmup
         warmup = max(self.ma_period, self.roc_period)
@@ -117,12 +109,7 @@ class VolatilityBreakoutStrategy(BaseStrategy):
         breakout_mult: ATR multiplier for breakout (default: 1.5)
     """
 
-    def __init__(
-        self,
-        atr_period: int = 14,
-        breakout_mult: float = 1.5,
-        **kwargs
-    ):
+    def __init__(self, atr_period: int = 14, breakout_mult: float = 1.5, **kwargs):
         super().__init__(**kwargs)
         self.atr_period = atr_period
         self.breakout_mult = breakout_mult
@@ -131,16 +118,12 @@ class VolatilityBreakoutStrategy(BaseStrategy):
         if len(data) < self.atr_period + 1:
             return 0
 
-        high = data['High'] if 'High' in data.columns else data['high']
-        low = data['Low'] if 'Low' in data.columns else data['low']
-        close = data['Close'] if 'Close' in data.columns else data['close']
+        high = data["High"] if "High" in data.columns else data["high"]
+        low = data["Low"] if "Low" in data.columns else data["low"]
+        close = data["Close"] if "Close" in data.columns else data["close"]
 
         # Calculate ATR
-        tr = pd.concat([
-            high - low,
-            (high - close.shift()).abs(),
-            (low - close.shift()).abs()
-        ], axis=1).max(axis=1)
+        tr = pd.concat([high - low, (high - close.shift()).abs(), (low - close.shift()).abs()], axis=1).max(axis=1)
         atr = tr.rolling(self.atr_period).mean().iloc[-1]
 
         # Previous day's close and current price
@@ -152,22 +135,18 @@ class VolatilityBreakoutStrategy(BaseStrategy):
         lower_breakout = prev_close - (atr * self.breakout_mult)
 
         if current > upper_breakout:
-            return 1   # Bullish breakout
+            return 1  # Bullish breakout
         elif current < lower_breakout:
             return -1  # Bearish breakout
         return 0
 
-    def generate_signals_vectorized(self, data: pd.DataFrame) -> Optional[List[int]]:
-        high = data['High'] if 'High' in data.columns else data['high']
-        low = data['Low'] if 'Low' in data.columns else data['low']
-        close = data['Close'] if 'Close' in data.columns else data['close']
+    def generate_signals_vectorized(self, data: pd.DataFrame) -> list[int] | None:
+        high = data["High"] if "High" in data.columns else data["high"]
+        low = data["Low"] if "Low" in data.columns else data["low"]
+        close = data["Close"] if "Close" in data.columns else data["close"]
 
         # Calculate ATR
-        tr = pd.concat([
-            high - low,
-            (high - close.shift()).abs(),
-            (low - close.shift()).abs()
-        ], axis=1).max(axis=1)
+        tr = pd.concat([high - low, (high - close.shift()).abs(), (low - close.shift()).abs()], axis=1).max(axis=1)
         atr = tr.rolling(self.atr_period).mean()
 
         # Breakout levels
@@ -176,7 +155,7 @@ class VolatilityBreakoutStrategy(BaseStrategy):
         lower = prev_close - (atr * self.breakout_mult)
 
         signals = np.where(close > upper, 1, np.where(close < lower, -1, 0))
-        signals[:self.atr_period + 1] = 0
+        signals[: self.atr_period + 1] = 0
 
         return signals.tolist()
 
@@ -185,28 +164,31 @@ class VolatilityBreakoutStrategy(BaseStrategy):
 # MAIN EXAMPLE
 # =============================================================================
 
+
 def generate_sample_data(days: int = 500) -> pd.DataFrame:
     """Generate synthetic price data with trends."""
     np.random.seed(42)
 
-    dates = pd.date_range(end=datetime.now(), periods=days, freq='D')
+    dates = pd.date_range(end=datetime.now(), periods=days, freq="D")
 
     # Create trending data
     trend = np.sin(np.linspace(0, 4 * np.pi, days)) * 20
     noise = np.cumsum(np.random.randn(days) * 0.5)
     prices = 100 + trend + noise
 
-    data = pd.DataFrame({
-        'Date': dates,
-        'Open': prices + np.random.randn(days) * 0.5,
-        'High': prices + np.abs(np.random.randn(days) * 1.5),
-        'Low': prices - np.abs(np.random.randn(days) * 1.5),
-        'Close': prices,
-        'Volume': np.random.randint(100000, 1000000, days)
-    })
+    data = pd.DataFrame(
+        {
+            "Date": dates,
+            "Open": prices + np.random.randn(days) * 0.5,
+            "High": prices + np.abs(np.random.randn(days) * 1.5),
+            "Low": prices - np.abs(np.random.randn(days) * 1.5),
+            "Close": prices,
+            "Volume": np.random.randint(100000, 1000000, days),
+        }
+    )
 
-    data['High'] = data[['Open', 'High', 'Low', 'Close']].max(axis=1)
-    data['Low'] = data[['Open', 'High', 'Low', 'Close']].min(axis=1)
+    data["High"] = data[["Open", "High", "Low", "Close"]].max(axis=1)
+    data["Low"] = data[["Open", "High", "Low", "Close"]].min(axis=1)
 
     return data
 
@@ -216,10 +198,10 @@ def test_strategy(data: pd.DataFrame, strategy: BaseStrategy, name: str) -> dict
     # Generate signals
     signals = strategy.generate_signals_vectorized(data)
     if signals is None:
-        signals = [strategy.generate_signal(data.iloc[:i+1]) for i in range(len(data))]
+        signals = [strategy.generate_signal(data.iloc[: i + 1]) for i in range(len(data))]
 
     data_copy = data.copy()
-    data_copy['Signal'] = signals
+    data_copy["Signal"] = signals
 
     # Run backtest manually
     initial_capital = 10000
@@ -228,8 +210,8 @@ def test_strategy(data: pd.DataFrame, strategy: BaseStrategy, name: str) -> dict
     portfolio_values = []
 
     for i, row in data_copy.iterrows():
-        price = row['Close']
-        signal = row['Signal']
+        price = row["Close"]
+        signal = row["Signal"]
 
         # Execute trades
         if signal == 1 and position == 0:
@@ -259,11 +241,11 @@ def test_strategy(data: pd.DataFrame, strategy: BaseStrategy, name: str) -> dict
     max_dd = np.max(drawdown)
 
     return {
-        'name': name,
-        'total_return': total_return,
-        'sharpe_ratio': sharpe,
-        'max_drawdown': max_dd,
-        'final_value': pv[-1]
+        "name": name,
+        "total_return": total_return,
+        "sharpe_ratio": sharpe,
+        "max_drawdown": max_dd,
+        "final_value": pv[-1],
     }
 
 
@@ -309,11 +291,8 @@ def main():
     print(f"\n{'Strategy':<25} {'Return':>10} {'Sharpe':>10} {'MaxDD':>10}")
     print("-" * 60)
 
-    for r in sorted(results, key=lambda x: x['sharpe_ratio'], reverse=True):
-        print(f"{r['name']:<25} "
-              f"{r['total_return']:>+9.2%} "
-              f"{r['sharpe_ratio']:>10.2f} "
-              f"{r['max_drawdown']:>9.2%}")
+    for r in sorted(results, key=lambda x: x["sharpe_ratio"], reverse=True):
+        print(f"{r['name']:<25} {r['total_return']:>+9.2%} {r['sharpe_ratio']:>10.2f} {r['max_drawdown']:>9.2%}")
 
     # Show strategy code
     print("\n" + "=" * 70)
@@ -359,5 +338,5 @@ class MyCustomStrategy(BaseStrategy):
     print("\n" + "=" * 70)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

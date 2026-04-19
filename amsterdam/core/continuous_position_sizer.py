@@ -23,8 +23,8 @@ Usage:
 """
 
 import logging
-from typing import Dict, Optional, List
 from dataclasses import dataclass
+
 import pandas as pd
 
 from core.continuous_metrics import ContinuousMetrics, RiskMetrics
@@ -33,6 +33,7 @@ from core.continuous_metrics import ContinuousMetrics, RiskMetrics
 @dataclass
 class PositionSizeResult:
     """Result of position size calculation."""
+
     symbol: str
     strategy: str
     base_size: float  # Base position size (dollars)
@@ -53,11 +54,7 @@ class ContinuousPositionSizer:
     3. Configurable risk thresholds
     """
 
-    def __init__(
-        self,
-        config: Optional[Dict] = None,
-        logger: Optional[logging.Logger] = None
-    ):
+    def __init__(self, config: dict | None = None, logger: logging.Logger | None = None):
         """
         Initialize continuous position sizer.
 
@@ -70,43 +67,37 @@ class ContinuousPositionSizer:
         # Default configuration
         self.config = {
             # Volatility thresholds (percentile)
-            'vol_low_threshold': 30,
-            'vol_medium_threshold': 50,
-            'vol_high_threshold': 70,
-
+            "vol_low_threshold": 30,
+            "vol_medium_threshold": 50,
+            "vol_high_threshold": 70,
             # Sharpe thresholds
-            'sharpe_excellent': 1.5,
-            'sharpe_good': 1.0,
-            'sharpe_acceptable': 0.5,
-
+            "sharpe_excellent": 1.5,
+            "sharpe_good": 1.0,
+            "sharpe_acceptable": 0.5,
             # Position multipliers for different scenarios
-            'multiplier_max': 1.0,  # Best conditions
-            'multiplier_good': 0.75,  # Good conditions
-            'multiplier_medium': 0.50,  # Medium conditions
-            'multiplier_low': 0.25,  # Poor conditions
-            'multiplier_min': 0.10,  # Worst conditions (or skip)
-
+            "multiplier_max": 1.0,  # Best conditions
+            "multiplier_good": 0.75,  # Good conditions
+            "multiplier_medium": 0.50,  # Medium conditions
+            "multiplier_low": 0.25,  # Poor conditions
+            "multiplier_min": 0.10,  # Worst conditions (or skip)
             # Continuous formula parameters
-            'use_continuous_formula': True,  # vs discrete buckets
-            'max_sharpe_for_scaling': 2.0,  # Sharpe >= this = 1.0 multiplier
-            'scaling_alpha': 1.5,  # Scaling constant for leverage (C_final = α * √(V×P))
-
+            "use_continuous_formula": True,  # vs discrete buckets
+            "max_sharpe_for_scaling": 2.0,  # Sharpe >= this = 1.0 multiplier
+            "scaling_alpha": 1.5,  # Scaling constant for leverage (C_final = α * √(V×P))
             # Safety limits (applied AFTER scaling)
-            'min_multiplier': 0.30,  # Floor
-            'max_multiplier': 1.5,  # Ceiling
-            'skip_trade_threshold': 0.05,  # Check raw score BEFORE flooring
-
+            "min_multiplier": 0.30,  # Floor
+            "max_multiplier": 1.5,  # Ceiling
+            "skip_trade_threshold": 0.05,  # Check raw score BEFORE flooring
             # Bayesian shrinkage parameters (passed to metrics calculator)
-            'bayesian_prior_sharpe': 0.5,  # Conservative prior
-            'bayesian_prior_weight': 5,  # Equivalent to 5 trades
-            'sharpe_smoothing_alpha': 0.3,  # EMA alpha for smoothing
-
+            "bayesian_prior_sharpe": 0.5,  # Conservative prior
+            "bayesian_prior_weight": 5,  # Equivalent to 5 trades
+            "sharpe_smoothing_alpha": 0.3,  # EMA alpha for smoothing
             # Cold-start graduated ceiling (reduces ceiling when trade count is low)
-            'use_graduated_ceiling': True,
-            'cold_start_very_low_threshold': 5,  # N < 5: very cold
-            'cold_start_low_threshold': 10,  # N < 10: warming up
-            'ceiling_very_low_trades': 0.50,  # Max multiplier when N < 5
-            'ceiling_low_trades': 0.75,  # Max multiplier when 5 <= N < 10
+            "use_graduated_ceiling": True,
+            "cold_start_very_low_threshold": 5,  # N < 5: very cold
+            "cold_start_low_threshold": 10,  # N < 10: warming up
+            "ceiling_very_low_trades": 0.50,  # Max multiplier when N < 5
+            "ceiling_low_trades": 0.75,  # Max multiplier when 5 <= N < 10
         }
 
         # Override with provided config
@@ -130,60 +121,39 @@ class ContinuousPositionSizer:
         sharpe = metrics.rolling_sharpe
 
         # Excellent conditions: Low vol + High Sharpe
-        if sharpe >= self.config['sharpe_excellent'] and vol < self.config['vol_low_threshold']:
-            return (
-                self.config['multiplier_max'],
-                f"Excellent: Low vol ({vol:.0f}%) + High Sharpe ({sharpe:.2f})"
-            )
+        if sharpe >= self.config["sharpe_excellent"] and vol < self.config["vol_low_threshold"]:
+            return (self.config["multiplier_max"], f"Excellent: Low vol ({vol:.0f}%) + High Sharpe ({sharpe:.2f})")
 
         # Good conditions: Low/Medium vol + Good Sharpe
-        elif sharpe >= self.config['sharpe_excellent'] and vol < self.config['vol_medium_threshold']:
-            return (
-                0.9,
-                f"Very Good: Medium vol ({vol:.0f}%) + High Sharpe ({sharpe:.2f})"
-            )
+        elif sharpe >= self.config["sharpe_excellent"] and vol < self.config["vol_medium_threshold"]:
+            return (0.9, f"Very Good: Medium vol ({vol:.0f}%) + High Sharpe ({sharpe:.2f})")
 
         # Good Sharpe but high volatility
-        elif sharpe >= self.config['sharpe_excellent']:
+        elif sharpe >= self.config["sharpe_excellent"]:
             return (
-                self.config['multiplier_good'],
-                f"Good but volatile: High vol ({vol:.0f}%) + High Sharpe ({sharpe:.2f})"
+                self.config["multiplier_good"],
+                f"Good but volatile: High vol ({vol:.0f}%) + High Sharpe ({sharpe:.2f})",
             )
 
         # Decent Sharpe, low vol
-        elif sharpe >= self.config['sharpe_good'] and vol < self.config['vol_low_threshold']:
-            return (
-                0.85,
-                f"Good: Low vol ({vol:.0f}%) + Decent Sharpe ({sharpe:.2f})"
-            )
+        elif sharpe >= self.config["sharpe_good"] and vol < self.config["vol_low_threshold"]:
+            return (0.85, f"Good: Low vol ({vol:.0f}%) + Decent Sharpe ({sharpe:.2f})")
 
         # Decent Sharpe, medium vol
-        elif sharpe >= self.config['sharpe_good'] and vol < self.config['vol_medium_threshold']:
-            return (
-                self.config['multiplier_good'],
-                f"Decent: Medium vol ({vol:.0f}%) + Good Sharpe ({sharpe:.2f})"
-            )
+        elif sharpe >= self.config["sharpe_good"] and vol < self.config["vol_medium_threshold"]:
+            return (self.config["multiplier_good"], f"Decent: Medium vol ({vol:.0f}%) + Good Sharpe ({sharpe:.2f})")
 
         # Decent Sharpe, high vol
-        elif sharpe >= self.config['sharpe_good']:
-            return (
-                self.config['multiplier_medium'],
-                f"Cautious: High vol ({vol:.0f}%) + Decent Sharpe ({sharpe:.2f})"
-            )
+        elif sharpe >= self.config["sharpe_good"]:
+            return (self.config["multiplier_medium"], f"Cautious: High vol ({vol:.0f}%) + Decent Sharpe ({sharpe:.2f})")
 
         # Marginal performance
-        elif sharpe >= self.config['sharpe_acceptable']:
-            return (
-                self.config['multiplier_low'],
-                f"Marginal: Sharpe {sharpe:.2f}, Vol {vol:.0f}%"
-            )
+        elif sharpe >= self.config["sharpe_acceptable"]:
+            return (self.config["multiplier_low"], f"Marginal: Sharpe {sharpe:.2f}, Vol {vol:.0f}%")
 
         # Poor performance
         else:
-            return (
-                self.config['multiplier_min'],
-                f"Poor: Sharpe {sharpe:.2f}, Vol {vol:.0f}% - Consider skipping"
-            )
+            return (self.config["multiplier_min"], f"Poor: Sharpe {sharpe:.2f}, Vol {vol:.0f}% - Consider skipping")
 
     def get_effective_ceiling(self, trade_count: int) -> float:
         """
@@ -203,37 +173,27 @@ class ContinuousPositionSizer:
         Returns:
             Effective ceiling (may be lower than config max_multiplier)
         """
-        if not self.config.get('use_graduated_ceiling', True):
-            return self.config['max_multiplier']
+        if not self.config.get("use_graduated_ceiling", True):
+            return self.config["max_multiplier"]
 
-        very_low_thresh = self.config.get('cold_start_very_low_threshold', 5)
-        low_thresh = self.config.get('cold_start_low_threshold', 10)
+        very_low_thresh = self.config.get("cold_start_very_low_threshold", 5)
+        low_thresh = self.config.get("cold_start_low_threshold", 10)
 
         if trade_count < very_low_thresh:
             # Very cold start
-            ceiling = self.config.get('ceiling_very_low_trades', 0.50)
-            self.logger.debug(
-                f"Cold start (N={trade_count} < {very_low_thresh}): "
-                f"using reduced ceiling {ceiling:.2f}"
-            )
+            ceiling = self.config.get("ceiling_very_low_trades", 0.50)
+            self.logger.debug(f"Cold start (N={trade_count} < {very_low_thresh}): using reduced ceiling {ceiling:.2f}")
             return ceiling
         elif trade_count < low_thresh:
             # Warming up
-            ceiling = self.config.get('ceiling_low_trades', 0.75)
-            self.logger.debug(
-                f"Warming up (N={trade_count} < {low_thresh}): "
-                f"using reduced ceiling {ceiling:.2f}"
-            )
+            ceiling = self.config.get("ceiling_low_trades", 0.75)
+            self.logger.debug(f"Warming up (N={trade_count} < {low_thresh}): using reduced ceiling {ceiling:.2f}")
             return ceiling
         else:
             # Mature - use full ceiling
-            return self.config['max_multiplier']
+            return self.config["max_multiplier"]
 
-    def calculate_continuous_multiplier(
-        self,
-        metrics: RiskMetrics,
-        trade_count: int
-    ) -> tuple[float, float, str]:
+    def calculate_continuous_multiplier(self, metrics: RiskMetrics, trade_count: int) -> tuple[float, float, str]:
         """
         Calculate position multiplier using continuous formula with scaling.
 
@@ -257,11 +217,11 @@ class ContinuousPositionSizer:
         raw_score = metrics.combined_score  # Already √(V × P)
 
         # Step 2: Apply scaling constant
-        scaling_alpha = self.config.get('scaling_alpha', 1.0)
+        scaling_alpha = self.config.get("scaling_alpha", 1.0)
         scaled_score = scaling_alpha * raw_score
 
         # Step 3: Apply floor and effective ceiling (graduated for cold start)
-        floor = self.config['min_multiplier']
+        floor = self.config["min_multiplier"]
         effective_ceiling = self.get_effective_ceiling(trade_count)
         final_multiplier = max(floor, min(effective_ceiling, scaled_score))
 
@@ -278,7 +238,7 @@ class ContinuousPositionSizer:
         if final_multiplier != scaled_score:
             if final_multiplier == floor:
                 bound_type = "floor"
-            elif final_multiplier == effective_ceiling and effective_ceiling < self.config['max_multiplier']:
+            elif final_multiplier == effective_ceiling and effective_ceiling < self.config["max_multiplier"]:
                 bound_type = f"grad-ceiling (N={trade_count})"
             else:
                 bound_type = "ceiling"
@@ -297,9 +257,9 @@ class ContinuousPositionSizer:
         base_capital: float,
         max_position_pct: float,
         bars: pd.DataFrame,
-        recent_trades: List[Dict],
+        recent_trades: list[dict],
         atr_lookback: int = 250,
-        sharpe_lookback_days: int = 30
+        sharpe_lookback_days: int = 30,
     ) -> PositionSizeResult:
         """
         Calculate position size with continuous adaptation.
@@ -322,12 +282,18 @@ class ContinuousPositionSizer:
 
         # Count recent trades for graduated ceiling
         from datetime import datetime, timedelta
+
         if recent_trades:
             cutoff = datetime.now() - timedelta(days=sharpe_lookback_days)
             recent_count = sum(
-                1 for t in recent_trades
-                if (t.get('timestamp', datetime.now()) if not isinstance(t.get('timestamp'), str)
-                    else datetime.fromisoformat(t['timestamp'])) > cutoff
+                1
+                for t in recent_trades
+                if (
+                    t.get("timestamp", datetime.now())
+                    if not isinstance(t.get("timestamp"), str)
+                    else datetime.fromisoformat(t["timestamp"])
+                )
+                > cutoff
             )
         else:
             recent_count = 0
@@ -339,14 +305,12 @@ class ContinuousPositionSizer:
             strategy=strategy,
             recent_trades=recent_trades,
             atr_lookback=atr_lookback,
-            sharpe_lookback_days=sharpe_lookback_days
+            sharpe_lookback_days=sharpe_lookback_days,
         )
 
         # Calculate multiplier
-        if self.config['use_continuous_formula']:
-            raw_score, multiplier, rationale = self.calculate_continuous_multiplier(
-                metrics, trade_count=recent_count
-            )
+        if self.config["use_continuous_formula"]:
+            raw_score, multiplier, rationale = self.calculate_continuous_multiplier(metrics, trade_count=recent_count)
         else:
             # Discrete method doesn't have raw_score concept
             multiplier, rationale = self.calculate_discrete_multiplier(metrics)
@@ -363,7 +327,7 @@ class ContinuousPositionSizer:
             multiplier=multiplier,
             final_size=final_size,
             metrics=metrics,
-            rationale=rationale
+            rationale=rationale,
         )
 
         self.logger.info(
@@ -374,11 +338,7 @@ class ContinuousPositionSizer:
 
         return result
 
-    def should_skip_trade(
-        self,
-        result: PositionSizeResult,
-        min_size_threshold: Optional[float] = None
-    ) -> bool:
+    def should_skip_trade(self, result: PositionSizeResult, min_size_threshold: float | None = None) -> bool:
         """
         Determine if trade should be skipped based on RAW score (before flooring).
 
@@ -394,7 +354,7 @@ class ContinuousPositionSizer:
         """
         # Use config value if not specified
         if min_size_threshold is None:
-            min_size_threshold = self.config.get('skip_trade_threshold', 0.15)
+            min_size_threshold = self.config.get("skip_trade_threshold", 0.15)
 
         # Check raw score BEFORE flooring (this is the key fix)
         if result.raw_score < min_size_threshold:
@@ -412,8 +372,8 @@ class ContinuousPositionSizer:
 def main():
     """Example usage."""
     import json
-    from pathlib import Path
     from datetime import datetime, timedelta
+    from pathlib import Path
 
     # Setup
     logging.basicConfig(level=logging.INFO)
@@ -431,10 +391,10 @@ def main():
         # Mock some trades
         mock_trades = [
             {
-                'pnl': 100 * (1 if i % 3 != 0 else -1),  # 67% win rate
-                'entry_value': 10000,
-                'timestamp': datetime.now() - timedelta(days=i),
-                'return_pct': 1.0 if i % 3 != 0 else -1.0
+                "pnl": 100 * (1 if i % 3 != 0 else -1),  # 67% win rate
+                "entry_value": 10000,
+                "timestamp": datetime.now() - timedelta(days=i),
+                "return_pct": 1.0 if i % 3 != 0 else -1.0,
             }
             for i in range(20)
         ]
@@ -443,21 +403,21 @@ def main():
         sizer = ContinuousPositionSizer()
 
         result = sizer.calculate_position_size(
-            symbol='AAPL',
-            strategy='rsi',
+            symbol="AAPL",
+            strategy="rsi",
             base_capital=100000,
             max_position_pct=0.10,
             bars=bars,
-            recent_trades=mock_trades
+            recent_trades=mock_trades,
         )
 
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"Position Size Calculation: {result.symbol}/{result.strategy}")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
         print(f"Base Capital: ${result.base_size:,.0f}")
         print(f"Multiplier: {result.multiplier:.2%}")
         print(f"Final Size: ${result.final_size:,.0f}")
-        print(f"\nMetrics:")
+        print("\nMetrics:")
         print(f"  ATR Percentile: {result.metrics.atr_percentile:.1f}%")
         print(f"  Rolling Sharpe: {result.metrics.rolling_sharpe:.2f}")
         print(f"  Volatility Score: {result.metrics.volatility_score:.2f}")
@@ -466,5 +426,5 @@ def main():
         print(f"Skip Trade? {sizer.should_skip_trade(result)}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

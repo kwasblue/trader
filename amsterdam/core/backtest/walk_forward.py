@@ -5,9 +5,10 @@ Provides walk-forward analysis for out-of-sample strategy validation.
 """
 
 import logging
-import numpy as np
-from typing import Dict, List, Any
 from dataclasses import dataclass
+from typing import Any
+
+import numpy as np
 
 from core.backtest.optimization import grid_search
 
@@ -17,23 +18,24 @@ logger = logging.getLogger(__name__)
 @dataclass
 class WalkForwardResult:
     """Result of walk-forward analysis."""
-    windows: List[Dict[str, Any]]
+
+    windows: list[dict[str, Any]]
     overall_return: float
     overall_sharpe: float
-    out_of_sample_returns: List[float]
-    in_sample_params: List[Dict[str, Any]]
+    out_of_sample_returns: list[float]
+    in_sample_params: list[dict[str, Any]]
 
 
 def walk_forward_analysis(
     data,
     strategy_name: str,
-    param_grid: Dict[str, List[Any]],
+    param_grid: dict[str, list[Any]],
     train_size: int = 252,  # ~1 year of daily data
-    test_size: int = 63,    # ~3 months
-    step_size: int = 63,    # Roll forward by 3 months
-    metric: str = 'sharpe_ratio',
+    test_size: int = 63,  # ~3 months
+    step_size: int = 63,  # Roll forward by 3 months
+    metric: str = "sharpe_ratio",
     initial_capital: float = 10000,
-    verbose: bool = True
+    verbose: bool = True,
 ) -> WalkForwardResult:
     """
     Walk-forward analysis with rolling train/test windows.
@@ -81,9 +83,7 @@ def walk_forward_analysis(
         # Optimize on training data
         try:
             opt_result = grid_search(
-                train_data, strategy_name, param_grid,
-                metric=metric, initial_capital=cumulative_capital,
-                verbose=False
+                train_data, strategy_name, param_grid, metric=metric, initial_capital=cumulative_capital, verbose=False
             )
             best_params = opt_result.best_params
             is_metric = opt_result.best_metric
@@ -103,12 +103,12 @@ def walk_forward_analysis(
             portfolio_df = bt.run(strategy_name, best_params)
 
             if not portfolio_df.empty:
-                final_value = portfolio_df['Portfolio_Value'].iloc[-1]
+                final_value = portfolio_df["Portfolio_Value"].iloc[-1]
                 oos_return = (final_value - cumulative_capital) / cumulative_capital
                 cumulative_capital = final_value
 
                 metrics = bt.get_metrics(portfolio_df)
-                oos_sharpe = metrics.get('sharpe_ratio', 0)
+                oos_sharpe = metrics.get("sharpe_ratio", 0)
             else:
                 oos_return = 0
                 oos_sharpe = 0
@@ -121,17 +121,19 @@ def walk_forward_analysis(
         if verbose:
             logger.info(f"  Out-of-sample return: {oos_return:.2%}")
 
-        windows.append({
-            'window': window_num,
-            'train_start': start_idx,
-            'train_end': train_end,
-            'test_start': train_end,
-            'test_end': test_end,
-            'best_params': best_params,
-            'is_metric': is_metric,
-            'oos_return': oos_return,
-            'oos_sharpe': oos_sharpe
-        })
+        windows.append(
+            {
+                "window": window_num,
+                "train_start": start_idx,
+                "train_end": train_end,
+                "test_start": train_end,
+                "test_end": test_end,
+                "best_params": best_params,
+                "is_metric": is_metric,
+                "oos_return": oos_return,
+                "oos_sharpe": oos_sharpe,
+            }
+        )
 
         oos_returns.append(oos_return)
         is_params.append(best_params)
@@ -140,7 +142,7 @@ def walk_forward_analysis(
 
     # Calculate overall metrics
     overall_return = (cumulative_capital - initial_capital) / initial_capital
-    avg_oos_sharpe = np.mean([w['oos_sharpe'] for w in windows]) if windows else 0
+    avg_oos_sharpe = np.mean([w["oos_sharpe"] for w in windows]) if windows else 0
 
     if verbose:
         logger.info("=== Walk-Forward Summary ===")
@@ -153,19 +155,19 @@ def walk_forward_analysis(
         overall_return=overall_return,
         overall_sharpe=avg_oos_sharpe,
         out_of_sample_returns=oos_returns,
-        in_sample_params=is_params
+        in_sample_params=is_params,
     )
 
 
 def anchored_walk_forward(
     data,
     strategy_name: str,
-    param_grid: Dict[str, List[Any]],
+    param_grid: dict[str, list[Any]],
     initial_train_size: int = 252,
     test_size: int = 63,
-    metric: str = 'sharpe_ratio',
+    metric: str = "sharpe_ratio",
     initial_capital: float = 10000,
-    verbose: bool = True
+    verbose: bool = True,
 ) -> WalkForwardResult:
     """
     Anchored walk-forward analysis.
@@ -210,9 +212,7 @@ def anchored_walk_forward(
 
         try:
             opt_result = grid_search(
-                train_data, strategy_name, param_grid,
-                metric=metric, initial_capital=cumulative_capital,
-                verbose=False
+                train_data, strategy_name, param_grid, metric=metric, initial_capital=cumulative_capital, verbose=False
             )
             best_params = opt_result.best_params
             is_metric = opt_result.best_metric
@@ -227,11 +227,11 @@ def anchored_walk_forward(
             portfolio_df = bt.run(strategy_name, best_params)
 
             if not portfolio_df.empty:
-                final_value = portfolio_df['Portfolio_Value'].iloc[-1]
+                final_value = portfolio_df["Portfolio_Value"].iloc[-1]
                 oos_return = (final_value - cumulative_capital) / cumulative_capital
                 cumulative_capital = final_value
                 metrics = bt.get_metrics(portfolio_df)
-                oos_sharpe = metrics.get('sharpe_ratio', 0)
+                oos_sharpe = metrics.get("sharpe_ratio", 0)
             else:
                 oos_return = 0
                 oos_sharpe = 0
@@ -241,29 +241,31 @@ def anchored_walk_forward(
             oos_return = 0
             oos_sharpe = 0
 
-        windows.append({
-            'window': window_num,
-            'train_start': 0,
-            'train_end': train_end,
-            'test_start': train_end,
-            'test_end': test_end,
-            'best_params': best_params,
-            'is_metric': is_metric,
-            'oos_return': oos_return,
-            'oos_sharpe': oos_sharpe
-        })
+        windows.append(
+            {
+                "window": window_num,
+                "train_start": 0,
+                "train_end": train_end,
+                "test_start": train_end,
+                "test_end": test_end,
+                "best_params": best_params,
+                "is_metric": is_metric,
+                "oos_return": oos_return,
+                "oos_sharpe": oos_sharpe,
+            }
+        )
 
         oos_returns.append(oos_return)
         is_params.append(best_params)
         train_end += test_size
 
     overall_return = (cumulative_capital - initial_capital) / initial_capital
-    avg_oos_sharpe = np.mean([w['oos_sharpe'] for w in windows]) if windows else 0
+    avg_oos_sharpe = np.mean([w["oos_sharpe"] for w in windows]) if windows else 0
 
     return WalkForwardResult(
         windows=windows,
         overall_return=overall_return,
         overall_sharpe=avg_oos_sharpe,
         out_of_sample_returns=oos_returns,
-        in_sample_params=is_params
+        in_sample_params=is_params,
     )

@@ -24,16 +24,17 @@ Output (trace.log):
 
 from __future__ import annotations
 
-import functools
-import json
-import time
-import inspect
 import asyncio
-from datetime import datetime, timezone
-from typing import Optional, Any, Dict, Callable, List
-from pathlib import Path
-from contextlib import contextmanager
+import functools
+import inspect
+import json
 import threading
+import time
+from collections.abc import Callable
+from contextlib import contextmanager
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
 
 # Thread-local storage for call stack tracking
 _local = threading.local()
@@ -47,23 +48,31 @@ class Tracer:
     Writes structured JSON to trace.log for analysis.
     """
 
-    _instance: Optional["Tracer"] = None
+    _instance: Tracer | None = None
 
     def __init__(self):
         self.enabled = False
-        self.log_file: Optional[Path] = None
+        self.log_file: Path | None = None
         self._file_handle = None
         self._lock = threading.Lock()
         self._depth = 0
 
         # Parameters to extract from args (for readable traces)
         self.interesting_params = {
-            'symbol', 'signal', 'price', 'side', 'qty', 'action_type',
-            'regime', 'strategy_name', 'reason', 'result'
+            "symbol",
+            "signal",
+            "price",
+            "side",
+            "qty",
+            "action_type",
+            "regime",
+            "strategy_name",
+            "reason",
+            "result",
         }
 
     @classmethod
-    def get_instance(cls) -> "Tracer":
+    def get_instance(cls) -> Tracer:
         """Get singleton tracer instance."""
         if cls._instance is None:
             cls._instance = Tracer()
@@ -86,20 +95,17 @@ class Tracer:
             # Open file for append
             if self._file_handle:
                 self._file_handle.close()
-            self._file_handle = open(self.log_file, 'a')
+            self._file_handle = open(self.log_file, "a")
 
-            self._write_event({
-                "event": "TRACE_START",
-                "message": "Tracing enabled"
-            })
+            self._write_event({"event": "TRACE_START", "message": "Tracing enabled"})
 
-    def _write_event(self, event: Dict[str, Any]):
+    def _write_event(self, event: dict[str, Any]):
         """Write event to trace log."""
         if not self.enabled or not self._file_handle:
             return
 
         event["ts"] = datetime.now(timezone.utc).isoformat()
-        event["depth"] = getattr(_local, 'depth', 0)
+        event["depth"] = getattr(_local, "depth", 0)
 
         with self._lock:
             try:
@@ -108,13 +114,13 @@ class Tracer:
             except Exception:
                 pass  # Don't let tracing errors affect execution
 
-    def enter(self, func_name: str, args_dict: Dict[str, Any] = None):
+    def enter(self, func_name: str, args_dict: dict[str, Any] = None):
         """Record function entry."""
         if not self.enabled:
             return
 
         # Increment depth
-        _local.depth = getattr(_local, 'depth', 0) + 1
+        _local.depth = getattr(_local, "depth", 0) + 1
 
         event = {
             "event": "ENTER",
@@ -127,9 +133,9 @@ class Tracer:
                 if key in args_dict and args_dict[key] is not None:
                     val = args_dict[key]
                     # Make JSON serializable
-                    if hasattr(val, 'value'):  # Enum
+                    if hasattr(val, "value"):  # Enum
                         val = val.value
-                    elif hasattr(val, '__class__') and val.__class__.__name__ == 'SymbolState':
+                    elif hasattr(val, "__class__") and val.__class__.__name__ == "SymbolState":
                         val = f"<SymbolState:{getattr(val, 'symbol', '?')}>"
                     elif not isinstance(val, (str, int, float, bool, type(None))):
                         val = str(val)[:100]
@@ -159,7 +165,7 @@ class Tracer:
                 event["result"] = list(result)
             elif isinstance(result, bool):
                 event["result"] = result
-            elif hasattr(result, 'success'):
+            elif hasattr(result, "success"):
                 event["result"] = {"success": result.success}
             elif result is not None:
                 event["result"] = str(result)[:100]
@@ -167,7 +173,7 @@ class Tracer:
         self._write_event(event)
 
         # Decrement depth
-        _local.depth = max(0, getattr(_local, 'depth', 1) - 1)
+        _local.depth = max(0, getattr(_local, "depth", 1) - 1)
 
     @contextmanager
     def span(self, name: str, **kwargs):
@@ -207,7 +213,7 @@ def get_tracer() -> Tracer:
     return Tracer.get_instance()
 
 
-def trace(func: Callable = None, *, extract: List[str] = None):
+def trace(func: Callable = None, *, extract: list[str] = None):
     """
     Decorator to trace function entry/exit.
 
@@ -224,6 +230,7 @@ def trace(func: Callable = None, *, extract: List[str] = None):
         func: Function to wrap
         extract: Parameter names to extract and log
     """
+
     def decorator(fn):
         # Get parameter names from signature
         sig = inspect.signature(fn)
@@ -290,19 +297,19 @@ def _build_args_dict(fn, args, kwargs, param_names, extract_params):
     for i, arg in enumerate(args):
         if i < len(param_names):
             name = param_names[i]
-            if name != 'self':
+            if name != "self":
                 args_dict[name] = arg
 
     # Add kwargs
     args_dict.update(kwargs)
 
     # Extract nested attributes (e.g., context.symbol)
-    if 'context' in args_dict:
-        ctx = args_dict['context']
-        for attr in ['symbol', 'signal', 'price', 'regime', 'strategy_name']:
+    if "context" in args_dict:
+        ctx = args_dict["context"]
+        for attr in ["symbol", "signal", "price", "regime", "strategy_name"]:
             if hasattr(ctx, attr):
                 args_dict[attr] = getattr(ctx, attr)
-        del args_dict['context']  # Don't log full context object
+        del args_dict["context"]  # Don't log full context object
 
     # Filter to extract list if specified
     if extract_params:
@@ -319,10 +326,11 @@ def configure_tracing_from_config():
     """
     try:
         from core.config_loader import get_config
+
         cfg = get_config()
 
-        trace_enabled = getattr(cfg.logging, 'trace_enabled', False)
-        trace_file = getattr(cfg.logging, 'trace_file', 'logs/trace.log')
+        trace_enabled = getattr(cfg.logging, "trace_enabled", False)
+        trace_file = getattr(cfg.logging, "trace_file", "logs/trace.log")
 
         if trace_enabled:
             tracer = get_tracer()

@@ -50,8 +50,7 @@ def analyze_thresholds():
         total_blocked = sum(len(r) for r in blocked.values())
         total_combos = sum(len(r) for r in filter.sharpe_map.values())
 
-        print(f"\n  Total: {total_blocked}/{total_combos} blocked "
-              f"({100*total_blocked/total_combos:.1f}%)")
+        print(f"\n  Total: {total_blocked}/{total_combos} blocked ({100 * total_blocked / total_combos:.1f}%)")
 
     print("\n" + "=" * 80)
     print("RECOMMENDATIONS")
@@ -77,14 +76,9 @@ min_sharpe = 1.0  : Only trade excellent strategies
 def main():
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description='Analyze Sharpe filter impact'
-    )
+    parser = argparse.ArgumentParser(description="Analyze Sharpe filter impact")
 
-    parser.add_argument(
-        '--min-sharpe', type=float,
-        help='Show specific threshold impact'
-    )
+    parser.add_argument("--min-sharpe", type=float, help="Show specific threshold impact")
 
     args = parser.parse_args()
 
@@ -97,5 +91,5 @@ def main():
         analyze_thresholds()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

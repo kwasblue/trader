@@ -27,6 +27,7 @@ Usage:
     # Remove
     manager.remove_symbol("AAPL")
 """
+
 from __future__ import annotations
 
 import json
@@ -35,10 +36,10 @@ import os
 import sqlite3
 import threading
 from contextlib import contextmanager
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -49,16 +50,17 @@ LIST_TYPE_WATCH = "watch"
 @dataclass
 class SymbolEntry:
     """A symbol entry in a list."""
+
     symbol: str
     list_type: str  # 'trade' or 'watch'
     added_at: str
     notes: str = ""
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
     @classmethod
-    def from_row(cls, row: sqlite3.Row) -> "SymbolEntry":
+    def from_row(cls, row: sqlite3.Row) -> SymbolEntry:
         return cls(
             symbol=row["symbol"],
             list_type=row["list_type"],
@@ -77,7 +79,7 @@ class SymbolListManager:
     - Migration from config defaults
     """
 
-    def __init__(self, db_path: Optional[str] = None):
+    def __init__(self, db_path: str | None = None):
         """
         Initialize the symbol list manager.
 
@@ -157,12 +159,11 @@ class SymbolListManager:
 
     # ========== Trade List Operations ==========
 
-    def get_trade_list(self) -> List[str]:
+    def get_trade_list(self) -> list[str]:
         """Get list of symbols in the trade list."""
         conn = self._get_connection()
         rows = conn.execute(
-            "SELECT symbol FROM symbol_lists WHERE list_type = ? ORDER BY symbol",
-            (LIST_TYPE_TRADE,)
+            "SELECT symbol FROM symbol_lists WHERE list_type = ? ORDER BY symbol", (LIST_TYPE_TRADE,)
         ).fetchall()
         return [row["symbol"] for row in rows]
 
@@ -182,9 +183,7 @@ class SymbolListManager:
 
         with self._transaction() as conn:
             # Check if exists
-            existing = conn.execute(
-                "SELECT list_type FROM symbol_lists WHERE symbol = ?", (symbol,)
-            ).fetchone()
+            existing = conn.execute("SELECT list_type FROM symbol_lists WHERE symbol = ?", (symbol,)).fetchone()
 
             if existing:
                 if existing["list_type"] == LIST_TYPE_TRADE:
@@ -192,13 +191,13 @@ class SymbolListManager:
                 # Move from watch to trade
                 conn.execute(
                     "UPDATE symbol_lists SET list_type = ?, added_at = ?, notes = ? WHERE symbol = ?",
-                    (LIST_TYPE_TRADE, now, notes, symbol)
+                    (LIST_TYPE_TRADE, now, notes, symbol),
                 )
                 logger.info(f"[SymbolListManager] Moved {symbol} from watch to trade list")
             else:
                 conn.execute(
                     "INSERT INTO symbol_lists (symbol, list_type, added_at, notes) VALUES (?, ?, ?, ?)",
-                    (symbol, LIST_TYPE_TRADE, now, notes)
+                    (symbol, LIST_TYPE_TRADE, now, notes),
                 )
                 logger.info(f"[SymbolListManager] Added {symbol} to trade list")
 
@@ -206,12 +205,11 @@ class SymbolListManager:
 
     # ========== Watch List Operations ==========
 
-    def get_watch_list(self) -> List[str]:
+    def get_watch_list(self) -> list[str]:
         """Get list of symbols in the watch list."""
         conn = self._get_connection()
         rows = conn.execute(
-            "SELECT symbol FROM symbol_lists WHERE list_type = ? ORDER BY symbol",
-            (LIST_TYPE_WATCH,)
+            "SELECT symbol FROM symbol_lists WHERE list_type = ? ORDER BY symbol", (LIST_TYPE_WATCH,)
         ).fetchall()
         return [row["symbol"] for row in rows]
 
@@ -231,9 +229,7 @@ class SymbolListManager:
 
         with self._transaction() as conn:
             # Check if exists
-            existing = conn.execute(
-                "SELECT list_type FROM symbol_lists WHERE symbol = ?", (symbol,)
-            ).fetchone()
+            existing = conn.execute("SELECT list_type FROM symbol_lists WHERE symbol = ?", (symbol,)).fetchone()
 
             if existing:
                 if existing["list_type"] == LIST_TYPE_WATCH:
@@ -241,13 +237,13 @@ class SymbolListManager:
                 # Move from trade to watch
                 conn.execute(
                     "UPDATE symbol_lists SET list_type = ?, added_at = ?, notes = ? WHERE symbol = ?",
-                    (LIST_TYPE_WATCH, now, notes, symbol)
+                    (LIST_TYPE_WATCH, now, notes, symbol),
                 )
                 logger.info(f"[SymbolListManager] Moved {symbol} from trade to watch list")
             else:
                 conn.execute(
                     "INSERT INTO symbol_lists (symbol, list_type, added_at, notes) VALUES (?, ?, ?, ?)",
-                    (symbol, LIST_TYPE_WATCH, now, notes)
+                    (symbol, LIST_TYPE_WATCH, now, notes),
                 )
                 logger.info(f"[SymbolListManager] Added {symbol} to watch list")
 
@@ -271,7 +267,7 @@ class SymbolListManager:
         with self._transaction() as conn:
             cursor = conn.execute(
                 "UPDATE symbol_lists SET list_type = ?, added_at = ? WHERE symbol = ? AND list_type = ?",
-                (LIST_TYPE_TRADE, now, symbol, LIST_TYPE_WATCH)
+                (LIST_TYPE_TRADE, now, symbol, LIST_TYPE_WATCH),
             )
             if cursor.rowcount > 0:
                 logger.info(f"[SymbolListManager] Moved {symbol} to trade list")
@@ -294,7 +290,7 @@ class SymbolListManager:
         with self._transaction() as conn:
             cursor = conn.execute(
                 "UPDATE symbol_lists SET list_type = ?, added_at = ? WHERE symbol = ? AND list_type = ?",
-                (LIST_TYPE_WATCH, now, symbol, LIST_TYPE_TRADE)
+                (LIST_TYPE_WATCH, now, symbol, LIST_TYPE_TRADE),
             )
             if cursor.rowcount > 0:
                 logger.info(f"[SymbolListManager] Moved {symbol} to watch list")
@@ -303,23 +299,19 @@ class SymbolListManager:
 
     # ========== General Operations ==========
 
-    def get_symbol(self, symbol: str) -> Optional[SymbolEntry]:
+    def get_symbol(self, symbol: str) -> SymbolEntry | None:
         """Get details for a specific symbol."""
         symbol = symbol.upper()
         conn = self._get_connection()
-        row = conn.execute(
-            "SELECT * FROM symbol_lists WHERE symbol = ?", (symbol,)
-        ).fetchone()
+        row = conn.execute("SELECT * FROM symbol_lists WHERE symbol = ?", (symbol,)).fetchone()
         if row:
             return SymbolEntry.from_row(row)
         return None
 
-    def get_all_symbols(self) -> List[SymbolEntry]:
+    def get_all_symbols(self) -> list[SymbolEntry]:
         """Get all symbols from both lists."""
         conn = self._get_connection()
-        rows = conn.execute(
-            "SELECT * FROM symbol_lists ORDER BY list_type, symbol"
-        ).fetchall()
+        rows = conn.execute("SELECT * FROM symbol_lists ORDER BY list_type, symbol").fetchall()
         return [SymbolEntry.from_row(row) for row in rows]
 
     def remove_symbol(self, symbol: str) -> bool:
@@ -335,9 +327,7 @@ class SymbolListManager:
         symbol = symbol.upper()
 
         with self._transaction() as conn:
-            cursor = conn.execute(
-                "DELETE FROM symbol_lists WHERE symbol = ?", (symbol,)
-            )
+            cursor = conn.execute("DELETE FROM symbol_lists WHERE symbol = ?", (symbol,))
             if cursor.rowcount > 0:
                 logger.info(f"[SymbolListManager] Removed {symbol} from lists")
                 return True
@@ -357,28 +347,21 @@ class SymbolListManager:
         symbol = symbol.upper()
 
         with self._transaction() as conn:
-            cursor = conn.execute(
-                "UPDATE symbol_lists SET notes = ? WHERE symbol = ?",
-                (notes, symbol)
-            )
+            cursor = conn.execute("UPDATE symbol_lists SET notes = ? WHERE symbol = ?", (notes, symbol))
             return cursor.rowcount > 0
 
     def symbol_exists(self, symbol: str) -> bool:
         """Check if a symbol exists in any list."""
         symbol = symbol.upper()
         conn = self._get_connection()
-        row = conn.execute(
-            "SELECT 1 FROM symbol_lists WHERE symbol = ?", (symbol,)
-        ).fetchone()
+        row = conn.execute("SELECT 1 FROM symbol_lists WHERE symbol = ?", (symbol,)).fetchone()
         return row is not None
 
-    def get_list_type(self, symbol: str) -> Optional[str]:
+    def get_list_type(self, symbol: str) -> str | None:
         """Get which list a symbol is in."""
         symbol = symbol.upper()
         conn = self._get_connection()
-        row = conn.execute(
-            "SELECT list_type FROM symbol_lists WHERE symbol = ?", (symbol,)
-        ).fetchone()
+        row = conn.execute("SELECT list_type FROM symbol_lists WHERE symbol = ?", (symbol,)).fetchone()
         if row:
             return row["list_type"]
         return None
@@ -391,10 +374,10 @@ class SymbolListManager:
 
 
 # Singleton instance
-_list_manager: Optional[SymbolListManager] = None
+_list_manager: SymbolListManager | None = None
 
 
-def get_list_manager(db_path: Optional[str] = None) -> SymbolListManager:
+def get_list_manager(db_path: str | None = None) -> SymbolListManager:
     """
     Get singleton SymbolListManager instance.
 

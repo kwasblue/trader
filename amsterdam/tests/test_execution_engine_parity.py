@@ -8,24 +8,26 @@ These tests ensure backtest-live parity by verifying that:
 3. _get_exit_quantity() produces identical exit quantities
 4. Same signal stream produces same trade decisions
 """
-import sys
+
 import os
+import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
-from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
+from core.enums import OrderSide
 from core.logic.live_execution_engine import LiveExecutionEngine
 from core.logic.mock_execution_engine import MockExecutionEngine
 from core.logic.portfolio_state import PortfolioState, SymbolPosition
 from core.logic.symbol_state import SymbolState
-from core.enums import OrderSide
-
 
 # ============================================================================
 # Fixtures
 # ============================================================================
+
 
 @pytest.fixture
 def shared_components():
@@ -62,28 +64,28 @@ def shared_components():
     performance_tracker.log_error = MagicMock()
 
     return {
-        'broker': broker,
-        'executor': executor,
-        'sizer': sizer,
-        'portfolio': portfolio,
-        'trade_logic_manager': trade_logic_manager,
-        'performance_tracker': performance_tracker,
-        'mock_logic': mock_logic,
+        "broker": broker,
+        "executor": executor,
+        "sizer": sizer,
+        "portfolio": portfolio,
+        "trade_logic_manager": trade_logic_manager,
+        "performance_tracker": performance_tracker,
+        "mock_logic": mock_logic,
     }
 
 
 @pytest.fixture
 def live_engine(shared_components):
     """Create LiveExecutionEngine with shared components."""
-    with patch.object(LiveExecutionEngine, '_sync_portfolio_with_broker', return_value=None):
+    with patch.object(LiveExecutionEngine, "_sync_portfolio_with_broker", return_value=None):
         engine = LiveExecutionEngine(
-            broker=shared_components['broker'],
-            executor=shared_components['executor'],
-            sizer=shared_components['sizer'],
-            performance_tracker=shared_components['performance_tracker'],
-            trade_logic_manager=shared_components['trade_logic_manager'],
-            portfolio=shared_components['portfolio'],
-            sync_on_start=False
+            broker=shared_components["broker"],
+            executor=shared_components["executor"],
+            sizer=shared_components["sizer"],
+            performance_tracker=shared_components["performance_tracker"],
+            trade_logic_manager=shared_components["trade_logic_manager"],
+            portfolio=shared_components["portfolio"],
+            sync_on_start=False,
         )
     return engine
 
@@ -92,12 +94,12 @@ def live_engine(shared_components):
 def mock_engine(shared_components):
     """Create MockExecutionEngine with shared components."""
     engine = MockExecutionEngine(
-        broker=shared_components['broker'],
-        executor=shared_components['executor'],
-        sizer=shared_components['sizer'],
-        performance_tracker=shared_components['performance_tracker'],
-        trade_logic_manager=shared_components['trade_logic_manager'],
-        portfolio=shared_components['portfolio'],
+        broker=shared_components["broker"],
+        executor=shared_components["executor"],
+        sizer=shared_components["sizer"],
+        performance_tracker=shared_components["performance_tracker"],
+        trade_logic_manager=shared_components["trade_logic_manager"],
+        portfolio=shared_components["portfolio"],
     )
     return engine
 
@@ -105,6 +107,7 @@ def mock_engine(shared_components):
 # ============================================================================
 # _determine_action() Parity Tests
 # ============================================================================
+
 
 class TestDetermineActionParity:
     """Test that _determine_action produces identical results in both engines."""
@@ -202,6 +205,7 @@ class TestDetermineActionParity:
 # _setup_approval_state() Parity Tests
 # ============================================================================
 
+
 class TestSetupApprovalStateParity:
     """Test that _setup_approval_state produces identical state setup."""
 
@@ -214,19 +218,15 @@ class TestSetupApprovalStateParity:
         mock_qty, mock_price = mock_engine._setup_approval_state("AAPL", state_mock)
 
         assert live_qty == mock_qty == 0
-        assert live_price == mock_price == None
-        assert state_live.side == state_mock.side == None
+        assert live_price == mock_price is None
+        assert state_live.side == state_mock.side is None
         assert state_live.current_position == state_mock.current_position == 0
 
     def test_with_long_position(self, live_engine, mock_engine):
         """State setup with existing long position."""
         # Add position to portfolio
-        live_engine.portfolio.positions["AAPL"] = SymbolPosition(
-            qty=100, avg_price=150.0, last_price=152.0
-        )
-        mock_engine.portfolio.positions["AAPL"] = SymbolPosition(
-            qty=100, avg_price=150.0, last_price=152.0
-        )
+        live_engine.portfolio.positions["AAPL"] = SymbolPosition(qty=100, avg_price=150.0, last_price=152.0)
+        mock_engine.portfolio.positions["AAPL"] = SymbolPosition(qty=100, avg_price=150.0, last_price=152.0)
 
         state_live = SymbolState(symbol="AAPL")
         state_mock = SymbolState(symbol="AAPL")
@@ -242,12 +242,8 @@ class TestSetupApprovalStateParity:
     def test_with_short_position(self, live_engine, mock_engine):
         """State setup with existing short position."""
         # Add position to portfolio
-        live_engine.portfolio.positions["AAPL"] = SymbolPosition(
-            qty=-50, avg_price=150.0, last_price=148.0
-        )
-        mock_engine.portfolio.positions["AAPL"] = SymbolPosition(
-            qty=-50, avg_price=150.0, last_price=148.0
-        )
+        live_engine.portfolio.positions["AAPL"] = SymbolPosition(qty=-50, avg_price=150.0, last_price=148.0)
+        mock_engine.portfolio.positions["AAPL"] = SymbolPosition(qty=-50, avg_price=150.0, last_price=148.0)
 
         state_live = SymbolState(symbol="AAPL")
         state_mock = SymbolState(symbol="AAPL")
@@ -265,6 +261,7 @@ class TestSetupApprovalStateParity:
 # _get_exit_quantity() Parity Tests
 # ============================================================================
 
+
 class TestGetExitQuantityParity:
     """Test that _get_exit_quantity produces identical results."""
 
@@ -274,7 +271,7 @@ class TestGetExitQuantityParity:
         live_engine.portfolio.positions["AAPL"] = SymbolPosition(qty=100)
         mock_engine.portfolio.positions["AAPL"] = SymbolPosition(qty=100)
 
-        mock_logic = shared_components['mock_logic']
+        mock_logic = shared_components["mock_logic"]
 
         live_qty = live_engine._get_exit_quantity("AAPL", "exit", mock_logic)
         mock_qty = mock_engine._get_exit_quantity("AAPL", "exit", mock_logic)
@@ -287,7 +284,7 @@ class TestGetExitQuantityParity:
         live_engine.portfolio.positions["AAPL"] = SymbolPosition(qty=-75)
         mock_engine.portfolio.positions["AAPL"] = SymbolPosition(qty=-75)
 
-        mock_logic = shared_components['mock_logic']
+        mock_logic = shared_components["mock_logic"]
 
         live_qty = live_engine._get_exit_quantity("AAPL", "exit", mock_logic)
         mock_qty = mock_engine._get_exit_quantity("AAPL", "exit", mock_logic)
@@ -299,7 +296,7 @@ class TestGetExitQuantityParity:
         live_engine.portfolio.positions["AAPL"] = SymbolPosition(qty=100)
         mock_engine.portfolio.positions["AAPL"] = SymbolPosition(qty=100)
 
-        mock_logic = shared_components['mock_logic']
+        mock_logic = shared_components["mock_logic"]
 
         live_qty = live_engine._get_exit_quantity("AAPL", "reversal", mock_logic)
         mock_qty = mock_engine._get_exit_quantity("AAPL", "reversal", mock_logic)
@@ -312,7 +309,7 @@ class TestGetExitQuantityParity:
         mock_engine.portfolio.positions["AAPL"] = SymbolPosition(qty=100)
 
         # Create a mock logic without get_exit_quantity to force get_param path
-        mock_logic = MagicMock(spec=['get_param'])
+        mock_logic = MagicMock(spec=["get_param"])
         mock_logic.get_param = MagicMock(return_value=0.25)  # 25%
 
         live_qty = live_engine._get_exit_quantity("AAPL", "partial_exit", mock_logic)
@@ -326,7 +323,7 @@ class TestGetExitQuantityParity:
         live_engine.portfolio.positions.pop("AAPL", None)
         mock_engine.portfolio.positions.pop("AAPL", None)
 
-        mock_logic = shared_components['mock_logic']
+        mock_logic = shared_components["mock_logic"]
 
         live_qty = live_engine._get_exit_quantity("AAPL", "exit", mock_logic)
         mock_qty = mock_engine._get_exit_quantity("AAPL", "exit", mock_logic)
@@ -337,6 +334,7 @@ class TestGetExitQuantityParity:
 # ============================================================================
 # Signal-to-Decision Parity Tests
 # ============================================================================
+
 
 class TestSignalToDecisionParity:
     """Test that same signals produce same trade decisions."""
@@ -377,6 +375,7 @@ class TestSignalToDecisionParity:
 # ============================================================================
 # Base Class Method Inheritance Tests
 # ============================================================================
+
 
 class TestBaseClassInheritance:
     """Verify both engines use the same base class methods."""
@@ -425,6 +424,7 @@ class TestBaseClassInheritance:
 # ============================================================================
 # Phase 2: Portfolio State Management Tests
 # ============================================================================
+
 
 class TestPortfolioStaleDetection:
     """Test portfolio state staleness detection."""
@@ -479,30 +479,24 @@ class TestLiveEngineOptimisticUpdates:
         """LiveExecutionEngine should update portfolio after order placement."""
         # Create fresh portfolio
         portfolio = PortfolioState(cash=100000)
-        shared_components['portfolio'] = portfolio
+        shared_components["portfolio"] = portfolio
 
         # Create engine
-        with patch.object(LiveExecutionEngine, '_sync_portfolio_with_broker', return_value=None):
+        with patch.object(LiveExecutionEngine, "_sync_portfolio_with_broker", return_value=None):
             engine = LiveExecutionEngine(
-                broker=shared_components['broker'],
-                executor=shared_components['executor'],
-                sizer=shared_components['sizer'],
-                performance_tracker=shared_components['performance_tracker'],
-                trade_logic_manager=shared_components['trade_logic_manager'],
+                broker=shared_components["broker"],
+                executor=shared_components["executor"],
+                sizer=shared_components["sizer"],
+                performance_tracker=shared_components["performance_tracker"],
+                trade_logic_manager=shared_components["trade_logic_manager"],
                 portfolio=portfolio,
-                sync_on_start=False
+                sync_on_start=False,
             )
 
         # Execute a buy trade
         state = SymbolState(symbol="AAPL")
         result = await engine._execute_live_trade(
-            symbol="AAPL",
-            state=state,
-            side=OrderSide.BUY,
-            qty=10,
-            price=150.0,
-            atr=2.5,
-            action_type="entry"
+            symbol="AAPL", state=state, side=OrderSide.BUY, qty=10, price=150.0, atr=2.5, action_type="entry"
         )
 
         # Verify portfolio was updated
@@ -515,24 +509,25 @@ class TestLiveEngineOptimisticUpdates:
     async def test_live_engine_skips_double_update(self, shared_components):
         """LiveExecutionEngine should not double-update portfolio in _post_execution."""
         portfolio = PortfolioState(cash=100000)
-        shared_components['portfolio'] = portfolio
+        shared_components["portfolio"] = portfolio
 
-        with patch.object(LiveExecutionEngine, '_sync_portfolio_with_broker', return_value=None):
+        with patch.object(LiveExecutionEngine, "_sync_portfolio_with_broker", return_value=None):
             engine = LiveExecutionEngine(
-                broker=shared_components['broker'],
-                executor=shared_components['executor'],
-                sizer=shared_components['sizer'],
-                performance_tracker=shared_components['performance_tracker'],
-                trade_logic_manager=shared_components['trade_logic_manager'],
+                broker=shared_components["broker"],
+                executor=shared_components["executor"],
+                sizer=shared_components["sizer"],
+                performance_tracker=shared_components["performance_tracker"],
+                trade_logic_manager=shared_components["trade_logic_manager"],
                 portfolio=portfolio,
-                sync_on_start=False
+                sync_on_start=False,
             )
 
         # Verify the override exists
-        assert hasattr(engine, '_update_portfolio_after_execution')
+        assert hasattr(engine, "_update_portfolio_after_execution")
 
         # The override should do nothing
         from core.app_types import OrderResult
+
         result = OrderResult(symbol="AAPL", filled_qty=10, avg_fill_price=150.0)
 
         # Store initial position count
@@ -560,9 +555,9 @@ class TestReconcilerConfig:
         from core.state_reconciler import ReconcilerConfig
 
         config = ReconcilerConfig()
-        assert hasattr(config, 'stale_threshold_seconds')
+        assert hasattr(config, "stale_threshold_seconds")
         assert config.stale_threshold_seconds == 30
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

@@ -21,17 +21,17 @@ Usage:
 """
 
 import logging
-import pandas as pd
-import numpy as np
-from typing import Dict, Optional, Tuple
-from datetime import datetime, timedelta
-from dataclasses import dataclass
 from collections import deque
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+
+import pandas as pd
 
 
 @dataclass
 class RegimeState:
     """Current regime state for a symbol."""
+
     current_regime: str
     previous_regime: str
     regime_start_time: datetime
@@ -54,7 +54,7 @@ class StableRegimeDetector:
     5. Strength measurement - Only switch if new regime is strong
     """
 
-    def __init__(self, config: Optional[Dict] = None, logger: Optional[logging.Logger] = None):
+    def __init__(self, config: dict | None = None, logger: logging.Logger | None = None):
         """
         Initialize stable regime detector.
 
@@ -67,28 +67,22 @@ class StableRegimeDetector:
         # Default configuration
         self.config = {
             # Base thresholds (percentile)
-            'low_volatility_threshold': 33,
-            'high_volatility_threshold': 67,
-
+            "low_volatility_threshold": 33,
+            "high_volatility_threshold": 67,
             # Hysteresis bands (prevent rapid switching)
-            'hysteresis_band': 5,  # ±5% buffer around thresholds
-
+            "hysteresis_band": 5,  # ±5% buffer around thresholds
             # Persistence requirements
-            'min_bars_in_regime': 5,  # Require 5 bars before switching
-
+            "min_bars_in_regime": 5,  # Require 5 bars before switching
             # Cooldown (prevent thrashing)
-            'min_minutes_between_switches': 30,  # 30 minutes minimum
-
+            "min_minutes_between_switches": 30,  # 30 minutes minimum
             # Smoothing
-            'use_smoothed_atr': True,
-            'atr_ema_alpha': 0.2,  # 0.2 = slower smoothing, more stable
-
+            "use_smoothed_atr": True,
+            "atr_ema_alpha": 0.2,  # 0.2 = slower smoothing, more stable
             # Strength requirements
-            'min_regime_strength': 0.6,  # Need 60% confidence to switch
-
+            "min_regime_strength": 0.6,  # Need 60% confidence to switch
             # Multi-timeframe (use longer bars for regime detection)
-            'regime_detection_timeframe': 'day',  # Detect regime on daily bars
-            'execution_timeframe': None,  # Execute on any timeframe
+            "regime_detection_timeframe": "day",  # Detect regime on daily bars
+            "execution_timeframe": None,  # Execute on any timeframe
         }
 
         # Override with provided config
@@ -96,12 +90,12 @@ class StableRegimeDetector:
             self.config.update(config)
 
         # State tracking per symbol
-        self.regime_states: Dict[str, RegimeState] = {}
+        self.regime_states: dict[str, RegimeState] = {}
 
         # History for persistence checking
-        self.regime_history: Dict[str, deque] = {}
+        self.regime_history: dict[str, deque] = {}
 
-    def _calculate_hysteresis_thresholds(self, current_regime: str) -> Tuple[float, float]:
+    def _calculate_hysteresis_thresholds(self, current_regime: str) -> tuple[float, float]:
         """
         Calculate hysteresis thresholds based on current regime.
 
@@ -113,9 +107,9 @@ class StableRegimeDetector:
         Returns:
             (low_threshold, high_threshold) with hysteresis applied
         """
-        base_low = self.config['low_volatility_threshold']
-        base_high = self.config['high_volatility_threshold']
-        band = self.config['hysteresis_band']
+        base_low = self.config["low_volatility_threshold"]
+        base_high = self.config["high_volatility_threshold"]
+        band = self.config["hysteresis_band"]
 
         if current_regime == "low_volatility":
             # Staying in low vol: easier to stay, harder to leave
@@ -136,11 +130,7 @@ class StableRegimeDetector:
             # No hysteresis for initial classification
             return (base_low, base_high)
 
-    def _classify_regime(
-        self,
-        atr_percentile: float,
-        current_regime: Optional[str] = None
-    ) -> str:
+    def _classify_regime(self, atr_percentile: float, current_regime: str | None = None) -> str:
         """
         Classify regime with hysteresis if currently in a regime.
 
@@ -156,8 +146,8 @@ class StableRegimeDetector:
             low_thresh, high_thresh = self._calculate_hysteresis_thresholds(current_regime)
         else:
             # First time - use base thresholds
-            low_thresh = self.config['low_volatility_threshold']
-            high_thresh = self.config['high_volatility_threshold']
+            low_thresh = self.config["low_volatility_threshold"]
+            high_thresh = self.config["high_volatility_threshold"]
 
         if atr_percentile < low_thresh:
             return "low_volatility"
@@ -166,11 +156,7 @@ class StableRegimeDetector:
         else:
             return "high_volatility"
 
-    def _smooth_atr_percentile(
-        self,
-        symbol: str,
-        new_percentile: float
-    ) -> float:
+    def _smooth_atr_percentile(self, symbol: str, new_percentile: float) -> float:
         """
         Apply exponential moving average to ATR percentile.
 
@@ -181,7 +167,7 @@ class StableRegimeDetector:
         Returns:
             Smoothed ATR percentile
         """
-        if not self.config['use_smoothed_atr']:
+        if not self.config["use_smoothed_atr"]:
             return new_percentile
 
         state = self.regime_states.get(symbol)
@@ -191,16 +177,12 @@ class StableRegimeDetector:
             return new_percentile
 
         # EMA formula: smoothed = alpha * new + (1 - alpha) * previous
-        alpha = self.config['atr_ema_alpha']
+        alpha = self.config["atr_ema_alpha"]
         smoothed = alpha * new_percentile + (1 - alpha) * state.smoothed_atr_percentile
 
         return smoothed
 
-    def _calculate_regime_strength(
-        self,
-        atr_percentile: float,
-        regime: str
-    ) -> float:
+    def _calculate_regime_strength(self, atr_percentile: float, regime: str) -> float:
         """
         Calculate how "strong" a regime is (0-1).
 
@@ -214,8 +196,8 @@ class StableRegimeDetector:
         Returns:
             Strength score (0-1)
         """
-        low_thresh = self.config['low_volatility_threshold']
-        high_thresh = self.config['high_volatility_threshold']
+        low_thresh = self.config["low_volatility_threshold"]
+        high_thresh = self.config["high_volatility_threshold"]
 
         if regime == "low_volatility":
             # Strength = how far below low threshold
@@ -255,14 +237,12 @@ class StableRegimeDetector:
         if state is None:
             return False
 
-        min_minutes = self.config['min_minutes_between_switches']
+        min_minutes = self.config["min_minutes_between_switches"]
         time_since_switch = datetime.now() - state.last_switch_time
 
         if time_since_switch < timedelta(minutes=min_minutes):
             remaining = timedelta(minutes=min_minutes) - time_since_switch
-            self.logger.debug(
-                f"{symbol} in cooldown: {remaining.seconds//60}min remaining"
-            )
+            self.logger.debug(f"{symbol} in cooldown: {remaining.seconds // 60}min remaining")
             return True
 
         return False
@@ -281,13 +261,13 @@ class StableRegimeDetector:
             True if persisted long enough
         """
         if symbol not in self.regime_history:
-            self.regime_history[symbol] = deque(maxlen=self.config['min_bars_in_regime'])
+            self.regime_history[symbol] = deque(maxlen=self.config["min_bars_in_regime"])
 
         history = self.regime_history[symbol]
         history.append(new_regime)
 
         # Check if all recent bars agree on new regime
-        if len(history) < self.config['min_bars_in_regime']:
+        if len(history) < self.config["min_bars_in_regime"]:
             return False
 
         all_agree = all(r == new_regime for r in history)
@@ -299,12 +279,7 @@ class StableRegimeDetector:
 
         return all_agree
 
-    def update_regime(
-        self,
-        symbol: str,
-        bars: pd.DataFrame,
-        atr_percentile: Optional[float] = None
-    ) -> str:
+    def update_regime(self, symbol: str, bars: pd.DataFrame, atr_percentile: float | None = None) -> str:
         """
         Update regime for symbol with stability checks.
 
@@ -319,6 +294,7 @@ class StableRegimeDetector:
         # Calculate or use provided ATR percentile
         if atr_percentile is None:
             from core.continuous_metrics import ContinuousMetrics
+
             metrics = ContinuousMetrics()
             atr_percentile = metrics.calculate_atr_percentile(symbol, bars)
 
@@ -338,9 +314,7 @@ class StableRegimeDetector:
                 current_state.regime_bar_count += 1
                 current_state.atr_percentile = atr_percentile
                 current_state.smoothed_atr_percentile = smoothed_percentile
-                current_state.regime_strength = self._calculate_regime_strength(
-                    smoothed_percentile, current_regime
-                )
+                current_state.regime_strength = self._calculate_regime_strength(smoothed_percentile, current_regime)
             return current_regime or candidate_regime
 
         # Regime wants to change - apply stability checks
@@ -357,7 +331,7 @@ class StableRegimeDetector:
 
         # Check 3: Regime strength requirement
         regime_strength = self._calculate_regime_strength(smoothed_percentile, candidate_regime)
-        if regime_strength < self.config['min_regime_strength']:
+        if regime_strength < self.config["min_regime_strength"]:
             self.logger.debug(
                 f"{symbol} regime switch blocked: weak regime "
                 f"(strength={regime_strength:.2f} < {self.config['min_regime_strength']})"
@@ -379,14 +353,14 @@ class StableRegimeDetector:
             last_switch_time=datetime.now(),
             atr_percentile=atr_percentile,
             smoothed_atr_percentile=smoothed_percentile,
-            regime_strength=regime_strength
+            regime_strength=regime_strength,
         )
 
         self.regime_states[symbol] = new_state
 
         return candidate_regime
 
-    def get_current_regime(self, symbol: str) -> Optional[str]:
+    def get_current_regime(self, symbol: str) -> str | None:
         """Get current regime for symbol."""
         state = self.regime_states.get(symbol)
         return state.current_regime if state else None
@@ -398,21 +372,21 @@ class StableRegimeDetector:
             return False
         return state.current_regime != state.previous_regime
 
-    def get_regime_info(self, symbol: str) -> Dict:
+    def get_regime_info(self, symbol: str) -> dict:
         """Get detailed regime information."""
         state = self.regime_states.get(symbol)
         if state is None:
             return {}
 
         return {
-            'regime': state.current_regime,
-            'previous_regime': state.previous_regime,
-            'bars_in_regime': state.regime_bar_count,
-            'time_in_regime': (datetime.now() - state.regime_start_time).seconds // 60,
-            'atr_percentile': state.atr_percentile,
-            'smoothed_atr_percentile': state.smoothed_atr_percentile,
-            'regime_strength': state.regime_strength,
-            'time_since_last_switch': (datetime.now() - state.last_switch_time).seconds // 60
+            "regime": state.current_regime,
+            "previous_regime": state.previous_regime,
+            "bars_in_regime": state.regime_bar_count,
+            "time_in_regime": (datetime.now() - state.regime_start_time).seconds // 60,
+            "atr_percentile": state.atr_percentile,
+            "smoothed_atr_percentile": state.smoothed_atr_percentile,
+            "regime_strength": state.regime_strength,
+            "time_since_last_switch": (datetime.now() - state.last_switch_time).seconds // 60,
         }
 
 
@@ -421,7 +395,7 @@ def main():
     import json
     from pathlib import Path
 
-    logging.basicConfig(level=logging.INFO, format='%(message)s')
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
 
     # Load test data
     data_path = Path(__file__).parents[1] / "data" / "data_storage" / "proc_data"
@@ -434,33 +408,37 @@ def main():
         bars = pd.DataFrame(data)
 
         # Create detector with stability features
-        detector = StableRegimeDetector(config={
-            'min_bars_in_regime': 3,
-            'min_minutes_between_switches': 15,
-            'hysteresis_band': 5,
-            'use_smoothed_atr': True,
-            'atr_ema_alpha': 0.3
-        })
+        detector = StableRegimeDetector(
+            config={
+                "min_bars_in_regime": 3,
+                "min_minutes_between_switches": 15,
+                "hysteresis_band": 5,
+                "use_smoothed_atr": True,
+                "atr_ema_alpha": 0.3,
+            }
+        )
 
         # Simulate streaming bars
         print("Simulating regime detection with stability checks:\n")
 
         for i in range(200, min(250, len(bars))):
-            window = bars.iloc[:i+1]
+            window = bars.iloc[: i + 1]
 
-            regime = detector.update_regime('AAPL', window)
-            info = detector.get_regime_info('AAPL')
+            regime = detector.update_regime("AAPL", window)
+            info = detector.get_regime_info("AAPL")
 
-            if detector.regime_changed('AAPL'):
+            if detector.regime_changed("AAPL"):
                 print(f"Bar {i}: ★ REGIME CHANGE ★")
 
-            print(f"Bar {i}: {regime} (ATR={info['smoothed_atr_percentile']:.1f}%, "
-                  f"strength={info['regime_strength']:.2f}, "
-                  f"bars={info['bars_in_regime']})")
+            print(
+                f"Bar {i}: {regime} (ATR={info['smoothed_atr_percentile']:.1f}%, "
+                f"strength={info['regime_strength']:.2f}, "
+                f"bars={info['bars_in_regime']})"
+            )
 
             if i < 210:  # Just show first few
                 continue
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

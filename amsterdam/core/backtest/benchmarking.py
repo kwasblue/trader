@@ -4,14 +4,16 @@ Benchmark Comparison Module
 Provides tools for comparing strategy performance against benchmarks.
 """
 
+from dataclasses import dataclass
+
 import numpy as np
 import pandas as pd
-from dataclasses import dataclass
 
 
 @dataclass
 class BenchmarkComparison:
     """Comparison of strategy vs benchmark."""
+
     strategy_return: float
     benchmark_return: float
     excess_return: float
@@ -26,9 +28,7 @@ class BenchmarkComparison:
 
 
 def compare_to_benchmark(
-    strategy_returns: pd.Series,
-    benchmark_returns: pd.Series,
-    risk_free_rate: float = 0.02
+    strategy_returns: pd.Series, benchmark_returns: pd.Series, risk_free_rate: float = 0.02
 ) -> BenchmarkComparison:
     """
     Compare strategy performance to a benchmark.
@@ -42,13 +42,10 @@ def compare_to_benchmark(
         BenchmarkComparison with various metrics
     """
     # Align the series
-    aligned = pd.DataFrame({
-        'strategy': strategy_returns,
-        'benchmark': benchmark_returns
-    }).dropna()
+    aligned = pd.DataFrame({"strategy": strategy_returns, "benchmark": benchmark_returns}).dropna()
 
-    strat = aligned['strategy']
-    bench = aligned['benchmark']
+    strat = aligned["strategy"]
+    bench = aligned["benchmark"]
 
     # Basic returns
     strategy_total = (1 + strat).prod() - 1
@@ -95,15 +92,12 @@ def compare_to_benchmark(
         information_ratio=information_ratio,
         tracking_error=tracking_error,
         up_capture=up_capture,
-        down_capture=down_capture
+        down_capture=down_capture,
     )
 
 
 def calculate_rolling_metrics(
-    strategy_returns: pd.Series,
-    benchmark_returns: pd.Series,
-    window: int = 252,
-    risk_free_rate: float = 0.02
+    strategy_returns: pd.Series, benchmark_returns: pd.Series, window: int = 252, risk_free_rate: float = 0.02
 ) -> pd.DataFrame:
     """
     Calculate rolling performance metrics vs benchmark.
@@ -117,10 +111,7 @@ def calculate_rolling_metrics(
     Returns:
         DataFrame with rolling metrics
     """
-    aligned = pd.DataFrame({
-        'strategy': strategy_returns,
-        'benchmark': benchmark_returns
-    }).dropna()
+    aligned = pd.DataFrame({"strategy": strategy_returns, "benchmark": benchmark_returns}).dropna()
 
     daily_rf = risk_free_rate / 252
 
@@ -131,8 +122,8 @@ def calculate_rolling_metrics(
     dates = []
 
     for i in range(window, len(aligned)):
-        strat_window = aligned['strategy'].iloc[i - window:i]
-        bench_window = aligned['benchmark'].iloc[i - window:i]
+        strat_window = aligned["strategy"].iloc[i - window : i]
+        bench_window = aligned["benchmark"].iloc[i - window : i]
 
         # Beta
         cov = np.cov(strat_window, bench_window)
@@ -154,13 +145,15 @@ def calculate_rolling_metrics(
         rolling_info_ratio.append(ir)
         dates.append(aligned.index[i])
 
-    return pd.DataFrame({
-        'date': dates,
-        'alpha': rolling_alpha,
-        'beta': rolling_beta,
-        'sharpe': rolling_sharpe,
-        'information_ratio': rolling_info_ratio
-    }).set_index('date')
+    return pd.DataFrame(
+        {
+            "date": dates,
+            "alpha": rolling_alpha,
+            "beta": rolling_beta,
+            "sharpe": rolling_sharpe,
+            "information_ratio": rolling_info_ratio,
+        }
+    ).set_index("date")
 
 
 def calculate_drawdown_analysis(returns: pd.Series) -> dict:
@@ -191,20 +184,22 @@ def calculate_drawdown_analysis(returns: pd.Series) -> dict:
             current_dd_start = i
         if is_end and current_dd_start is not None:
             dd_slice = drawdown.iloc[current_dd_start:i]
-            drawdowns.append({
-                'start_idx': current_dd_start,
-                'end_idx': i,
-                'depth': dd_slice.min(),
-                'duration': i - current_dd_start,
-                'recovery_time': i - dd_slice.idxmin() if dd_slice.min() < 0 else 0
-            })
+            drawdowns.append(
+                {
+                    "start_idx": current_dd_start,
+                    "end_idx": i,
+                    "depth": dd_slice.min(),
+                    "duration": i - current_dd_start,
+                    "recovery_time": i - dd_slice.idxmin() if dd_slice.min() < 0 else 0,
+                }
+            )
             current_dd_start = None
 
     if drawdowns:
-        max_dd = min(d['depth'] for d in drawdowns)
-        avg_dd = np.mean([d['depth'] for d in drawdowns])
-        avg_duration = np.mean([d['duration'] for d in drawdowns])
-        avg_recovery = np.mean([d['recovery_time'] for d in drawdowns if d['recovery_time'] > 0])
+        max_dd = min(d["depth"] for d in drawdowns)
+        avg_dd = np.mean([d["depth"] for d in drawdowns])
+        avg_duration = np.mean([d["duration"] for d in drawdowns])
+        avg_recovery = np.mean([d["recovery_time"] for d in drawdowns if d["recovery_time"] > 0])
     else:
         max_dd = 0
         avg_dd = 0
@@ -212,11 +207,11 @@ def calculate_drawdown_analysis(returns: pd.Series) -> dict:
         avg_recovery = 0
 
     return {
-        'max_drawdown': max_dd,
-        'avg_drawdown': avg_dd,
-        'avg_duration_bars': avg_duration,
-        'avg_recovery_bars': avg_recovery if drawdowns else 0,
-        'num_drawdowns': len(drawdowns),
-        'current_drawdown': drawdown.iloc[-1] if len(drawdown) > 0 else 0,
-        'drawdown_periods': drawdowns
+        "max_drawdown": max_dd,
+        "avg_drawdown": avg_dd,
+        "avg_duration_bars": avg_duration,
+        "avg_recovery_bars": avg_recovery if drawdowns else 0,
+        "num_drawdowns": len(drawdowns),
+        "current_drawdown": drawdown.iloc[-1] if len(drawdown) > 0 else 0,
+        "drawdown_periods": drawdowns,
     }

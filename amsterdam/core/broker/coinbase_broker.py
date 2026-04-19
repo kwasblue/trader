@@ -35,6 +35,7 @@ Run:
 - `python coinbase_broker.py` → demo (lists product count)
 - `python coinbase_broker.py --test` → offline self-tests (no network)
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -42,7 +43,7 @@ import logging
 import os
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from dotenv import load_dotenv
 
@@ -50,6 +51,7 @@ from dotenv import load_dotenv
 try:
     from coinbase.rest import RESTClient
     from coinbase.websocket import WSClient, WSUserClient
+
     HAS_CB_SDK = True
 except Exception as _e:  # pragma: no cover
     HAS_CB_SDK = False
@@ -62,9 +64,9 @@ CB_BASE_PATH = "/api/v3/brokerage"
 
 @dataclass
 class CoinbaseAuth:
-    api_key: Optional[str] = None
-    api_secret: Optional[str] = None
-    key_file: Optional[str] = None
+    api_key: str | None = None
+    api_secret: str | None = None
+    key_file: str | None = None
 
 
 class CoinbaseBroker:
@@ -78,16 +80,16 @@ class CoinbaseBroker:
         auth: CoinbaseAuth | None = None,
         *,
         timeout: float = 15.0,
-        logger: Optional[logging.Logger] = None,
+        logger: logging.Logger | None = None,
     ) -> None:
         if not HAS_CB_SDK:
             raise RuntimeError(
-                "coinbase-advanced-py not installed. `pip install coinbase-advanced-py`\n"
-                f"Import error: {_IMPORT_ERR}"
+                f"coinbase-advanced-py not installed. `pip install coinbase-advanced-py`\nImport error: {_IMPORT_ERR}"
             )
 
         # Auto-load .env if not provided (relative path)
         from pathlib import Path
+
         _ENV_PATH = Path(__file__).resolve().parents[2] / ".venv" / ".env"
         load_dotenv(_ENV_PATH)
 
@@ -100,8 +102,8 @@ class CoinbaseBroker:
 
         self.logger = logger or logging.getLogger("CoinbaseBroker")
         self._rest = self._make_rest_client(auth, timeout)
-        self._ws: Optional[WSClient] = None
-        self._ws_user: Optional[WSUserClient] = None
+        self._ws: WSClient | None = None
+        self._ws_user: WSUserClient | None = None
 
     # ----------------------------- Client Init ---------------------------- #
     def _make_rest_client(self, auth: CoinbaseAuth, timeout: float) -> RESTClient:
@@ -132,11 +134,11 @@ class CoinbaseBroker:
         product_id: str,
         *,
         granularity: str = "ONE_MINUTE",
-        start_iso: Optional[str] = None,
-        end_iso: Optional[str] = None,
+        start_iso: str | None = None,
+        end_iso: str | None = None,
         limit: int = 300,
-    ) -> List[Dict[str, Any]]:
-        params: Dict[str, Any] = {"granularity": granularity, "limit": limit}
+    ) -> list[dict[str, Any]]:
+        params: dict[str, Any] = {"granularity": granularity, "limit": limit}
         if start_iso:
             params["start"] = start_iso
         if end_iso:
@@ -165,9 +167,9 @@ class CoinbaseBroker:
         size: Decimal | str | float | None = None,
         quote_size: Decimal | str | float | None = None,
         limit_price: Decimal | str | float | None = None,
-        time_in_force: Optional[str] = None,
-        client_order_id: Optional[str] = "",
-    ) -> Dict[str, Any]:
+        time_in_force: str | None = None,
+        client_order_id: str | None = "",
+    ) -> dict[str, Any]:
         side = side.upper()
         order_type = order_type.upper()
 
@@ -176,20 +178,26 @@ class CoinbaseBroker:
                 if quote_size is None and size is None:
                     raise ValueError("MARKET BUY requires quote_size or size")
                 if quote_size is not None:
-                    res = self._rest.market_order_buy(client_order_id=client_order_id, product_id=product_id, quote_size=str(quote_size))
+                    res = self._rest.market_order_buy(
+                        client_order_id=client_order_id, product_id=product_id, quote_size=str(quote_size)
+                    )
                 else:
-                    res = self._rest.market_order_buy(client_order_id=client_order_id, product_id=product_id, base_size=str(size))
+                    res = self._rest.market_order_buy(
+                        client_order_id=client_order_id, product_id=product_id, base_size=str(size)
+                    )
             elif side == "SELL":
                 if size is None:
                     raise ValueError("MARKET SELL requires base size")
-                res = self._rest.market_order_sell(client_order_id=client_order_id, product_id=product_id, base_size=str(size))
+                res = self._rest.market_order_sell(
+                    client_order_id=client_order_id, product_id=product_id, base_size=str(size)
+                )
             else:
                 raise ValueError("side must be BUY or SELL")
         elif order_type == "LIMIT":
             if limit_price is None or size is None:
                 raise ValueError("LIMIT orders require limit_price and base size")
             tif = time_in_force or "GOOD_UNTIL_CANCELLED"
-            order_cfg: Dict[str, Any] = {
+            order_cfg: dict[str, Any] = {
                 "product_id": product_id,
                 "side": side,
                 "client_order_id": client_order_id,
@@ -208,11 +216,13 @@ class CoinbaseBroker:
         return res.to_dict() if hasattr(res, "to_dict") else res
 
     # ---------------------------- Market Data WS -------------------------- #
-    def open_ws(self, on_message, *, retry: bool = True, timeout: Optional[int] = None, max_size: Optional[int] = None) -> None:
+    def open_ws(
+        self, on_message, *, retry: bool = True, timeout: int | None = None, max_size: int | None = None
+    ) -> None:
         self._ws = WSClient(on_message=on_message, retry=retry, timeout=timeout, max_size=max_size)
         self._ws.open()
 
-    def subscribe_ws(self, product_ids: List[str], channels: List[str]) -> None:
+    def subscribe_ws(self, product_ids: list[str], channels: list[str]) -> None:
         if not self._ws:
             raise RuntimeError("WS not opened. Call open_ws first.")
         self._ws.subscribe(product_ids=product_ids, channels=channels)
@@ -223,11 +233,11 @@ class CoinbaseBroker:
             self._ws = None
 
     # ---------------------------- User Orders WS -------------------------- #
-    def open_user_ws(self, on_message, *, api_key: Optional[str] = None, api_secret: Optional[str] = None) -> None:
+    def open_user_ws(self, on_message, *, api_key: str | None = None, api_secret: str | None = None) -> None:
         self._ws_user = WSUserClient(api_key=api_key, api_secret=api_secret, on_message=on_message)
         self._ws_user.open()
 
-    def subscribe_user_ws(self, channels: List[str]) -> None:
+    def subscribe_user_ws(self, channels: list[str]) -> None:
         if not self._ws_user:
             raise RuntimeError("User WS not opened. Call open_user_ws first.")
         self._ws_user.subscribe(channels=channels)
@@ -242,6 +252,7 @@ class CoinbaseBroker:
 
 
 # ------------------------- Safe async entry points ------------------------ #
+
 
 def safe_asyncio_run(coro):
     try:
@@ -259,8 +270,10 @@ async def _demo():
 
     cb = CoinbaseBroker()  # auto-loads .env creds
     prods = await cb.list_products()
-    count = len(prods["products"]) if isinstance(prods, dict) and "products" in prods else (
-        len(getattr(prods, "products", []))
+    count = (
+        len(prods["products"])
+        if isinstance(prods, dict) and "products" in prods
+        else (len(getattr(prods, "products", [])))
     )
     logger.info(f"Products count: {count}")
 
@@ -308,6 +321,7 @@ async def _run_tests():
 
 if __name__ == "__main__":
     import sys
+
     if "--test" in sys.argv:
         safe_asyncio_run(_run_tests())
     else:

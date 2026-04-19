@@ -8,18 +8,20 @@ Coverage:
 - State machine transitions
 - Daily cycle orchestration
 """
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime, time, timedelta
-from zoneinfo import ZoneInfo
 
 import sys
+from datetime import datetime, time
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
+from zoneinfo import ZoneInfo
+
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from app.daemon import MarketScheduler, AutoTrader, AutoTraderState
+from app.daemon import AutoTrader, AutoTraderState, MarketScheduler
 
 ET = ZoneInfo("America/New_York")
 
@@ -59,35 +61,35 @@ class TestMarketScheduler:
 
     def test_is_market_open_during_hours(self, scheduler):
         """Test market open detection during trading hours."""
-        with patch.object(scheduler, 'now_et') as mock_now:
+        with patch.object(scheduler, "now_et") as mock_now:
             # 10:30 AM on a Monday
             mock_now.return_value = datetime(2024, 1, 8, 10, 30, tzinfo=ET)
             assert scheduler.is_market_open() is True
 
     def test_is_market_open_before_hours(self, scheduler):
         """Test market closed before trading hours."""
-        with patch.object(scheduler, 'now_et') as mock_now:
+        with patch.object(scheduler, "now_et") as mock_now:
             # 8:00 AM on a Monday
             mock_now.return_value = datetime(2024, 1, 8, 8, 0, tzinfo=ET)
             assert scheduler.is_market_open() is False
 
     def test_is_market_open_after_hours(self, scheduler):
         """Test market closed after trading hours."""
-        with patch.object(scheduler, 'now_et') as mock_now:
+        with patch.object(scheduler, "now_et") as mock_now:
             # 5:00 PM on a Monday
             mock_now.return_value = datetime(2024, 1, 8, 17, 0, tzinfo=ET)
             assert scheduler.is_market_open() is False
 
     def test_is_market_open_weekend(self, scheduler):
         """Test market closed on weekends."""
-        with patch.object(scheduler, 'now_et') as mock_now:
+        with patch.object(scheduler, "now_et") as mock_now:
             # Saturday at 10:30 AM
             mock_now.return_value = datetime(2024, 1, 6, 10, 30, tzinfo=ET)
             assert scheduler.is_market_open() is False
 
     def test_get_next_market_open_same_day(self, scheduler):
         """Test next market open calculation for same day."""
-        with patch.object(scheduler, 'now_et') as mock_now:
+        with patch.object(scheduler, "now_et") as mock_now:
             # 8:00 AM on Monday
             mock_now.return_value = datetime(2024, 1, 8, 8, 0, tzinfo=ET)
             next_open = scheduler.get_next_market_open()
@@ -96,7 +98,7 @@ class TestMarketScheduler:
 
     def test_get_next_market_open_next_day(self, scheduler):
         """Test next market open calculation for next day."""
-        with patch.object(scheduler, 'now_et') as mock_now:
+        with patch.object(scheduler, "now_et") as mock_now:
             # 5:00 PM on Monday
             mock_now.return_value = datetime(2024, 1, 8, 17, 0, tzinfo=ET)
             next_open = scheduler.get_next_market_open()
@@ -104,7 +106,7 @@ class TestMarketScheduler:
 
     def test_get_next_market_open_over_weekend(self, scheduler):
         """Test next market open skips weekends."""
-        with patch.object(scheduler, 'now_et') as mock_now:
+        with patch.object(scheduler, "now_et") as mock_now:
             # Friday 5:00 PM
             mock_now.return_value = datetime(2024, 1, 5, 17, 0, tzinfo=ET)
             next_open = scheduler.get_next_market_open()
@@ -114,7 +116,7 @@ class TestMarketScheduler:
 
     def test_get_market_close_today(self, scheduler):
         """Test getting today's market close time."""
-        with patch.object(scheduler, 'now_et') as mock_now:
+        with patch.object(scheduler, "now_et") as mock_now:
             mock_now.return_value = datetime(2024, 1, 8, 10, 0, tzinfo=ET)
             close = scheduler.get_market_close_today()
             assert close.time() == time(16, 0)
@@ -122,7 +124,7 @@ class TestMarketScheduler:
 
     def test_seconds_until_market_open(self, scheduler):
         """Test seconds calculation until market open."""
-        with patch.object(scheduler, 'now_et') as mock_now:
+        with patch.object(scheduler, "now_et") as mock_now:
             # 9:00 AM - 30 minutes before open
             mock_now.return_value = datetime(2024, 1, 8, 9, 0, tzinfo=ET)
             seconds = scheduler.seconds_until_market_open()
@@ -130,7 +132,7 @@ class TestMarketScheduler:
 
     def test_seconds_until_market_close(self, scheduler):
         """Test seconds calculation until market close."""
-        with patch.object(scheduler, 'now_et') as mock_now:
+        with patch.object(scheduler, "now_et") as mock_now:
             # 3:00 PM - 1 hour before close
             mock_now.return_value = datetime(2024, 1, 8, 15, 0, tzinfo=ET)
             seconds = scheduler.seconds_until_market_close()
@@ -143,8 +145,9 @@ class TestAutoTrader:
     @pytest.fixture
     def autotrader(self):
         """Create AutoTrader with mocked AppContext (canonical path)."""
-        from app.bootstrap import AppContext
         import logging
+
+        from app.bootstrap import AppContext
 
         # Create mock config
         mock_config = MagicMock(
@@ -152,32 +155,28 @@ class TestAutoTrader:
                 pre_market_buffer_minutes=15,
                 post_market_delay_minutes=5,
                 preflight_max_retries=3,
-                preflight_retry_delay=1
+                preflight_retry_delay=1,
             )
         )
 
         # Create mock AppContext (canonical path)
         mock_ctx = AppContext(
             config=mock_config,
-            logger=logging.getLogger('test'),
-            mode='daemon',
-            symbols=['AAPL', 'MSFT'],
+            logger=logging.getLogger("test"),
+            mode="daemon",
+            symbols=["AAPL", "MSFT"],
             root_path=ROOT,
-            metadata={'broker': 'alpaca'}
+            metadata={"broker": "alpaca"},
         )
 
         # Create AutoTrader with canonical AppContext
-        trader = AutoTrader(
-            ctx=mock_ctx,
-            dry_run=True,
-            update_data_days=5
-        )
+        trader = AutoTrader(ctx=mock_ctx, dry_run=True, update_data_days=5)
         return trader
 
     def test_init(self, autotrader):
         """Test AutoTrader initialization."""
-        assert autotrader.symbols == ['AAPL', 'MSFT']
-        assert autotrader.broker == 'alpaca'
+        assert autotrader.symbols == ["AAPL", "MSFT"]
+        assert autotrader.broker == "alpaca"
         assert autotrader.dry_run is True
         assert autotrader.state == AutoTraderState.INITIALIZING
 
@@ -198,13 +197,13 @@ class TestAutoTrader:
     def test_get_status(self, autotrader):
         """Test status reporting."""
         status = autotrader.get_status()
-        assert 'state' in status
-        assert 'running' in status
-        assert 'symbols' in status
-        assert 'broker' in status
-        assert 'dry_run' in status
-        assert 'stats' in status
-        assert status['symbols'] == ['AAPL', 'MSFT']
+        assert "state" in status
+        assert "running" in status
+        assert "symbols" in status
+        assert "broker" in status
+        assert "dry_run" in status
+        assert "stats" in status
+        assert status["symbols"] == ["AAPL", "MSFT"]
 
     @pytest.mark.asyncio
     async def test_run_preflight_success(self, autotrader):
@@ -216,8 +215,10 @@ class TestAutoTrader:
         mock_checker = MagicMock()
         mock_checker.run_all_checks = AsyncMock(return_value=True)
 
-        with patch.dict('sys.modules', {'preflight': MagicMock(PreFlightChecker=MagicMock(return_value=mock_checker))}), \
-             patch.object(autotrader, '_check_network_connectivity_sync', return_value=True):
+        with (
+            patch.dict("sys.modules", {"preflight": MagicMock(PreFlightChecker=MagicMock(return_value=mock_checker))}),
+            patch.object(autotrader, "_check_network_connectivity_sync", return_value=True),
+        ):
             result = await autotrader._run_preflight()
             assert result is True
 
@@ -227,8 +228,10 @@ class TestAutoTrader:
         # Set running flag so network check loop runs
         autotrader.running = True
 
-        with patch('preflight.PreFlightChecker') as MockChecker, \
-             patch.object(autotrader, '_check_network_connectivity_sync', return_value=True):
+        with (
+            patch("preflight.PreFlightChecker") as MockChecker,
+            patch.object(autotrader, "_check_network_connectivity_sync", return_value=True),
+        ):
             mock_checker = MagicMock()
             mock_checker.run_all_checks = AsyncMock(return_value=False)
             MockChecker.return_value = mock_checker
@@ -242,15 +245,15 @@ class TestAutoTrader:
         autotrader.running = True
         autotrader.post_market_delay = 0  # Skip delay for test
 
-        with patch('core.unified_data_pipeline.UnifiedDataPipeline') as MockPipeline:
+        with patch("core.unified_data_pipeline.UnifiedDataPipeline") as MockPipeline:
             mock_pipeline = MagicMock()
-            mock_pipeline.update_symbols = AsyncMock(return_value={'AAPL': 100, 'MSFT': 100})
+            mock_pipeline.update_symbols = AsyncMock(return_value={"AAPL": 100, "MSFT": 100})
             MockPipeline.return_value = mock_pipeline
 
-            with patch('asyncio.sleep', new_callable=AsyncMock):
+            with patch("asyncio.sleep", new_callable=AsyncMock):
                 await autotrader._run_post_market()
 
-            assert autotrader.stats['last_data_update'] is not None
+            assert autotrader.stats["last_data_update"] is not None
 
 
 class TestAutoTraderIntegration:
@@ -259,31 +262,24 @@ class TestAutoTraderIntegration:
     @pytest.mark.asyncio
     async def test_dry_run_session(self):
         """Test a complete dry run session."""
-        from app.bootstrap import AppContext
         import logging
 
+        from app.bootstrap import AppContext
+
         # Create mock config
-        mock_config = MagicMock(
-            autotrader=MagicMock(
-                pre_market_buffer_minutes=0,
-                post_market_delay_minutes=0
-            )
-        )
+        mock_config = MagicMock(autotrader=MagicMock(pre_market_buffer_minutes=0, post_market_delay_minutes=0))
 
         # Create mock AppContext (canonical path)
         mock_ctx = AppContext(
             config=mock_config,
-            logger=logging.getLogger('test'),
-            mode='daemon',
-            symbols=['AAPL'],
+            logger=logging.getLogger("test"),
+            mode="daemon",
+            symbols=["AAPL"],
             root_path=ROOT,
-            metadata={'broker': 'alpaca'}
+            metadata={"broker": "alpaca"},
         )
 
-        trader = AutoTrader(
-            ctx=mock_ctx,
-            dry_run=True
-        )
+        trader = AutoTrader(ctx=mock_ctx, dry_run=True)
 
         # Mock scheduler to say market is open briefly then closes
         call_count = [0]
@@ -295,7 +291,7 @@ class TestAutoTraderIntegration:
         trader.scheduler.is_market_open = mock_is_open
         trader.running = True
 
-        with patch('asyncio.sleep', new_callable=AsyncMock):
+        with patch("asyncio.sleep", new_callable=AsyncMock):
             await trader._run_trading_session()
 
-        assert trader.stats['sessions_completed'] == 1
+        assert trader.stats["sessions_completed"] == 1

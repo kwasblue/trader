@@ -8,10 +8,10 @@ Tests cover:
 - Configurable circuit breaker settings
 """
 
+from datetime import datetime
+from unittest.mock import MagicMock, patch
+
 import pytest
-import asyncio
-from unittest.mock import MagicMock, AsyncMock, patch
-from datetime import datetime, timezone
 
 from core.broker.schwab_broker import SchwabBroker
 
@@ -20,19 +20,19 @@ from core.broker.schwab_broker import SchwabBroker
 def mock_client():
     """Create a mock SchwabClient."""
     client = MagicMock()
-    client.account_number = MagicMock(return_value={
-        "accountNumbers": [{"accountNumber": "12345678"}]
-    })
-    client.accounts_number = MagicMock(return_value={
-        "securitiesAccount": {
-            "positions": [],
-            "currentBalances": {
-                "availableFunds": 100000.0,
-                "buyingPower": 100000.0,
-                "liquidationValue": 100000.0,
+    client.account_number = MagicMock(return_value={"accountNumbers": [{"accountNumber": "12345678"}]})
+    client.accounts_number = MagicMock(
+        return_value={
+            "securitiesAccount": {
+                "positions": [],
+                "currentBalances": {
+                    "availableFunds": 100000.0,
+                    "buyingPower": 100000.0,
+                    "liquidationValue": 100000.0,
+                },
             }
         }
-    })
+    )
     return client
 
 
@@ -57,11 +57,13 @@ class TestGetPositionRetry:
                 raise ConnectionError("Network error")
             return {
                 "securitiesAccount": {
-                    "positions": [{
-                        "instrument": {"symbol": "AAPL"},
-                        "longQuantity": 100,
-                        "averagePrice": 150.0,
-                    }]
+                    "positions": [
+                        {
+                            "instrument": {"symbol": "AAPL"},
+                            "longQuantity": 100,
+                            "averagePrice": 150.0,
+                        }
+                    ]
                 }
             }
 
@@ -78,9 +80,7 @@ class TestGetPositionRetry:
     @pytest.mark.asyncio
     async def test_get_position_returns_none_for_missing(self, broker, mock_client):
         """Test that get_position returns None for non-existent position."""
-        mock_client.accounts_number = MagicMock(return_value={
-            "securitiesAccount": {"positions": []}
-        })
+        mock_client.accounts_number = MagicMock(return_value={"securitiesAccount": {"positions": []}})
 
         result = await broker.get_position("AAPL")
         assert result is None
@@ -88,9 +88,7 @@ class TestGetPositionRetry:
     @pytest.mark.asyncio
     async def test_get_position_exhausts_retries(self, broker, mock_client):
         """Test that get_position raises after exhausting retries."""
-        mock_client.accounts_number = MagicMock(
-            side_effect=ConnectionError("Persistent failure")
-        )
+        mock_client.accounts_number = MagicMock(side_effect=ConnectionError("Persistent failure"))
 
         with pytest.raises(ConnectionError):
             await broker.get_position("AAPL")
@@ -116,7 +114,7 @@ class TestGetAccountInfoRetry:
                         "availableFunds": 50000.0,
                         "buyingPower": 50000.0,
                         "liquidationValue": 50000.0,
-                    }
+                    },
                 }
             }
 
@@ -141,23 +139,13 @@ class TestCircuitBreaker:
         failure_count = 0
         for _ in range(10):
             try:
-                await broker.place_order(
-                    symbol="AAPL",
-                    qty=100,
-                    side="buy",
-                    order_type="market"
-                )
+                await broker.place_order(symbol="AAPL", qty=100, side="buy", order_type="market")
             except Exception:
                 failure_count += 1
 
         # Circuit breaker should be open
         # Additional requests should be rejected immediately
-        result = await broker.place_order(
-            symbol="AAPL",
-            qty=100,
-            side="buy",
-            order_type="market"
-        )
+        result = await broker.place_order(symbol="AAPL", qty=100, side="buy", order_type="market")
 
         # Should be rejected by circuit breaker
         assert result.status == "rejected"
@@ -172,12 +160,7 @@ class TestCircuitBreaker:
         mock_client.place_orders = MagicMock(side_effect=Exception("API error"))
 
         try:
-            await broker.place_order(
-                symbol="AAPL",
-                qty=100,
-                side="buy",
-                order_type="market"
-            )
+            await broker.place_order(symbol="AAPL", qty=100, side="buy", order_type="market")
         except Exception:
             pass
 
@@ -185,17 +168,14 @@ class TestCircuitBreaker:
         assert broker._circuit_breaker.failure_count == 3
 
         # Now make a successful request
-        mock_client.place_orders = MagicMock(return_value={
-            "orderId": "123",
-            "status": "FILLED",
-        })
-
-        result = await broker.place_order(
-            symbol="AAPL",
-            qty=100,
-            side="buy",
-            order_type="market"
+        mock_client.place_orders = MagicMock(
+            return_value={
+                "orderId": "123",
+                "status": "FILLED",
+            }
         )
+
+        result = await broker.place_order(symbol="AAPL", qty=100, side="buy", order_type="market")
 
         # Should succeed and reset the failure count
         assert result.status != "rejected"
@@ -209,7 +189,7 @@ class TestMarketHoursSafeDefault:
     async def test_market_hours_returns_false_on_error(self, broker):
         """Test that is_market_open returns False on error."""
         # Patch the datetime to raise an exception
-        with patch('core.broker.schwab_broker.datetime') as mock_dt:
+        with patch("core.broker.schwab_broker.datetime") as mock_dt:
             mock_dt.now.side_effect = Exception("Timezone error")
             mock_dt.side_effect = Exception("Timezone error")
 
@@ -222,8 +202,8 @@ class TestMarketHoursSafeDefault:
     async def test_market_hours_returns_false_on_missing_timezone(self, broker):
         """Test that is_market_open returns False when timezone lib unavailable."""
         # Patch ZoneInfo to raise ImportError
-        with patch.dict('sys.modules', {'zoneinfo': None}):
-            with patch('builtins.__import__', side_effect=ImportError("No zoneinfo")):
+        with patch.dict("sys.modules", {"zoneinfo": None}):
+            with patch("builtins.__import__", side_effect=ImportError("No zoneinfo")):
                 # This is tricky to test, but the code path handles ImportError
                 # The actual test would need to manipulate imports more carefully
                 pass
@@ -232,8 +212,9 @@ class TestMarketHoursSafeDefault:
     async def test_market_hours_weekend(self, broker):
         """Test that is_market_open returns False on weekends."""
         # Patch datetime to return a Saturday
-        with patch('core.broker.schwab_broker.datetime') as mock_dt:
+        with patch("core.broker.schwab_broker.datetime") as mock_dt:
             from zoneinfo import ZoneInfo
+
             et_tz = ZoneInfo("America/New_York")
 
             # Create a Saturday
@@ -251,7 +232,7 @@ class TestConfigurableCircuitBreaker:
 
     def test_circuit_breaker_uses_config(self, mock_client):
         """Test that circuit breaker settings come from config."""
-        with patch('core.config_loader.get_config') as mock_config:
+        with patch("core.config_loader.get_config") as mock_config:
             mock_err_config = MagicMock()
             mock_err_config.circuit_breaker_failure_threshold = 10
             mock_err_config.circuit_breaker_timeout = 120.0

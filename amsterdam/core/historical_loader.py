@@ -1,10 +1,11 @@
 # core/historical_loader.py
 from __future__ import annotations
-from pathlib import Path
-from typing import List, Dict, Any, Optional
-from datetime import datetime, timezone
+
 import json
 import math
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
 
 from loggers.logger import Logger
 
@@ -23,7 +24,7 @@ class HistoricalBarLoader:
         self.path = Path(path)
         self.logger = Logger("historical_loader.log", "HistoricalBarLoader").get_logger()
 
-    def load_last_n_bars(self, symbol: str, n: int = 200) -> List[Dict[str, Any]]:
+    def load_last_n_bars(self, symbol: str, n: int = 200) -> list[dict[str, Any]]:
         # Try processed data first
         fp = self.path / f"proc_{symbol}_file.json"
         if not fp.exists():
@@ -37,7 +38,7 @@ class HistoricalBarLoader:
                 return []
 
         try:
-            with open(fp, "r") as f:
+            with open(fp) as f:
                 raw = json.load(f)  # Python's json accepts NaN by default
         except Exception as e:
             self.logger.exception(f"Failed to read {fp}: {e}")
@@ -54,7 +55,7 @@ class HistoricalBarLoader:
             return []
 
         tail = rows[-n:]
-        out: List[Dict[str, Any]] = []
+        out: list[dict[str, Any]] = []
         for row in tail:
             nb = self._normalize_row(row, symbol)
             if nb:
@@ -63,16 +64,17 @@ class HistoricalBarLoader:
         out.sort(key=lambda r: r["timestamp"])
         return out
 
-    def get_latest_close_price(self, symbol: str) -> Optional[float]:
+    def get_latest_close_price(self, symbol: str) -> float | None:
         bars = self.load_last_n_bars(symbol, n=1)
         return float(bars[-1]["Close"]) if bars else None
 
     # --- helpers ---
 
-    def _normalize_row(self, row: Dict[str, Any], fallback_symbol: str) -> Optional[Dict[str, Any]]:
+    def _normalize_row(self, row: dict[str, Any], fallback_symbol: str) -> dict[str, Any] | None:
         # Parse timestamp from epoch ms - handle various field names
-        ts_raw = (row.get("Date") or row.get("timestamp") or row.get("Datetime")
-                  or row.get("date") or row.get("datetime"))
+        ts_raw = (
+            row.get("Date") or row.get("timestamp") or row.get("Datetime") or row.get("date") or row.get("datetime")
+        )
         if ts_raw is None:
             return None
         try:
@@ -81,8 +83,11 @@ class HistoricalBarLoader:
                 ts = datetime.fromtimestamp(ts_raw / 1000.0, tz=timezone.utc)
             else:
                 # seconds epoch or ISO string
-                ts = datetime.fromtimestamp(float(ts_raw), tz=timezone.utc) if isinstance(ts_raw, (int, float)) \
-                     else datetime.fromisoformat(str(ts_raw)).astimezone(timezone.utc)
+                ts = (
+                    datetime.fromtimestamp(float(ts_raw), tz=timezone.utc)
+                    if isinstance(ts_raw, (int, float))
+                    else datetime.fromisoformat(str(ts_raw)).astimezone(timezone.utc)
+                )
         except Exception:
             return None
 
@@ -109,18 +114,27 @@ class HistoricalBarLoader:
         symbol = str(row.get("Symbol", row.get("symbol", fallback_symbol)))
 
         # Keep all extra fields
-        extra = {k: v for k, v in row.items()
-                 if k not in {"Date", "timestamp", "Datetime", "date", "datetime",
-                              "Open", "High", "Low", "Close", "Volume",
-                              "open", "high", "low", "close", "volume"}}
-
-        return {
-            "timestamp": ts,
-            "symbol": symbol,
-            "Open": o,
-            "High": h,
-            "Low": l,
-            "Close": c,
-            "Volume": v,
-            **extra
+        extra = {
+            k: v
+            for k, v in row.items()
+            if k
+            not in {
+                "Date",
+                "timestamp",
+                "Datetime",
+                "date",
+                "datetime",
+                "Open",
+                "High",
+                "Low",
+                "Close",
+                "Volume",
+                "open",
+                "high",
+                "low",
+                "close",
+                "volume",
+            }
         }
+
+        return {"timestamp": ts, "symbol": symbol, "Open": o, "High": h, "Low": l, "Close": c, "Volume": v, **extra}

@@ -28,48 +28,45 @@ Usage:
     # Check current state
     mismatches = await reconciler.check_positions()
 """
+
 from __future__ import annotations
 
 import asyncio
-import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from core.app_types import BrokerSnapshot, PositionView
-from loggers.logger import Logger
-from core.events.eventhandler import get_event_handler
 from core.events import events
+from core.events.eventhandler import get_event_handler
 from core.logging_config import (
+    format_log_message,
     generate_correlation_id,
     set_correlation_id,
-    get_correlation_id,
-    format_log_message,
 )
+from loggers.logger import Logger
 
 if TYPE_CHECKING:
-    from core.logic.portfolio_state import PortfolioState
     from core.base.base_broker_interface import BaseBrokerInterface
+    from core.logic.portfolio_state import PortfolioState
 
 # Dedicated log file for state reconciliation
-logger = Logger(
-    log_file="state_reconciler.log",
-    logger_name="StateReconciler",
-    propagate=True
-).get_logger()
+logger = Logger(log_file="state_reconciler.log", logger_name="StateReconciler", propagate=True).get_logger()
 
 
 class ReconcileAction(Enum):
     """Actions to take on mismatch."""
-    ALERT = "alert"          # Log and emit alert, continue trading
-    HALT = "halt"            # Stop trading until resolved
-    AUTO_CORRECT = "auto"    # Automatically sync from broker
+
+    ALERT = "alert"  # Log and emit alert, continue trading
+    HALT = "halt"  # Stop trading until resolved
+    AUTO_CORRECT = "auto"  # Automatically sync from broker
 
 
 @dataclass
 class PositionMismatch:
     """Details of a position mismatch."""
+
     symbol: str
     local_qty: float
     broker_qty: float
@@ -80,7 +77,7 @@ class PositionMismatch:
     timestamp: str
     severity: str  # 'minor', 'major', 'critical'
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "symbol": self.symbol,
             "local_qty": self.local_qty,
@@ -97,18 +94,19 @@ class PositionMismatch:
 @dataclass
 class ReconcileResult:
     """Result of a reconciliation check."""
+
     success: bool
     timestamp: str
     positions_checked: int
-    mismatches: List[PositionMismatch] = field(default_factory=list)
+    mismatches: list[PositionMismatch] = field(default_factory=list)
     broker_positions: int = 0
     local_positions: int = 0
     cash_match: bool = True
     local_cash: float = 0.0
     broker_cash: float = 0.0
-    action_taken: Optional[str] = None
+    action_taken: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "success": self.success,
             "timestamp": self.timestamp,
@@ -124,26 +122,27 @@ class ReconcileResult:
 @dataclass
 class ReconcilerConfig:
     """Configuration for state reconciler."""
+
     # Thresholds
-    qty_tolerance: float = 0.001          # Qty diff tolerance (for fractional shares)
-    price_tolerance: float = 0.01         # Price diff tolerance ($)
-    cash_tolerance: float = 1.0           # Cash diff tolerance ($)
+    qty_tolerance: float = 0.001  # Qty diff tolerance (for fractional shares)
+    price_tolerance: float = 0.01  # Price diff tolerance ($)
+    cash_tolerance: float = 1.0  # Cash diff tolerance ($)
 
     # Behavior
-    reconcile_interval: int = 15          # Seconds between periodic checks (reduced from 60)
-    stale_threshold_seconds: int = 30     # Portfolio state staleness threshold
-    halt_on_critical: bool = False        # Halt trading on critical mismatch (prefer auto_sync_critical)
-    auto_correct_minor: bool = True       # Auto-sync minor mismatches
-    auto_sync_critical: bool = True       # Auto-sync critical mismatches (safer than halting)
-    auto_sync_cash: bool = True           # Auto-sync cash on mismatch
+    reconcile_interval: int = 15  # Seconds between periodic checks (reduced from 60)
+    stale_threshold_seconds: int = 30  # Portfolio state staleness threshold
+    halt_on_critical: bool = False  # Halt trading on critical mismatch (prefer auto_sync_critical)
+    auto_correct_minor: bool = True  # Auto-sync minor mismatches
+    auto_sync_critical: bool = True  # Auto-sync critical mismatches (safer than halting)
+    auto_sync_cash: bool = True  # Auto-sync cash on mismatch
 
     # Severity thresholds
-    minor_qty_diff: float = 1.0           # Qty diff for 'minor'
-    major_qty_diff: float = 10.0          # Qty diff for 'major', above is 'critical'
+    minor_qty_diff: float = 1.0  # Qty diff for 'minor'
+    major_qty_diff: float = 10.0  # Qty diff for 'major', above is 'critical'
 
     # Order verification
-    order_verify_timeout: float = 30.0    # Seconds to wait for order fill
-    order_verify_retries: int = 3         # Retries for order verification
+    order_verify_timeout: float = 30.0  # Seconds to wait for order fill
+    order_verify_retries: int = 3  # Retries for order verification
 
 
 class StateReconciler:
@@ -156,11 +155,11 @@ class StateReconciler:
 
     def __init__(
         self,
-        broker: "BaseBrokerInterface",
-        portfolio: "PortfolioState",
-        config: Optional[ReconcilerConfig] = None,
-        on_mismatch: Optional[Callable[[List[PositionMismatch]], None]] = None,
-        on_halt: Optional[Callable[[str], None]] = None,
+        broker: BaseBrokerInterface,
+        portfolio: PortfolioState,
+        config: ReconcilerConfig | None = None,
+        on_mismatch: Callable[[list[PositionMismatch]], None] | None = None,
+        on_halt: Callable[[str], None] | None = None,
     ):
         """
         Initialize the state reconciler.
@@ -180,9 +179,9 @@ class StateReconciler:
 
         self.event_handler = get_event_handler()
         self._running = False
-        self._task: Optional[asyncio.Task] = None
+        self._task: asyncio.Task | None = None
         self._halted = False
-        self._last_result: Optional[ReconcileResult] = None
+        self._last_result: ReconcileResult | None = None
 
         # Statistics
         self._sync_count = 0
@@ -200,7 +199,7 @@ class StateReconciler:
         return self._halted
 
     @property
-    def last_result(self) -> Optional[ReconcileResult]:
+    def last_result(self) -> ReconcileResult | None:
         """Get the last reconciliation result."""
         return self._last_result
 
@@ -222,18 +221,14 @@ class StateReconciler:
         set_correlation_id(correlation_id)
         timestamp = datetime.now(timezone.utc).isoformat()
 
-        logger.info(
-            format_log_message("Starting full sync from broker", correlation_id=correlation_id)
-        )
+        logger.info(format_log_message("Starting full sync from broker", correlation_id=correlation_id))
 
         try:
             # Get broker snapshot
             snapshot = await self.broker.get_account_info()
 
             if snapshot is None:
-                logger.error(
-                    format_log_message("Failed to get broker snapshot", correlation_id=correlation_id)
-                )
+                logger.error(format_log_message("Failed to get broker snapshot", correlation_id=correlation_id))
                 return ReconcileResult(
                     success=False,
                     timestamp=timestamp,
@@ -268,7 +263,7 @@ class StateReconciler:
                 format_log_message(
                     f"Full sync complete: {broker_positions} positions, "
                     f"${snapshot.cash:,.2f} cash, ${snapshot.equity:,.2f} equity",
-                    correlation_id=correlation_id
+                    correlation_id=correlation_id,
                 )
             )
 
@@ -278,9 +273,7 @@ class StateReconciler:
             return result
 
         except Exception as e:
-            logger.error(
-                format_log_message(f"Full sync failed: {e}", correlation_id=correlation_id)
-            )
+            logger.error(format_log_message(f"Full sync failed: {e}", correlation_id=correlation_id))
             return ReconcileResult(
                 success=False,
                 timestamp=timestamp,
@@ -292,7 +285,7 @@ class StateReconciler:
     # POSITION CHECK (Periodic)
     # ========================================================================
 
-    async def check_positions(self, correlation_id: Optional[str] = None) -> ReconcileResult:
+    async def check_positions(self, correlation_id: str | None = None) -> ReconcileResult:
         """
         Check local positions against broker positions.
 
@@ -307,7 +300,7 @@ class StateReconciler:
         """
         correlation_id = correlation_id or generate_correlation_id()
         timestamp = datetime.now(timezone.utc).isoformat()
-        mismatches: List[PositionMismatch] = []
+        mismatches: list[PositionMismatch] = []
 
         try:
             # Get broker snapshot
@@ -362,7 +355,7 @@ class StateReconciler:
                         format_log_message(
                             f"Position mismatch [{severity}]: local={local_qty} broker={broker_qty} diff={qty_diff}",
                             correlation_id=correlation_id,
-                            symbol=symbol
+                            symbol=symbol,
                         )
                     )
 
@@ -375,7 +368,7 @@ class StateReconciler:
                     format_log_message(
                         f"Cash mismatch: local=${self.portfolio.cash:,.2f} "
                         f"broker=${snapshot.cash:,.2f} diff=${cash_diff:,.2f}",
-                        correlation_id=correlation_id
+                        correlation_id=correlation_id,
                     )
                 )
 
@@ -399,9 +392,7 @@ class StateReconciler:
             return result
 
         except Exception as e:
-            logger.error(
-                format_log_message(f"Position check failed: {e}", correlation_id=correlation_id)
-            )
+            logger.error(format_log_message(f"Position check failed: {e}", correlation_id=correlation_id))
             return ReconcileResult(
                 success=False,
                 timestamp=timestamp,
@@ -430,9 +421,7 @@ class StateReconciler:
         result = await self.check_positions(correlation_id)
 
         if result.success:
-            logger.debug(
-                format_log_message("Reconciliation passed - no mismatches", correlation_id=correlation_id)
-            )
+            logger.debug(format_log_message("Reconciliation passed - no mismatches", correlation_id=correlation_id))
             result.action_taken = "none_needed"
             return result
 
@@ -447,8 +436,7 @@ class StateReconciler:
         if minor_mismatches and self.config.auto_correct_minor:
             logger.info(
                 format_log_message(
-                    f"Auto-correcting {len(minor_mismatches)} minor mismatches",
-                    correlation_id=correlation_id
+                    f"Auto-correcting {len(minor_mismatches)} minor mismatches", correlation_id=correlation_id
                 )
             )
             await self.full_sync()
@@ -461,7 +449,7 @@ class StateReconciler:
                 f"Major position mismatches detected: {len(major_mismatches)} positions",
                 "warning",
                 result,
-                correlation_id
+                correlation_id,
             )
             actions_taken.append("alerted")
 
@@ -476,9 +464,7 @@ class StateReconciler:
             if self.config.auto_sync_critical:
                 # Auto-sync instead of halting - this is safer for live trading
                 msg = f"CRITICAL mismatch detected ({details}) - AUTO-SYNCING to broker state"
-                logger.warning(
-                    format_log_message(msg, correlation_id=correlation_id)
-                )
+                logger.warning(format_log_message(msg, correlation_id=correlation_id))
                 await self._emit_alert(msg, "warning", result, correlation_id)
 
                 # Perform full sync to fix the mismatch
@@ -486,8 +472,7 @@ class StateReconciler:
                 if sync_result.success:
                     logger.info(
                         format_log_message(
-                            f"Auto-sync successful - positions now match broker",
-                            correlation_id=correlation_id
+                            "Auto-sync successful - positions now match broker", correlation_id=correlation_id
                         )
                     )
                     actions_taken.append("critical_auto_synced")
@@ -495,9 +480,7 @@ class StateReconciler:
                     # Sync failed - now we halt
                     self._halted = True
                     msg = f"CRITICAL: Auto-sync FAILED for {symbols} - HALTING TRADING"
-                    logger.critical(
-                        format_log_message(msg, correlation_id=correlation_id)
-                    )
+                    logger.critical(format_log_message(msg, correlation_id=correlation_id))
                     await self._emit_alert(msg, "error", result, correlation_id)
                     actions_taken.append("halted")
                     if self.on_halt:
@@ -507,9 +490,7 @@ class StateReconciler:
                 # Old behavior: halt immediately
                 self._halted = True
                 msg = f"CRITICAL: {len(critical_mismatches)} position mismatches - HALTING TRADING"
-                logger.critical(
-                    format_log_message(msg, correlation_id=correlation_id)
-                )
+                logger.critical(format_log_message(msg, correlation_id=correlation_id))
                 await self._emit_alert(msg, "error", result, correlation_id)
                 actions_taken.append("halted")
                 if self.on_halt:
@@ -521,7 +502,7 @@ class StateReconciler:
                 logger.info(
                     format_log_message(
                         f"Auto-syncing cash: local=${result.local_cash:,.2f} -> broker=${result.broker_cash:,.2f}",
-                        correlation_id=correlation_id
+                        correlation_id=correlation_id,
                     )
                 )
                 if await self.sync_cash(correlation_id):
@@ -531,14 +512,14 @@ class StateReconciler:
                         f"Cash sync failed: local=${result.local_cash:,.2f} broker=${result.broker_cash:,.2f}",
                         "warning",
                         result,
-                        correlation_id
+                        correlation_id,
                     )
             else:
                 await self._emit_alert(
                     f"Cash mismatch: local=${result.local_cash:,.2f} broker=${result.broker_cash:,.2f}",
                     "warning",
                     result,
-                    correlation_id
+                    correlation_id,
                 )
 
         result.action_taken = ", ".join(actions_taken) if actions_taken else "none"
@@ -558,7 +539,7 @@ class StateReconciler:
         symbol: str,
         expected_qty: float,
         expected_side: str,  # 'buy' or 'sell'
-        correlation_id: Optional[str] = None,
+        correlation_id: str | None = None,
     ) -> bool:
         """
         Verify an order was filled as expected.
@@ -580,7 +561,7 @@ class StateReconciler:
             format_log_message(
                 f"Verifying order {order_id}: {expected_side} {expected_qty}",
                 correlation_id=correlation_id,
-                symbol=symbol
+                symbol=symbol,
             )
         )
 
@@ -593,7 +574,7 @@ class StateReconciler:
                         format_log_message(
                             f"Order {order_id} not found (attempt {attempt + 1})",
                             correlation_id=correlation_id,
-                            symbol=symbol
+                            symbol=symbol,
                         )
                     )
                     await asyncio.sleep(2)
@@ -610,7 +591,7 @@ class StateReconciler:
                             format_log_message(
                                 f"Order {order_id} verified: filled {filled_qty}",
                                 correlation_id=correlation_id,
-                                symbol=symbol
+                                symbol=symbol,
                             )
                         )
                         return True
@@ -619,7 +600,7 @@ class StateReconciler:
                             format_log_message(
                                 f"Order {order_id} qty mismatch: expected={expected_qty} filled={filled_qty}",
                                 correlation_id=correlation_id,
-                                symbol=symbol
+                                symbol=symbol,
                             )
                         )
                         return False
@@ -629,7 +610,7 @@ class StateReconciler:
                         format_log_message(
                             f"Order {order_id} not filled: status={status}",
                             correlation_id=correlation_id,
-                            symbol=symbol
+                            symbol=symbol,
                         )
                     )
                     return False
@@ -640,27 +621,19 @@ class StateReconciler:
                         format_log_message(
                             f"Order {order_id} status={status}, waiting...",
                             correlation_id=correlation_id,
-                            symbol=symbol
+                            symbol=symbol,
                         )
                     )
                     await asyncio.sleep(self.config.order_verify_timeout / self.config.order_verify_retries)
 
             except Exception as e:
                 logger.error(
-                    format_log_message(
-                        f"Order verification error: {e}",
-                        correlation_id=correlation_id,
-                        symbol=symbol
-                    )
+                    format_log_message(f"Order verification error: {e}", correlation_id=correlation_id, symbol=symbol)
                 )
                 await asyncio.sleep(2)
 
         logger.error(
-            format_log_message(
-                f"Order {order_id} verification timed out",
-                correlation_id=correlation_id,
-                symbol=symbol
-            )
+            format_log_message(f"Order {order_id} verification timed out", correlation_id=correlation_id, symbol=symbol)
         )
         return False
 
@@ -668,7 +641,7 @@ class StateReconciler:
     # PERIODIC RECONCILIATION
     # ========================================================================
 
-    async def start_periodic(self, interval_seconds: Optional[int] = None) -> None:
+    async def start_periodic(self, interval_seconds: int | None = None) -> None:
         """
         Start periodic reconciliation in background.
 
@@ -710,20 +683,16 @@ class StateReconciler:
                     break
 
                 correlation_id = generate_correlation_id()
-                logger.debug(
-                    format_log_message("Running periodic reconciliation", correlation_id=correlation_id)
-                )
+                logger.debug(format_log_message("Running periodic reconciliation", correlation_id=correlation_id))
                 result = await self.reconcile()
 
                 if result.success:
-                    logger.debug(
-                        format_log_message("Periodic reconciliation passed", correlation_id=correlation_id)
-                    )
+                    logger.debug(format_log_message("Periodic reconciliation passed", correlation_id=correlation_id))
                 else:
                     logger.warning(
                         format_log_message(
                             f"Periodic reconciliation found issues: {result.action_taken}",
-                            correlation_id=correlation_id
+                            correlation_id=correlation_id,
                         )
                     )
 
@@ -749,7 +718,7 @@ class StateReconciler:
         self.clear_halt()
         return result
 
-    async def sync_cash(self, correlation_id: Optional[str] = None) -> bool:
+    async def sync_cash(self, correlation_id: str | None = None) -> bool:
         """
         Sync only cash balance from broker.
 
@@ -774,17 +743,14 @@ class StateReconciler:
 
             logger.info(
                 format_log_message(
-                    f"Cash synced: ${old_cash:,.2f} -> ${snapshot.cash:,.2f}",
-                    correlation_id=correlation_id
+                    f"Cash synced: ${old_cash:,.2f} -> ${snapshot.cash:,.2f}", correlation_id=correlation_id
                 )
             )
 
             return True
 
         except Exception as e:
-            logger.error(
-                format_log_message(f"Cash sync failed: {e}", correlation_id=correlation_id)
-            )
+            logger.error(format_log_message(f"Cash sync failed: {e}", correlation_id=correlation_id))
             return False
 
     # ========================================================================
@@ -801,11 +767,7 @@ class StateReconciler:
             return "critical"
 
     async def _emit_alert(
-        self,
-        message: str,
-        level: str,
-        result: ReconcileResult,
-        correlation_id: Optional[str] = None
+        self, message: str, level: str, result: ReconcileResult, correlation_id: str | None = None
     ) -> None:
         """Emit alert event."""
         payload = {
@@ -822,15 +784,9 @@ class StateReconciler:
         try:
             await self.event_handler.emit(events.EVENT_ALERT, payload)
         except Exception as e:
-            logger.error(
-                format_log_message(f"Failed to emit alert: {e}", correlation_id=correlation_id)
-            )
+            logger.error(format_log_message(f"Failed to emit alert: {e}", correlation_id=correlation_id))
 
-    async def _emit_reconcile_event(
-        self,
-        result: ReconcileResult,
-        correlation_id: Optional[str] = None
-    ) -> None:
+    async def _emit_reconcile_event(self, result: ReconcileResult, correlation_id: str | None = None) -> None:
         """Emit reconciliation result event."""
         payload = {
             "type": "reconcile_result",
@@ -857,11 +813,9 @@ class StateReconciler:
                     event_payload["correlation_id"] = correlation_id
                 await self.event_handler.emit(events.EVENT_ALERT, event_payload)
         except Exception as e:
-            logger.error(
-                format_log_message(f"Failed to emit reconcile event: {e}", correlation_id=correlation_id)
-            )
+            logger.error(format_log_message(f"Failed to emit reconcile event: {e}", correlation_id=correlation_id))
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get reconciler statistics."""
         return {
             "sync_count": self._sync_count,

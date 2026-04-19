@@ -12,17 +12,17 @@ Preferred (new code):
 """
 
 # Re-export everything from contracts for backward compatibility
-from core.contracts.types import (
-    SignalPayload,
-    SignalContext,
-    OrderResult,
-    PositionView,
-    BrokerSnapshot,
-)
-from core.contracts.events import BarPayload
-
 # Legacy type aliases that were defined here
 from typing import Literal
+
+from core.contracts.events import BarPayload
+from core.contracts.types import (
+    BrokerSnapshot,
+    OrderResult,
+    PositionView,
+    SignalContext,
+    SignalPayload,
+)
 
 BarEventName = Literal["BAR_CREATED"]
 SignalEventName = Literal["SIGNAL"]
@@ -31,15 +31,15 @@ PnlEventName = Literal["PNL_UPDATE"]
 SystemEventName = Literal["HEARTBEAT", "ERROR", "WARNING", "INFO"]
 
 __all__ = [
-    'BarPayload',
-    'SignalPayload',
-    'SignalContext',
-    'OrderResult',
-    'PositionView',
-    'BrokerSnapshot',
-    'BarEventName',
-    'SignalEventName',
-    'TradeEventName',
-    'PnlEventName',
-    'SystemEventName',
+    "BarPayload",
+    "SignalPayload",
+    "SignalContext",
+    "OrderResult",
+    "PositionView",
+    "BrokerSnapshot",
+    "BarEventName",
+    "SignalEventName",
+    "TradeEventName",
+    "PnlEventName",
+    "SystemEventName",
 ]

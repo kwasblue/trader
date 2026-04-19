@@ -6,14 +6,16 @@ Tests that all strategies:
 2. Return valid signals: -1 (sell), 0 (hold), or 1 (buy)
 3. Handle edge cases (empty data, insufficient data)
 """
-import sys
+
 import os
+import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import unittest
-import pandas as pd
+
 import numpy as np
-from unittest.mock import Mock, MagicMock
+import pandas as pd
 
 
 class TestStrategySignalTypes(unittest.TestCase):
@@ -28,30 +30,25 @@ class TestStrategySignalTypes(unittest.TestCase):
         # Generate realistic price data
         close_prices = 100 + np.cumsum(np.random.randn(n) * 0.5)
 
-        cls.sample_data = pd.DataFrame({
-            'Open': close_prices - np.random.rand(n) * 0.5,
-            'High': close_prices + np.random.rand(n) * 1.0,
-            'Low': close_prices - np.random.rand(n) * 1.0,
-            'Close': close_prices,
-            'Volume': np.random.randint(100000, 1000000, n),
-        })
+        cls.sample_data = pd.DataFrame(
+            {
+                "Open": close_prices - np.random.rand(n) * 0.5,
+                "High": close_prices + np.random.rand(n) * 1.0,
+                "Low": close_prices - np.random.rand(n) * 1.0,
+                "Close": close_prices,
+                "Volume": np.random.randint(100000, 1000000, n),
+            }
+        )
 
         # Also create lowercase version for strategies that expect it
-        cls.sample_data_lower = cls.sample_data.rename(columns={
-            'Open': 'open', 'High': 'high', 'Low': 'low',
-            'Close': 'close', 'Volume': 'volume'
-        })
+        cls.sample_data_lower = cls.sample_data.rename(
+            columns={"Open": "open", "High": "high", "Low": "low", "Close": "close", "Volume": "volume"}
+        )
 
     def _assert_valid_signal(self, signal, strategy_name):
         """Assert signal is valid int in {-1, 0, 1}."""
-        self.assertIsInstance(
-            signal, (int, np.integer),
-            f"{strategy_name} returned {type(signal)}, expected int"
-        )
-        self.assertIn(
-            int(signal), [-1, 0, 1],
-            f"{strategy_name} returned {signal}, expected -1, 0, or 1"
-        )
+        self.assertIsInstance(signal, (int, np.integer), f"{strategy_name} returned {type(signal)}, expected int")
+        self.assertIn(int(signal), [-1, 0, 1], f"{strategy_name} returned {signal}, expected -1, 0, or 1")
 
     # ========== Simple Strategies ==========
 
@@ -149,10 +146,7 @@ class TestStrategySignalTypes(unittest.TestCase):
         """StochasticStrategy should return int signal."""
         from strategies.strategy_registry.stochastic_strategy import StochasticStrategy
 
-        strategy = StochasticStrategy(params={
-            "k_window": 14, "d_window": 3,
-            "oversold": 20, "overbought": 80
-        })
+        strategy = StochasticStrategy(params={"k_window": 14, "d_window": 3, "oversold": 20, "overbought": 80})
         signal = strategy.generate_signal(self.sample_data.copy())
 
         self._assert_valid_signal(signal, "StochasticStrategy")
@@ -226,13 +220,15 @@ class TestStrategySignalValues(unittest.TestCase):
         n = 50
         close_prices = np.linspace(100, 150, n)  # Steady uptrend
 
-        data = pd.DataFrame({
-            'Open': close_prices - 0.5,
-            'High': close_prices + 1.0,
-            'Low': close_prices - 1.0,
-            'Close': close_prices,
-            'Volume': [100000] * n,
-        })
+        data = pd.DataFrame(
+            {
+                "Open": close_prices - 0.5,
+                "High": close_prices + 1.0,
+                "Low": close_prices - 1.0,
+                "Close": close_prices,
+                "Volume": [100000] * n,
+            }
+        )
 
         strategy = EMAStrategy(params={"short_window": 5, "long_window": 20})
         signal = strategy.generate_signal(data)
@@ -248,13 +244,15 @@ class TestStrategySignalValues(unittest.TestCase):
         n = 50
         close_prices = np.linspace(150, 100, n)  # Steady downtrend
 
-        data = pd.DataFrame({
-            'Open': close_prices + 0.5,
-            'High': close_prices + 1.0,
-            'Low': close_prices - 1.0,
-            'Close': close_prices,
-            'Volume': [100000] * n,
-        })
+        data = pd.DataFrame(
+            {
+                "Open": close_prices + 0.5,
+                "High": close_prices + 1.0,
+                "Low": close_prices - 1.0,
+                "Close": close_prices,
+                "Volume": [100000] * n,
+            }
+        )
 
         strategy = EMAStrategy(params={"short_window": 5, "long_window": 20})
         signal = strategy.generate_signal(data)
@@ -270,13 +268,15 @@ class TestStrategySignalValues(unittest.TestCase):
         n = 30
         close_prices = np.linspace(150, 100, n)  # Sharp decline
 
-        data = pd.DataFrame({
-            'Open': close_prices + 0.5,
-            'High': close_prices + 1.0,
-            'Low': close_prices - 1.0,
-            'Close': close_prices,
-            'Volume': [100000] * n,
-        })
+        data = pd.DataFrame(
+            {
+                "Open": close_prices + 0.5,
+                "High": close_prices + 1.0,
+                "Low": close_prices - 1.0,
+                "Close": close_prices,
+                "Volume": [100000] * n,
+            }
+        )
 
         strategy = RSIStrategy(params={"window": 14, "oversold": 30, "overbought": 70})
         signal = strategy.generate_signal(data)
@@ -294,13 +294,15 @@ class TestCombinedStrategy(unittest.TestCase):
         n = 100
         close_prices = 100 + np.cumsum(np.random.randn(n) * 0.5)
 
-        self.sample_data = pd.DataFrame({
-            'Open': close_prices - np.random.rand(n) * 0.5,
-            'High': close_prices + np.random.rand(n) * 1.0,
-            'Low': close_prices - np.random.rand(n) * 1.0,
-            'Close': close_prices,
-            'Volume': np.random.randint(100000, 1000000, n),
-        })
+        self.sample_data = pd.DataFrame(
+            {
+                "Open": close_prices - np.random.rand(n) * 0.5,
+                "High": close_prices + np.random.rand(n) * 1.0,
+                "Low": close_prices - np.random.rand(n) * 1.0,
+                "Close": close_prices,
+                "Volume": np.random.randint(100000, 1000000, n),
+            }
+        )
 
     def test_combined_strategy_returns_int(self):
         """CombinedStrategy should return int signal."""
@@ -309,18 +311,16 @@ class TestCombinedStrategy(unittest.TestCase):
         # Create a mock strategy instance that has methods returning DataFrames with Signal
         class MockStrategyObj:
             def ema_strat(self, data, **kwargs):
-                data['Signal'] = 1
+                data["Signal"] = 1
                 return data
 
             def rsi_strat(self, data, **kwargs):
-                data['Signal'] = 1
+                data["Signal"] = 1
                 return data
 
         # Pass keyword arguments directly (not nested under 'params')
         strategy = CombinedStrategy(
-            strategy_methods=["ema_strat", "rsi_strat"],
-            combine_method="vote",
-            strategy_instance=MockStrategyObj()
+            strategy_methods=["ema_strat", "rsi_strat"], combine_method="vote", strategy_instance=MockStrategyObj()
         )
 
         signal = strategy.generate_signal(self.sample_data.copy())
@@ -329,5 +329,5 @@ class TestCombinedStrategy(unittest.TestCase):
         self.assertIn(int(signal), [-1, 0, 1])
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

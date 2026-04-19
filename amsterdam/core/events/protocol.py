@@ -7,17 +7,19 @@ type-enforced at compile time, but payloads will be validated
 at runtime using isinstance() checks.
 """
 
-from typing import Protocol, Any, Dict
+from typing import Any, Protocol
+
 from core.contracts.events import EVENT_SCHEMA_MAP
 
 
 def _make_protocol() -> type[Any]:
-    namespace: Dict[str, Any] = {}
+    namespace: dict[str, Any] = {}
 
     for event_name in EVENT_SCHEMA_MAP.keys():
         method_name = "emit_" + event_name.lower()
 
         async def _template(self, payload: dict) -> None: ...
+
         _template.__name__ = method_name
         namespace[method_name] = _template
 

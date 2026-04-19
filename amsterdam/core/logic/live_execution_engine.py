@@ -10,58 +10,62 @@ Executes real trades using:
 
 from __future__ import annotations
 
-from typing import Optional, Dict, Any, TYPE_CHECKING, Union
 import asyncio
 import json
-from datetime import datetime, timezone, time
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo
-import logging
 
 # US Eastern timezone for market hours calculations
 ET = ZoneInfo("America/New_York")
 
+from core.app_types import OrderResult, SignalContext
+from core.base.base_broker_interface import BaseBrokerInterface
 from core.base.execution_engine_base import ExecutionEngineBase
 from core.base.executor_base import BaseExecutor
-from core.base.base_broker_interface import BaseBrokerInterface
 from core.base.position_sizer_base import PositionSizerBase
 from core.base.trade_logger_base import TradeLoggerBase
 from core.base.trade_logic_manager_base import TradeLogicManagerBase
-from core.logic.portfolio_state import PortfolioState
-from core.logic.symbol_state import SymbolState
-from core.logic.position_manager import PositionManager
-from core.logic.hybrid_position_sizer import HybridPositionSizer
-from core.app_types import OrderResult, SignalContext
-from core.enums import OrderSide, PositionState
-from core.order_registry import OrderRegistry
-from core.trade_validator import TradeValidator
-from core.logging_config import (
-    get_component_logger,
-    generate_correlation_id,
-    set_correlation_id,
-    format_log_message,
-)
-from loggers.logger import Logger
 from core.contracts.events import (
-    EVENT_ALERT, AlertPayload, EVENT_NEW_TRADE, TradePayload,
-    EVENT_MANUAL_ORDER, EVENT_FLATTEN_ALL, EVENT_FLATTEN_SYMBOL, EVENT_CANCEL_ALL,
-    EVENT_POSITION_UPDATE, PositionPayload,
+    EVENT_ALERT,
+    EVENT_CANCEL_ALL,
+    EVENT_FLATTEN_ALL,
+    EVENT_FLATTEN_SYMBOL,
+    EVENT_MANUAL_ORDER,
+    EVENT_NEW_TRADE,
+    EVENT_POSITION_UPDATE,
+    AlertPayload,
+    PositionPayload,
+    TradePayload,
 )
 from core.contracts.meta_types import TradeEntryContext, TradeExitContext
-from loggers.meta_trade_logger import MetaTradeLogger, generate_trade_id
-from core.ml.trade_quality_filter import TradeQualityFilter
+from core.enums import OrderSide, PositionState
+from core.logging_config import (
+    format_log_message,
+    generate_correlation_id,
+    set_correlation_id,
+)
+from core.logic.hybrid_position_sizer import HybridPositionSizer
+from core.logic.portfolio_state import PortfolioState
+from core.logic.position_manager import PositionManager
+from core.logic.symbol_state import SymbolState
 
 # Import the router we created
 from core.logic.trade_logic_router import TradeApproverRouter
+from core.ml.trade_quality_filter import TradeQualityFilter
+from core.order_registry import OrderRegistry
 from core.tracing import trace
+from core.trade_validator import TradeValidator
+from loggers.logger import Logger
+from loggers.meta_trade_logger import MetaTradeLogger, generate_trade_id
 
 if TYPE_CHECKING:
-    from core.state_reconciler import StateReconciler
     from core.drawdown_monitor import DrawdownMonitor
-    from core.state_sync import StateSynchronizer
+    from core.state_reconciler import StateReconciler
 
 # Default PositionManager instance
-_default_position_manager: Optional[PositionManager] = None
+_default_position_manager: PositionManager | None = None
 
 
 def get_default_position_manager() -> PositionManager:
@@ -71,17 +75,18 @@ def get_default_position_manager() -> PositionManager:
         _default_position_manager = PositionManager()
     return _default_position_manager
 
+
 class LiveExecutionEngine(ExecutionEngineBase):
     """
     Live execution engine for real-time trading.
-    
+
     Features:
     - Real broker connectivity
     - Dynamic trade logic routing (by symbol/strategy/regime)
     - Production-grade error handling
     - Comprehensive logging
     - State synchronization with broker
-    
+
     Example:
         # Setup
         broker = AlpacaBroker(api_key=..., secret_key=...)
@@ -90,7 +95,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
         tracker = DatabaseTradeLogger()
         logic = DefaultTradeLogicManager()
         portfolio = PortfolioState(initial_cash=100000)
-        
+
         # Create router with default logic and register overrides
         router = TradeApproverRouter(logic)
         router.register_symbol_approver("BTC-USD", crypto_approver)
@@ -116,7 +121,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
             strategy_name="momentum"
         )
     """
-    
+
     def __init__(
         self,
         broker: BaseBrokerInterface,
@@ -126,11 +131,11 @@ class LiveExecutionEngine(ExecutionEngineBase):
         trade_logic_manager: TradeLogicManagerBase,
         portfolio: PortfolioState,
         sync_on_start: bool = True,
-        reconciler: Optional["StateReconciler"] = None,
-        event_handler: Optional[Any] = None,
-        daily_loss_limit: Optional[float] = None,
-        drawdown_monitor: Optional["DrawdownMonitor"] = None,
-        position_manager: Optional[PositionManager] = None,
+        reconciler: StateReconciler | None = None,
+        event_handler: Any | None = None,
+        daily_loss_limit: float | None = None,
+        drawdown_monitor: DrawdownMonitor | None = None,
+        position_manager: PositionManager | None = None,
     ):
         """
         Initialize live execution engine.
@@ -199,54 +204,57 @@ class LiveExecutionEngine(ExecutionEngineBase):
         self.daily_loss_limit = daily_loss_limit
         self._daily_realized_pnl: float = 0.0
         self._daily_loss_limit_breached: bool = False
-        self._trading_day_start: Optional[datetime] = None
+        self._trading_day_start: datetime | None = None
 
         # Initialize symbol states dict for state synchronization
-        if not hasattr(self, 'symbol_states'):
-            self.symbol_states: Dict[str, SymbolState] = {}
+        if not hasattr(self, "symbol_states"):
+            self.symbol_states: dict[str, SymbolState] = {}
 
         # State synchronizer for Portfolio <-> Symbol consistency
         from core.state_sync import StateSynchronizer
+
         self._state_sync = StateSynchronizer(
             portfolio=self.portfolio,
             symbol_states=self.symbol_states,
         )
 
         # Position refresh cache to reduce broker API calls
-        self._position_cache: Dict[str, datetime] = {}  # symbol -> last_refresh_time
+        self._position_cache: dict[str, datetime] = {}  # symbol -> last_refresh_time
         self._position_cache_ttl: float = 30.0  # Cache TTL in seconds (increased for scaling)
 
         # Meta trade logger for ML training data
         # Load config for meta logging settings
         try:
             from core.config_loader import get_config
+
             cfg = get_config()
-            ml_config = getattr(cfg, 'ml_training', None)
-            if ml_config and getattr(ml_config, 'meta_logging_enabled', True):
-                meta_log_file = getattr(ml_config, 'meta_log_file', 'meta_trades_live.jsonl')
+            ml_config = getattr(cfg, "ml_training", None)
+            if ml_config and getattr(ml_config, "meta_logging_enabled", True):
+                meta_log_file = getattr(ml_config, "meta_log_file", "meta_trades_live.jsonl")
                 self.meta_logger = MetaTradeLogger(log_file=meta_log_file)
             else:
-                self.meta_logger = MetaTradeLogger(log_file='meta_trades_live.jsonl')
+                self.meta_logger = MetaTradeLogger(log_file="meta_trades_live.jsonl")
         except Exception:
-            self.meta_logger = MetaTradeLogger(log_file='meta_trades_live.jsonl')
+            self.meta_logger = MetaTradeLogger(log_file="meta_trades_live.jsonl")
 
         # Hybrid position sizer - set by BaseLiveRunner if enabled
         # Uses confidence + trend alignment to adjust position sizes
-        self.hybrid_sizer: Optional[HybridPositionSizer] = None
+        self.hybrid_sizer: HybridPositionSizer | None = None
 
         # ML Trade Quality Filter - gates entries based on predicted quality
         # Settings loaded from config/trading_config.json under ml_training section
         try:
             from core.config_loader import get_config
+
             ml_cfg = get_config().ml_training
-            ml_filter_enabled = getattr(ml_cfg, 'filter_enabled', False)
-            ml_filter_confidence = getattr(ml_cfg, 'filter_min_confidence', 0.5)
-            ml_filter_model_path = getattr(ml_cfg, 'filter_model_path', 'models/trade_quality_model.joblib')
-            ml_filter_shadow_mode = getattr(ml_cfg, 'filter_shadow_mode', False)
+            ml_filter_enabled = getattr(ml_cfg, "filter_enabled", False)
+            ml_filter_confidence = getattr(ml_cfg, "filter_min_confidence", 0.5)
+            ml_filter_model_path = getattr(ml_cfg, "filter_model_path", "models/trade_quality_model.joblib")
+            ml_filter_shadow_mode = getattr(ml_cfg, "filter_shadow_mode", False)
         except Exception:
             ml_filter_enabled = False
             ml_filter_confidence = 0.5
-            ml_filter_model_path = 'models/trade_quality_model.joblib'
+            ml_filter_model_path = "models/trade_quality_model.joblib"
             ml_filter_shadow_mode = False
 
         self.ml_filter = TradeQualityFilter(
@@ -275,12 +283,13 @@ class LiveExecutionEngine(ExecutionEngineBase):
         if sync_on_start:
             # Can't await in __init__, use asyncio.run for one-time sync
             import asyncio
+
             asyncio.run(self._sync_portfolio_with_broker())
-    
+
     # ========================================================================
     # INITIALIZATION
     # ========================================================================
-    
+
     async def _sync_portfolio_with_broker(self) -> None:
         """
         Sync portfolio state with live broker positions.
@@ -299,8 +308,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
             self.portfolio.sync_from_snapshot(account)
 
             self.logger.info(
-                f"Portfolio synced: ${self.portfolio.total_value:,.2f}, "
-                f"{len(self.portfolio.positions)} positions"
+                f"Portfolio synced: ${self.portfolio.total_value:,.2f}, {len(self.portfolio.positions)} positions"
             )
 
         except Exception as e:
@@ -330,10 +338,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
             realized_pnl: Realized profit/loss from the trade (positive = profit)
         """
         self._daily_realized_pnl += realized_pnl
-        self.logger.debug(
-            f"Trade P&L recorded: ${realized_pnl:+,.2f}, "
-            f"daily total: ${self._daily_realized_pnl:+,.2f}"
-        )
+        self.logger.debug(f"Trade P&L recorded: ${realized_pnl:+,.2f}, daily total: ${self._daily_realized_pnl:+,.2f}")
 
         # Check if limit breached
         if self._check_daily_loss_limit_breached():
@@ -344,12 +349,15 @@ class LiveExecutionEngine(ExecutionEngineBase):
             # Emit alert
             if self.event_handler:
                 asyncio.create_task(
-                    self.event_handler.emit(EVENT_ALERT, AlertPayload(
-                        level="critical",
-                        message=f"Daily loss limit breached! Lost ${abs(self._daily_realized_pnl):,.2f}",
-                        symbol=None,
-                        timestamp=datetime.now(timezone.utc).isoformat(),
-                    ))
+                    self.event_handler.emit(
+                        EVENT_ALERT,
+                        AlertPayload(
+                            level="critical",
+                            message=f"Daily loss limit breached! Lost ${abs(self._daily_realized_pnl):,.2f}",
+                            symbol=None,
+                            timestamp=datetime.now(timezone.utc).isoformat(),
+                        ),
+                    )
                 )
 
     def _check_daily_loss_limit_breached(self) -> bool:
@@ -375,7 +383,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
         """Get current daily realized P&L."""
         return self._daily_realized_pnl
 
-    def get_daily_loss_remaining(self) -> Optional[float]:
+    def get_daily_loss_remaining(self) -> float | None:
         """
         Get remaining loss budget before hitting daily limit.
 
@@ -394,10 +402,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
     min_signal_confidence: float = 0.0
 
     @trace
-    async def handle_signal_context(
-        self,
-        context: SignalContext
-    ) -> Optional[OrderResult]:
+    async def handle_signal_context(self, context: SignalContext) -> OrderResult | None:
         """
         Handle live trading signal using unified context.
 
@@ -429,7 +434,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
                 format_log_message(
                     "Trading halted by reconciler - skipping signal",
                     correlation_id=correlation_id,
-                    symbol=context.symbol
+                    symbol=context.symbol,
                 )
             )
             return None
@@ -441,7 +446,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
                     f"Daily loss limit breached (${abs(self._daily_realized_pnl):,.2f} lost, "
                     f"limit ${self.daily_loss_limit:,.2f}) - trading halted",
                     correlation_id=correlation_id,
-                    symbol=context.symbol
+                    symbol=context.symbol,
                 )
             )
             return None
@@ -452,7 +457,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
                 format_log_message(
                     f"Signal confidence {context.confidence:.2f} below threshold",
                     correlation_id=correlation_id,
-                    symbol=context.symbol
+                    symbol=context.symbol,
                 )
             )
             return None
@@ -465,15 +470,13 @@ class LiveExecutionEngine(ExecutionEngineBase):
                     format_log_message(
                         f"Drawdown limit blocking trade for {context.symbol}",
                         correlation_id=correlation_id,
-                        symbol=context.symbol
+                        symbol=context.symbol,
                     )
                 )
                 return None
             self.logger.debug(
                 format_log_message(
-                    f"Drawdown check passed for {context.symbol}",
-                    correlation_id=correlation_id,
-                    symbol=context.symbol
+                    f"Drawdown check passed for {context.symbol}", correlation_id=correlation_id, symbol=context.symbol
                 )
             )
 
@@ -485,7 +488,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
             return None
 
         # Get or create state from metadata or create new
-        state = context.metadata.get('state')
+        state = context.metadata.get("state")
         if state is None:
             if context.symbol not in self.symbol_states:
                 new_state = SymbolState(symbol=context.symbol)
@@ -495,9 +498,9 @@ class LiveExecutionEngine(ExecutionEngineBase):
             state = self.symbol_states[context.symbol]
 
         # Track bar for bar-based cooldown (call on every signal = every bar)
-        if hasattr(self, 'trade_logic_manager') and self.trade_logic_manager:
+        if hasattr(self, "trade_logic_manager") and self.trade_logic_manager:
             trade_logic = self.trade_logic_manager.get(context.symbol, context.regime)
-            if hasattr(trade_logic, 'on_bar'):
+            if hasattr(trade_logic, "on_bar"):
                 trade_logic.on_bar(context.symbol)
 
         # Set strategy name
@@ -508,16 +511,14 @@ class LiveExecutionEngine(ExecutionEngineBase):
                 f"Processing signal: {context.signal} @ ${context.price:.2f} "
                 f"(regime={context.regime}, strategy={context.strategy_name})",
                 correlation_id=correlation_id,
-                symbol=context.symbol
+                symbol=context.symbol,
             )
         )
 
         try:
             # Get appropriate trade approver
             trade_approver = self.approver_router.get_approver(
-                symbol=context.symbol,
-                strategy=context.strategy_name,
-                regime=context.regime
+                symbol=context.symbol, strategy=context.strategy_name, regime=context.regime
             )
             # Alias for backwards compatibility in this method
             trade_logic = trade_approver
@@ -526,7 +527,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
                 format_log_message(
                     f"Using approver: {trade_approver.__class__.__name__}",
                     correlation_id=correlation_id,
-                    symbol=context.symbol
+                    symbol=context.symbol,
                 )
             )
 
@@ -537,27 +538,24 @@ class LiveExecutionEngine(ExecutionEngineBase):
             # 2. Check trade approval (pure gating - pass context directly)
             # Approver answers: "Are we ALLOWED to trade?"
             # PositionManager answers: "SHOULD we exit?" (for in-position)
-            should_trade, reason = await self._check_trade_approval(
-                trade_logic, context, state
-            )
+            should_trade, reason = await self._check_trade_approval(trade_logic, context, state)
 
             if not should_trade:
                 self.logger.info(
-                    format_log_message(
-                        f"Trade blocked: {reason}",
-                        correlation_id=correlation_id,
-                        symbol=context.symbol
-                    )
+                    format_log_message(f"Trade blocked: {reason}", correlation_id=correlation_id, symbol=context.symbol)
                 )
                 # Emit alert for GUI visibility
                 if self.event_handler:
                     signal_text = {-1: "SELL", 0: "HOLD", 1: "BUY"}.get(context.signal, "?")
-                    await self.event_handler.emit(EVENT_ALERT, AlertPayload(
-                        level="info",
-                        message=f"[{context.symbol}] {signal_text} blocked: {reason}",
-                        symbol=context.symbol,
-                        timestamp=datetime.now(timezone.utc).isoformat(),
-                    ))
+                    await self.event_handler.emit(
+                        EVENT_ALERT,
+                        AlertPayload(
+                            level="info",
+                            message=f"[{context.symbol}] {signal_text} blocked: {reason}",
+                            symbol=context.symbol,
+                            timestamp=datetime.now(timezone.utc).isoformat(),
+                        ),
+                    )
                 return None
 
             # 3. Determine action using PositionManager for exit decisions
@@ -578,20 +576,16 @@ class LiveExecutionEngine(ExecutionEngineBase):
 
                 if not should_exit:
                     # Update trailing stop and excursions even if not exiting
-                    self.position_manager.update_trailing_stop(
-                        state, context.price, context.atr, context.regime
-                    )
+                    self.position_manager.update_trailing_stop(state, context.price, context.atr, context.regime)
                     position = self.portfolio.positions.get(context.symbol)
                     if position:
-                        self.position_manager.update_excursions(
-                            state, context.price, position.avg_price
-                        )
-                    state.bars_held = getattr(state, 'bars_held', 0) + 1
+                        self.position_manager.update_excursions(state, context.price, position.avg_price)
+                    state.bars_held = getattr(state, "bars_held", 0) + 1
                     self.logger.debug(
                         format_log_message(
                             f"Holding position (bars_held={state.bars_held})",
                             correlation_id=correlation_id,
-                            symbol=context.symbol
+                            symbol=context.symbol,
                         )
                     )
                     return None
@@ -614,17 +608,22 @@ class LiveExecutionEngine(ExecutionEngineBase):
 
             # 4. Calculate quantity (pass context for hybrid sizing)
             qty = self._calculate_quantity(
-                context.symbol, state, action_type, context.price, context.atr,
-                context.regime, trade_logic, signal=context.signal,
-                df=context.df, context=context
+                context.symbol,
+                state,
+                action_type,
+                context.price,
+                context.atr,
+                context.regime,
+                trade_logic,
+                signal=context.signal,
+                df=context.df,
+                context=context,
             )
 
             if qty <= 0:
                 self.logger.warning(
                     format_log_message(
-                        f"Position size too small: {qty}",
-                        correlation_id=correlation_id,
-                        symbol=context.symbol
+                        f"Position size too small: {qty}", correlation_id=correlation_id, symbol=context.symbol
                     )
                 )
                 return None
@@ -643,9 +642,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
             if not validation.valid:
                 self.logger.warning(
                     format_log_message(
-                        f"Validation failed: {validation.errors}",
-                        correlation_id=correlation_id,
-                        symbol=context.symbol
+                        f"Validation failed: {validation.errors}", correlation_id=correlation_id, symbol=context.symbol
                     )
                 )
                 return None
@@ -655,7 +652,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
                     format_log_message(
                         f"Validation warnings: {validation.warnings}",
                         correlation_id=correlation_id,
-                        symbol=context.symbol
+                        symbol=context.symbol,
                     )
                 )
 
@@ -663,17 +660,17 @@ class LiveExecutionEngine(ExecutionEngineBase):
             if not await self._validate_live_execution(context.symbol, side, qty, context.price):
                 self.logger.error(
                     format_log_message(
-                        "Pre-execution validation failed",
-                        correlation_id=correlation_id,
-                        symbol=context.symbol
+                        "Pre-execution validation failed", correlation_id=correlation_id, symbol=context.symbol
                     )
                 )
                 return None
 
             # 6. SET PENDING STATE
             pending_state = (
-                PositionState.PENDING_ENTRY if action_type == "entry"
-                else PositionState.PENDING_EXIT if action_type in ("exit", "reversal")
+                PositionState.PENDING_ENTRY
+                if action_type == "entry"
+                else PositionState.PENDING_EXIT
+                if action_type in ("exit", "reversal")
                 else PositionState.PENDING_ADD
             )
             state_set = await self.portfolio.set_position_state(context.symbol, pending_state)
@@ -684,7 +681,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
                     format_log_message(
                         f"Cannot set {pending_state.value}: current state is {current_state.value}",
                         correlation_id=correlation_id,
-                        symbol=context.symbol
+                        symbol=context.symbol,
                     )
                 )
                 return None
@@ -695,7 +692,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
                     f"Action approved: {action_type} {side.value} {qty} @ ${context.price:.2f}",
                     correlation_id=correlation_id,
                     symbol=context.symbol,
-                    state=pending_state.value
+                    state=pending_state.value,
                 )
             )
 
@@ -704,20 +701,26 @@ class LiveExecutionEngine(ExecutionEngineBase):
             # updated inside _execute_live_trade before _post_execution runs
             position_before = self.portfolio.positions.get(context.symbol)
             pre_state = {
-                'cash': self.portfolio.cash,
-                'position_qty': position_before.qty if position_before else 0,
-                'avg_price': position_before.avg_price if position_before else None,
+                "cash": self.portfolio.cash,
+                "position_qty": position_before.qty if position_before else 0,
+                "avg_price": position_before.avg_price if position_before else None,
             }
 
             # 7. Execute trade (LIVE) - order registration happens inside
             result = await self._execute_live_trade(
-                context.symbol, state, side, qty, context.price, context.atr, action_type,
+                context.symbol,
+                state,
+                side,
+                qty,
+                context.price,
+                context.atr,
+                action_type,
                 correlation_id=correlation_id,
                 order_type=context.order_type,
                 time_in_force=context.time_in_force,
                 limit_price=context.limit_price,
                 stop_price=context.stop_price,
-                df=context.df
+                df=context.df,
             )
 
             # 8. UPDATE STATE ON RESULT
@@ -733,17 +736,13 @@ class LiveExecutionEngine(ExecutionEngineBase):
                     state.entry_regime = context.regime
 
                     self.position_manager.calculate_levels(
-                        state=state,
-                        price=result.avg_price,
-                        atr=context.atr,
-                        condition=context.regime,
-                        side=side
+                        state=state, price=result.avg_price, atr=context.atr, condition=context.regime, side=side
                     )
                     self.logger.debug(
                         format_log_message(
                             f"Entry levels set: SL=${state.stop_loss:.2f}, TP=${state.take_profit:.2f}",
                             correlation_id=correlation_id,
-                            symbol=context.symbol
+                            symbol=context.symbol,
                         )
                     )
 
@@ -752,12 +751,17 @@ class LiveExecutionEngine(ExecutionEngineBase):
 
                 # 10. Post-execution tasks (pass pre_state for accurate logging)
                 self._post_execution(
-                    context.symbol, state, result, action_type, context.regime, context.strategy_name,
-                    pre_state=pre_state
+                    context.symbol,
+                    state,
+                    result,
+                    action_type,
+                    context.regime,
+                    context.strategy_name,
+                    pre_state=pre_state,
                 )
 
                 # 11. Reset bar-based cooldown after trade
-                if hasattr(trade_logic, 'on_trade'):
+                if hasattr(trade_logic, "on_trade"):
                     trade_logic.on_trade(context.symbol)
 
                 self.logger.info(
@@ -765,14 +769,14 @@ class LiveExecutionEngine(ExecutionEngineBase):
                         f"Execution complete: {side.value} {qty} filled",
                         correlation_id=correlation_id,
                         symbol=context.symbol,
-                        state=new_state.value
+                        state=new_state.value,
                     )
                 )
             else:
                 # Order failed - revert state
                 await self.portfolio.set_position_state(
                     context.symbol,
-                    PositionState.OPEN if action_type in ("exit", "partial_exit") else PositionState.NONE
+                    PositionState.OPEN if action_type in ("exit", "partial_exit") else PositionState.NONE,
                 )
                 state.position_state = PositionState.NONE
 
@@ -781,9 +785,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
         except Exception as e:
             self.logger.exception(
                 format_log_message(
-                    f"Error in live execution: {e}",
-                    correlation_id=correlation_id,
-                    symbol=context.symbol
+                    f"Error in live execution: {e}", correlation_id=correlation_id, symbol=context.symbol
                 )
             )
 
@@ -798,12 +800,12 @@ class LiveExecutionEngine(ExecutionEngineBase):
                 message=f"Live execution error for {context.symbol}",
                 error=e,
                 context={
-                    'symbol': context.symbol,
-                    'signal': context.signal,
-                    'price': context.price,
-                    'strategy': context.strategy_name,
-                    'correlation_id': correlation_id,
-                }
+                    "symbol": context.symbol,
+                    "signal": context.signal,
+                    "price": context.price,
+                    "strategy": context.strategy_name,
+                    "correlation_id": correlation_id,
+                },
             )
 
             return None
@@ -812,7 +814,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
         self,
         context: SignalContext,
         state: SymbolState,
-    ) -> Optional[OrderResult]:
+    ) -> OrderResult | None:
         """
         Handle live trading signal.
 
@@ -827,14 +829,13 @@ class LiveExecutionEngine(ExecutionEngineBase):
             OrderResult if executed, None if skipped
         """
         # Store state in metadata so handle_signal_context can use it
-        context.metadata['state'] = state
+        context.metadata["state"] = state
         return await self.handle_signal_context(context)
 
-    
     # ========================================================================
     # LIVE-SPECIFIC METHODS
     # ========================================================================
-    
+
     async def _has_pending_orders(self, symbol: str) -> bool:
         """
         Check if there are any pending orders for a symbol.
@@ -885,9 +886,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
             if last_refresh:
                 age = (datetime.now(timezone.utc) - last_refresh).total_seconds()
                 if age < self._position_cache_ttl:
-                    self.logger.debug(
-                        f"[{symbol}] Using cached position (age={age:.1f}s)"
-                    )
+                    self.logger.debug(f"[{symbol}] Using cached position (age={age:.1f}s)")
                     return
 
         try:
@@ -904,34 +903,26 @@ class LiveExecutionEngine(ExecutionEngineBase):
                     avg_price=float(broker_position.avg_price),
                     last_price=float(broker_position.last_price or broker_position.avg_price),
                 )
-                self.logger.debug(
-                    f"[{symbol}] Position refreshed: qty={broker_position.qty}"
-                )
+                self.logger.debug(f"[{symbol}] Position refreshed: qty={broker_position.qty}")
             elif symbol in self.portfolio.positions:
                 # Position not on broker - use local registry for fast check
                 if await self.order_registry.has_pending_orders(symbol):
-                    self.logger.debug(
-                        f"[{symbol}] Has pending orders in registry, keeping local state"
-                    )
+                    self.logger.debug(f"[{symbol}] Has pending orders in registry, keeping local state")
                     return
 
                 # Double-check with broker (in case registry missed something)
                 if await self._has_pending_orders(symbol):
-                    self.logger.debug(
-                        f"[{symbol}] Has pending orders on broker, keeping local state"
-                    )
+                    self.logger.debug(f"[{symbol}] Has pending orders on broker, keeping local state")
                     return
 
                 # No pending orders, safe to remove position via proper method
                 self.portfolio.remove_position(symbol)
-                self.logger.warning(
-                    f"[{symbol}] Position removed (not found on broker)"
-                )
+                self.logger.warning(f"[{symbol}] Position removed (not found on broker)")
 
         except Exception as e:
             self.logger.warning(f"[{symbol}] Failed to refresh position: {e}")
 
-    def invalidate_position_cache(self, symbol: Optional[str] = None) -> None:
+    def invalidate_position_cache(self, symbol: str | None = None) -> None:
         """
         Invalidate position cache.
 
@@ -944,7 +935,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
             self._position_cache.pop(symbol, None)
         else:
             self._position_cache.clear()
-    
+
     async def _cancel_conflicting_orders(self, symbol: str, side: OrderSide) -> None:
         """
         Cancel any open orders that would conflict with a new order.
@@ -964,21 +955,15 @@ class LiveExecutionEngine(ExecutionEngineBase):
             conflicting = await self.order_registry.get_conflicting_orders(symbol, new_side)
 
             if conflicting:
-                self.logger.info(
-                    f"[{symbol}] Found {len(conflicting)} conflicting orders in registry"
-                )
+                self.logger.info(f"[{symbol}] Found {len(conflicting)} conflicting orders in registry")
 
                 for order in conflicting:
                     try:
                         await self.broker.cancel_order(order.order_id)
                         await self.order_registry.update_status(order.order_id, "cancelled")
-                        self.logger.info(
-                            f"[{symbol}] Cancelled conflicting order {order.order_id}"
-                        )
+                        self.logger.info(f"[{symbol}] Cancelled conflicting order {order.order_id}")
                     except Exception as e:
-                        self.logger.warning(
-                            f"[{symbol}] Failed to cancel order {order.order_id}: {e}"
-                        )
+                        self.logger.warning(f"[{symbol}] Failed to cancel order {order.order_id}: {e}")
 
             # Also check broker for orders not in our registry
             open_orders = await self.broker.get_open_orders()
@@ -995,24 +980,14 @@ class LiveExecutionEngine(ExecutionEngineBase):
                 if order_side != new_side:
                     try:
                         await self.broker.cancel_order(order.order_id)
-                        self.logger.info(
-                            f"[{symbol}] Cancelled conflicting broker order {order.order_id}"
-                        )
+                        self.logger.info(f"[{symbol}] Cancelled conflicting broker order {order.order_id}")
                     except Exception as e:
-                        self.logger.warning(
-                            f"[{symbol}] Failed to cancel order {order.order_id}: {e}"
-                        )
+                        self.logger.warning(f"[{symbol}] Failed to cancel order {order.order_id}: {e}")
 
         except Exception as e:
             self.logger.warning(f"[{symbol}] Failed to check/cancel conflicting orders: {e}")
 
-    async def _validate_live_execution(
-        self,
-        symbol: str,
-        side: OrderSide,
-        qty: int,
-        price: float
-    ) -> bool:
+    async def _validate_live_execution(self, symbol: str, side: OrderSide, qty: int, price: float) -> bool:
         """
         Final validation before live execution.
 
@@ -1032,7 +1007,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
                 # Continue anyway - some brokers accept orders when closed
 
             # Check buying power
-            if hasattr(self.broker, 'get_buying_power'):
+            if hasattr(self.broker, "get_buying_power"):
                 available = self.broker.get_buying_power()
             else:
                 available = self.broker.get_available_funds()
@@ -1052,7 +1027,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
                 return False
 
             # Check if symbol is tradeable (if broker supports)
-            if hasattr(self.broker, 'is_tradeable'):
+            if hasattr(self.broker, "is_tradeable"):
                 if not self.broker.is_tradeable(symbol):
                     self.logger.error(f"Symbol not tradeable: {symbol}")
                     return False
@@ -1077,13 +1052,13 @@ class LiveExecutionEngine(ExecutionEngineBase):
         price: float,
         atr: float,
         action_type: str,
-        correlation_id: Optional[str] = None,
+        correlation_id: str | None = None,
         order_type: str = "market",
         time_in_force: str = "day",
-        limit_price: Optional[float] = None,
-        stop_price: Optional[float] = None,
-        **kwargs
-    ) -> Optional[OrderResult]:
+        limit_price: float | None = None,
+        stop_price: float | None = None,
+        **kwargs,
+    ) -> OrderResult | None:
         """
         Execute LIVE trade via broker.
 
@@ -1115,10 +1090,9 @@ class LiveExecutionEngine(ExecutionEngineBase):
         try:
             self.logger.info(
                 format_log_message(
-                    f"Placing {order_type} {side.value} order: {qty} shares @ ~${price:.2f} "
-                    f"(TIF={time_in_force})",
+                    f"Placing {order_type} {side.value} order: {qty} shares @ ~${price:.2f} (TIF={time_in_force})",
                     correlation_id=correlation_id,
-                    symbol=symbol
+                    symbol=symbol,
                 )
             )
 
@@ -1138,7 +1112,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
                             format_log_message(
                                 f"Exit qty {qty} exceeds broker position {broker_qty}, capping to {broker_qty}",
                                 correlation_id=correlation_id,
-                                symbol=symbol
+                                symbol=symbol,
                             )
                         )
                         qty = broker_qty
@@ -1147,7 +1121,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
                                 format_log_message(
                                     "No position at broker to exit, skipping order",
                                     correlation_id=correlation_id,
-                                    symbol=symbol
+                                    symbol=symbol,
                                 )
                             )
                             return None
@@ -1156,7 +1130,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
                         format_log_message(
                             f"Could not verify broker position: {e}, proceeding with local qty",
                             correlation_id=correlation_id,
-                            symbol=symbol
+                            symbol=symbol,
                         )
                     )
 
@@ -1180,19 +1154,19 @@ class LiveExecutionEngine(ExecutionEngineBase):
 
             # Extract order ID from response if available
             order_id = (
-                getattr(order_response, 'order_id', None) or
-                getattr(order_response, 'id', None) or
-                f"LIVE_{symbol}_{datetime.now(timezone.utc).timestamp()}"
+                getattr(order_response, "order_id", None)
+                or getattr(order_response, "id", None)
+                or f"LIVE_{symbol}_{datetime.now(timezone.utc).timestamp()}"
             )
 
             # Register order in local registry for tracking
-            tracked_order = await self.order_registry.register(
+            await self.order_registry.register(
                 order_id=str(order_id),
                 symbol=symbol,
                 side=side_str,
                 qty=qty,
                 correlation_id=correlation_id,
-                status="pending"
+                status="pending",
             )
 
             # Update symbol state with pending order
@@ -1200,9 +1174,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
 
             self.logger.debug(
                 format_log_message(
-                    f"Order registered in local registry: {order_id}",
-                    correlation_id=correlation_id,
-                    symbol=symbol
+                    f"Order registered in local registry: {order_id}", correlation_id=correlation_id, symbol=symbol
                 )
             )
 
@@ -1230,9 +1202,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
                 except Exception as e:
                     self.logger.warning(
                         format_log_message(
-                            f"Could not get fill details: {e}",
-                            correlation_id=correlation_id,
-                            symbol=symbol
+                            f"Could not get fill details: {e}", correlation_id=correlation_id, symbol=symbol
                         )
                     )
                     if verified:
@@ -1244,7 +1214,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
                         format_log_message(
                             f"Order not filled (status={order_final_status}) - not applying to portfolio",
                             correlation_id=correlation_id,
-                            symbol=symbol
+                            symbol=symbol,
                         )
                     )
                     await self.order_registry.update_status(str(order_id), "rejected", 0)
@@ -1255,7 +1225,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
                         format_log_message(
                             f"Partial fill: {actual_filled_qty}/{qty} shares",
                             correlation_id=correlation_id,
-                            symbol=symbol
+                            symbol=symbol,
                         )
                     )
             else:
@@ -1264,7 +1234,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
                     format_log_message(
                         "No reconciler available - using optimistic fill (unsafe)",
                         correlation_id=correlation_id,
-                        symbol=symbol
+                        symbol=symbol,
                     )
                 )
                 actual_filled_qty = qty
@@ -1293,7 +1263,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
                 format_log_message(
                     f"Order verified and fill applied: {side.value} {actual_filled_qty}@${actual_fill_price:.2f}",
                     correlation_id=correlation_id,
-                    symbol=symbol
+                    symbol=symbol,
                 )
             )
 
@@ -1331,11 +1301,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
 
         except Exception as e:
             self.logger.exception(
-                format_log_message(
-                    f"Execution failed: {e}",
-                    correlation_id=correlation_id,
-                    symbol=symbol
-                )
+                format_log_message(f"Execution failed: {e}", correlation_id=correlation_id, symbol=symbol)
             )
 
             # Log to performance tracker
@@ -1343,16 +1309,16 @@ class LiveExecutionEngine(ExecutionEngineBase):
                 message=f"Order execution failed for {symbol}",
                 error=e,
                 context={
-                    'symbol': symbol,
-                    'side': side.value,
-                    'qty': qty,
-                    'price': price,
-                    'correlation_id': correlation_id,
-                }
+                    "symbol": symbol,
+                    "side": side.value,
+                    "qty": qty,
+                    "price": price,
+                    "correlation_id": correlation_id,
+                },
             )
 
             return None
-    
+
     # ========================================================================
     # DELEGATION TO GENERIC ENGINE LOGIC
     # ========================================================================
@@ -1376,22 +1342,22 @@ class LiveExecutionEngine(ExecutionEngineBase):
             return should_trade, reason
 
         # ML Filter: Only check entries (not in position), skip exits
-        in_position = hasattr(state, 'is_in_position') and state.is_in_position
+        in_position = hasattr(state, "is_in_position") and state.is_in_position
         filter_active = self._ml_filter_enabled or self._ml_filter_shadow_mode
 
         if not in_position and filter_active and self.ml_filter.enabled:
             # Build features for ML filter
             features = self.ml_filter.build_features(
                 atr=context.atr,
-                atr_history=getattr(state, 'atr_history', []),
-                portfolio_drawdown=self.portfolio.drawdown_pct if hasattr(self.portfolio, 'drawdown_pct') else 0.0,
-                symbol_drawdown=getattr(state, 'drawdown_pct', 0.0),
+                atr_history=getattr(state, "atr_history", []),
+                portfolio_drawdown=self.portfolio.drawdown_pct if hasattr(self.portfolio, "drawdown_pct") else 0.0,
+                symbol_drawdown=getattr(state, "drawdown_pct", 0.0),
                 position_size_pct=0.1,  # Estimated; actual calculated later
                 hour=context.timestamp.hour if context.timestamp else datetime.now(ET).hour,
                 day_of_week=context.timestamp.weekday() if context.timestamp else datetime.now(ET).weekday(),
                 minutes_since_open=self._minutes_since_market_open(context.timestamp),
-                bars_in_regime=getattr(state, 'bars_in_regime', 1),
-                hours_since_last_trade=getattr(state, 'hours_since_last_trade', 999.0),
+                bars_in_regime=getattr(state, "bars_in_regime", 1),
+                hours_since_last_trade=getattr(state, "hours_since_last_trade", 999.0),
                 signal_strength=context.signal,
             )
 
@@ -1425,7 +1391,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
         threshold: float,
         strategy: str,
         signal: int,
-        features: Dict[str, Any],
+        features: dict[str, Any],
     ) -> None:
         """Log ML filter prediction to shadow log for later analysis."""
         try:
@@ -1445,7 +1411,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
         except Exception as e:
             self.logger.warning(f"Failed to write shadow log: {e}")
 
-    def _minutes_since_market_open(self, timestamp: Optional[datetime] = None) -> int:
+    def _minutes_since_market_open(self, timestamp: datetime | None = None) -> int:
         """Calculate minutes since market open (9:30 AM ET)."""
         if timestamp is None:
             timestamp = datetime.now(ET)
@@ -1499,11 +1465,11 @@ class LiveExecutionEngine(ExecutionEngineBase):
         self.ml_filter.set_min_confidence(min_confidence)
         self.logger.info(f"ML filter confidence threshold set to {min_confidence}")
 
-    def get_ml_filter_stats(self) -> Dict[str, Any]:
+    def get_ml_filter_stats(self) -> dict[str, Any]:
         """Get ML filter statistics."""
         return {
-            'enabled': self._ml_filter_enabled,
-            'min_confidence': self.ml_filter.min_confidence,
+            "enabled": self._ml_filter_enabled,
+            "min_confidence": self.ml_filter.min_confidence,
             **self.ml_filter.get_stats(),
         }
 
@@ -1525,10 +1491,10 @@ class LiveExecutionEngine(ExecutionEngineBase):
             return self.position_manager.get_exit_quantity(position.qty, is_partial=is_partial)
 
         # Get signal and context from kwargs
-        signal = kwargs.get('signal', 1)
-        context = kwargs.get('context')
+        signal = kwargs.get("signal", 1)
+        context = kwargs.get("context")
 
-        sl_mults = getattr(trade_logic, 'sl_mults', {"normal": 1.5})
+        sl_mults = getattr(trade_logic, "sl_mults", {"normal": 1.5})
         sl_mult = sl_mults.get(regime, 1.5)
 
         # ATR sanity check: if ATR is 0 or suspiciously small (< 0.5% of price),
@@ -1537,10 +1503,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
         if atr <= 0 or atr < min_atr:
             old_atr = atr
             atr = max(min_atr, price * 0.01)  # Use 1% of price as default
-            self.logger.warning(
-                f"[{symbol}] ATR too small (${old_atr:.2f}), using ${atr:.2f} "
-                f"(1% of ${price:.2f})"
-            )
+            self.logger.warning(f"[{symbol}] ATR too small (${old_atr:.2f}), using ${atr:.2f} (1% of ${price:.2f})")
 
         # Calculate stop loss based on signal direction (not current position)
         # Long (signal > 0): stop below price
@@ -1553,7 +1516,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
         # Get actual buying power from broker
         buying_power = self.portfolio.cash  # Default fallback
         try:
-            if hasattr(self.broker, 'get_buying_power'):
+            if hasattr(self.broker, "get_buying_power"):
                 buying_power = self.broker.get_buying_power()
                 self.logger.debug(f"[{symbol}] Broker buying power: ${buying_power:,.2f}")
             else:
@@ -1578,7 +1541,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
             signal=signal,
             portfolio=self.portfolio,
             market_conditions=regime,
-            current_cash=buying_power
+            current_cash=buying_power,
         )
 
         # Apply hybrid sizing if enabled
@@ -1588,8 +1551,8 @@ class LiveExecutionEngine(ExecutionEngineBase):
             confidence = 1.0  # Default to full confidence if not provided
 
             if context:
-                daily_ctx = context.metadata.get('daily_context', {})
-                confidence = getattr(context, 'confidence', 1.0)
+                daily_ctx = context.metadata.get("daily_context", {})
+                confidence = getattr(context, "confidence", 1.0)
 
             # Calculate hybrid sizing result
             sizing_result = self.hybrid_sizer.calculate(
@@ -1603,9 +1566,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
 
             # Log sizing decision
             if sizing_result.base_multiplier == 0:
-                self.logger.info(
-                    f"[{symbol}] Trade BLOCKED by hybrid sizer: {sizing_result.reason}"
-                )
+                self.logger.info(f"[{symbol}] Trade BLOCKED by hybrid sizer: {sizing_result.reason}")
                 return 0
             elif sizing_result.base_multiplier < 1.0:
                 self.logger.info(
@@ -1613,14 +1574,12 @@ class LiveExecutionEngine(ExecutionEngineBase):
                     f"{sizing_result.reason} (base_qty={base_qty} -> {adjusted_qty})"
                 )
             else:
-                self.logger.debug(
-                    f"[{symbol}] Hybrid sizing: {sizing_result.reason}"
-                )
+                self.logger.debug(f"[{symbol}] Hybrid sizing: {sizing_result.reason}")
 
             return adjusted_qty
 
         return base_qty
-    
+
     def _update_portfolio_after_execution(self, symbol: str, result) -> None:
         """
         Skip portfolio update - already handled in _execute_live_trade().
@@ -1660,7 +1619,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
 
             # Compute ATR percentile if we have access to atr_hist
             atr_percentile = 0.5  # Default
-            if hasattr(self, '_atr_hist_ref') and self._atr_hist_ref:
+            if hasattr(self, "_atr_hist_ref") and self._atr_hist_ref:
                 hist = list(self._atr_hist_ref.get(context.symbol, []))
                 if len(hist) >= 10:
                     atr_percentile = sum(1 for h in hist if h <= context.atr) / len(hist)
@@ -1694,7 +1653,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
                 minutes_since_open = 0
 
             # Get bars in regime from trade gate if available
-            bars_in_regime = getattr(state, 'regime_persist', 1)
+            bars_in_regime = getattr(state, "regime_persist", 1)
 
             # Build entry context (use ET hour/day for market-aware features)
             entry_context = TradeEntryContext(
@@ -1806,7 +1765,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
         except Exception as e:
             self.logger.warning(f"[{symbol}] Failed to log meta exit: {e}")
 
-    def set_atr_hist_reference(self, atr_hist: Dict[str, Any]) -> None:
+    def set_atr_hist_reference(self, atr_hist: dict[str, Any]) -> None:
         """
         Set reference to ATR history for ATR percentile calculation.
 
@@ -1843,16 +1802,13 @@ class LiveExecutionEngine(ExecutionEngineBase):
             equity = self.portfolio.total_equity()
             # Use sync version since _post_execution is synchronous
             self.drawdown_monitor.update_portfolio(equity)
-            self.logger.debug(
-                f"[{symbol}] Drawdown monitor updated: equity=${equity:,.2f}"
-            )
+            self.logger.debug(f"[{symbol}] Drawdown monitor updated: equity=${equity:,.2f}")
 
         # Live-specific logging
         self.logger.info(
             f"[LIVE] [{symbol}] Trade logged: {action_type} "
             f"{result.side.value} {result.filled_qty}@${result.avg_price:.2f}"
         )
-    
 
     # ========================================================================
     # GUI EVENT HANDLERS
@@ -1883,8 +1839,6 @@ class LiveExecutionEngine(ExecutionEngineBase):
         self.logger.info(f"[MANUAL ORDER] {side_str} {qty} {symbol} ({order_type})")
 
         try:
-            side = OrderSide.BUY if side_str == "BUY" else OrderSide.SELL
-
             if order_type == "limit":
                 await self.broker.place_order(
                     symbol=symbol,
@@ -1892,14 +1846,10 @@ class LiveExecutionEngine(ExecutionEngineBase):
                     side=side_str.lower(),
                     order_type="limit",
                     limit_price=price,
-                    time_in_force=payload.get("tif", "day")
+                    time_in_force=payload.get("tif", "day"),
                 )
             else:
-                await self.broker.place_market_order(
-                    symbol=symbol,
-                    qty=qty,
-                    side=side_str.lower()
-                )
+                await self.broker.place_market_order(symbol=symbol, qty=qty, side=side_str.lower())
 
             # Update portfolio optimistically
             await self._state_sync.apply_fill_and_sync(symbol, side_str.lower(), qty, price)
@@ -1938,12 +1888,15 @@ class LiveExecutionEngine(ExecutionEngineBase):
         except Exception as e:
             self.logger.error(f"Manual order failed: {e}")
             if self.event_handler:
-                await self.event_handler.emit(EVENT_ALERT, AlertPayload(
-                    level="error",
-                    message=f"Manual order failed for {symbol}: {str(e)}",
-                    symbol=symbol,
-                    timestamp=datetime.now(timezone.utc).isoformat(),
-                ))
+                await self.event_handler.emit(
+                    EVENT_ALERT,
+                    AlertPayload(
+                        level="error",
+                        message=f"Manual order failed for {symbol}: {str(e)}",
+                        symbol=symbol,
+                        timestamp=datetime.now(timezone.utc).isoformat(),
+                    ),
+                )
 
     async def _handle_flatten_all(self, event) -> None:
         """Flatten all positions using broker's actual positions."""
@@ -1961,21 +1914,20 @@ class LiveExecutionEngine(ExecutionEngineBase):
                 try:
                     qty = abs(int(pos.qty))
                     side = "sell" if pos.qty > 0 else "buy"
-                    await self.broker.place_market_order(
-                        symbol=pos.symbol,
-                        qty=qty,
-                        side=side
-                    )
+                    await self.broker.place_market_order(symbol=pos.symbol, qty=qty, side=side)
                     self.logger.info(f"Flattened {pos.symbol}: {side} {qty}")
                 except Exception as e:
                     self.logger.error(f"Failed to flatten {pos.symbol}: {e}")
                     if self.event_handler:
-                        await self.event_handler.emit(EVENT_ALERT, AlertPayload(
-                            level="error",
-                            message=f"Flatten failed for {symbol}: {str(e)}",
-                            symbol=symbol,
-                            timestamp=datetime.now(timezone.utc).isoformat(),
-                        ))
+                        await self.event_handler.emit(
+                            EVENT_ALERT,
+                            AlertPayload(
+                                level="error",
+                                message=f"Flatten failed for {pos.symbol}: {str(e)}",
+                                symbol=pos.symbol,
+                                timestamp=datetime.now(timezone.utc).isoformat(),
+                            ),
+                        )
 
     async def _handle_flatten_symbol(self, event) -> None:
         """Flatten specific symbol using broker's actual position."""
@@ -1999,21 +1951,20 @@ class LiveExecutionEngine(ExecutionEngineBase):
         self.logger.info(f"[GUI] Flatten {symbol} ({side} {qty})")
 
         try:
-            await self.broker.place_market_order(
-                symbol=symbol,
-                qty=qty,
-                side=side
-            )
+            await self.broker.place_market_order(symbol=symbol, qty=qty, side=side)
             self.logger.info(f"Flattened {symbol}: {side} {qty}")
         except Exception as e:
             self.logger.error(f"Failed to flatten {symbol}: {e}")
             if self.event_handler:
-                await self.event_handler.emit(EVENT_ALERT, AlertPayload(
-                    level="error",
-                    message=f"Flatten failed for {symbol}: {str(e)}",
-                    symbol=symbol,
-                    timestamp=datetime.now(timezone.utc).isoformat(),
-                ))
+                await self.event_handler.emit(
+                    EVENT_ALERT,
+                    AlertPayload(
+                        level="error",
+                        message=f"Flatten failed for {symbol}: {str(e)}",
+                        symbol=symbol,
+                        timestamp=datetime.now(timezone.utc).isoformat(),
+                    ),
+                )
 
     async def _handle_cancel_all(self, event) -> None:
         """Cancel all open orders."""
@@ -2023,7 +1974,7 @@ class LiveExecutionEngine(ExecutionEngineBase):
             open_orders = await self.broker.get_open_orders()
 
             for order in open_orders:
-                order_id = getattr(order, 'order_id', None) or getattr(order, 'id', None)
+                order_id = getattr(order, "order_id", None) or getattr(order, "id", None)
                 if order_id:
                     try:
                         await self.broker.cancel_order(str(order_id))
@@ -2035,9 +1986,12 @@ class LiveExecutionEngine(ExecutionEngineBase):
         except Exception as e:
             self.logger.error(f"Failed to cancel all orders: {e}")
             if self.event_handler:
-                await self.event_handler.emit(EVENT_ALERT, AlertPayload(
-                    level="error",
-                    message=f"Cancel all failed: {str(e)}",
-                    symbol=None,
-                    timestamp=datetime.now(timezone.utc).isoformat(),
-                ))
+                await self.event_handler.emit(
+                    EVENT_ALERT,
+                    AlertPayload(
+                        level="error",
+                        message=f"Cancel all failed: {str(e)}",
+                        symbol=None,
+                        timestamp=datetime.now(timezone.utc).isoformat(),
+                    ),
+                )

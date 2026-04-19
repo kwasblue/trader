@@ -13,6 +13,7 @@ Usage:
     # Auto-update trade/watch lists
     report = scanner.scan(update_lists=True)
 """
+
 from scanner.engine import ScannerEngine, get_scanner
 from scanner.result import ScanReport, SymbolScore
 

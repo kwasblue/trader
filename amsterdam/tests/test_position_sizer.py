@@ -6,11 +6,12 @@ Coverage:
 - Risk-based sizing
 - Market condition adjustments
 """
-import pytest
-from unittest.mock import MagicMock
 
 import sys
 from pathlib import Path
+
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -87,7 +88,7 @@ class TestCalculatePositionSize:
             stop_loss_price=95.0,  # $5 risk per share
             current_cash=20000.0,  # $20k: 10% cap = $2k = 20 shares
             market_conditions="normal",
-            signal=1  # Buy
+            signal=1,  # Buy
         )
         # Risk = 1% of 20000 = $200
         # Per share risk = $5
@@ -102,7 +103,7 @@ class TestCalculatePositionSize:
             stop_loss_price=105.0,  # $5 risk per share
             current_cash=20000.0,  # $20k: 10% cap = $2k = 20 shares
             market_conditions="normal",
-            signal=-1  # Sell
+            signal=-1,  # Sell
         )
         # Risk = 1% of 20000 = $200
         # Per share risk = $5
@@ -118,14 +119,14 @@ class TestCalculatePositionSize:
             stop_loss_price=80.0,  # $20 risk per share
             current_cash=10000.0,
             market_conditions="normal",
-            signal=1
+            signal=1,
         )
         size_low_vol = sizer.calculate_position_size(
             price=100.0,
             stop_loss_price=80.0,  # $20 risk per share
             current_cash=10000.0,
             market_conditions="low_volatility",
-            signal=1
+            signal=1,
         )
         # Normal: 1% * 10k / 20 = 5 shares
         # Low vol: 1.25% * 10k / 20 = 6 shares
@@ -139,14 +140,14 @@ class TestCalculatePositionSize:
             stop_loss_price=80.0,  # $20 risk per share
             current_cash=10000.0,
             market_conditions="normal",
-            signal=1
+            signal=1,
         )
         size_high_vol = sizer.calculate_position_size(
             price=100.0,
             stop_loss_price=80.0,  # $20 risk per share
             current_cash=10000.0,
             market_conditions="high_volatility",
-            signal=1
+            signal=1,
         )
         # Normal: 1% * 10k / 20 = 5 shares
         # High vol: 0.5% * 10k / 20 = 2 shares
@@ -155,11 +156,7 @@ class TestCalculatePositionSize:
     def test_returns_zero_for_zero_signal(self, sizer):
         """Test returns 0 for no signal."""
         size = sizer.calculate_position_size(
-            price=100.0,
-            stop_loss_price=95.0,
-            current_cash=10000.0,
-            market_conditions="normal",
-            signal=0
+            price=100.0, stop_loss_price=95.0, current_cash=10000.0, market_conditions="normal", signal=0
         )
         assert size == 0
 
@@ -170,7 +167,7 @@ class TestCalculatePositionSize:
             stop_loss_price=99.0,  # $1 risk per share
             current_cash=50.0,  # Very little cash
             market_conditions="high_volatility",
-            signal=1
+            signal=1,
         )
         # With high vol (0.005 risk) and $50 cash, risk_per_trade = $0.25 < $5 min
         # Implementation returns 0 when risk_per_trade < $5
@@ -183,7 +180,7 @@ class TestCalculatePositionSize:
             stop_loss_price=50.0,  # 50% stop
             current_cash=10000.0,
             market_conditions="normal",
-            signal=1
+            signal=1,
         )
         # Risk = $100, per share risk = $50
         # Size = 100 / 50 = 2
@@ -196,7 +193,7 @@ class TestCalculatePositionSize:
             stop_loss_price=99.50,  # $0.50 risk per share
             current_cash=10000.0,
             market_conditions="normal",
-            signal=1
+            signal=1,
         )
         # Risk = $100, per share risk = $0.50
         # But min_risk_per_share floor = $100 * 0.005 = $0.50, so uses $0.50
@@ -218,7 +215,7 @@ class TestEdgeCases:
             stop_loss_price=95.0,
             current_cash=100.0,  # Only $100
             market_conditions="normal",
-            signal=1
+            signal=1,
         )
         # Risk = 1% of $100 = $1, which is < $5 minimum
         # Implementation returns 0 when risk_per_trade < $5
@@ -232,7 +229,7 @@ class TestEdgeCases:
             stop_loss_price=4900.0,  # $100 risk per share
             current_cash=500000.0,  # $500k so 10% cap = 10 shares
             market_conditions="normal",
-            signal=1
+            signal=1,
         )
         # Risk = 1% * $500k = $5000, per share risk = $100
         # Size from risk = 50, but 10% cap = $50k / $5k = 10 shares

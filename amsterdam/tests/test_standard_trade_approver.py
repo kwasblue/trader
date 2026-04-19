@@ -3,13 +3,15 @@ Tests for StandardTradeApprover - the core trade gating logic.
 
 Tests the REAL implementation, not mocks.
 """
-import pytest
-from datetime import datetime, timezone, timedelta
 
-from core.logic.default_trade_logic import StandardTradeApprover
-from core.logic.symbol_state import SymbolState
+from datetime import datetime, timedelta, timezone
+
+import pytest
+
 from core.contracts.types import SignalContext
 from core.enums import OrderSide
+from core.logic.default_trade_logic import StandardTradeApprover
+from core.logic.symbol_state import SymbolState
 
 
 class TestStandardTradeApproverInit:
@@ -21,32 +23,22 @@ class TestStandardTradeApproverInit:
 
         assert approver.cooldown_seconds == 300
         assert approver.cooldown_bars == 5
-        assert approver.cooldown_mode == 'bars'
+        assert approver.cooldown_mode == "bars"
         assert approver.max_positions == 10
 
     def test_custom_initialization(self):
         """Test custom parameters."""
-        approver = StandardTradeApprover(
-            cooldown_seconds=600,
-            cooldown_bars=10,
-            cooldown_mode='time',
-            max_positions=5
-        )
+        approver = StandardTradeApprover(cooldown_seconds=600, cooldown_bars=10, cooldown_mode="time", max_positions=5)
 
         assert approver.cooldown_seconds == 600
         assert approver.cooldown_bars == 10
-        assert approver.cooldown_mode == 'time'
+        assert approver.cooldown_mode == "time"
         assert approver.max_positions == 5
 
     def test_multipliers_stored(self):
         """Test that SL/TP multipliers are stored correctly."""
         approver = StandardTradeApprover(
-            tp_mult_low=1.0,
-            tp_mult_normal=2.5,
-            tp_mult_high=4.0,
-            sl_mult_low=0.5,
-            sl_mult_normal=1.0,
-            sl_mult_high=1.5
+            tp_mult_low=1.0, tp_mult_normal=2.5, tp_mult_high=4.0, sl_mult_low=0.5, sl_mult_normal=1.0, sl_mult_high=1.5
         )
 
         assert approver.tp_mults["low_volatility"] == 1.0
@@ -63,11 +55,7 @@ class TestShouldTrade:
     @pytest.fixture
     def approver(self):
         """Create approver with bar-based cooldown."""
-        return StandardTradeApprover(
-            cooldown_mode='bars',
-            cooldown_bars=3,
-            max_positions=5
-        )
+        return StandardTradeApprover(cooldown_mode="bars", cooldown_bars=3, max_positions=5)
 
     @pytest.fixture
     def flat_state(self):
@@ -94,7 +82,7 @@ class TestShouldTrade:
             price=150.0,
             atr=2.0,
             regime="normal",
-            timestamp=datetime.now(timezone.utc)
+            timestamp=datetime.now(timezone.utc),
         )
 
         allowed, reason = approver.should_trade(context, flat_state, account_positions=0)
@@ -110,7 +98,7 @@ class TestShouldTrade:
             price=0,  # Invalid
             atr=2.0,
             regime="normal",
-            timestamp=datetime.now(timezone.utc)
+            timestamp=datetime.now(timezone.utc),
         )
 
         allowed, reason = approver.should_trade(context, flat_state, account_positions=0)
@@ -126,7 +114,7 @@ class TestShouldTrade:
             price=150.0,
             atr=0,  # Invalid
             regime="normal",
-            timestamp=datetime.now(timezone.utc)
+            timestamp=datetime.now(timezone.utc),
         )
 
         allowed, reason = approver.should_trade(context, flat_state, account_positions=0)
@@ -146,7 +134,7 @@ class TestShouldTrade:
             atr=2.0,
             regime="normal",
             timestamp=datetime.now(timezone.utc),
-            market_open=True
+            market_open=True,
         )
 
         allowed, reason = approver.should_trade(context, flat_state, account_positions=0)
@@ -165,7 +153,7 @@ class TestShouldTrade:
             atr=2.0,
             regime="normal",
             timestamp=datetime.now(timezone.utc),
-            market_open=True
+            market_open=True,
         )
 
         allowed, reason = approver.should_trade(context, flat_state, account_positions=0)
@@ -181,7 +169,7 @@ class TestShouldTrade:
             price=155.0,
             atr=2.0,
             regime="normal",
-            timestamp=datetime.now(timezone.utc)
+            timestamp=datetime.now(timezone.utc),
         )
 
         allowed, reason = approver.should_trade(context, long_state, account_positions=1)
@@ -195,10 +183,7 @@ class TestCooldown:
 
     def test_bar_cooldown_blocks(self):
         """Bar-based cooldown should block trades."""
-        approver = StandardTradeApprover(
-            cooldown_mode='bars',
-            cooldown_bars=5
-        )
+        approver = StandardTradeApprover(cooldown_mode="bars", cooldown_bars=5)
 
         state = SymbolState(symbol="AAPL")
         state.current_position = 0
@@ -213,7 +198,7 @@ class TestCooldown:
             atr=2.0,
             regime="normal",
             timestamp=datetime.now(timezone.utc),
-            market_open=True
+            market_open=True,
         )
 
         allowed, reason = approver.should_trade(context, state, account_positions=0)
@@ -224,10 +209,7 @@ class TestCooldown:
 
     def test_bar_cooldown_allows_after_elapsed(self):
         """Bar-based cooldown should allow after enough bars."""
-        approver = StandardTradeApprover(
-            cooldown_mode='bars',
-            cooldown_bars=5
-        )
+        approver = StandardTradeApprover(cooldown_mode="bars", cooldown_bars=5)
 
         state = SymbolState(symbol="AAPL")
         state.current_position = 0
@@ -242,7 +224,7 @@ class TestCooldown:
             atr=2.0,
             regime="normal",
             timestamp=datetime.now(timezone.utc),
-            market_open=True
+            market_open=True,
         )
 
         allowed, reason = approver.should_trade(context, state, account_positions=0)
@@ -252,8 +234,8 @@ class TestCooldown:
     def test_time_cooldown_blocks(self):
         """Time-based cooldown should block trades."""
         approver = StandardTradeApprover(
-            cooldown_mode='time',
-            cooldown_seconds=300  # 5 minutes
+            cooldown_mode="time",
+            cooldown_seconds=300,  # 5 minutes
         )
 
         state = SymbolState(symbol="AAPL")
@@ -267,7 +249,7 @@ class TestCooldown:
             atr=2.0,
             regime="normal",
             timestamp=datetime.now(timezone.utc),
-            market_open=True
+            market_open=True,
         )
 
         allowed, reason = approver.should_trade(context, state, account_positions=0)
@@ -277,10 +259,7 @@ class TestCooldown:
 
     def test_time_cooldown_allows_after_elapsed(self):
         """Time-based cooldown should allow after enough time."""
-        approver = StandardTradeApprover(
-            cooldown_mode='time',
-            cooldown_seconds=300
-        )
+        approver = StandardTradeApprover(cooldown_mode="time", cooldown_seconds=300)
 
         state = SymbolState(symbol="AAPL")
         state.current_position = 0
@@ -293,7 +272,7 @@ class TestCooldown:
             atr=2.0,
             regime="normal",
             timestamp=datetime.now(timezone.utc),
-            market_open=True
+            market_open=True,
         )
 
         allowed, reason = approver.should_trade(context, state, account_positions=0)
@@ -302,7 +281,7 @@ class TestCooldown:
 
     def test_on_bar_increments_counter(self):
         """on_bar() should increment the bars since trade counter."""
-        approver = StandardTradeApprover(cooldown_mode='bars')
+        approver = StandardTradeApprover(cooldown_mode="bars")
 
         # Initialize counter
         approver.on_trade("AAPL")
@@ -317,7 +296,7 @@ class TestCooldown:
 
     def test_on_trade_resets_counter(self):
         """on_trade() should reset the bars since trade counter."""
-        approver = StandardTradeApprover(cooldown_mode='bars')
+        approver = StandardTradeApprover(cooldown_mode="bars")
 
         approver._bars_since_trade["AAPL"] = 10
         approver.on_trade("AAPL")
@@ -343,7 +322,7 @@ class TestPositionLimit:
             atr=2.0,
             regime="normal",
             timestamp=datetime.now(timezone.utc),
-            market_open=True
+            market_open=True,
         )
 
         # At position limit (3 positions, max is 3)
@@ -367,7 +346,7 @@ class TestPositionLimit:
             atr=2.0,
             regime="normal",
             timestamp=datetime.now(timezone.utc),
-            market_open=True
+            market_open=True,
         )
 
         allowed, reason = approver.should_trade(context, state, account_positions=2)
@@ -393,7 +372,7 @@ class TestMarketHours:
             atr=2.0,
             regime="normal",
             timestamp=datetime.now(timezone.utc),
-            market_open=False  # Market closed
+            market_open=False,  # Market closed
         )
 
         allowed, reason = approver.should_trade(context, state, account_positions=0)
@@ -416,7 +395,7 @@ class TestMarketHours:
             atr=2.0,
             regime="normal",
             timestamp=datetime.now(timezone.utc),
-            market_open=False
+            market_open=False,
         )
 
         allowed, reason = approver.should_trade(context, state, account_positions=0)
@@ -436,8 +415,7 @@ class TestCanEnterPosition:
         state.side = "long"
 
         allowed, reason = approver.can_enter_position(
-            "AAPL", state, OrderSide.BUY,
-            account_positions=1, market_open=True
+            "AAPL", state, OrderSide.BUY, account_positions=1, market_open=True
         )
 
         assert allowed is False
@@ -479,9 +457,7 @@ class TestCanExitPosition:
         state.current_position = 100
         state.side = "long"
 
-        allowed, reason = approver.can_exit_position(
-            "AAPL", state, OrderSide.BUY, is_full_exit=True
-        )
+        allowed, reason = approver.can_exit_position("AAPL", state, OrderSide.BUY, is_full_exit=True)
 
         assert allowed is False
         assert "Cannot buy to exit long" in reason

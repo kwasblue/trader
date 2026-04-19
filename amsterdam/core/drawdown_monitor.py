@@ -1,17 +1,15 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import threading
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional
-from core.events.eventhandler import EventHandler, get_event_handler
-from core.contracts.events import EVENT_GUARDRAIL_TRIGGERED, GuardrailPayload
+from typing import Any
 
+from core.events.eventhandler import get_event_handler
 from loggers.logger import Logger
-
-import asyncio
 
 
 def _try_create_task(coro) -> None:
@@ -59,13 +57,12 @@ class DrawdownMonitor:
     def __init__(
         self,
         # --- Per-symbol limits ---
-        max_symbol_drawdown: float = 0.30,         # 30% symbol intraday
-        max_symbol_daily_drawdown: float = 0.15,   # 15% symbol daily
+        max_symbol_drawdown: float = 0.30,  # 30% symbol intraday
+        max_symbol_daily_drawdown: float = 0.15,  # 15% symbol daily
         symbol_cooldown_seconds: int = 5,
-
         # --- Portfolio limits ---
-        max_portfolio_drawdown: float = 0.25,      # 25% portfolio intraday
-        max_portfolio_daily_drawdown: float = 0.10,# 10% portfolio daily
+        max_portfolio_drawdown: float = 0.25,  # 25% portfolio intraday
+        max_portfolio_daily_drawdown: float = 0.10,  # 10% portfolio daily
         portfolio_cooldown_seconds: int = 5,
     ):
         # Per-symbol state
@@ -73,38 +70,36 @@ class DrawdownMonitor:
         self.max_symbol_daily_drawdown = max_symbol_daily_drawdown
         self.symbol_cooldown_seconds = symbol_cooldown_seconds
 
-        self.symbol_peak: Dict[str, float] = {}
-        self.symbol_daily_start: Dict[str, float] = {}
+        self.symbol_peak: dict[str, float] = {}
+        self.symbol_daily_start: dict[str, float] = {}
         self.symbol_locked = defaultdict(lambda: False)
-        self.symbol_last_unlock_time: Dict[str, datetime] = {}
+        self.symbol_last_unlock_time: dict[str, datetime] = {}
 
         # Track current drawdown values
         self.current_portfolio_dd: float = 0.0
         self.current_portfolio_daily_dd: float = 0.0
-        self.current_symbol_dd: Dict[str, float] = defaultdict(float)
-        self.current_symbol_daily_dd: Dict[str, float] = defaultdict(float)
+        self.current_symbol_dd: dict[str, float] = defaultdict(float)
+        self.current_symbol_daily_dd: dict[str, float] = defaultdict(float)
 
         # Portfolio state
         self.max_portfolio_drawdown = max_portfolio_drawdown
         self.max_portfolio_daily_drawdown = max_portfolio_daily_drawdown
         self.portfolio_cooldown_seconds = portfolio_cooldown_seconds
 
-        self.portfolio_peak: Optional[float] = None
-        self.portfolio_daily_start: Optional[float] = None
+        self.portfolio_peak: float | None = None
+        self.portfolio_daily_start: float | None = None
         self.portfolio_locked: bool = False
-        self.portfolio_last_unlock_time: Optional[datetime] = None
+        self.portfolio_last_unlock_time: datetime | None = None
 
         # Thread safety - RLock for reentrant locking
         self._lock = threading.RLock()
 
         # Persistence path
-        self._persistence_path: Optional[Path] = None
+        self._persistence_path: Path | None = None
 
         # Logger - own file with propagation to app.log
         self.logger = Logger(
-            log_file='drawdown_monitor.log',
-            logger_name='DrawdownMonitor',
-            propagate=True
+            log_file="drawdown_monitor.log", logger_name="DrawdownMonitor", propagate=True
         ).get_logger()
         self.event_handler = get_event_handler()
 
@@ -117,8 +112,8 @@ class DrawdownMonitor:
 
     def start_new_day(
         self,
-        portfolio_equity: Optional[float] = None,
-        per_symbol_equity: Optional[Dict[str, float]] = None,
+        portfolio_equity: float | None = None,
+        per_symbol_equity: dict[str, float] | None = None,
     ) -> None:
         """
         Reset daily baselines. Call once at session start.
@@ -132,7 +127,9 @@ class DrawdownMonitor:
             if per_symbol_equity:
                 for sym, eq in per_symbol_equity.items():
                     self.symbol_daily_start[sym] = eq
-                self.logger.info(f"[DAILY RESET] Per-symbol daily starts set for {len(per_symbol_equity)} symbols at {now.isoformat()}")
+                self.logger.info(
+                    f"[DAILY RESET] Per-symbol daily starts set for {len(per_symbol_equity)} symbols at {now.isoformat()}"
+                )
 
             self._persist_state()
 
@@ -155,7 +152,9 @@ class DrawdownMonitor:
 
             # daily drawdown
             if self.portfolio_daily_start:
-                self.current_portfolio_daily_dd = (portfolio_equity - self.portfolio_daily_start) / self.portfolio_daily_start
+                self.current_portfolio_daily_dd = (
+                    portfolio_equity - self.portfolio_daily_start
+                ) / self.portfolio_daily_start
             # intraday drawdown
             if self.portfolio_peak:
                 self.current_portfolio_dd = (portfolio_equity - self.portfolio_peak) / self.portfolio_peak
@@ -169,10 +168,10 @@ class DrawdownMonitor:
                     self.logger.warning(f"[PORTFOLIO DAILY LOCK] Daily DD {daily_dd:.2%} breached.")
                     _try_create_task(
                         self.event_handler.emit_guardrail(
-                            "portfolio.daily",         # guard_name (namespaced style is nice)
-                            True,                      # triggered
+                            "portfolio.daily",  # guard_name (namespaced style is nice)
+                            True,  # triggered
                             f"Portfolio daily drawdown breached {daily_dd:.2%}",
-                            daily_dd                   # <- value (float)
+                            daily_dd,  # <- value (float)
                         )
                     )
                 return False
@@ -189,11 +188,10 @@ class DrawdownMonitor:
                             "portfolio.intraday",
                             True,
                             f"Portfolio intraday drawdown breached {intraday_dd:.2%}",
-                            intraday_dd
+                            intraday_dd,
                         )
                     )
                 return False
-
 
             # cooldown if previously unlocked
             if not self.portfolio_locked and self.portfolio_last_unlock_time:
@@ -202,10 +200,7 @@ class DrawdownMonitor:
                     self.logger.warning(f"[PORTFOLIO COOLDOWN] {elapsed:.1f}s elapsed — trading disabled.")
                     _try_create_task(
                         self.event_handler.emit_guardrail(
-                            "portfolio.cooldown",
-                            True,
-                            f"Portfolio in cooldown ({elapsed:.1f}s elapsed)",
-                            elapsed
+                            "portfolio.cooldown", True, f"Portfolio in cooldown ({elapsed:.1f}s elapsed)", elapsed
                         )
                     )
                     return False
@@ -248,7 +243,11 @@ class DrawdownMonitor:
                         self.symbol_locked[symbol] = True
                         self._persist_state()
                         self.logger.warning(f"[{symbol}] DAILY LOCK | DD {daily_dd:.2%}")
-                        _try_create_task(self._emit_guardrail(f"{symbol}_daily", True, f"{symbol} daily drawdown breached {daily_dd:.2%}"))
+                        _try_create_task(
+                            self._emit_guardrail(
+                                f"{symbol}_daily", True, f"{symbol} daily drawdown breached {daily_dd:.2%}"
+                            )
+                        )
                     return False
 
             # intraday drawdown vs peak
@@ -330,8 +329,9 @@ class DrawdownMonitor:
                 self.symbol_last_unlock_time[symbol] = datetime.now(timezone.utc)
                 self._persist_state()
                 self.logger.info(f"[{symbol}] UNLOCKED (cooldown started)")
-                _try_create_task(self._emit_guardrail(f"{symbol}", False,
-                f"{symbol} unlocked from guardrail (cooldown active)"))
+                _try_create_task(
+                    self._emit_guardrail(f"{symbol}", False, f"{symbol} unlocked from guardrail (cooldown active)")
+                )
 
     def reset_symbol(self, symbol: str) -> None:
         with self._lock:
@@ -381,12 +381,12 @@ class DrawdownMonitor:
         try:
             self._persistence_path.parent.mkdir(parents=True, exist_ok=True)
             state = self._serialize_state()
-            with open(self._persistence_path, 'w') as f:
+            with open(self._persistence_path, "w") as f:
                 json.dump(state, f, indent=2, default=str)
         except Exception as e:
             self.logger.error(f"Failed to persist drawdown state: {e}")
 
-    def _serialize_state(self) -> Dict[str, Any]:
+    def _serialize_state(self) -> dict[str, Any]:
         """Serialize current state to dictionary."""
         return {
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -394,7 +394,9 @@ class DrawdownMonitor:
                 "peak": self.portfolio_peak,
                 "daily_start": self.portfolio_daily_start,
                 "locked": self.portfolio_locked,
-                "last_unlock_time": self.portfolio_last_unlock_time.isoformat() if self.portfolio_last_unlock_time else None,
+                "last_unlock_time": self.portfolio_last_unlock_time.isoformat()
+                if self.portfolio_last_unlock_time
+                else None,
                 "current_dd": self.current_portfolio_dd,
                 "current_daily_dd": self.current_portfolio_daily_dd,
             },
@@ -403,7 +405,9 @@ class DrawdownMonitor:
                     "peak": self.symbol_peak.get(sym),
                     "daily_start": self.symbol_daily_start.get(sym),
                     "locked": self.symbol_locked[sym],
-                    "last_unlock_time": self.symbol_last_unlock_time.get(sym).isoformat() if self.symbol_last_unlock_time.get(sym) else None,
+                    "last_unlock_time": self.symbol_last_unlock_time.get(sym).isoformat()
+                    if self.symbol_last_unlock_time.get(sym)
+                    else None,
                     "current_dd": self.current_symbol_dd.get(sym, 0.0),
                     "current_daily_dd": self.current_symbol_daily_dd.get(sym, 0.0),
                 }
@@ -417,7 +421,7 @@ class DrawdownMonitor:
             self._persist_state()
             self.logger.info("Drawdown state saved")
 
-    def load_state(self, path: Optional[Path] = None) -> bool:
+    def load_state(self, path: Path | None = None) -> bool:
         """
         Load state from disk.
 
@@ -436,7 +440,7 @@ class DrawdownMonitor:
             return False
 
         try:
-            with open(load_path, 'r') as f:
+            with open(load_path) as f:
                 state = json.load(f)
 
             with self._lock:
@@ -448,7 +452,7 @@ class DrawdownMonitor:
             self.logger.error(f"Failed to load drawdown state: {e}")
             return False
 
-    def _deserialize_state(self, state: Dict[str, Any]) -> None:
+    def _deserialize_state(self, state: dict[str, Any]) -> None:
         """Restore state from dictionary."""
         # Portfolio state
         portfolio = state.get("portfolio", {})

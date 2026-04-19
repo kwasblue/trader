@@ -8,13 +8,14 @@ Tests cover:
 - Buying power checks
 - Position existence checks for exits
 """
-import asyncio
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
-from core.trade_validator import TradeValidator, ValidationResult
-from core.order_registry import OrderRegistry
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
 from core.enums import PositionState
+from core.order_registry import OrderRegistry
+from core.trade_validator import TradeValidator, ValidationResult
 
 
 class TestValidationResult:
@@ -56,11 +57,7 @@ class TestValidationResult:
 
     def test_to_dict(self):
         """Test converting to dictionary."""
-        result = ValidationResult(
-            valid=False,
-            errors=["Error 1"],
-            warnings=["Warning 1"]
-        )
+        result = ValidationResult(valid=False, errors=["Error 1"], warnings=["Warning 1"])
         d = result.to_dict()
 
         assert d["valid"] is False

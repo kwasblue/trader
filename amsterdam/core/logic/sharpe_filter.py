@@ -6,9 +6,8 @@ that have demonstrated negative or low risk-adjusted returns.
 """
 
 import json
-from pathlib import Path
-from typing import Optional, Dict, Any
 import logging
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -29,11 +28,7 @@ class SharpeFilter:
             # Skip - poor historical performance
     """
 
-    def __init__(
-        self,
-        min_sharpe: float = 0.5,
-        config_path: Optional[str] = None
-    ):
+    def __init__(self, min_sharpe: float = 0.5, config_path: str | None = None):
         """
         Initialize Sharpe filter.
 
@@ -52,22 +47,16 @@ class SharpeFilter:
             config_path = root / "config" / "strategy_params.json"
 
         self.config_path = Path(config_path)
-        self.sharpe_map: Dict[str, Dict[str, float]] = {}
+        self.sharpe_map: dict[str, dict[str, float]] = {}
 
         self._load_sharpe_data()
 
-        logger.info(
-            f"SharpeFilter initialized with min_sharpe={min_sharpe} "
-            f"({len(self.sharpe_map)} symbols loaded)"
-        )
+        logger.info(f"SharpeFilter initialized with min_sharpe={min_sharpe} ({len(self.sharpe_map)} symbols loaded)")
 
     def _load_sharpe_data(self) -> None:
         """Load Sharpe ratios from strategy_params.json."""
         if not self.config_path.exists():
-            logger.warning(
-                f"Strategy params not found at {self.config_path}, "
-                "filter will allow all trades"
-            )
+            logger.warning(f"Strategy params not found at {self.config_path}, filter will allow all trades")
             return
 
         try:
@@ -82,8 +71,8 @@ class SharpeFilter:
                 self.sharpe_map[symbol] = {}
 
                 for regime, config in regimes.items():
-                    if isinstance(config, dict) and '_optimized_sharpe' in config:
-                        sharpe = config['_optimized_sharpe']
+                    if isinstance(config, dict) and "_optimized_sharpe" in config:
+                        sharpe = config["_optimized_sharpe"]
                         self.sharpe_map[symbol][regime] = sharpe
 
             logger.info(f"Loaded Sharpe data for {len(self.sharpe_map)} symbols")
@@ -114,15 +103,12 @@ class SharpeFilter:
         sharpe = self.sharpe_map[symbol][regime]
 
         if sharpe < self.min_sharpe:
-            logger.info(
-                f"Blocking trade for {symbol}/{regime}: "
-                f"Sharpe {sharpe:.2f} < {self.min_sharpe:.2f}"
-            )
+            logger.info(f"Blocking trade for {symbol}/{regime}: Sharpe {sharpe:.2f} < {self.min_sharpe:.2f}")
             return False
 
         return True
 
-    def get_sharpe(self, symbol: str, regime: str) -> Optional[float]:
+    def get_sharpe(self, symbol: str, regime: str) -> float | None:
         """
         Get backtested Sharpe ratio for symbol/regime.
 
@@ -135,7 +121,7 @@ class SharpeFilter:
         """
         return self.sharpe_map.get(symbol, {}).get(regime)
 
-    def get_blocked_regimes(self) -> Dict[str, list]:
+    def get_blocked_regimes(self) -> dict[str, list]:
         """
         Get all symbol/regime combinations that are blocked.
 
@@ -145,10 +131,7 @@ class SharpeFilter:
         blocked = {}
 
         for symbol, regimes in self.sharpe_map.items():
-            blocked_regimes = [
-                regime for regime, sharpe in regimes.items()
-                if sharpe < self.min_sharpe
-            ]
+            blocked_regimes = [regime for regime, sharpe in regimes.items() if sharpe < self.min_sharpe]
 
             if blocked_regimes:
                 blocked[symbol] = blocked_regimes
@@ -167,15 +150,11 @@ class SharpeFilter:
         print("=" * 80)
 
         for symbol, regimes in sorted(blocked.items()):
-            sharpe_info = [
-                f"{regime} (Sharpe: {self.sharpe_map[symbol][regime]:.2f})"
-                for regime in regimes
-            ]
+            sharpe_info = [f"{regime} (Sharpe: {self.sharpe_map[symbol][regime]:.2f})" for regime in regimes]
             print(f"{symbol:6} : {', '.join(sharpe_info)}")
 
         total_blocked = sum(len(r) for r in blocked.values())
         total_combos = sum(len(r) for r in self.sharpe_map.values())
 
         print("=" * 80)
-        print(f"Total blocked: {total_blocked}/{total_combos} "
-              f"({100*total_blocked/total_combos:.1f}%)")
+        print(f"Total blocked: {total_blocked}/{total_combos} ({100 * total_blocked / total_combos:.1f}%)")

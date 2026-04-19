@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from typing import Optional, List
+
 from core.base.base_strategy import BaseStrategy
 
 
@@ -18,13 +18,13 @@ class MACDStrategy(BaseStrategy):
             return 0
         return int(data["Signal"].iloc[-1])
 
-    def generate_signals_vectorized(self, data: pd.DataFrame) -> Optional[List[int]]:
+    def generate_signals_vectorized(self, data: pd.DataFrame) -> list[int] | None:
         """Vectorized MACD signal generation for fast backtesting."""
         fast = self.params.get("fast_window", 12)
         slow = self.params.get("slow_window", 26)
         signal_window = self.params.get("signal_window", 9)
 
-        close = data['Close'] if 'Close' in data.columns else data['close']
+        close = data["Close"] if "Close" in data.columns else data["close"]
 
         # Calculate EMAs using pandas (already optimized)
         ema_fast = close.ewm(span=fast, adjust=False).mean()

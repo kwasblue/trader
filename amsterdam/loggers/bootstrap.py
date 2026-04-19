@@ -1,6 +1,9 @@
-import logging, os
+import logging
+import os
 from logging.handlers import RotatingFileHandler
+
 from loggers.logger import UniqueMessageFilter
+
 
 def init_root_logger(
     log_dir: str = "logs",
@@ -19,11 +22,9 @@ def init_root_logger(
 
     # avoid duplicate handlers on hot-reloads
     if not any(isinstance(h, RotatingFileHandler) for h in root.handlers):
-        fmt = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-                                datefmt="%Y-%m-%d %H:%M:%S")
+        fmt = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 
-        fh = RotatingFileHandler(os.path.join(log_dir, root_file),
-                                 maxBytes=max_bytes, backupCount=backup_count)
+        fh = RotatingFileHandler(os.path.join(log_dir, root_file), maxBytes=max_bytes, backupCount=backup_count)
         fh.setLevel(level)
         fh.addFilter(UniqueMessageFilter())
         fh.setFormatter(fmt)

@@ -1,10 +1,11 @@
 """
 Multi-factor scoring and ranking for scanned symbols.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List
+from typing import Any
 
 from scanner.result import SymbolScore
 
@@ -16,7 +17,7 @@ class SymbolScorer:
 
     def __init__(
         self,
-        weights: Dict[str, float],
+        weights: dict[str, float],
         trade_threshold: float = 0.7,
         watch_threshold: float = 0.4,
         max_trade_symbols: int = 10,
@@ -31,8 +32,8 @@ class SymbolScorer:
     def score(
         self,
         symbol: str,
-        criteria_scores: Dict[str, float],
-        metadata: Dict[str, Any],
+        criteria_scores: dict[str, float],
+        metadata: dict[str, Any],
     ) -> SymbolScore:
         """Compute weighted composite score for a symbol."""
         total_weight = 0.0
@@ -61,7 +62,7 @@ class SymbolScorer:
             recommendation=recommendation,
         )
 
-    def rank(self, scores: List[SymbolScore]) -> List[SymbolScore]:
+    def rank(self, scores: list[SymbolScore]) -> list[SymbolScore]:
         """Sort by score descending and enforce max caps."""
         sorted_scores = sorted(scores, key=lambda s: s.total_score, reverse=True)
 

@@ -1,24 +1,31 @@
 # core/logic/trade_gate.py
-from dataclasses import dataclass, field
-from typing import Optional, Literal
+from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import Literal
 
 Side = Literal["long", "short", None]
 
+
 @dataclass
 class GateState:
-    last_bar_id: Optional[int] = None
+    last_bar_id: int | None = None
     did_action_this_bar: bool = False
     layers: int = 0
     side: Side = None
-    cooldown_until: Optional[datetime] = None
-    last_action_ts: Optional[datetime] = None
-    last_regime: Optional[str] = None
+    cooldown_until: datetime | None = None
+    last_action_ts: datetime | None = None
+    last_regime: str | None = None
     regime_persist: int = 0  # bars persisted in current regime
 
+
 class TradeGate:
-    def __init__(self, max_layers:int=1, min_bars_between_layers:int=2,
-                 regime_min_persist_bars:int=3, flip_cooldown_bars:int=1):
+    def __init__(
+        self,
+        max_layers: int = 1,
+        min_bars_between_layers: int = 2,
+        regime_min_persist_bars: int = 3,
+        flip_cooldown_bars: int = 1,
+    ):
         self.state = {}
         self.max_layers = max_layers
         self.min_bars_between_layers = min_bars_between_layers
@@ -33,7 +40,7 @@ class TradeGate:
     def get_regime_persist(self, symbol: str) -> int:
         return self.get_state(symbol).regime_persist
 
-    def on_new_bar(self, symbol:str, bar_id:int, regime:str):
+    def on_new_bar(self, symbol: str, bar_id: int, regime: str):
         s = self.state.setdefault(symbol, GateState())
         # s.did_action_this_bar = False       # don't clear on every update
 
@@ -51,8 +58,9 @@ class TradeGate:
                 s.last_regime, s.regime_persist = regime, 1
         # else: same bar → DO NOT touch did_action_this_bar or regime_persist
 
-    def can_enter(self, symbol:str, side:Side, ts:datetime, bar_id:int, regime:str,
-                  allow_pyramiding:bool=False):
+    def can_enter(
+        self, symbol: str, side: Side, ts: datetime, bar_id: int, regime: str, allow_pyramiding: bool = False
+    ):
         s = self.state.setdefault(symbol, GateState())
         # Block if we already acted this bar (unless pyramiding path)
         if s.did_action_this_bar and not allow_pyramiding:
@@ -83,8 +91,16 @@ class TradeGate:
 
         return True, "ok"
 
-    def mark_action(self, symbol:str, ts:datetime, bar_id:int, new_side:Side,
-                    action:str, flipped:bool=False, pyramided:bool=False):
+    def mark_action(
+        self,
+        symbol: str,
+        ts: datetime,
+        bar_id: int,
+        new_side: Side,
+        action: str,
+        flipped: bool = False,
+        pyramided: bool = False,
+    ):
         s = self.state.setdefault(symbol, GateState())
         s.did_action_this_bar = True
         s.last_action_ts = ts
@@ -103,7 +119,7 @@ class TradeGate:
             s.layers = 1
             self._bars_since_layer[symbol] = 0
 
-    def close_position(self, symbol:str, ts:datetime, bar_id:int):
+    def close_position(self, symbol: str, ts: datetime, bar_id: int):
         s = self.state.setdefault(symbol, GateState())
         s.did_action_this_bar = True
         s.side = None

@@ -1,41 +1,44 @@
 # strategies/strategy_registry/strategy_registry.py
 
-import os
 import importlib
 import inspect
-import re
 import logging
-from typing import Dict, Type
+import os
+import re
+
 from core.base.base_strategy import BaseStrategy
 
 logger = logging.getLogger(__name__)
 
-STRATEGY_CLASS_REGISTRY: Dict[str, Type[BaseStrategy]] = {}
+STRATEGY_CLASS_REGISTRY: dict[str, type[BaseStrategy]] = {}
+
 
 def _camel_to_snake(name: str) -> str:
-    s1 = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', name)
-    return re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
+    s1 = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", name)
+    return re.sub("([a-z0-9])([A-Z])", r"\1_\2", s1).lower()
 
-def _register_with_aliases(cls: Type[BaseStrategy]) -> None:
+
+def _register_with_aliases(cls: type[BaseStrategy]) -> None:
     # explicit key on the class wins if present
     explicit = getattr(cls, "strategy_key", None)
 
-    class_name = cls.__name__            # e.g., "SMAStrategy"
+    class_name = cls.__name__  # e.g., "SMAStrategy"
     module_tail = cls.__module__.split(".")[-1]  # e.g., "sma_strategy"
     base_snake = _camel_to_snake(class_name.replace("Strategy", ""))  # "sma"
 
     candidates = [
-        module_tail,                      # "sma_strategy" (module filename)
-        class_name,                       # "SMAStrategy"
-        class_name.lower(),               # "smastrategy"
-        base_snake,                       # "sma"
-        f"{base_snake}_strategy",         # "sma_strategy"
+        module_tail,  # "sma_strategy" (module filename)
+        class_name,  # "SMAStrategy"
+        class_name.lower(),  # "smastrategy"
+        base_snake,  # "sma"
+        f"{base_snake}_strategy",  # "sma_strategy"
     ]
     if explicit:
         candidates.insert(0, explicit.lower())
 
     for key in dict.fromkeys(k.lower() for k in candidates):
         STRATEGY_CLASS_REGISTRY[key] = cls
+
 
 def load_strategies_from_directory(directory: str) -> None:
     for filename in os.listdir(directory):
@@ -59,6 +62,7 @@ def load_strategies_from_directory(directory: str) -> None:
             if k in STRATEGY_CLASS_REGISTRY:
                 STRATEGY_CLASS_REGISTRY["default"] = STRATEGY_CLASS_REGISTRY[k]
                 break
+
 
 # Auto-load at import
 load_strategies_from_directory(os.path.dirname(__file__))

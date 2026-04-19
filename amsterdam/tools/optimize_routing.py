@@ -26,11 +26,11 @@ Usage:
     python tools/optimize_routing.py --dry-run
 """
 
-import sys
-import json
 import argparse
-from pathlib import Path
+import json
+import sys
 from collections import Counter
+from pathlib import Path
 
 # Ensure project root is in path
 ROOT = Path(__file__).resolve().parents[1]
@@ -38,23 +38,16 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from dotenv import load_dotenv
+
 load_dotenv(ROOT / ".env")
 
 
-DEFAULT_STRATEGIES = [
-    "sma", "ema", "macd", "rsi", "bollinger",
-    "momentum", "meanreversion", "stochastic"
-]
+DEFAULT_STRATEGIES = ["sma", "ema", "macd", "rsi", "bollinger", "momentum", "meanreversion", "stochastic"]
 
 # Strategy categories for hybrid sizing decision
-TREND_FOLLOWING_STRATEGIES = {
-    "sma", "ema", "macd", "momentum", "adx",
-    "ichimoku", "psar", "donchian", "breakout"
-}
+TREND_FOLLOWING_STRATEGIES = {"sma", "ema", "macd", "momentum", "adx", "ichimoku", "psar", "donchian", "breakout"}
 
-MEAN_REVERSION_STRATEGIES = {
-    "rsi", "bollinger", "stochastic", "meanreversion", "vwap"
-}
+MEAN_REVERSION_STRATEGIES = {"rsi", "bollinger", "stochastic", "meanreversion", "vwap"}
 
 
 def should_use_hybrid(strategy: str) -> bool:
@@ -137,12 +130,14 @@ Examples:
     )
 
     parser.add_argument(
-        "-s", "--symbols",
+        "-s",
+        "--symbols",
         default=None,
         help="Comma-separated symbols (default: all available)",
     )
     parser.add_argument(
-        "-d", "--days",
+        "-d",
+        "--days",
         type=int,
         default=365,
         help="Days of historical data (default: 365)",
@@ -153,7 +148,8 @@ Examples:
         help="Comma-separated strategies to test",
     )
     parser.add_argument(
-        "-m", "--metric",
+        "-m",
+        "--metric",
         default="sharpe_ratio",
         choices=["sharpe_ratio", "total_return", "win_rate"],
         help="Metric for ranking (default: sharpe_ratio)",
@@ -164,7 +160,8 @@ Examples:
         help="Don't save config (just show results)",
     )
     parser.add_argument(
-        "-o", "--output",
+        "-o",
+        "--output",
         default=None,
         help="Output file (default: config/strategy_routing.json)",
     )
@@ -172,8 +169,8 @@ Examples:
     args = parser.parse_args()
 
     # Import here to avoid slow startup
+    from core.backtest.regime_backtest import REGIME_TYPES, RegimeBacktester
     from core.unified_data_pipeline import UnifiedDataPipeline
-    from core.backtest.regime_backtest import RegimeBacktester, REGIME_TYPES
 
     pipeline = UnifiedDataPipeline()
 
@@ -187,7 +184,7 @@ Examples:
         if not symbols:
             routing_path = ROOT / "config" / "strategy_routing.json"
             if routing_path.exists():
-                with open(routing_path, "r") as f:
+                with open(routing_path) as f:
                     existing_routing = json.load(f)
                 symbols = [s for s in existing_routing.keys() if s != "default"]
                 if symbols:
@@ -220,7 +217,7 @@ Examples:
     failed = []
 
     for i, symbol in enumerate(symbols):
-        print(f"\n[{i+1}/{len(symbols)}] {symbol}...", end=" ")
+        print(f"\n[{i + 1}/{len(symbols)}] {symbol}...", end=" ")
 
         try:
             data = pipeline.get_data(symbol)
@@ -244,9 +241,11 @@ Examples:
 
             # Print summary
             best = result.best_strategies
-            print(f"low_vol={best.get('low_volatility', '?')}, "
-                  f"normal={best.get('normal', '?')}, "
-                  f"high_vol={best.get('high_volatility', '?')}")
+            print(
+                f"low_vol={best.get('low_volatility', '?')}, "
+                f"normal={best.get('normal', '?')}, "
+                f"high_vol={best.get('high_volatility', '?')}"
+            )
 
         except Exception as e:
             print(f"ERROR: {e}")
@@ -295,8 +294,10 @@ Examples:
     for symbol in sorted(all_results.keys()):
         r = all_results[symbol].best_strategies
         use_hyb = "YES" if hybrid_config.get(symbol, {}).get("enabled", False) else "NO"
-        print(f"{symbol:<8} {r.get('low_volatility', '?'):<15} "
-              f"{r.get('normal', '?'):<15} {r.get('high_volatility', '?'):<15} {use_hyb:<8}")
+        print(
+            f"{symbol:<8} {r.get('low_volatility', '?'):<15} "
+            f"{r.get('normal', '?'):<15} {r.get('high_volatility', '?'):<15} {use_hyb:<8}"
+        )
 
     print("-" * 70)
 

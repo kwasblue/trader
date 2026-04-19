@@ -16,9 +16,8 @@ This is a reference implementation showing:
 import asyncio
 import json
 from datetime import datetime
-from pathlib import Path
 
-from core.bar_aggregator import BarAggregator, Bar
+from core.bar_aggregator import Bar, BarAggregator
 from core.logic.strategy_routing_manager import StrategyRoutingManager
 from loggers.logger import Logger
 
@@ -34,11 +33,7 @@ class MultiTimeframeTrader:
     - Live trading execution
     """
 
-    def __init__(
-        self,
-        symbols: list[str],
-        routing_config_path: str = "config/strategy_routing.json"
-    ):
+    def __init__(self, symbols: list[str], routing_config_path: str = "config/strategy_routing.json"):
         """
         Initialize multi-timeframe trader.
 
@@ -47,11 +42,7 @@ class MultiTimeframeTrader:
             routing_config_path: Path to strategy routing configuration
         """
         self.symbols = symbols
-        self.logger = Logger(
-            "multi_timeframe_trader.log",
-            "MultiTimeframeTrader",
-            propagate=True
-        ).get_logger()
+        self.logger = Logger("multi_timeframe_trader.log", "MultiTimeframeTrader", propagate=True).get_logger()
 
         # Initialize components
         self.bar_aggregator = BarAggregator()
@@ -62,10 +53,10 @@ class MultiTimeframeTrader:
 
         # Statistics
         self.stats = {
-            'bars_processed': 0,
-            'signals_generated': 0,
-            'trades_executed': 0,
-            'regime_changes': 0,
+            "bars_processed": 0,
+            "signals_generated": 0,
+            "trades_executed": 0,
+            "regime_changes": 0,
         }
 
         self.logger.info(f"Initialized MultiTimeframeTrader for {len(symbols)} symbols")
@@ -85,13 +76,13 @@ class MultiTimeframeTrader:
             if regime_detector:
                 regime = regime_detector.get_current_regime(symbol)
             else:
-                regime = 'normal'  # Default regime
+                regime = "normal"  # Default regime
 
             # Get routing decision
             routing = self.routing_manager.get_routing(symbol, regime)
 
             # Configure aggregator
-            self.bar_aggregator.set_timeframe(symbol, routing['timeframe'])
+            self.bar_aggregator.set_timeframe(symbol, routing["timeframe"])
 
             # Track regime
             self.current_regimes[symbol] = regime
@@ -113,14 +104,12 @@ class MultiTimeframeTrader:
         """
         try:
             # Get current regime for this symbol
-            regime = self.current_regimes.get(bar.symbol, 'normal')
+            regime = self.current_regimes.get(bar.symbol, "normal")
 
             # Get strategy instance
             strategy = self.routing_manager.get_strategy(bar.symbol, regime)
 
-            self.logger.debug(
-                f"[{bar.symbol}] Processing {bar.timeframe} bar at {bar.timestamp.strftime('%H:%M:%S')}"
-            )
+            self.logger.debug(f"[{bar.symbol}] Processing {bar.timeframe} bar at {bar.timestamp.strftime('%H:%M:%S')}")
 
             # Generate signal
             # Note: Strategy needs to be adapted to work with Bar objects
@@ -128,15 +117,13 @@ class MultiTimeframeTrader:
             signal = self._generate_signal(strategy, bar)
 
             if signal:
-                self.stats['signals_generated'] += 1
-                self.logger.info(
-                    f"[{bar.symbol}] Signal: {signal['action']} @ {bar.close}"
-                )
+                self.stats["signals_generated"] += 1
+                self.logger.info(f"[{bar.symbol}] Signal: {signal['action']} @ {bar.close}")
 
                 # Execute trade
                 success = self._execute_trade(bar.symbol, signal)
                 if success:
-                    self.stats['trades_executed'] += 1
+                    self.stats["trades_executed"] += 1
 
         except Exception as e:
             self.logger.exception(f"Error processing bar for {bar.symbol}: {e}")
@@ -161,20 +148,25 @@ class MultiTimeframeTrader:
         # In production, integrate with actual strategy.generate_signal()
 
         # Example: Simple momentum signal
-        if hasattr(strategy, 'generate_signal_from_bar'):
+        if hasattr(strategy, "generate_signal_from_bar"):
             return strategy.generate_signal_from_bar(bar)
         else:
             # Fallback: convert to single-row DataFrame
             import pandas as pd
-            df = pd.DataFrame([{
-                'timestamp': bar.timestamp,
-                'open': bar.open,
-                'high': bar.high,
-                'low': bar.low,
-                'close': bar.close,
-                'volume': bar.volume,
-            }])
-            df.set_index('timestamp', inplace=True)
+
+            df = pd.DataFrame(
+                [
+                    {
+                        "timestamp": bar.timestamp,
+                        "open": bar.open,
+                        "high": bar.high,
+                        "low": bar.low,
+                        "close": bar.close,
+                        "volume": bar.volume,
+                    }
+                ]
+            )
+            df.set_index("timestamp", inplace=True)
 
             # Call strategy's generate_signal with DataFrame
             # (This assumes strategy can work with single-row data)
@@ -194,10 +186,7 @@ class MultiTimeframeTrader:
         # TODO: Integrate with actual broker (Alpaca)
         # For now, just log
 
-        self.logger.info(
-            f"[{symbol}] EXECUTE: {signal.get('action')} "
-            f"{signal.get('size', 'N/A')} shares"
-        )
+        self.logger.info(f"[{symbol}] EXECUTE: {signal.get('action')} {signal.get('size', 'N/A')} shares")
 
         return True  # Placeholder
 
@@ -235,20 +224,16 @@ class MultiTimeframeTrader:
         old_timeframe = self.bar_aggregator.get_timeframe(symbol)
 
         # Update aggregator (will complete partial window if timeframe changes)
-        self.bar_aggregator.set_timeframe(symbol, new_routing['timeframe'])
+        self.bar_aggregator.set_timeframe(symbol, new_routing["timeframe"])
 
-        if old_timeframe != new_routing['timeframe']:
-            self.logger.info(
-                f"[{symbol}] Timeframe changed: {old_timeframe} → {new_routing['timeframe']}"
-            )
+        if old_timeframe != new_routing["timeframe"]:
+            self.logger.info(f"[{symbol}] Timeframe changed: {old_timeframe} → {new_routing['timeframe']}")
 
-        self.logger.info(
-            f"[{symbol}] New strategy: {new_routing['strategy']}"
-        )
+        self.logger.info(f"[{symbol}] New strategy: {new_routing['strategy']}")
 
         # Update tracking
         self.current_regimes[symbol] = new_regime
-        self.stats['regime_changes'] += 1
+        self.stats["regime_changes"] += 1
 
     def on_market_close(self):
         """
@@ -280,9 +265,9 @@ class MultiTimeframeTrader:
 
         return {
             **self.stats,
-            'aggregator': aggregator_stats,
-            'active_symbols': len(self.symbols),
-            'current_regimes': self.current_regimes.copy(),
+            "aggregator": aggregator_stats,
+            "active_symbols": len(self.symbols),
+            "current_regimes": self.current_regimes.copy(),
         }
 
 
@@ -290,16 +275,14 @@ class MultiTimeframeTrader:
 # EXAMPLE USAGE
 # ============================================================================
 
+
 async def main():
     """Example integration with Schwab websocket stream."""
     # Trading symbols
-    symbols = ['AAPL', 'TSLA', 'MSFT', 'NVDA', 'AMD']
+    symbols = ["AAPL", "TSLA", "MSFT", "NVDA", "AMD"]
 
     # Initialize trader
-    trader = MultiTimeframeTrader(
-        symbols=symbols,
-        routing_config_path="config/strategy_routing.json"
-    )
+    trader = MultiTimeframeTrader(symbols=symbols, routing_config_path="config/strategy_routing.json")
 
     # Configure initial timeframes
     # Note: In production, pass actual RegimeDetector
@@ -334,12 +317,12 @@ async def main():
                 close=150.5 + i * 0.1,
                 volume=10000,
                 symbol=symbol,
-                timeframe="1min"  # Raw incoming data
+                timeframe="1min",  # Raw incoming data
             )
 
             # Process through aggregator
             trader.bar_aggregator.process_bar(bar)
-            trader.stats['bars_processed'] += 1
+            trader.stats["bars_processed"] += 1
 
         # Simulate regime check every 5 minutes
         if i % 5 == 0 and i > 0:
@@ -358,7 +341,7 @@ async def main():
     print(json.dumps(stats, indent=2, default=str))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     from datetime import timedelta
 
     # Run example

@@ -10,8 +10,8 @@ Usage:
     from core.contracts.events import EVENT_NEW_BAR, BarPayload
     from core.contracts.events import EVENT_SCHEMA_MAP
 """
-from typing import TypedDict, Literal, Optional, List, Dict, Type, Any
 
+from typing import Any, Literal, TypedDict
 
 # =============================================================================
 # Event Name Constants
@@ -70,9 +70,11 @@ EVENT_MANUAL_ORDER = "MANUAL_ORDER"
 # Payload Schemas (TypedDicts)
 # =============================================================================
 
+
 # --- Market data ---
 class BarPayload(TypedDict):
     """OHLCV bar data."""
+
     symbol: str
     open: float
     high: float
@@ -84,15 +86,17 @@ class BarPayload(TypedDict):
 
 class PricePayload(TypedDict):
     """Price update with moving averages."""
+
     symbol: str
     price: float
-    ma20: Optional[float]
-    ma50: Optional[float]
+    ma20: float | None
+    ma50: float | None
     timestamp: str
 
 
 class RegimePayload(TypedDict):
     """Market regime classification."""
+
     symbol: str
     volatility: str  # low_volatility | normal | high_volatility
     trend: str  # bullish | bearish | sideways
@@ -102,35 +106,39 @@ class RegimePayload(TypedDict):
 
 class NewsPayload(TypedDict):
     """News event with sentiment."""
+
     headline: str
     source: str
-    sentiment: Optional[Literal["positive", "negative", "neutral"]]
+    sentiment: Literal["positive", "negative", "neutral"] | None
     timestamp: str
 
 
 # --- Execution / trades ---
 class TradePayload(TypedDict):
     """Trade execution details."""
+
     symbol: str
     side: Literal["buy", "sell", "long", "short"]
     qty: float
     price: float
     timestamp: str
-    pnl: Optional[float]
+    pnl: float | None
 
 
 class OrderStatusPayload(TypedDict):
     """Order status update."""
+
     order_id: str
     symbol: str
     status: Literal["submitted", "filled", "canceled", "rejected"]
     filled_qty: float
-    avg_price: Optional[float]
+    avg_price: float | None
     timestamp: str
 
 
 class PositionPayload(TypedDict, total=False):
     """Position update with extended fields."""
+
     symbol: str
     qty: float
     avg_price: float
@@ -148,8 +156,9 @@ class PositionPayload(TypedDict, total=False):
 # --- Performance ---
 class PnLPayload(TypedDict, total=False):
     """Portfolio P&L update."""
+
     portfolio_value: float
-    equity_curve: List[float]
+    equity_curve: list[float]
     unrealized: float
     realized: float
     drawdown: float
@@ -160,6 +169,7 @@ class PnLPayload(TypedDict, total=False):
 
 class PerformanceMetricsPayload(TypedDict):
     """Performance metrics snapshot."""
+
     sharpe: float
     sortino: float
     kelly: float
@@ -172,20 +182,23 @@ class PerformanceMetricsPayload(TypedDict):
 
 class HeatmapPayload(TypedDict):
     """Risk heatmap data."""
-    data: List[List[float]]  # 2D matrix for risk vs exposure
+
+    data: list[list[float]]  # 2D matrix for risk vs exposure
     timestamp: str
 
 
 class DistributionPayload(TypedDict):
     """Return distribution data."""
-    bins: List[float]
-    counts: List[int]
+
+    bins: list[float]
+    counts: list[int]
     timestamp: str
 
 
 class TradeStatsPayload(TypedDict):
     """Trade statistics."""
-    durations: List[float]
+
+    durations: list[float]
     win_streak: int
     loss_streak: int
     timestamp: str
@@ -193,26 +206,30 @@ class TradeStatsPayload(TypedDict):
 
 class RegimePerfPayload(TypedDict):
     """Performance by market regime."""
-    regimes: Dict[str, float]  # {"low_volatility": equity, ...}
+
+    regimes: dict[str, float]  # {"low_volatility": equity, ...}
     timestamp: str
 
 
 # --- History / Replay ---
 class HistoryPayload(TypedDict):
     """Historical P&L by day."""
-    pnl_by_day: Dict[str, float]  # date -> pnl
+
+    pnl_by_day: dict[str, float]  # date -> pnl
     timestamp: str
 
 
 class BenchmarkPayload(TypedDict):
     """Benchmark comparison."""
-    equity_curve: List[float]
-    benchmark_curve: List[float]
+
+    equity_curve: list[float]
+    benchmark_curve: list[float]
     timestamp: str
 
 
 class ReplayFramePayload(TypedDict):
     """Replay frame for backtesting visualization."""
+
     frame_idx: int
     equity: float
     timestamp: str
@@ -221,14 +238,16 @@ class ReplayFramePayload(TypedDict):
 # --- Alerts & logs ---
 class AlertPayload(TypedDict):
     """Alert notification."""
+
     level: Literal["info", "warning", "error", "critical"]
     message: str
-    symbol: Optional[str]
+    symbol: str | None
     timestamp: str
 
 
 class LogPayload(TypedDict):
     """Log message."""
+
     message: str
     level: str
     timestamp: str
@@ -236,15 +255,17 @@ class LogPayload(TypedDict):
 
 class HealthPayload(TypedDict):
     """System health status."""
+
     broker: str
     status: str
-    details: Dict
+    details: dict
     timestamp: str
 
 
 # --- Ops ---
 class GuardrailPayload(TypedDict, total=False):
     """Risk guardrail trigger event."""
+
     guard_name: str
     triggered: bool
     message: str
@@ -254,6 +275,7 @@ class GuardrailPayload(TypedDict, total=False):
 
 class SessionPayload(TypedDict):
     """Trading session summary."""
+
     realized: float
     trade_count: int
     win_rate: float
@@ -262,44 +284,49 @@ class SessionPayload(TypedDict):
 
 class ConfigSnapshotPayload(TypedDict):
     """Configuration snapshot."""
+
     risk_pct: float
     routing: str
-    active_symbols: List[str]
+    active_symbols: list[str]
     timestamp: str
 
 
 # --- Strategy ---
 class StrategySignalPayload(TypedDict):
     """Strategy signal event."""
+
     symbol: str
     strategy: str
     signal: Literal["buy", "sell", "hold"]
-    confidence: Optional[float]
+    confidence: float | None
     timestamp: str
 
 
 # --- GUI -> Backend commands ---
 class FlattenSymbolPayload(TypedDict):
     """Flatten symbol command."""
+
     symbol: str
 
 
 class PlaceOrderPayload(TypedDict, total=False):
     """Manual order placement command."""
+
     symbol: str
     side: Literal["BUY", "SELL", "SHORT", "COVER"]
     qty: int
     type: Literal["market", "limit"]
-    price: Optional[float]
+    price: float | None
     tif: Literal["DAY", "IOC", "FOK", "GTC"]
     route: str
     reduce_only: bool
-    sl: Optional[float]  # Stop Loss
-    tp: Optional[float]  # Take Profit
+    sl: float | None  # Stop Loss
+    tp: float | None  # Take Profit
 
 
 class SetStrategyPayload(TypedDict):
     """Set strategy command."""
+
     symbol: str
     strategy_name: str
 
@@ -307,34 +334,40 @@ class SetStrategyPayload(TypedDict):
 # --- Additional command payloads ---
 class FlattenAllPayload(TypedDict):
     """Flatten all positions command."""
+
     confirm: bool
 
 
 class CancelAllPayload(TypedDict):
     """Cancel all orders command."""
+
     confirm: bool
 
 
 class TogglePanicPayload(TypedDict):
     """Toggle panic mode command."""
+
     halted: bool
 
 
 class HaltedPayload(TypedDict):
     """System halted state."""
+
     halted: bool
-    reason: Optional[str]
+    reason: str | None
 
 
 class HaltStatePayload(TypedDict):
     """Halt state update."""
+
     halted: bool
-    reason: Optional[str]
+    reason: str | None
     timestamp: str
 
 
 class CooldownStatePayload(TypedDict):
     """Cooldown state update."""
+
     symbol: str
     in_cooldown: bool
     remaining_seconds: float
@@ -343,18 +376,20 @@ class CooldownStatePayload(TypedDict):
 
 class OrderQueueUpdatePayload(TypedDict):
     """Order queue update."""
+
     pending_count: int
-    orders: List[Dict]
+    orders: list[dict]
     timestamp: str
 
 
 class ManualOrderPayload(TypedDict, total=False):
     """Manual order command."""
+
     symbol: str
     side: Literal["BUY", "SELL", "SHORT", "COVER"]
     qty: int
     order_type: Literal["market", "limit"]
-    limit_price: Optional[float]
+    limit_price: float | None
     tif: Literal["DAY", "IOC", "FOK", "GTC"]
 
 
@@ -362,7 +397,7 @@ class ManualOrderPayload(TypedDict, total=False):
 # Event Schema Map
 # =============================================================================
 
-EVENT_SCHEMA_MAP: Dict[str, Type[Any]] = {
+EVENT_SCHEMA_MAP: dict[str, type[Any]] = {
     # Market data
     EVENT_NEW_BAR: BarPayload,
     EVENT_PRICE_UPDATE: PricePayload,
@@ -415,31 +450,76 @@ EVENT_SCHEMA_MAP: Dict[str, Type[Any]] = {
 
 __all__ = [
     # Event names
-    'EVENT_NEW_BAR', 'EVENT_NEW_TRADE', 'EVENT_ORDER_STATUS',
-    'EVENT_POSITION_UPDATE', 'EVENT_PNL_UPDATE', 'EVENT_ALERT',
-    'EVENT_HEALTH_UPDATE', 'EVENT_ORDER_QUEUE_UPDATE', 'EVENT_HALT_STATE',
-    'EVENT_COOLDOWN_STATE', 'EVENT_PRICE_UPDATE', 'EVENT_REGIME_UPDATE',
-    'EVENT_NEWS_UPDATE', 'EVENT_STRATEGY_SIGNAL', 'EVENT_PERFORMANCE_METRICS',
-    'EVENT_HEATMAP_UPDATE', 'EVENT_DISTRIBUTION_UPDATE', 'EVENT_TRADE_STATS',
-    'EVENT_REGIME_PERF', 'EVENT_HISTORY_UPDATE', 'EVENT_BENCHMARK_UPDATE',
-    'EVENT_REPLAY_FRAME', 'EVENT_LOG', 'EVENT_GUARDRAIL_TRIGGERED',
-    'EVENT_SESSION_UPDATE', 'EVENT_CONFIG_SNAPSHOT', 'EVENT_FLATTEN_ALL',
-    'EVENT_CANCEL_ALL', 'EVENT_FLATTEN_SYMBOL', 'EVENT_PLACE_ORDER',
-    'EVENT_SET_STRATEGY', 'EVENT_TOGGLE_PANIC', 'EVENT_HALTED',
-    'EVENT_MANUAL_ORDER',
+    "EVENT_NEW_BAR",
+    "EVENT_NEW_TRADE",
+    "EVENT_ORDER_STATUS",
+    "EVENT_POSITION_UPDATE",
+    "EVENT_PNL_UPDATE",
+    "EVENT_ALERT",
+    "EVENT_HEALTH_UPDATE",
+    "EVENT_ORDER_QUEUE_UPDATE",
+    "EVENT_HALT_STATE",
+    "EVENT_COOLDOWN_STATE",
+    "EVENT_PRICE_UPDATE",
+    "EVENT_REGIME_UPDATE",
+    "EVENT_NEWS_UPDATE",
+    "EVENT_STRATEGY_SIGNAL",
+    "EVENT_PERFORMANCE_METRICS",
+    "EVENT_HEATMAP_UPDATE",
+    "EVENT_DISTRIBUTION_UPDATE",
+    "EVENT_TRADE_STATS",
+    "EVENT_REGIME_PERF",
+    "EVENT_HISTORY_UPDATE",
+    "EVENT_BENCHMARK_UPDATE",
+    "EVENT_REPLAY_FRAME",
+    "EVENT_LOG",
+    "EVENT_GUARDRAIL_TRIGGERED",
+    "EVENT_SESSION_UPDATE",
+    "EVENT_CONFIG_SNAPSHOT",
+    "EVENT_FLATTEN_ALL",
+    "EVENT_CANCEL_ALL",
+    "EVENT_FLATTEN_SYMBOL",
+    "EVENT_PLACE_ORDER",
+    "EVENT_SET_STRATEGY",
+    "EVENT_TOGGLE_PANIC",
+    "EVENT_HALTED",
+    "EVENT_MANUAL_ORDER",
     # Payload schemas
-    'BarPayload', 'PricePayload', 'RegimePayload', 'NewsPayload',
-    'TradePayload', 'OrderStatusPayload', 'PositionPayload', 'PnLPayload',
-    'PerformanceMetricsPayload', 'HeatmapPayload', 'DistributionPayload',
-    'TradeStatsPayload', 'RegimePerfPayload', 'HistoryPayload',
-    'BenchmarkPayload', 'ReplayFramePayload', 'AlertPayload', 'LogPayload',
-    'HealthPayload', 'GuardrailPayload', 'SessionPayload',
-    'ConfigSnapshotPayload', 'StrategySignalPayload', 'FlattenSymbolPayload',
-    'PlaceOrderPayload', 'SetStrategyPayload',
+    "BarPayload",
+    "PricePayload",
+    "RegimePayload",
+    "NewsPayload",
+    "TradePayload",
+    "OrderStatusPayload",
+    "PositionPayload",
+    "PnLPayload",
+    "PerformanceMetricsPayload",
+    "HeatmapPayload",
+    "DistributionPayload",
+    "TradeStatsPayload",
+    "RegimePerfPayload",
+    "HistoryPayload",
+    "BenchmarkPayload",
+    "ReplayFramePayload",
+    "AlertPayload",
+    "LogPayload",
+    "HealthPayload",
+    "GuardrailPayload",
+    "SessionPayload",
+    "ConfigSnapshotPayload",
+    "StrategySignalPayload",
+    "FlattenSymbolPayload",
+    "PlaceOrderPayload",
+    "SetStrategyPayload",
     # Additional command payloads
-    'FlattenAllPayload', 'CancelAllPayload', 'TogglePanicPayload',
-    'HaltedPayload', 'HaltStatePayload', 'CooldownStatePayload',
-    'OrderQueueUpdatePayload', 'ManualOrderPayload',
+    "FlattenAllPayload",
+    "CancelAllPayload",
+    "TogglePanicPayload",
+    "HaltedPayload",
+    "HaltStatePayload",
+    "CooldownStatePayload",
+    "OrderQueueUpdatePayload",
+    "ManualOrderPayload",
     # Schema map
-    'EVENT_SCHEMA_MAP',
+    "EVENT_SCHEMA_MAP",
 ]

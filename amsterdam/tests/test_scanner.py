@@ -1,27 +1,30 @@
 """
 Test suite for the stock scanner module.
 """
-import sys
+
 import os
+import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import unittest
-from unittest.mock import patch, MagicMock
-import pandas as pd
+from unittest.mock import MagicMock, patch
+
 import numpy as np
+import pandas as pd
 
-from scanner.result import SymbolScore, ScanReport
-from scanner.scorer import SymbolScorer
-from scanner.providers.base import BaseDataProvider, ProviderData
-from scanner.criteria.base import BaseCriterion, create_criterion, CRITERION_REGISTRY
+from scanner.criteria.base import CRITERION_REGISTRY, create_criterion
 from scanner.criteria.momentum import MomentumBreakout, RelativeStrength, VolumeSurge
-from scanner.criteria.trend import TrendFollowing, MovingAverageCross
-from scanner.universe import get_universe, FALLBACK_SYMBOLS
-
+from scanner.criteria.trend import MovingAverageCross, TrendFollowing
+from scanner.providers.base import BaseDataProvider, ProviderData
+from scanner.result import ScanReport, SymbolScore
+from scanner.scorer import SymbolScorer
+from scanner.universe import FALLBACK_SYMBOLS, get_universe
 
 # =============================================================================
 # HELPERS
 # =============================================================================
+
 
 def _make_ohlcv_df(n=200, base_close=100.0, trend=0.001, volume=100000, lowercase=True):
     """Create a synthetic OHLCV DataFrame for testing.
@@ -37,23 +40,27 @@ def _make_ohlcv_df(n=200, base_close=100.0, trend=0.001, volume=100000, lowercas
     closes = np.array(closes)
 
     if lowercase:
-        df = pd.DataFrame({
-            "timestamp": dates,
-            "open": closes * 0.999,
-            "high": closes * 1.01,
-            "low": closes * 0.99,
-            "close": closes,
-            "volume": np.random.randint(int(volume * 0.5), int(volume * 1.5), n),
-        })
+        df = pd.DataFrame(
+            {
+                "timestamp": dates,
+                "open": closes * 0.999,
+                "high": closes * 1.01,
+                "low": closes * 0.99,
+                "close": closes,
+                "volume": np.random.randint(int(volume * 0.5), int(volume * 1.5), n),
+            }
+        )
     else:
-        df = pd.DataFrame({
-            "timestamp": dates,
-            "Open": closes * 0.999,
-            "High": closes * 1.01,
-            "Low": closes * 0.99,
-            "Close": closes,
-            "Volume": np.random.randint(int(volume * 0.5), int(volume * 1.5), n),
-        })
+        df = pd.DataFrame(
+            {
+                "timestamp": dates,
+                "Open": closes * 0.999,
+                "High": closes * 1.01,
+                "Low": closes * 0.99,
+                "Close": closes,
+                "Volume": np.random.randint(int(volume * 0.5), int(volume * 1.5), n),
+            }
+        )
     return df
 
 
@@ -69,6 +76,7 @@ def _make_provider_data(symbol, df=None, summary=None):
 def _apply_indicators(df):
     """Apply indicators to a test DataFrame. Handles column casing."""
     from indicators.technical_indicators import TechnicalIndicators
+
     # Indicators expect capitalized columns
     cap_map = {"open": "Open", "high": "High", "low": "Low", "close": "Close", "volume": "Volume"}
     low_map = {"Open": "open", "High": "high", "Low": "low", "Close": "close", "Volume": "volume"}
@@ -81,6 +89,7 @@ def _apply_indicators(df):
 # =============================================================================
 # RESULT TESTS
 # =============================================================================
+
 
 class TestSymbolScore(unittest.TestCase):
     def test_creation(self):
@@ -131,6 +140,7 @@ class TestScanReport(unittest.TestCase):
 # =============================================================================
 # SCORER TESTS
 # =============================================================================
+
 
 class TestSymbolScorer(unittest.TestCase):
     def setUp(self):
@@ -197,6 +207,7 @@ class TestSymbolScorer(unittest.TestCase):
 # =============================================================================
 # CRITERIA TESTS
 # =============================================================================
+
 
 class TestMomentumBreakout(unittest.TestCase):
     def setUp(self):
@@ -317,11 +328,11 @@ class TestTrendFollowing(unittest.TestCase):
     def test_strong_uptrend(self):
         summary = {
             "close": 150.0,
-            "SMA": 140.0,       # close > SMA
-            "SMA_50": 130.0,    # close > SMA50
-            "MACD": 2.0,        # positive
-            "MACD_signal": 1.0, # above signal
-            "PSAR": 135.0,      # below price
+            "SMA": 140.0,  # close > SMA
+            "SMA_50": 130.0,  # close > SMA50
+            "MACD": 2.0,  # positive
+            "MACD_signal": 1.0,  # above signal
+            "PSAR": 135.0,  # below price
         }
         pd_data = ProviderData("AAPL", "technical", data=summary)
         score = self.criterion.evaluate("AAPL", {"technical": pd_data})
@@ -330,11 +341,11 @@ class TestTrendFollowing(unittest.TestCase):
     def test_no_trend(self):
         summary = {
             "close": 100.0,
-            "SMA": 110.0,       # close < SMA
-            "SMA_50": 120.0,    # close < SMA50
-            "MACD": -1.0,       # negative
-            "MACD_signal": 0.5, # below signal
-            "PSAR": 115.0,      # above price
+            "SMA": 110.0,  # close < SMA
+            "SMA_50": 120.0,  # close < SMA50
+            "MACD": -1.0,  # negative
+            "MACD_signal": 0.5,  # below signal
+            "PSAR": 115.0,  # above price
         }
         pd_data = ProviderData("AAPL", "technical", data=summary)
         score = self.criterion.evaluate("AAPL", {"technical": pd_data})
@@ -343,10 +354,10 @@ class TestTrendFollowing(unittest.TestCase):
     def test_mixed_signals(self):
         summary = {
             "close": 105.0,
-            "SMA": 100.0,       # close > SMA
-            "MACD": -0.5,       # negative
+            "SMA": 100.0,  # close > SMA
+            "MACD": -0.5,  # negative
             "MACD_signal": -0.3,
-            "PSAR": 103.0,      # below price
+            "PSAR": 103.0,  # below price
         }
         pd_data = ProviderData("AAPL", "technical", data=summary)
         score = self.criterion.evaluate("AAPL", {"technical": pd_data})
@@ -372,11 +383,10 @@ class TestMovingAverageCross(unittest.TestCase):
 # CRITERION REGISTRY TESTS
 # =============================================================================
 
+
 class TestCriterionRegistry(unittest.TestCase):
     def test_registry_populated(self):
         # Import criteria to trigger registration
-        import scanner.criteria.momentum
-        import scanner.criteria.trend
         self.assertGreater(len(CRITERION_REGISTRY), 0)
 
     def test_create_momentum_breakout(self):
@@ -396,6 +406,7 @@ class TestCriterionRegistry(unittest.TestCase):
 # =============================================================================
 # UNIVERSE TESTS
 # =============================================================================
+
 
 class TestUniverse(unittest.TestCase):
     def test_sp500_returns_list(self):
@@ -420,22 +431,29 @@ class TestUniverse(unittest.TestCase):
 # ENGINE TESTS
 # =============================================================================
 
+
 class TestScannerEngine(unittest.TestCase):
     def test_engine_init_with_defaults(self):
         """Engine should initialize without errors using default config."""
         from scanner.engine import ScannerEngine
-        engine = ScannerEngine({
-            "providers": {"technical_enabled": False},
-            "criteria": [],
-        })
+
+        engine = ScannerEngine(
+            {
+                "providers": {"technical_enabled": False},
+                "criteria": [],
+            }
+        )
         self.assertIsNotNone(engine)
 
     def test_engine_scan_empty_universe(self):
         from scanner.engine import ScannerEngine
-        engine = ScannerEngine({
-            "providers": {"technical_enabled": False},
-            "criteria": [],
-        })
+
+        engine = ScannerEngine(
+            {
+                "providers": {"technical_enabled": False},
+                "criteria": [],
+            }
+        )
         report = engine.scan(symbols=[])
         self.assertEqual(report.universe_size, 0)
         self.assertEqual(len(report.results), 0)
@@ -460,11 +478,13 @@ class TestScannerEngine(unittest.TestCase):
         }
         mock_fetch.return_value = ProviderData("AAPL", "technical", summary, df)
 
-        engine = ScannerEngine({
-            "providers": {"technical_enabled": True},
-            "criteria": [{"name": "momentum_breakout", "params": {}}],
-            "scoring": {"weights": {"momentum_breakout": 1.0}},
-        })
+        engine = ScannerEngine(
+            {
+                "providers": {"technical_enabled": True},
+                "criteria": [{"name": "momentum_breakout", "params": {}}],
+                "scoring": {"weights": {"momentum_breakout": 1.0}},
+            }
+        )
 
         report = engine.scan(symbols=["AAPL"])
         self.assertEqual(report.universe_size, 1)
@@ -474,10 +494,13 @@ class TestScannerEngine(unittest.TestCase):
 
     def test_engine_last_report(self):
         from scanner.engine import ScannerEngine
-        engine = ScannerEngine({
-            "providers": {"technical_enabled": False},
-            "criteria": [],
-        })
+
+        engine = ScannerEngine(
+            {
+                "providers": {"technical_enabled": False},
+                "criteria": [],
+            }
+        )
         self.assertIsNone(engine.last_report)
         engine.scan(symbols=["AAPL"])
         self.assertIsNotNone(engine.last_report)
@@ -487,15 +510,18 @@ class TestScannerEngine(unittest.TestCase):
 # CONFIG TESTS
 # =============================================================================
 
+
 class TestScannerConfig(unittest.TestCase):
     def test_config_loads_scanner_section(self):
-        from core.config_loader import load_config, ScannerConfig
+        from core.config_loader import ScannerConfig, load_config
+
         config = load_config()
         self.assertIsInstance(config.scanner, ScannerConfig)
         self.assertTrue(config.scanner.enabled)
 
     def test_to_engine_config(self):
         from core.config_loader import ScannerConfig
+
         cfg = ScannerConfig()
         d = cfg.to_engine_config()
         self.assertIn("universe_source", d)
@@ -505,6 +531,7 @@ class TestScannerConfig(unittest.TestCase):
 
     def test_default_criteria_present(self):
         from core.config_loader import ScannerConfig
+
         cfg = ScannerConfig()
         self.assertEqual(len(cfg.criteria), 4)
         names = [c["name"] for c in cfg.criteria]
@@ -516,20 +543,24 @@ class TestScannerConfig(unittest.TestCase):
 # PROVIDER TESTS
 # =============================================================================
 
+
 class TestProviderStubs(unittest.TestCase):
     def test_fundamental_not_available(self):
         from scanner.providers.fundamental import FundamentalProvider
+
         p = FundamentalProvider()
         self.assertFalse(p.is_available())
         self.assertEqual(p.name, "fundamental")
 
     def test_sentiment_not_available(self):
         from scanner.providers.sentiment import SentimentProvider
+
         p = SentimentProvider()
         self.assertFalse(p.is_available())
 
     def test_insider_not_available(self):
         from scanner.providers.insider import InsiderProvider
+
         p = InsiderProvider()
         self.assertFalse(p.is_available())
 
@@ -540,8 +571,10 @@ class TestBaseDataProvider(unittest.TestCase):
             @property
             def name(self):
                 return "failing"
+
             def fetch(self, symbol):
                 raise ValueError("fail")
+
             def is_available(self):
                 return True
 
@@ -554,22 +587,29 @@ class TestBaseDataProvider(unittest.TestCase):
 # OPTIMIZATION TESTS
 # =============================================================================
 
+
 class TestOptimizeStrategies(unittest.TestCase):
     def test_optimize_no_symbols_returns_empty(self):
         from scanner.engine import ScannerEngine
-        engine = ScannerEngine({
-            "providers": {"technical_enabled": False},
-            "criteria": [],
-        })
+
+        engine = ScannerEngine(
+            {
+                "providers": {"technical_enabled": False},
+                "criteria": [],
+            }
+        )
         result = engine.optimize_strategies(symbols=[])
         self.assertEqual(result, {})
 
     def test_optimize_no_report_no_symbols_returns_empty(self):
         from scanner.engine import ScannerEngine
-        engine = ScannerEngine({
-            "providers": {"technical_enabled": False},
-            "criteria": [],
-        })
+
+        engine = ScannerEngine(
+            {
+                "providers": {"technical_enabled": False},
+                "criteria": [],
+            }
+        )
         # No scan run, no symbols passed
         result = engine.optimize_strategies()
         self.assertEqual(result, {})
@@ -591,10 +631,12 @@ class TestOptimizeStrategies(unittest.TestCase):
         mock_result.best_strategies = {"low_volatility": "sma", "normal": "momentum", "high_volatility": "rsi"}
         mock_tester.run_regime_analysis.return_value = mock_result
 
-        engine = ScannerEngine({
-            "providers": {"technical_enabled": False},
-            "criteria": [],
-        })
+        engine = ScannerEngine(
+            {
+                "providers": {"technical_enabled": False},
+                "criteria": [],
+            }
+        )
 
         result = engine.optimize_strategies(symbols=["AAPL", "MSFT"], days=365)
 
@@ -619,10 +661,12 @@ class TestOptimizeStrategies(unittest.TestCase):
         mock_result.best_strategies = {"normal": "sma"}
         mock_tester.run_regime_analysis.return_value = mock_result
 
-        engine = ScannerEngine({
-            "providers": {"technical_enabled": False},
-            "criteria": [],
-        })
+        engine = ScannerEngine(
+            {
+                "providers": {"technical_enabled": False},
+                "criteria": [],
+            }
+        )
 
         # Simulate a previous scan with trade candidates
         engine._last_report = ScanReport(
@@ -650,10 +694,12 @@ class TestOptimizeStrategies(unittest.TestCase):
         mock_pipeline = MockPipeline.return_value
         mock_pipeline.load_symbol_data.return_value = None  # No data
 
-        engine = ScannerEngine({
-            "providers": {"technical_enabled": False},
-            "criteria": [],
-        })
+        engine = ScannerEngine(
+            {
+                "providers": {"technical_enabled": False},
+                "criteria": [],
+            }
+        )
 
         result = engine.optimize_strategies(symbols=["NODATA"])
         self.assertEqual(result, {})
@@ -674,10 +720,12 @@ class TestOptimizeStrategies(unittest.TestCase):
             MagicMock(best_strategies={"normal": "sma"}),  # Second succeeds
         ]
 
-        engine = ScannerEngine({
-            "providers": {"technical_enabled": False},
-            "criteria": [],
-        })
+        engine = ScannerEngine(
+            {
+                "providers": {"technical_enabled": False},
+                "criteria": [],
+            }
+        )
 
         result = engine.optimize_strategies(symbols=["FAIL", "OK"])
         self.assertEqual(len(result), 1)
@@ -687,6 +735,7 @@ class TestOptimizeStrategies(unittest.TestCase):
 class TestScannerConfigSchedule(unittest.TestCase):
     def test_default_schedule_has_optimize_fields(self):
         from core.config_loader import ScannerConfig
+
         cfg = ScannerConfig()
         self.assertTrue(cfg.schedule["optimize_after_scan"])
         self.assertEqual(cfg.schedule["optimization_days"], 365)

@@ -18,6 +18,7 @@ Usage:
     # On exit
     logger.log_exit(exit_context)
 """
+
 from __future__ import annotations
 
 import json
@@ -25,7 +26,7 @@ import os
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Any
 
 from core.contracts.meta_types import TradeEntryContext, TradeExitContext
 from loggers.logger import Logger
@@ -88,11 +89,7 @@ class MetaTradeLogger:
         self._lock = threading.Lock()
 
         # Setup app logger
-        self._app_logger = Logger(
-            log_file=f"{logger_name}.log",
-            logger_name=logger_name,
-            log_dir=log_dir
-        ).get_logger()
+        self._app_logger = Logger(log_file=f"{logger_name}.log", logger_name=logger_name, log_dir=log_dir).get_logger()
 
         self._app_logger.info(f"MetaTradeLogger initialized: {self.log_path}")
 
@@ -125,13 +122,12 @@ class MetaTradeLogger:
                 "bars_in_regime": context.bars_in_regime,
                 "hours_since_last_trade": context.hours_since_last_trade,
                 "signal_strength": context.signal_strength,
-            }
+            },
         }
 
         self._write_event(event)
         self._app_logger.info(
-            f"[ENTRY] {context.trade_id} | {context.side.upper()} {context.qty} "
-            f"{context.symbol} @ ${context.price:.2f}"
+            f"[ENTRY] {context.trade_id} | {context.side.upper()} {context.qty} {context.symbol} @ ${context.price:.2f}"
         )
 
     def log_exit(self, context: TradeExitContext) -> None:
@@ -153,7 +149,7 @@ class MetaTradeLogger:
                 "mae_percent": context.mae_percent,
                 "mfe_percent": context.mfe_percent,
                 "exit_reason": context.exit_reason,
-            }
+            },
         }
 
         self._write_event(event)
@@ -163,7 +159,7 @@ class MetaTradeLogger:
             f"({pnl_sign}{context.pnl_percent:.2%}) | {context.exit_reason}"
         )
 
-    def _write_event(self, event: Dict[str, Any]) -> None:
+    def _write_event(self, event: dict[str, Any]) -> None:
         """
         Write an event to the JSONL file (thread-safe).
 
@@ -187,7 +183,7 @@ class MetaTradeLogger:
         self._app_logger.info("MetaTradeLogger closed")
 
 
-def generate_trade_id(symbol: str, timestamp: Optional[datetime] = None) -> str:
+def generate_trade_id(symbol: str, timestamp: datetime | None = None) -> str:
     """
     Generate a unique trade ID.
 
@@ -205,6 +201,6 @@ def generate_trade_id(symbol: str, timestamp: Optional[datetime] = None) -> str:
 
 
 __all__ = [
-    'MetaTradeLogger',
-    'generate_trade_id',
+    "MetaTradeLogger",
+    "generate_trade_id",
 ]

@@ -3,13 +3,16 @@ Test suite for pattern recognition.
 
 Tests candlestick patterns, chart patterns, and price action detection.
 """
-import sys
+
 import os
+import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import unittest
-import pandas as pd
+
 import numpy as np
+import pandas as pd
 
 
 class TestCandlestickPatterns(unittest.TestCase):
@@ -18,15 +21,10 @@ class TestCandlestickPatterns(unittest.TestCase):
     def test_detect_doji(self):
         """Should detect doji pattern."""
         # Doji: open and close very close, with wicks
-        candle = {
-            'Open': 100.0,
-            'High': 102.0,
-            'Low': 98.0,
-            'Close': 100.1
-        }
+        candle = {"Open": 100.0, "High": 102.0, "Low": 98.0, "Close": 100.1}
 
-        body_size = abs(candle['Close'] - candle['Open'])
-        range_size = candle['High'] - candle['Low']
+        body_size = abs(candle["Close"] - candle["Open"])
+        range_size = candle["High"] - candle["Low"]
         body_ratio = body_size / range_size if range_size > 0 else 0
 
         is_doji = body_ratio < 0.1  # Body < 10% of range
@@ -37,39 +35,36 @@ class TestCandlestickPatterns(unittest.TestCase):
         """Should detect hammer pattern (bullish reversal)."""
         # Hammer: small body at top, long lower wick
         candle = {
-            'Open': 100.0,
-            'High': 100.4,  # Small upper wick (0.4 < body_size of 0.5)
-            'Low': 95.0,    # Long lower wick (5.0 >= 2 * 0.5)
-            'Close': 100.5
+            "Open": 100.0,
+            "High": 100.4,  # Small upper wick (0.4 < body_size of 0.5)
+            "Low": 95.0,  # Long lower wick (5.0 >= 2 * 0.5)
+            "Close": 100.5,
         }
 
-        body_size = abs(candle['Close'] - candle['Open'])
-        lower_wick = min(candle['Open'], candle['Close']) - candle['Low']
-        upper_wick = candle['High'] - max(candle['Open'], candle['Close'])
+        body_size = abs(candle["Close"] - candle["Open"])
+        lower_wick = min(candle["Open"], candle["Close"]) - candle["Low"]
+        upper_wick = candle["High"] - max(candle["Open"], candle["Close"])
 
         # Hammer: lower wick >= 2x body, small upper wick
-        is_hammer = (
-            lower_wick >= 2 * body_size and
-            upper_wick < body_size
-        )
+        is_hammer = lower_wick >= 2 * body_size and upper_wick < body_size
 
         self.assertTrue(is_hammer)
 
     def test_detect_engulfing(self):
         """Should detect engulfing pattern."""
         # Bullish engulfing: current candle engulfs previous
-        prev_candle = {'Open': 102.0, 'High': 103.0, 'Low': 100.0, 'Close': 101.0}  # Bearish
-        curr_candle = {'Open': 99.0, 'High': 104.0, 'Low': 98.0, 'Close': 103.5}   # Bullish
+        prev_candle = {"Open": 102.0, "High": 103.0, "Low": 100.0, "Close": 101.0}  # Bearish
+        curr_candle = {"Open": 99.0, "High": 104.0, "Low": 98.0, "Close": 103.5}  # Bullish
 
-        prev_body_high = max(prev_candle['Open'], prev_candle['Close'])
-        prev_body_low = min(prev_candle['Open'], prev_candle['Close'])
-        curr_body_high = max(curr_candle['Open'], curr_candle['Close'])
-        curr_body_low = min(curr_candle['Open'], curr_candle['Close'])
+        prev_body_high = max(prev_candle["Open"], prev_candle["Close"])
+        prev_body_low = min(prev_candle["Open"], prev_candle["Close"])
+        curr_body_high = max(curr_candle["Open"], curr_candle["Close"])
+        curr_body_low = min(curr_candle["Open"], curr_candle["Close"])
 
         is_bullish_engulfing = (
-            curr_body_high > prev_body_high and
-            curr_body_low < prev_body_low and
-            curr_candle['Close'] > curr_candle['Open']  # Bullish current
+            curr_body_high > prev_body_high
+            and curr_body_low < prev_body_low
+            and curr_candle["Close"] > curr_candle["Open"]  # Bullish current
         )
 
         self.assertTrue(is_bullish_engulfing)
@@ -90,7 +85,7 @@ class TestChartPatterns(unittest.TestCase):
         # Find local minima
         local_mins = []
         for i in range(1, len(prices) - 1):
-            if prices[i] < prices[i-1] and prices[i] < prices[i+1]:
+            if prices[i] < prices[i - 1] and prices[i] < prices[i + 1]:
                 local_mins.append((i, prices[i]))
 
         # Check if two minima are close in value
@@ -110,9 +105,9 @@ class TestChartPatterns(unittest.TestCase):
         right_shoulder = highs[3]
 
         is_head_and_shoulders = (
-            head > left_shoulder and
-            head > right_shoulder and
-            abs(left_shoulder - right_shoulder) < 5  # Shoulders similar
+            head > left_shoulder
+            and head > right_shoulder
+            and abs(left_shoulder - right_shoulder) < 5  # Shoulders similar
         )
 
         self.assertTrue(is_head_and_shoulders)
@@ -166,14 +161,11 @@ class TestTrendPatterns(unittest.TestCase):
 
     def test_detect_uptrend(self):
         """Should detect uptrend (higher highs and higher lows)."""
-        prices = pd.DataFrame({
-            'High': [100, 105, 103, 108, 106, 112],
-            'Low': [95, 98, 97, 101, 100, 105]
-        })
+        prices = pd.DataFrame({"High": [100, 105, 103, 108, 106, 112], "Low": [95, 98, 97, 101, 100, 105]})
 
         # Check if highs and lows are generally increasing
-        high_trend = np.polyfit(range(len(prices)), prices['High'], 1)[0]
-        low_trend = np.polyfit(range(len(prices)), prices['Low'], 1)[0]
+        high_trend = np.polyfit(range(len(prices)), prices["High"], 1)[0]
+        low_trend = np.polyfit(range(len(prices)), prices["Low"], 1)[0]
 
         is_uptrend = high_trend > 0 and low_trend > 0
 
@@ -181,13 +173,10 @@ class TestTrendPatterns(unittest.TestCase):
 
     def test_detect_downtrend(self):
         """Should detect downtrend (lower highs and lower lows)."""
-        prices = pd.DataFrame({
-            'High': [110, 108, 105, 103, 100],
-            'Low': [105, 103, 100, 98, 95]
-        })
+        prices = pd.DataFrame({"High": [110, 108, 105, 103, 100], "Low": [105, 103, 100, 98, 95]})
 
-        high_trend = np.polyfit(range(len(prices)), prices['High'], 1)[0]
-        low_trend = np.polyfit(range(len(prices)), prices['Low'], 1)[0]
+        high_trend = np.polyfit(range(len(prices)), prices["High"], 1)[0]
+        low_trend = np.polyfit(range(len(prices)), prices["Low"], 1)[0]
 
         is_downtrend = high_trend < 0 and low_trend < 0
 
@@ -195,13 +184,10 @@ class TestTrendPatterns(unittest.TestCase):
 
     def test_detect_ranging(self):
         """Should detect ranging/sideways market."""
-        prices = pd.DataFrame({
-            'High': [105, 104, 106, 105, 104],
-            'Low': [100, 99, 101, 100, 99]
-        })
+        prices = pd.DataFrame({"High": [105, 104, 106, 105, 104], "Low": [100, 99, 101, 100, 99]})
 
-        high_std = prices['High'].std()
-        low_std = prices['Low'].std()
+        high_std = prices["High"].std()
+        low_std = prices["Low"].std()
 
         # Ranging: low standard deviation in highs and lows
         is_ranging = high_std < 2 and low_std < 2
@@ -237,5 +223,5 @@ class TestVolumePatterns(unittest.TestCase):
         self.assertTrue(has_divergence)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

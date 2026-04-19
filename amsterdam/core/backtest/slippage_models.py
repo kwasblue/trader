@@ -5,7 +5,6 @@ Provides various slippage models for realistic trade execution simulation.
 """
 
 import numpy as np
-from typing import Optional
 
 
 class SlippageModel:
@@ -17,7 +16,7 @@ class SlippageModel:
         quantity: int,
         side: str,  # 'buy' or 'sell'
         volume: float = None,
-        volatility: float = None
+        volatility: float = None,
     ) -> float:
         """Return the execution price after slippage."""
         raise NotImplementedError
@@ -30,7 +29,7 @@ class FixedSlippage(SlippageModel):
         self.slippage_pct = slippage_pct
 
     def calculate_slippage(self, price, quantity, side, volume=None, volatility=None):
-        if side == 'buy':
+        if side == "buy":
             return price * (1 + self.slippage_pct)
         return price * (1 - self.slippage_pct)
 
@@ -44,7 +43,7 @@ class RandomSlippage(SlippageModel):
 
     def calculate_slippage(self, price, quantity, side, volume=None, volatility=None):
         slippage = np.random.uniform(self.min_pct, self.max_pct)
-        if side == 'buy':
+        if side == "buy":
             slippage = abs(slippage)  # Always adverse for buys
         else:
             slippage = -abs(slippage)  # Always adverse for sells
@@ -58,12 +57,7 @@ class VolumeBasedSlippage(SlippageModel):
     Larger orders relative to volume have more slippage.
     """
 
-    def __init__(
-        self,
-        base_slippage: float = 0.0001,
-        volume_impact: float = 0.1,
-        max_slippage: float = 0.02
-    ):
+    def __init__(self, base_slippage: float = 0.0001, volume_impact: float = 0.1, max_slippage: float = 0.02):
         self.base_slippage = base_slippage
         self.volume_impact = volume_impact
         self.max_slippage = max_slippage
@@ -79,7 +73,7 @@ class VolumeBasedSlippage(SlippageModel):
         slippage = self.base_slippage + (participation * self.volume_impact)
         slippage = min(slippage, self.max_slippage)
 
-        if side == 'buy':
+        if side == "buy":
             return price * (1 + slippage)
         return price * (1 - slippage)
 
@@ -91,12 +85,7 @@ class VolatilityAdjustedSlippage(SlippageModel):
     Higher volatility = more slippage.
     """
 
-    def __init__(
-        self,
-        base_slippage: float = 0.0005,
-        volatility_multiplier: float = 2.0,
-        max_slippage: float = 0.03
-    ):
+    def __init__(self, base_slippage: float = 0.0005, volatility_multiplier: float = 2.0, max_slippage: float = 0.03):
         self.base_slippage = base_slippage
         self.volatility_multiplier = volatility_multiplier
         self.max_slippage = max_slippage
@@ -109,7 +98,7 @@ class VolatilityAdjustedSlippage(SlippageModel):
         slippage = self.base_slippage + (volatility * self.volatility_multiplier / 100)
         slippage = min(slippage, self.max_slippage)
 
-        if side == 'buy':
+        if side == "buy":
             return price * (1 + slippage)
         return price * (1 - slippage)
 

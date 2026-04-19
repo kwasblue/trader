@@ -3,6 +3,7 @@ Retry utilities with exponential backoff and circuit breaker pattern.
 
 Provides decorators and utilities for resilient API calls.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -10,30 +11,30 @@ import functools
 import logging
 import random
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime
 from enum import Enum
-from typing import (
-    Any, Callable, Optional, Set, Type, TypeVar, Union,
-    Awaitable, ParamSpec
-)
+from typing import ParamSpec, TypeVar
 
 logger = logging.getLogger(__name__)
 
-P = ParamSpec('P')
-T = TypeVar('T')
+P = ParamSpec("P")
+T = TypeVar("T")
 
 
 class CircuitState(Enum):
     """Circuit breaker states."""
-    CLOSED = "closed"      # Normal operation
-    OPEN = "open"          # Failing, reject requests
+
+    CLOSED = "closed"  # Normal operation
+    OPEN = "open"  # Failing, reject requests
     HALF_OPEN = "half_open"  # Testing if recovered
 
 
 @dataclass
 class RetryConfig:
     """Configuration for retry behavior."""
+
     max_attempts: int = 3
     base_delay: float = 1.0  # seconds
     max_delay: float = 60.0  # seconds
@@ -46,6 +47,7 @@ class RetryConfig:
 @dataclass
 class CircuitBreakerConfig:
     """Configuration for circuit breaker."""
+
     failure_threshold: int = 5  # failures before opening
     success_threshold: int = 2  # successes in half-open before closing
     timeout: float = 30.0  # seconds before trying half-open
@@ -59,12 +61,13 @@ class CircuitBreaker:
 
     Prevents cascading failures by stopping requests to failing services.
     """
+
     name: str
     config: CircuitBreakerConfig = field(default_factory=CircuitBreakerConfig)
     state: CircuitState = CircuitState.CLOSED
     failure_count: int = 0
     success_count: int = 0
-    last_failure_time: Optional[datetime] = None
+    last_failure_time: datetime | None = None
 
     def _should_allow_request(self) -> bool:
         """Check if request should be allowed based on circuit state."""
@@ -113,13 +116,12 @@ class CircuitBreaker:
         elif self.state == CircuitState.CLOSED:
             if self.failure_count >= self.config.failure_threshold:
                 self.state = CircuitState.OPEN
-                logger.warning(
-                    f"[CircuitBreaker:{self.name}] Circuit OPEN after {self.failure_count} failures"
-                )
+                logger.warning(f"[CircuitBreaker:{self.name}] Circuit OPEN after {self.failure_count} failures")
 
 
 class CircuitOpenError(Exception):
     """Raised when circuit breaker is open."""
+
     def __init__(self, breaker_name: str):
         self.breaker_name = breaker_name
         super().__init__(f"Circuit breaker '{breaker_name}' is OPEN")
@@ -129,19 +131,16 @@ class CircuitOpenError(Exception):
 _circuit_breakers: dict[str, CircuitBreaker] = {}
 
 
-def get_circuit_breaker(name: str, config: Optional[CircuitBreakerConfig] = None) -> CircuitBreaker:
+def get_circuit_breaker(name: str, config: CircuitBreakerConfig | None = None) -> CircuitBreaker:
     """Get or create a circuit breaker by name."""
     if name not in _circuit_breakers:
-        _circuit_breakers[name] = CircuitBreaker(
-            name=name,
-            config=config or CircuitBreakerConfig()
-        )
+        _circuit_breakers[name] = CircuitBreaker(name=name, config=config or CircuitBreakerConfig())
     return _circuit_breakers[name]
 
 
 def calculate_delay(attempt: int, config: RetryConfig) -> float:
     """Calculate delay for retry attempt with exponential backoff."""
-    delay = config.base_delay * (config.exponential_base ** attempt)
+    delay = config.base_delay * (config.exponential_base**attempt)
     delay = min(delay, config.max_delay)
 
     if config.jitter:
@@ -156,7 +155,7 @@ def retry(
     base_delay: float = 1.0,
     max_delay: float = 60.0,
     retryable_exceptions: tuple = (Exception,),
-    circuit_breaker: Optional[str] = None,
+    circuit_breaker: str | None = None,
 ) -> Callable[[Callable[P, T]], Callable[P, T]]:
     """
     Decorator for synchronous functions with retry logic.
@@ -196,21 +195,19 @@ def retry(
                         breaker.record_failure(e)
 
                     if attempt == config.max_attempts - 1:
-                        logger.error(
-                            f"[Retry] {func.__name__} failed after {config.max_attempts} attempts: {e}"
-                        )
+                        logger.error(f"[Retry] {func.__name__} failed after {config.max_attempts} attempts: {e}")
                         raise
 
                     delay = calculate_delay(attempt, config)
                     logger.warning(
-                        f"[Retry] {func.__name__} attempt {attempt + 1} failed: {e}. "
-                        f"Retrying in {delay:.2f}s..."
+                        f"[Retry] {func.__name__} attempt {attempt + 1} failed: {e}. Retrying in {delay:.2f}s..."
                     )
                     time.sleep(delay)
 
             raise RuntimeError("Unexpected retry loop exit")
 
         return wrapper
+
     return decorator
 
 
@@ -219,7 +216,7 @@ def async_retry(
     base_delay: float = 1.0,
     max_delay: float = 60.0,
     retryable_exceptions: tuple = (Exception,),
-    circuit_breaker: Optional[str] = None,
+    circuit_breaker: str | None = None,
 ) -> Callable[[Callable[P, Awaitable[T]]], Callable[P, Awaitable[T]]]:
     """
     Decorator for async functions with retry logic.
@@ -259,19 +256,17 @@ def async_retry(
                         breaker.record_failure(e)
 
                     if attempt == config.max_attempts - 1:
-                        logger.error(
-                            f"[Retry] {func.__name__} failed after {config.max_attempts} attempts: {e}"
-                        )
+                        logger.error(f"[Retry] {func.__name__} failed after {config.max_attempts} attempts: {e}")
                         raise
 
                     delay = calculate_delay(attempt, config)
                     logger.warning(
-                        f"[Retry] {func.__name__} attempt {attempt + 1} failed: {e}. "
-                        f"Retrying in {delay:.2f}s..."
+                        f"[Retry] {func.__name__} attempt {attempt + 1} failed: {e}. Retrying in {delay:.2f}s..."
                     )
                     await asyncio.sleep(delay)
 
             raise RuntimeError("Unexpected retry loop exit")
 
         return wrapper
+
     return decorator

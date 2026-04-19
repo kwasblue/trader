@@ -13,6 +13,7 @@ Tests:
 
 import unittest
 from datetime import datetime, timedelta
+
 from core.bar_aggregator import Bar, BarAggregator, TimeframeWindow
 
 
@@ -29,7 +30,7 @@ class TestBar(unittest.TestCase):
             close=150.5,
             volume=10000,
             symbol="AAPL",
-            timeframe="5min"
+            timeframe="5min",
         )
 
         self.assertEqual(bar.symbol, "AAPL")
@@ -47,14 +48,14 @@ class TestBar(unittest.TestCase):
             close=150.5,
             volume=10000,
             symbol="AAPL",
-            timeframe="5min"
+            timeframe="5min",
         )
 
         bar_dict = bar.to_dict()
-        self.assertIn('symbol', bar_dict)
-        self.assertIn('timestamp', bar_dict)
-        self.assertEqual(bar_dict['symbol'], 'AAPL')
-        self.assertEqual(bar_dict['timeframe'], '5min')
+        self.assertIn("symbol", bar_dict)
+        self.assertIn("timestamp", bar_dict)
+        self.assertEqual(bar_dict["symbol"], "AAPL")
+        self.assertEqual(bar_dict["timeframe"], "5min")
 
 
 class TestTimeframeWindow(unittest.TestCase):
@@ -127,7 +128,7 @@ class TestTimeframeWindow(unittest.TestCase):
                 close=150.2 + i * 0.1,
                 volume=1000 * (i + 1),
                 symbol="AAPL",
-                timeframe="1min"
+                timeframe="1min",
             )
             result = window.add_bar(bar)
 
@@ -147,7 +148,7 @@ class TestTimeframeWindow(unittest.TestCase):
             close=150.7,
             volume=5000,
             symbol="AAPL",
-            timeframe="1min"
+            timeframe="1min",
         )
         completed = window.add_bar(next_bar)
 
@@ -176,7 +177,7 @@ class TestTimeframeWindow(unittest.TestCase):
                 close=150.2 + i * 0.1,
                 volume=1000,
                 symbol="AAPL",
-                timeframe="1min"
+                timeframe="1min",
             )
             window.add_bar(bar)
 
@@ -216,7 +217,7 @@ class TestBarAggregator(unittest.TestCase):
                 close=150.5,
                 volume=1000,
                 symbol="AAPL",
-                timeframe="1min"
+                timeframe="1min",
             )
             self.aggregator.process_bar(bar)
 
@@ -249,7 +250,7 @@ class TestBarAggregator(unittest.TestCase):
                 close=150.5,
                 volume=1000,
                 symbol="AAPL",
-                timeframe="1min"
+                timeframe="1min",
             )
             self.aggregator.process_bar(aapl_bar)
 
@@ -262,7 +263,7 @@ class TestBarAggregator(unittest.TestCase):
                 close=200.5,
                 volume=2000,
                 symbol="TSLA",
-                timeframe="1min"
+                timeframe="1min",
             )
             self.aggregator.process_bar(tsla_bar)
 
@@ -294,7 +295,7 @@ class TestBarAggregator(unittest.TestCase):
                 close=150.5,
                 volume=1000,
                 symbol="AAPL",
-                timeframe="1min"
+                timeframe="1min",
             )
             self.aggregator.process_bar(bar)
 
@@ -311,7 +312,7 @@ class TestBarAggregator(unittest.TestCase):
 
         # Check stats
         stats = self.aggregator.get_stats()
-        self.assertEqual(stats['timeframe_changes'], 1)
+        self.assertEqual(stats["timeframe_changes"], 1)
 
     def test_unknown_symbol_ignored(self):
         """Test that bars for unconfigured symbols are ignored."""
@@ -326,7 +327,7 @@ class TestBarAggregator(unittest.TestCase):
             close=100.5,
             volume=1000,
             symbol="MSFT",  # Not configured
-            timeframe="1min"
+            timeframe="1min",
         )
         result = self.aggregator.process_bar(bar)
 
@@ -349,7 +350,7 @@ class TestBarAggregator(unittest.TestCase):
                 close=150.5,
                 volume=1000,
                 symbol="AAPL",
-                timeframe="1min"
+                timeframe="1min",
             )
             self.aggregator.process_bar(bar)
 
@@ -381,16 +382,16 @@ class TestBarAggregator(unittest.TestCase):
                     close=150.5,
                     volume=1000,
                     symbol=symbol,
-                    timeframe="1min"
+                    timeframe="1min",
                 )
                 self.aggregator.process_bar(bar)
 
         stats = self.aggregator.get_stats()
 
-        self.assertEqual(stats['bars_received'], 20)  # 10 * 2 symbols
-        self.assertEqual(stats['active_symbols'], 2)
-        self.assertEqual(stats['timeframes']['AAPL'], '5min')
-        self.assertEqual(stats['timeframes']['TSLA'], '15min')
+        self.assertEqual(stats["bars_received"], 20)  # 10 * 2 symbols
+        self.assertEqual(stats["active_symbols"], 2)
+        self.assertEqual(stats["timeframes"]["AAPL"], "5min")
+        self.assertEqual(stats["timeframes"]["TSLA"], "15min")
 
     def test_clear_all(self):
         """Test clearing all windows."""
@@ -409,7 +410,7 @@ class TestBarAggregator(unittest.TestCase):
                 close=150.5,
                 volume=1000,
                 symbol="AAPL",
-                timeframe="1min"
+                timeframe="1min",
             )
             self.aggregator.process_bar(bar)
 
@@ -459,7 +460,7 @@ class TestEdgeCases(unittest.TestCase):
                     close=150.5,
                     volume=1000,
                     symbol=symbol,
-                    timeframe="1min"
+                    timeframe="1min",
                 )
                 aggregator.process_bar(bar)
 
@@ -488,5 +489,5 @@ class TestEdgeCases(unittest.TestCase):
         self.assertEqual(len(received), 0)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

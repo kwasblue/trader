@@ -1,7 +1,7 @@
 import threading
+
 import pandas as pd
 
-import threading
 
 class DataFrameManager:
     _instance = None
@@ -11,13 +11,13 @@ class DataFrameManager:
         # Implementing Singleton pattern
         with cls._lock:
             if cls._instance is None:
-                cls._instance = super(DataFrameManager, cls).__new__(cls, *args, **kwargs)
+                cls._instance = super().__new__(cls, *args, **kwargs)
                 cls._instance.dataframes = {}
         return cls._instance
 
     def __init__(self):
         """Initializes only once for the singleton instance"""
-        if not hasattr(self, '_initialized'):  # Prevent re-initialization
+        if not hasattr(self, "_initialized"):  # Prevent re-initialization
             self._initialized = True
             self.dataframes = {}
 

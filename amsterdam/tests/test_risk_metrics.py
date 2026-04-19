@@ -11,18 +11,19 @@ Coverage:
   - All calculation methods
   - risk_profile
 """
-import pytest
-import numpy as np
-import pandas as pd
-from datetime import datetime
 
 import sys
 from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from core.risk.metrics import StandardRiskModel, RiskQuantifier
+from core.risk.metrics import RiskQuantifier, StandardRiskModel
 
 
 class TestStandardRiskModelInit:
@@ -63,21 +64,31 @@ class TestComputeMetrics:
         metrics = model.compute_metrics(sample_returns)
 
         assert isinstance(metrics, dict)
-        assert 'sharpe_ratio' in metrics
-        assert 'sortino_ratio' in metrics
-        assert 'max_drawdown' in metrics
-        assert 'var_95' in metrics
+        assert "sharpe_ratio" in metrics
+        assert "sortino_ratio" in metrics
+        assert "max_drawdown" in metrics
+        assert "var_95" in metrics
 
     def test_compute_metrics_all_keys(self, model, sample_returns):
         """Test that all expected keys are present."""
         metrics = model.compute_metrics(sample_returns)
 
         expected_keys = [
-            'total_return', 'annualized_return', 'volatility', 'volatility_daily',
-            'sharpe_ratio', 'sortino_ratio', 'calmar_ratio',
-            'max_drawdown', 'current_drawdown',
-            'var_95', 'var_99', 'cvar_95',
-            'win_rate', 'profit_factor', 'n_periods',
+            "total_return",
+            "annualized_return",
+            "volatility",
+            "volatility_daily",
+            "sharpe_ratio",
+            "sortino_ratio",
+            "calmar_ratio",
+            "max_drawdown",
+            "current_drawdown",
+            "var_95",
+            "var_99",
+            "cvar_95",
+            "win_rate",
+            "profit_factor",
+            "n_periods",
         ]
 
         for key in expected_keys:
@@ -90,8 +101,8 @@ class TestComputeMetrics:
 
         metrics = model.compute_metrics(sample_returns, benchmark_returns=benchmark)
 
-        assert 'beta' in metrics
-        assert 'alpha' in metrics
+        assert "beta" in metrics
+        assert "alpha" in metrics
 
     def test_compute_metrics_empty_returns(self, model):
         """Test compute_metrics with insufficient data."""
@@ -100,8 +111,8 @@ class TestComputeMetrics:
         metrics = model.compute_metrics(short_returns)
 
         # Should return empty metrics
-        assert metrics['n_periods'] == 0
-        assert metrics['sharpe_ratio'] == 0.0
+        assert metrics["n_periods"] == 0
+        assert metrics["sharpe_ratio"] == 0.0
 
 
 class TestComputeMetric:
@@ -118,27 +129,27 @@ class TestComputeMetric:
 
     def test_compute_single_metric(self, model, sample_returns):
         """Test computing a single metric."""
-        sharpe = model.compute_metric(sample_returns, 'sharpe_ratio')
+        sharpe = model.compute_metric(sample_returns, "sharpe_ratio")
 
         assert isinstance(sharpe, (int, float))
 
     def test_compute_metric_var(self, model, sample_returns):
         """Test computing VaR metric."""
-        var95 = model.compute_metric(sample_returns, 'var_95')
+        var95 = model.compute_metric(sample_returns, "var_95")
 
         assert isinstance(var95, (int, float))
         assert var95 < 0  # VaR should be negative (loss)
 
     def test_compute_metric_cvar(self, model, sample_returns):
         """Test computing CVaR metric."""
-        cvar95 = model.compute_metric(sample_returns, 'cvar_95')
+        cvar95 = model.compute_metric(sample_returns, "cvar_95")
 
         assert isinstance(cvar95, (int, float))
 
     def test_compute_metric_unknown(self, model, sample_returns):
         """Test computing unknown metric raises error."""
         with pytest.raises(ValueError, match="Unknown metric"):
-            model.compute_metric(sample_returns, 'unknown_metric')
+            model.compute_metric(sample_returns, "unknown_metric")
 
 
 class TestIndividualMetrics:
@@ -322,9 +333,9 @@ class TestEmptyMetrics:
         model = StandardRiskModel()
         metrics = model._empty_metrics()
 
-        assert metrics['total_return'] == 0.0
-        assert metrics['sharpe_ratio'] == 0.0
-        assert metrics['n_periods'] == 0
+        assert metrics["total_return"] == 0.0
+        assert metrics["sharpe_ratio"] == 0.0
+        assert metrics["n_periods"] == 0
 
 
 class TestRiskQuantifier:
@@ -340,11 +351,11 @@ class TestRiskQuantifier:
         """Create sample returns DataFrame."""
         np.random.seed(42)
         returns = np.random.normal(0.001, 0.02, 100)
-        return pd.DataFrame({'return': returns})
+        return pd.DataFrame({"return": returns})
 
     def test_set_returns(self, quantifier, returns_df):
         """Test setting returns data."""
-        quantifier.set_returns(returns_df, 'return')
+        quantifier.set_returns(returns_df, "return")
 
         assert quantifier.returns is not None
         assert len(quantifier.returns) == 100
@@ -352,12 +363,12 @@ class TestRiskQuantifier:
     def test_set_returns_invalid_column(self, quantifier, returns_df):
         """Test setting returns with invalid column."""
         with pytest.raises(ValueError, match="not found"):
-            quantifier.set_returns(returns_df, 'invalid_column')
+            quantifier.set_returns(returns_df, "invalid_column")
 
     def test_set_returns_not_dataframe(self, quantifier):
         """Test setting returns with non-DataFrame."""
         with pytest.raises(ValueError, match="must be a Pandas DataFrame"):
-            quantifier.set_returns([0.01, 0.02], 'return')
+            quantifier.set_returns([0.01, 0.02], "return")
 
     def test_set_risk_free_rate(self, quantifier):
         """Test setting risk-free rate."""
@@ -367,7 +378,7 @@ class TestRiskQuantifier:
 
     def test_calculate_standard_deviation(self, quantifier, returns_df):
         """Test standard deviation calculation."""
-        quantifier.set_returns(returns_df, 'return')
+        quantifier.set_returns(returns_df, "return")
 
         std = quantifier.calculate_standard_deviation()
 
@@ -380,7 +391,7 @@ class TestRiskQuantifier:
 
     def test_calculate_sharpe_ratio(self, quantifier, returns_df):
         """Test Sharpe ratio calculation."""
-        quantifier.set_returns(returns_df, 'return')
+        quantifier.set_returns(returns_df, "return")
 
         sharpe = quantifier.calculate_sharpe_ratio()
 
@@ -388,7 +399,7 @@ class TestRiskQuantifier:
 
     def test_calculate_sortino_ratio(self, quantifier, returns_df):
         """Test Sortino ratio calculation."""
-        quantifier.set_returns(returns_df, 'return')
+        quantifier.set_returns(returns_df, "return")
 
         sortino = quantifier.calculate_sortino_ratio()
 
@@ -397,7 +408,7 @@ class TestRiskQuantifier:
 
     def test_calculate_max_drawdown(self, quantifier, returns_df):
         """Test max drawdown calculation."""
-        quantifier.set_returns(returns_df, 'return')
+        quantifier.set_returns(returns_df, "return")
 
         mdd = quantifier.calculate_max_drawdown()
 
@@ -405,7 +416,7 @@ class TestRiskQuantifier:
 
     def test_calculate_kelly_criterion(self, quantifier, returns_df):
         """Test Kelly criterion calculation."""
-        quantifier.set_returns(returns_df, 'return')
+        quantifier.set_returns(returns_df, "return")
 
         kelly = quantifier.calculate_kelly_criterion()
 
@@ -413,7 +424,7 @@ class TestRiskQuantifier:
 
     def test_calculate_var(self, quantifier, returns_df):
         """Test VaR calculation."""
-        quantifier.set_returns(returns_df, 'return')
+        quantifier.set_returns(returns_df, "return")
 
         var = quantifier.calculate_var(confidence_level=0.05)
 
@@ -421,7 +432,7 @@ class TestRiskQuantifier:
 
     def test_calculate_beta(self, quantifier, returns_df):
         """Test beta calculation."""
-        quantifier.set_returns(returns_df, 'return')
+        quantifier.set_returns(returns_df, "return")
         market_df = returns_df.copy()
 
         beta = quantifier.calculate_beta(market_df)
@@ -431,7 +442,7 @@ class TestRiskQuantifier:
 
     def test_calculate_alpha(self, quantifier, returns_df):
         """Test alpha calculation."""
-        quantifier.set_returns(returns_df, 'return')
+        quantifier.set_returns(returns_df, "return")
         market_df = returns_df.copy()
 
         alpha = quantifier.calculate_alpha(market_df)
@@ -441,7 +452,7 @@ class TestRiskQuantifier:
 
     def test_calculate_treynor_ratio(self, quantifier, returns_df):
         """Test Treynor ratio calculation."""
-        quantifier.set_returns(returns_df, 'return')
+        quantifier.set_returns(returns_df, "return")
         market_df = returns_df.copy()
 
         treynor = quantifier.calculate_treynor_ratio(market_df)
@@ -451,20 +462,18 @@ class TestRiskQuantifier:
     def test_risk_profile(self, quantifier):
         """Test risk profile calculation."""
         np.random.seed(42)
-        df = pd.DataFrame({
-            'Strategy_Return': np.random.normal(0.001, 0.02, 100)
-        })
+        df = pd.DataFrame({"Strategy_Return": np.random.normal(0.001, 0.02, 100)})
 
-        profile = quantifier.risk_profile(df, 'TestStrategy')
+        profile = quantifier.risk_profile(df, "TestStrategy")
 
-        assert 'Sharpe Ratio' in profile
-        assert 'Max Drawdown' in profile
-        assert 'VaR' in profile
-        assert profile['Strategy'] == 'TestStrategy'
+        assert "Sharpe Ratio" in profile
+        assert "Max Drawdown" in profile
+        assert "VaR" in profile
+        assert profile["Strategy"] == "TestStrategy"
 
     def test_risk_profile_missing_column(self, quantifier):
         """Test risk profile with missing column."""
-        df = pd.DataFrame({'Other_Return': [0.01, 0.02]})
+        df = pd.DataFrame({"Other_Return": [0.01, 0.02]})
 
         with pytest.raises(ValueError, match="Strategy_Return"):
-            quantifier.risk_profile(df, 'TestStrategy')
+            quantifier.risk_profile(df, "TestStrategy")

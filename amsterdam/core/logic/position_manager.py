@@ -15,20 +15,15 @@ Responsibilities:
 
 from __future__ import annotations
 
-from typing import Optional, Tuple, Dict
 from datetime import datetime, timezone
 
-from core.logic.symbol_state import SymbolState
 from core.enums import OrderSide
-from loggers.logger import Logger
+from core.logic.symbol_state import SymbolState
 from core.tracing import trace
+from loggers.logger import Logger
 
 # Logger - own file with propagation to app.log
-_logger_instance = Logger(
-    log_file="position_manager.log",
-    logger_name="PositionManager",
-    propagate=True
-)
+_logger_instance = Logger(log_file="position_manager.log", logger_name="PositionManager", propagate=True)
 logger = _logger_instance.get_logger()
 
 
@@ -64,8 +59,8 @@ class PositionManager:
 
     def __init__(
         self,
-        tp_mults: Optional[Dict[str, float]] = None,
-        sl_mults: Optional[Dict[str, float]] = None,
+        tp_mults: dict[str, float] | None = None,
+        sl_mults: dict[str, float] | None = None,
         exit_fraction: float = 0.25,
         min_bars_to_hold: int = 3,
         swing_mode: bool = False,
@@ -84,16 +79,8 @@ class PositionManager:
             min_hold_days: Days to hold in swing mode before allowing exit
             signal_based_exits: If False, only exit on SL/TP (no signal reversal exits)
         """
-        self.tp_mults = tp_mults or {
-            "low_volatility": 1.5,
-            "normal": 2.0,
-            "high_volatility": 3.0
-        }
-        self.sl_mults = sl_mults or {
-            "low_volatility": 1.0,
-            "normal": 1.5,
-            "high_volatility": 2.0
-        }
+        self.tp_mults = tp_mults or {"low_volatility": 1.5, "normal": 2.0, "high_volatility": 3.0}
+        self.sl_mults = sl_mults or {"low_volatility": 1.0, "normal": 1.5, "high_volatility": 2.0}
         self.exit_fraction = exit_fraction
 
         # Exit timing rules (owned by PositionManager)
@@ -114,14 +101,7 @@ class PositionManager:
     # ========================================================================
 
     @trace
-    def calculate_levels(
-        self,
-        state: SymbolState,
-        price: float,
-        atr: float,
-        condition: str,
-        side: OrderSide
-    ) -> None:
+    def calculate_levels(self, state: SymbolState, price: float, atr: float, condition: str, side: OrderSide) -> None:
         """
         Calculate and set SL/TP/partial targets on state.
 
@@ -139,18 +119,12 @@ class PositionManager:
             # Long position
             state.stop_loss = price - (atr * sl_mult)
             state.take_profit = price + (atr * tp_mult)
-            state.partial_exit_targets = [
-                price + (atr * 1.0),
-                price + (atr * 2.0)
-            ]
+            state.partial_exit_targets = [price + (atr * 1.0), price + (atr * 2.0)]
         else:
             # Short position
             state.stop_loss = price + (atr * sl_mult)
             state.take_profit = price - (atr * tp_mult)
-            state.partial_exit_targets = [
-                price - (atr * 1.0),
-                price - (atr * 2.0)
-            ]
+            state.partial_exit_targets = [price - (atr * 1.0), price - (atr * 2.0)]
 
         # Reset position tracking
         state.pyramid_layer = 1
@@ -169,13 +143,7 @@ class PositionManager:
     # ========================================================================
 
     @trace
-    def update_trailing_stop(
-        self,
-        state: SymbolState,
-        price: float,
-        atr: float,
-        condition: str
-    ) -> None:
+    def update_trailing_stop(self, state: SymbolState, price: float, atr: float, condition: str) -> None:
         """
         Update trailing stop based on current price.
 
@@ -209,12 +177,7 @@ class PositionManager:
     # EXCURSION TRACKING
     # ========================================================================
 
-    def update_excursions(
-        self,
-        state: SymbolState,
-        current_price: float,
-        avg_price: float
-    ) -> None:
+    def update_excursions(self, state: SymbolState, current_price: float, avg_price: float) -> None:
         """
         Track MFE/MAE for trade analytics.
 
@@ -246,7 +209,7 @@ class PositionManager:
         state: SymbolState,
         price: float,
         signal: int,
-    ) -> Tuple[bool, Optional[str]]:
+    ) -> tuple[bool, str | None]:
         """
         Check all exit conditions for a position.
 
@@ -290,9 +253,7 @@ class PositionManager:
                         )
                         return True, "Stop loss hit (catastrophic)"
             # Block all other same-bar exits
-            logger.debug(
-                f"[{state.symbol}] Same-bar exit blocked (bars_held=0)"
-            )
+            logger.debug(f"[{state.symbol}] Same-bar exit blocked (bars_held=0)")
             return False, "Same-bar exit blocked"
 
         # Swing mode check - prevent same-day exits (except stop loss)
@@ -303,10 +264,7 @@ class PositionManager:
                 # Check if it's a stop loss hit (always allowed for protection)
                 hit_sl = self._check_stop_loss_hit(state, price)
                 if hit_sl:
-                    logger.warning(
-                        f"[{state.symbol}] SWING MODE: Stop loss hit on same day - "
-                        f"allowing protective exit"
-                    )
+                    logger.warning(f"[{state.symbol}] SWING MODE: Stop loss hit on same day - allowing protective exit")
                     return True, "Stop loss hit (swing mode override)"
 
                 logger.debug(
@@ -361,11 +319,7 @@ class PositionManager:
             return price <= state.take_profit
         return False
 
-    def check_partial_exit(
-        self,
-        state: SymbolState,
-        price: float
-    ) -> Tuple[bool, Optional[str]]:
+    def check_partial_exit(self, state: SymbolState, price: float) -> tuple[bool, str | None]:
         """
         Check if partial exit target was hit.
 
@@ -395,11 +349,7 @@ class PositionManager:
     # EXIT QUANTITY
     # ========================================================================
 
-    def get_exit_quantity(
-        self,
-        current_position: float,
-        is_partial: bool = False
-    ) -> int:
+    def get_exit_quantity(self, current_position: float, is_partial: bool = False) -> int:
         """
         Calculate exit quantity.
 
@@ -419,7 +369,7 @@ class PositionManager:
 
 
 # Module-level default instance for convenience
-_default_manager: Optional[PositionManager] = None
+_default_manager: PositionManager | None = None
 
 
 def get_position_manager() -> PositionManager:

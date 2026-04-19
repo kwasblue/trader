@@ -35,16 +35,17 @@ All entry points should follow this path. If you're adding a new entry point,
 import bootstrap_app() and use it as the first initialization step.
 """
 
-from dataclasses import dataclass
-from typing import List, Literal, Optional
 import logging
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
+
 from dotenv import load_dotenv
-from loggers.bootstrap import init_root_logger
-from core.config_loader import get_config, TradingConfig
 
 # Canonical app root path - use get_app_path() from config_loader for consistency
-from core.config_loader import get_app_path
+from core.config_loader import TradingConfig, get_app_path, get_config
+from loggers.bootstrap import init_root_logger
+
 ROOT = get_app_path()
 
 
@@ -60,20 +61,21 @@ class AppContext:
         root_path: Path to project root
         metadata: Additional context (broker, trading_mode, operation, etc.)
     """
+
     config: TradingConfig
     logger: logging.Logger
     mode: str
-    symbols: List[str]
+    symbols: list[str]
     root_path: Path
     metadata: dict
 
 
 def bootstrap_app(
-    mode: Literal['daemon', 'gui', 'cli'],
-    symbols: Optional[List[str]] = None,
-    broker: Optional[str] = None,
-    trading_mode: Optional[str] = None,
-    operation: Optional[str] = None,
+    mode: Literal["daemon", "gui", "cli"],
+    symbols: list[str] | None = None,
+    broker: str | None = None,
+    trading_mode: str | None = None,
+    operation: str | None = None,
     log_level: int = logging.INFO,
     console_logging: bool = True,
 ) -> AppContext:
@@ -104,11 +106,7 @@ def bootstrap_app(
     load_dotenv()
 
     # 2. Initialize unified logger
-    log_files = {
-        'daemon': 'autotrader.log',
-        'gui': 'app.log',
-        'cli': 'cli.log'
-    }
+    log_files = {"daemon": "autotrader.log", "gui": "app.log", "cli": "cli.log"}
     init_root_logger(
         log_dir=str(ROOT / "logs"),
         root_file=log_files[mode],
@@ -136,11 +134,11 @@ def bootstrap_app(
     # 6. Build metadata dict
     metadata = {}
     if broker:
-        metadata['broker'] = broker
+        metadata["broker"] = broker
     if trading_mode:
-        metadata['trading_mode'] = trading_mode
+        metadata["trading_mode"] = trading_mode
     if operation:
-        metadata['operation'] = operation
+        metadata["operation"] = operation
 
     # 7. Create and return context
     return AppContext(

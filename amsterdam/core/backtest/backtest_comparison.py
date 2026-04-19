@@ -29,21 +29,20 @@ Usage:
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
-from typing import Dict, List, Any, Optional, Tuple
-from datetime import datetime
-import pandas as pd
-import numpy as np
 import logging
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Any
+
+import numpy as np
+import pandas as pd
 
 from core.backtest.unified_backtest_runner import (
-    UnifiedBacktestRunner,
-    BacktestConfig,
-    BacktestResult,
-    BacktestMetrics,
     STRATEGY_CATEGORIES,
-    get_strategy_category,
+    BacktestResult,
+    UnifiedBacktestRunner,
     get_strategies_by_category,
+    get_strategy_category,
     list_available_strategies,
 )
 
@@ -54,9 +53,9 @@ logger = logging.getLogger(__name__)
 class StrategyComparisonResult:
     """Result of comparing multiple strategies."""
 
-    strategies: List[str]
-    results: Dict[str, BacktestResult]
-    rankings: Dict[str, int]  # strategy -> rank
+    strategies: list[str]
+    results: dict[str, BacktestResult]
+    rankings: dict[str, int]  # strategy -> rank
     best_strategy: str
     best_metric_value: float
     metric_used: str
@@ -68,23 +67,23 @@ class StrategyComparisonResult:
 class CategoryComparisonResult:
     """Result of comparing strategy categories."""
 
-    categories: List[str]
-    category_results: Dict[str, Dict[str, Any]]  # category -> avg metrics
-    strategy_results: Dict[str, BacktestResult]  # individual strategy results
+    categories: list[str]
+    category_results: dict[str, dict[str, Any]]  # category -> avg metrics
+    strategy_results: dict[str, BacktestResult]  # individual strategy results
     best_category: str
-    rankings: Dict[str, int]  # category -> rank
+    rankings: dict[str, int]  # category -> rank
 
 
 @dataclass
 class HybridComparisonResult:
     """Result of comparing hybrid vs standard sizing."""
 
-    strategies: List[str]
-    standard_results: Dict[str, BacktestResult]
-    hybrid_results: Dict[str, BacktestResult]
-    improvements: Dict[str, float]  # strategy -> return delta
+    strategies: list[str]
+    standard_results: dict[str, BacktestResult]
+    hybrid_results: dict[str, BacktestResult]
+    improvements: dict[str, float]  # strategy -> return delta
     best_improvement: str
-    trade_distribution: Dict[str, Dict[str, int]]  # strategy -> {with_trend, against_trend}
+    trade_distribution: dict[str, dict[str, int]]  # strategy -> {with_trend, against_trend}
 
 
 @dataclass
@@ -97,11 +96,11 @@ class ComparisonReport:
     data_period: str
     num_bars: int
 
-    strategy_comparison: Optional[StrategyComparisonResult] = None
-    category_comparison: Optional[CategoryComparisonResult] = None
-    hybrid_comparison: Optional[HybridComparisonResult] = None
+    strategy_comparison: StrategyComparisonResult | None = None
+    category_comparison: CategoryComparisonResult | None = None
+    hybrid_comparison: HybridComparisonResult | None = None
 
-    insights: List[str] = field(default_factory=list)
+    insights: list[str] = field(default_factory=list)
 
     def to_markdown(self) -> str:
         """Generate markdown report."""
@@ -129,17 +128,19 @@ class ComparisonReport:
 
         # Insights
         if self.insights:
-            lines.extend([
-                "## Key Insights",
-                "",
-            ])
+            lines.extend(
+                [
+                    "## Key Insights",
+                    "",
+                ]
+            )
             for insight in self.insights:
                 lines.append(f"- {insight}")
             lines.append("")
 
         return "\n".join(lines)
 
-    def _format_strategy_comparison(self) -> List[str]:
+    def _format_strategy_comparison(self) -> list[str]:
         """Format strategy comparison section."""
         sc = self.strategy_comparison
         lines = [
@@ -165,7 +166,7 @@ class ComparisonReport:
         lines.extend(["", f"**Best Strategy:** {sc.best_strategy}", ""])
         return lines
 
-    def _format_category_comparison(self) -> List[str]:
+    def _format_category_comparison(self) -> list[str]:
         """Format category comparison section."""
         cc = self.category_comparison
         lines = [
@@ -182,17 +183,14 @@ class ComparisonReport:
             avg_return = cat_data.get("avg_return", 0)
             avg_sharpe = cat_data.get("avg_sharpe", 0)
             best_strat = cat_data.get("best_strategy", "-")
-            rank = cc.rankings.get(cat, "-")
+            cc.rankings.get(cat, "-")
 
-            lines.append(
-                f"| {cat.replace('_', ' ').title()} | {avg_return:+.1%} | "
-                f"{avg_sharpe:.2f} | {best_strat} |"
-            )
+            lines.append(f"| {cat.replace('_', ' ').title()} | {avg_return:+.1%} | {avg_sharpe:.2f} | {best_strat} |")
 
         lines.extend(["", f"**Best Category:** {cc.best_category.replace('_', ' ').title()}", ""])
         return lines
 
-    def _format_hybrid_comparison(self) -> List[str]:
+    def _format_hybrid_comparison(self) -> list[str]:
         """Format hybrid comparison section."""
         hc = self.hybrid_comparison
         lines = [
@@ -214,17 +212,18 @@ class ComparisonReport:
                 category = get_strategy_category(strat)
 
                 lines.append(
-                    f"| {strat} | {std_return:+.1%} | {hyb_return:+.1%} | "
-                    f"{delta:+.1%} | {improved} ({category}) |"
+                    f"| {strat} | {std_return:+.1%} | {hyb_return:+.1%} | {delta:+.1%} | {improved} ({category}) |"
                 )
 
         lines.append("")
 
         # Trade distribution
-        lines.extend([
-            "### Trade Distribution (Hybrid)",
-            "",
-        ])
+        lines.extend(
+            [
+                "### Trade Distribution (Hybrid)",
+                "",
+            ]
+        )
 
         total_with = 0
         total_against = 0
@@ -251,11 +250,13 @@ class ComparisonReport:
             wr_with = wins_with / total_with * 100 if total_with > 0 else 0
             wr_against = wins_against / total_against * 100 if total_against > 0 else 0
 
-            lines.extend([
-                f"- Trades with trend: {total_with} ({pct_with:.0f}%) - {wr_with:.1f}% win rate",
-                f"- Trades against trend: {total_against} ({pct_against:.0f}%) - {wr_against:.1f}% win rate",
-                "",
-            ])
+            lines.extend(
+                [
+                    f"- Trades with trend: {total_with} ({pct_with:.0f}%) - {wr_with:.1f}% win rate",
+                    f"- Trades against trend: {total_against} ({pct_against:.0f}%) - {wr_against:.1f}% win rate",
+                    "",
+                ]
+            )
 
         return lines
 
@@ -277,10 +278,7 @@ class ComparisonReport:
                 "rankings": sc.rankings,
                 "best_strategy": sc.best_strategy,
                 "metric_used": sc.metric_used,
-                "results": {
-                    s: r.metrics.to_dict()
-                    for s, r in sc.results.items()
-                },
+                "results": {s: r.metrics.to_dict() for s, r in sc.results.items()},
             }
 
         if self.category_comparison:
@@ -298,14 +296,8 @@ class ComparisonReport:
                 "strategies": hc.strategies,
                 "improvements": hc.improvements,
                 "best_improvement": hc.best_improvement,
-                "standard_results": {
-                    s: r.metrics.to_dict()
-                    for s, r in hc.standard_results.items()
-                },
-                "hybrid_results": {
-                    s: r.metrics.to_dict()
-                    for s, r in hc.hybrid_results.items()
-                },
+                "standard_results": {s: r.metrics.to_dict() for s, r in hc.standard_results.items()},
+                "hybrid_results": {s: r.metrics.to_dict() for s, r in hc.hybrid_results.items()},
             }
 
         return json.dumps(data, indent=2)
@@ -365,7 +357,7 @@ class BacktestComparison:
 
     def compare_strategies(
         self,
-        strategies: List[str],
+        strategies: list[str],
         metric: str = "sharpe_ratio",
         use_hybrid: bool = False,
         **config_kwargs,
@@ -384,7 +376,7 @@ class BacktestComparison:
         """
         logger.info(f"Comparing {len(strategies)} strategies (metric={metric})")
 
-        results: Dict[str, BacktestResult] = {}
+        results: dict[str, BacktestResult] = {}
 
         for strategy in strategies:
             try:
@@ -423,7 +415,7 @@ class BacktestComparison:
 
     def compare_categories(
         self,
-        categories: Optional[List[str]] = None,
+        categories: list[str] | None = None,
         metric: str = "sharpe_ratio",
         **config_kwargs,
     ) -> CategoryComparisonResult:
@@ -443,8 +435,8 @@ class BacktestComparison:
 
         logger.info(f"Comparing {len(categories)} categories")
 
-        strategy_results: Dict[str, BacktestResult] = {}
-        category_results: Dict[str, Dict[str, Any]] = {}
+        strategy_results: dict[str, BacktestResult] = {}
+        category_results: dict[str, dict[str, Any]] = {}
 
         for category in categories:
             strategies = get_strategies_by_category(category)
@@ -508,7 +500,7 @@ class BacktestComparison:
 
     def compare_hybrid(
         self,
-        strategies: List[str],
+        strategies: list[str],
         **config_kwargs,
     ) -> HybridComparisonResult:
         """
@@ -523,10 +515,10 @@ class BacktestComparison:
         """
         logger.info(f"Comparing hybrid sizing for {len(strategies)} strategies")
 
-        standard_results: Dict[str, BacktestResult] = {}
-        hybrid_results: Dict[str, BacktestResult] = {}
-        improvements: Dict[str, float] = {}
-        trade_distribution: Dict[str, Dict[str, int]] = {}
+        standard_results: dict[str, BacktestResult] = {}
+        hybrid_results: dict[str, BacktestResult] = {}
+        improvements: dict[str, float] = {}
+        trade_distribution: dict[str, dict[str, int]] = {}
 
         for strategy in strategies:
             try:
@@ -570,8 +562,8 @@ class BacktestComparison:
 
     def full_comparison(
         self,
-        strategies: Optional[List[str]] = None,
-        categories: Optional[List[str]] = None,
+        strategies: list[str] | None = None,
+        categories: list[str] | None = None,
         include_hybrid: bool = True,
         metric: str = "sharpe_ratio",
         **config_kwargs,
@@ -640,9 +632,9 @@ class BacktestComparison:
 
     def _rank_by_metric(
         self,
-        results: Dict[str, BacktestResult],
+        results: dict[str, BacktestResult],
         metric: str,
-    ) -> Dict[str, int]:
+    ) -> dict[str, int]:
         """Rank results by metric (lower rank = better)."""
         # Sort descending (higher metric = better)
         sorted_strategies = sorted(
@@ -653,7 +645,7 @@ class BacktestComparison:
 
         return {s: rank for rank, s in enumerate(sorted_strategies, 1)}
 
-    def _generate_insights(self, report: ComparisonReport) -> List[str]:
+    def _generate_insights(self, report: ComparisonReport) -> list[str]:
         """Generate insights from comparison results."""
         insights = []
 
@@ -688,9 +680,7 @@ class BacktestComparison:
             total = len(hc.improvements)
 
             if total > 0:
-                insights.append(
-                    f"Hybrid sizing improved {improved}/{total} strategies"
-                )
+                insights.append(f"Hybrid sizing improved {improved}/{total} strategies")
 
             # Check if trend-following benefits
             tf_strategies = [s for s in hc.strategies if get_strategy_category(s) == "trend_following"]
@@ -701,9 +691,7 @@ class BacktestComparison:
 
             if tf_strategies and mr_strategies:
                 if tf_improved > mr_improved:
-                    insights.append(
-                        "Trend-following strategies benefit more from hybrid sizing"
-                    )
+                    insights.append("Trend-following strategies benefit more from hybrid sizing")
                 elif mr_improved > tf_improved:
                     insights.append(
                         "Mean-reversion strategies may not benefit from hybrid sizing (they trade against trend by design)"
@@ -713,9 +701,9 @@ class BacktestComparison:
 
     def generate_report(
         self,
-        strategy_result: Optional[StrategyComparisonResult] = None,
-        category_result: Optional[CategoryComparisonResult] = None,
-        hybrid_result: Optional[HybridComparisonResult] = None,
+        strategy_result: StrategyComparisonResult | None = None,
+        category_result: CategoryComparisonResult | None = None,
+        hybrid_result: HybridComparisonResult | None = None,
     ) -> ComparisonReport:
         """
         Generate a report from existing comparison results.
@@ -744,7 +732,7 @@ class BacktestComparison:
 
 
 def print_strategy_table(
-    results: Dict[str, BacktestResult],
+    results: dict[str, BacktestResult],
     symbol: str = "SYMBOL",
     title: str = "STRATEGY COMPARISON",
 ) -> None:
@@ -802,29 +790,20 @@ def print_hybrid_table(
             improved = "YES" if delta > 0 else "NO"
             category = get_strategy_category(strat)
 
-            print(
-                f"{strat:<12} {std_ret:>+9.1%} {hyb_ret:>+9.1%} {delta:>+9.1%} "
-                f"{improved:>5} ({category})"
-            )
+            print(f"{strat:<12} {std_ret:>+9.1%} {hyb_ret:>+9.1%} {delta:>+9.1%} {improved:>5} ({category})")
 
     print("-" * 70)
 
     # Trade distribution summary
-    total_with = sum(
-        r.metrics.trades_with_trend
-        for r in hybrid_result.hybrid_results.values()
-    )
-    total_against = sum(
-        r.metrics.trades_against_trend
-        for r in hybrid_result.hybrid_results.values()
-    )
+    total_with = sum(r.metrics.trades_with_trend for r in hybrid_result.hybrid_results.values())
+    total_against = sum(r.metrics.trades_against_trend for r in hybrid_result.hybrid_results.values())
     total = total_with + total_against
 
     if total > 0:
         print()
         print("TRADE DISTRIBUTION:")
-        print(f"  Trades with trend:     {total_with} ({total_with/total*100:.0f}%)")
-        print(f"  Trades against trend:  {total_against} ({total_against/total*100:.0f}%)")
+        print(f"  Trades with trend:     {total_with} ({total_with / total * 100:.0f}%)")
+        print(f"  Trades against trend:  {total_against} ({total_against / total * 100:.0f}%)")
 
     print("=" * 70)
     print()

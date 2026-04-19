@@ -46,24 +46,29 @@ import json
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Any
 
+import joblib
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.metrics import (
-    accuracy_score, precision_score, recall_score, f1_score,
-    roc_auc_score, classification_report, confusion_matrix,
-    balanced_accuracy_score
+    accuracy_score,
+    balanced_accuracy_score,
+    classification_report,
+    f1_score,
+    precision_score,
+    recall_score,
+    roc_auc_score,
 )
+from sklearn.model_selection import cross_val_score, train_test_split
 from sklearn.preprocessing import StandardScaler
-import joblib
 
 # Optional: SMOTE for synthetic oversampling
 try:
     from imblearn.over_sampling import SMOTE
+
     SMOTE_AVAILABLE = True
 except ImportError:
     SMOTE_AVAILABLE = False
@@ -89,22 +94,22 @@ class TradeQualityTrainer:
 
     # Default feature columns
     DEFAULT_FEATURES = [
-        'feat_atr_percentile',
-        'feat_drawdown_portfolio_pct',
-        'feat_drawdown_symbol_pct',
-        'feat_position_size_pct',
-        'feat_hour_of_day',
-        'feat_day_of_week',
-        'feat_minutes_since_open',
-        'feat_bars_in_regime',
-        'feat_hours_since_last_trade',
-        'feat_signal_strength',
+        "feat_atr_percentile",
+        "feat_drawdown_portfolio_pct",
+        "feat_drawdown_symbol_pct",
+        "feat_position_size_pct",
+        "feat_hour_of_day",
+        "feat_day_of_week",
+        "feat_minutes_since_open",
+        "feat_bars_in_regime",
+        "feat_hours_since_last_trade",
+        "feat_signal_strength",
     ]
 
     def __init__(
         self,
         model_dir: str = "models",
-        features: Optional[List[str]] = None,
+        features: list[str] | None = None,
     ):
         """
         Initialize trainer.
@@ -119,7 +124,7 @@ class TradeQualityTrainer:
         self.features = features or self.DEFAULT_FEATURES
         self.model = None
         self.scaler = StandardScaler()
-        self.metrics: Dict[str, Any] = {}
+        self.metrics: dict[str, Any] = {}
 
     def load_data(self, data_path: str) -> pd.DataFrame:
         """
@@ -133,9 +138,9 @@ class TradeQualityTrainer:
         """
         path = Path(data_path)
 
-        if path.suffix == '.parquet':
+        if path.suffix == ".parquet":
             df = pd.read_parquet(path)
-        elif path.suffix == '.jsonl':
+        elif path.suffix == ".jsonl":
             # Convert JSONL to DataFrame
             df = self._load_jsonl(path)
         else:
@@ -149,14 +154,14 @@ class TradeQualityTrainer:
         entries = {}
         exits = {}
 
-        with open(path, 'r') as f:
+        with open(path) as f:
             for line in f:
                 event = json.loads(line)
-                trade_id = event['trade_id']
+                trade_id = event["trade_id"]
 
-                if event['event'] == 'entry':
+                if event["event"] == "entry":
                     entries[trade_id] = event
-                elif event['event'] == 'exit':
+                elif event["event"] == "exit":
                     exits[trade_id] = event
 
         # Merge entries and exits
@@ -165,21 +170,21 @@ class TradeQualityTrainer:
             if trade_id in exits:
                 exit_event = exits[trade_id]
                 row = {
-                    'trade_id': trade_id,
-                    'symbol': entry['symbol'],
-                    'side': entry['side'],
-                    'entry_price': entry['price'],
-                    'exit_price': exit_event['price'],
-                    'qty': entry['qty'],
+                    "trade_id": trade_id,
+                    "symbol": entry["symbol"],
+                    "side": entry["side"],
+                    "entry_price": entry["price"],
+                    "exit_price": exit_event["price"],
+                    "qty": entry["qty"],
                 }
 
                 # Add features
-                for key, value in entry.get('features', {}).items():
-                    row[f'feat_{key}'] = value
+                for key, value in entry.get("features", {}).items():
+                    row[f"feat_{key}"] = value
 
                 # Add outcomes
-                for key, value in exit_event.get('outcome', {}).items():
-                    row[f'out_{key}'] = value
+                for key, value in exit_event.get("outcome", {}).items():
+                    row[f"out_{key}"] = value
 
                 rows.append(row)
 
@@ -188,9 +193,9 @@ class TradeQualityTrainer:
     def prepare_data(
         self,
         df: pd.DataFrame,
-        target_col: str = 'out_pnl_dollars',
+        target_col: str = "out_pnl_dollars",
         min_trades: int = 50,
-    ) -> Tuple[np.ndarray, np.ndarray, List[str]]:
+    ) -> tuple[np.ndarray, np.ndarray, list[str]]:
         """
         Prepare features and target for training.
 
@@ -230,18 +235,18 @@ class TradeQualityTrainer:
         print(f"Win rate: {win_rate:.1%}")
 
         # Data quality warnings
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("DATA QUALITY CHECK")
-        print("="*60)
+        print("=" * 60)
 
         if n_wins < 200:
             print(f"⚠️  WARNING: Only {n_wins} winning trades")
-            print(f"   Recommended minimum: 200 wins for reliable training")
-            print(f"   Current status: INSUFFICIENT DATA")
+            print("   Recommended minimum: 200 wins for reliable training")
+            print("   Current status: INSUFFICIENT DATA")
         elif n_wins < 500:
             print(f"⚠️  CAUTION: {n_wins} winning trades")
-            print(f"   Recommended minimum: 500 wins for good performance")
-            print(f"   Current status: MARGINAL - Model may not generalize well")
+            print("   Recommended minimum: 500 wins for good performance")
+            print("   Current status: MARGINAL - Model may not generalize well")
         else:
             print(f"✓  Good: {n_wins} winning trades (sufficient for training)")
 
@@ -249,14 +254,14 @@ class TradeQualityTrainer:
         imbalance_ratio = n_losses / max(n_wins, 1)
         if imbalance_ratio > 10:
             print(f"⚠️  SEVERE class imbalance: {imbalance_ratio:.1f}:1 (loss:win)")
-            print(f"   Will use class balancing and SMOTE to compensate")
+            print("   Will use class balancing and SMOTE to compensate")
         elif imbalance_ratio > 5:
             print(f"⚠️  Moderate class imbalance: {imbalance_ratio:.1f}:1 (loss:win)")
-            print(f"   Will use class balancing to compensate")
+            print("   Will use class balancing to compensate")
         else:
             print(f"✓  Acceptable balance: {imbalance_ratio:.1f}:1 (loss:win)")
 
-        print("="*60 + "\n")
+        print("=" * 60 + "\n")
 
         return X.values, y.values, available_features
 
@@ -264,12 +269,12 @@ class TradeQualityTrainer:
         self,
         X: np.ndarray,
         y: np.ndarray,
-        feature_names: List[str],
-        model_type: str = 'random_forest',
+        feature_names: list[str],
+        model_type: str = "random_forest",
         test_size: float = 0.2,
         cv_folds: int = 5,
         use_smote: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Train the model.
 
@@ -285,9 +290,7 @@ class TradeQualityTrainer:
             Dictionary of metrics
         """
         # Split data
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=test_size, random_state=42, stratify=y
-        )
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=42, stratify=y)
 
         # Scale features
         X_train_scaled = self.scaler.fit_transform(X_train)
@@ -298,8 +301,8 @@ class TradeQualityTrainer:
             # Check if we have enough minority class samples
             minority_count = min(np.bincount(y_train))
             if minority_count >= 6:  # SMOTE needs at least 6 samples
-                print(f"Applying SMOTE to balance training data...")
-                smote = SMOTE(random_state=42, k_neighbors=min(5, minority_count-1))
+                print("Applying SMOTE to balance training data...")
+                smote = SMOTE(random_state=42, k_neighbors=min(5, minority_count - 1))
                 X_train_scaled, y_train = smote.fit_resample(X_train_scaled, y_train)
                 print(f"After SMOTE: {np.bincount(y_train)[1]} wins, {np.bincount(y_train)[0]} losses")
             else:
@@ -311,17 +314,17 @@ class TradeQualityTrainer:
             use_smote = False
 
         # Select model with class balancing
-        if model_type == 'random_forest':
+        if model_type == "random_forest":
             self.model = RandomForestClassifier(
                 n_estimators=100,
                 max_depth=10,
                 min_samples_split=5,
                 min_samples_leaf=2,
-                class_weight='balanced',  # Handle class imbalance
+                class_weight="balanced",  # Handle class imbalance
                 random_state=42,
                 n_jobs=-1,
             )
-        elif model_type == 'gradient_boosting':
+        elif model_type == "gradient_boosting":
             # Note: GradientBoostingClassifier doesn't support class_weight
             # We rely on SMOTE for balancing if available
             self.model = GradientBoostingClassifier(
@@ -330,10 +333,10 @@ class TradeQualityTrainer:
                 learning_rate=0.1,
                 random_state=42,
             )
-        elif model_type == 'logistic':
+        elif model_type == "logistic":
             self.model = LogisticRegression(
                 max_iter=1000,
-                class_weight='balanced',  # Handle class imbalance
+                class_weight="balanced",  # Handle class imbalance
                 random_state=42,
             )
         else:
@@ -346,14 +349,10 @@ class TradeQualityTrainer:
             print("(With class_weight='balanced' for class balance)")
 
         # Cross-validation using ROC-AUC (better for imbalanced data)
-        cv_scores_auc = cross_val_score(
-            self.model, X_train_scaled, y_train, cv=cv_folds, scoring='roc_auc'
-        )
-        cv_scores_f1 = cross_val_score(
-            self.model, X_train_scaled, y_train, cv=cv_folds, scoring='f1'
-        )
-        print(f"CV ROC-AUC: {cv_scores_auc.mean():.3f} (+/- {cv_scores_auc.std()*2:.3f})")
-        print(f"CV F1:      {cv_scores_f1.mean():.3f} (+/- {cv_scores_f1.std()*2:.3f})")
+        cv_scores_auc = cross_val_score(self.model, X_train_scaled, y_train, cv=cv_folds, scoring="roc_auc")
+        cv_scores_f1 = cross_val_score(self.model, X_train_scaled, y_train, cv=cv_folds, scoring="f1")
+        print(f"CV ROC-AUC: {cv_scores_auc.mean():.3f} (+/- {cv_scores_auc.std() * 2:.3f})")
+        print(f"CV F1:      {cv_scores_f1.mean():.3f} (+/- {cv_scores_f1.std() * 2:.3f})")
 
         # Train final model
         self.model.fit(X_train_scaled, y_train)
@@ -374,56 +373,58 @@ class TradeQualityTrainer:
         f1_loss = f1_score(y_test, y_pred, pos_label=0, zero_division=0)
 
         self.metrics = {
-            'model_type': model_type,
-            'n_train': len(X_train),
-            'n_test': len(X_test),
-            'used_smote': use_smote,
+            "model_type": model_type,
+            "n_train": len(X_train),
+            "n_test": len(X_test),
+            "used_smote": use_smote,
             # CV scores (more important than test for small datasets)
-            'cv_roc_auc_mean': float(cv_scores_auc.mean()),
-            'cv_roc_auc_std': float(cv_scores_auc.std()),
-            'cv_f1_mean': float(cv_scores_f1.mean()),
-            'cv_f1_std': float(cv_scores_f1.std()),
+            "cv_roc_auc_mean": float(cv_scores_auc.mean()),
+            "cv_roc_auc_std": float(cv_scores_auc.std()),
+            "cv_f1_mean": float(cv_scores_f1.mean()),
+            "cv_f1_std": float(cv_scores_f1.std()),
             # Overall test metrics
-            'test_accuracy': float(accuracy_score(y_test, y_pred)),
-            'test_balanced_accuracy': float(balanced_accuracy_score(y_test, y_pred)),
-            'test_roc_auc': float(roc_auc_score(y_test, y_prob)),
+            "test_accuracy": float(accuracy_score(y_test, y_pred)),
+            "test_balanced_accuracy": float(balanced_accuracy_score(y_test, y_pred)),
+            "test_roc_auc": float(roc_auc_score(y_test, y_prob)),
             # Profit class (the one we care about)
-            'test_profit_precision': float(precision_profit),
-            'test_profit_recall': float(recall_profit),
-            'test_profit_f1': float(f1_profit),
+            "test_profit_precision": float(precision_profit),
+            "test_profit_recall": float(recall_profit),
+            "test_profit_f1": float(f1_profit),
             # Loss class (for reference)
-            'test_loss_precision': float(precision_loss),
-            'test_loss_recall': float(recall_loss),
-            'test_loss_f1': float(f1_loss),
+            "test_loss_precision": float(precision_loss),
+            "test_loss_recall": float(recall_loss),
+            "test_loss_f1": float(f1_loss),
             # Baselines
-            'baseline_accuracy': float(max(y.mean(), 1 - y.mean())),
-            'win_rate': float(y.mean()),
+            "baseline_accuracy": float(max(y.mean(), 1 - y.mean())),
+            "win_rate": float(y.mean()),
             # Metadata
-            'trained_at': datetime.now().isoformat(),
-            'features': feature_names,
+            "trained_at": datetime.now().isoformat(),
+            "features": feature_names,
         }
 
         # Feature importance
-        if hasattr(self.model, 'feature_importances_'):
+        if hasattr(self.model, "feature_importances_"):
             importance = dict(zip(feature_names, self.model.feature_importances_))
-            self.metrics['feature_importance'] = dict(
-                sorted(importance.items(), key=lambda x: x[1], reverse=True)
-            )
+            self.metrics["feature_importance"] = dict(sorted(importance.items(), key=lambda x: x[1], reverse=True))
 
         # Print report
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("MODEL PERFORMANCE")
-        print("="*60)
+        print("=" * 60)
 
         # Overall metrics
         print("\nOverall Metrics:")
-        print(f"  Test Accuracy:          {self.metrics['test_accuracy']:.3f} (baseline: {self.metrics['baseline_accuracy']:.3f})")
+        print(
+            f"  Test Accuracy:          {self.metrics['test_accuracy']:.3f} (baseline: {self.metrics['baseline_accuracy']:.3f})"
+        )
         print(f"  Test Balanced Accuracy: {self.metrics['test_balanced_accuracy']:.3f}")
         print(f"  Test ROC-AUC:           {self.metrics['test_roc_auc']:.3f}")
 
         # Per-class metrics (what really matters)
         print("\nProfit Prediction (Minority Class - What We Care About):")
-        print(f"  Precision: {self.metrics['test_profit_precision']:.3f} (of trades predicted profitable, % that actually were)")
+        print(
+            f"  Precision: {self.metrics['test_profit_precision']:.3f} (of trades predicted profitable, % that actually were)"
+        )
         print(f"  Recall:    {self.metrics['test_profit_recall']:.3f} (of actual profitable trades, % we caught)")
         print(f"  F1-Score:  {self.metrics['test_profit_f1']:.3f} (harmonic mean of precision & recall)")
 
@@ -433,11 +434,11 @@ class TradeQualityTrainer:
         print(f"  F1-Score:  {self.metrics['test_loss_f1']:.3f}")
 
         # Interpretation
-        print("\n" + "-"*60)
+        print("\n" + "-" * 60)
         print("INTERPRETATION:")
-        print("-"*60)
-        roc_auc = self.metrics['test_roc_auc']
-        profit_f1 = self.metrics['test_profit_f1']
+        print("-" * 60)
+        roc_auc = self.metrics["test_roc_auc"]
+        profit_f1 = self.metrics["test_profit_f1"]
 
         if roc_auc < 0.6:
             print("❌ ROC-AUC < 0.6: Model is barely better than random guessing")
@@ -467,11 +468,11 @@ class TradeQualityTrainer:
 
         print()
         print("Detailed Classification Report:")
-        print(classification_report(y_test, y_pred, target_names=['Loss', 'Profit'], zero_division=0))
+        print(classification_report(y_test, y_pred, target_names=["Loss", "Profit"], zero_division=0))
 
-        if 'feature_importance' in self.metrics:
+        if "feature_importance" in self.metrics:
             print("\nFeature Importance:")
-            for feat, imp in list(self.metrics['feature_importance'].items())[:10]:
+            for feat, imp in list(self.metrics["feature_importance"].items())[:10]:
                 print(f"  {feat}: {imp:.4f}")
 
         return self.metrics
@@ -493,15 +494,15 @@ class TradeQualityTrainer:
 
         # Save metrics
         metrics_path = self.model_dir / f"{model_name}_metrics.json"
-        with open(metrics_path, 'w') as f:
+        with open(metrics_path, "w") as f:
             json.dump(self.metrics, f, indent=2)
         print(f"Metrics saved to: {metrics_path}")
 
         # Save feature importance separately for easy access
-        if 'feature_importance' in self.metrics:
+        if "feature_importance" in self.metrics:
             importance_path = self.model_dir / f"{model_name}_feature_importance.json"
-            with open(importance_path, 'w') as f:
-                json.dump(self.metrics['feature_importance'], f, indent=2)
+            with open(importance_path, "w") as f:
+                json.dump(self.metrics["feature_importance"], f, indent=2)
             print(f"Feature importance saved to: {importance_path}")
 
     def load_model(self, model_name: str = "trade_quality_model") -> None:
@@ -514,7 +515,7 @@ class TradeQualityTrainer:
 
         print(f"Model loaded from: {model_path}")
 
-    def predict(self, features: Dict[str, float]) -> Tuple[int, float]:
+    def predict(self, features: dict[str, float]) -> tuple[int, float]:
         """
         Predict trade quality.
 
@@ -537,7 +538,7 @@ class TradeQualityTrainer:
         return int(pred), float(prob)
 
 
-def find_data_files(data_dir: str = "data") -> List[Path]:
+def find_data_files(data_dir: str = "data") -> list[Path]:
     """Find all parquet files with trade data."""
     data_path = Path(data_dir)
     files = list(data_path.glob("trades*.parquet"))
@@ -550,48 +551,20 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
+    parser.add_argument("--input", "-i", help="Input data file (parquet or jsonl). Auto-detects if not specified.")
     parser.add_argument(
-        '--input', '-i',
-        help='Input data file (parquet or jsonl). Auto-detects if not specified.'
+        "--model-type",
+        "-m",
+        choices=["random_forest", "gradient_boosting", "logistic"],
+        default="random_forest",
+        help="Model type to train (default: random_forest)",
     )
-    parser.add_argument(
-        '--model-type', '-m',
-        choices=['random_forest', 'gradient_boosting', 'logistic'],
-        default='random_forest',
-        help='Model type to train (default: random_forest)'
-    )
-    parser.add_argument(
-        '--model-name',
-        default='trade_quality_model',
-        help='Name for saved model files'
-    )
-    parser.add_argument(
-        '--min-trades',
-        type=int,
-        default=50,
-        help='Minimum trades required for training'
-    )
-    parser.add_argument(
-        '--test-size',
-        type=float,
-        default=0.2,
-        help='Test set fraction (default: 0.2)'
-    )
-    parser.add_argument(
-        '--evaluate-only',
-        action='store_true',
-        help='Only evaluate existing model, do not train'
-    )
-    parser.add_argument(
-        '--combine-all',
-        action='store_true',
-        help='Combine all available parquet files for training'
-    )
-    parser.add_argument(
-        '--no-smote',
-        action='store_true',
-        help='Disable SMOTE resampling (use class weights only)'
-    )
+    parser.add_argument("--model-name", default="trade_quality_model", help="Name for saved model files")
+    parser.add_argument("--min-trades", type=int, default=50, help="Minimum trades required for training")
+    parser.add_argument("--test-size", type=float, default=0.2, help="Test set fraction (default: 0.2)")
+    parser.add_argument("--evaluate-only", action="store_true", help="Only evaluate existing model, do not train")
+    parser.add_argument("--combine-all", action="store_true", help="Combine all available parquet files for training")
+    parser.add_argument("--no-smote", action="store_true", help="Disable SMOTE resampling (use class weights only)")
 
     args = parser.parse_args()
 
@@ -617,7 +590,7 @@ def main():
         print(f"Combining {len(files)} parquet files...")
         dfs = [pd.read_parquet(f) for f in files]
         df = pd.concat(dfs, ignore_index=True)
-        df = df.drop_duplicates(subset=['trade_id'])
+        df = df.drop_duplicates(subset=["trade_id"])
         print(f"Combined {len(df)} unique trades")
     else:
         # Auto-detect largest file
@@ -641,18 +614,20 @@ def main():
     try:
         X, y, features = trainer.prepare_data(df, min_trades=args.min_trades)
         trainer.train(
-            X, y, features,
+            X,
+            y,
+            features,
             model_type=args.model_type,
             test_size=args.test_size,
             use_smote=not args.no_smote,
         )
         trainer.save_model(args.model_name)
 
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("TRAINING COMPLETE")
-        print("="*60)
+        print("=" * 60)
         print(f"Model saved to: models/{args.model_name}.joblib")
-        print(f"\nTo use in trading:")
+        print("\nTo use in trading:")
         print("  from tools.train_trade_model import TradeQualityTrainer")
         print("  trainer = TradeQualityTrainer()")
         print(f"  trainer.load_model('{args.model_name}')")

@@ -1,10 +1,14 @@
-from loggers.logger import Logger
-import random, math
-import numpy as np
-from datetime import datetime, UTC
 import asyncio
+import math
+import random
+from datetime import UTC, datetime
+
+import numpy as np
+
+from core.contracts.events import EVENT_NEW_BAR, EVENT_PRICE_UPDATE
 from core.events.eventhandler import get_event_handler
-from core.contracts.events import EVENT_PRICE_UPDATE, EVENT_NEW_BAR
+from loggers.logger import Logger
+
 
 class GBMSimulator:
     """
@@ -22,32 +26,27 @@ class GBMSimulator:
         *,
         drift_scale: float = 1.0,
         vol_scale: float = 1.0,
-        dt: float = 1/390,
-        bias_period: int = 10_000,     # how fast the regime bias oscillates
-        bias_strength: float = 1.0,    # amplitude of bias drift
+        dt: float = 1 / 390,
+        bias_period: int = 10_000,  # how fast the regime bias oscillates
+        bias_strength: float = 1.0,  # amplitude of bias drift
     ):
         self.symbols = symbols
         self.price_state = {
-            s: base_price[s] if isinstance(base_price, dict) else base_price + random.uniform(-50, 50)
-            for s in symbols
+            s: base_price[s] if isinstance(base_price, dict) else base_price + random.uniform(-50, 50) for s in symbols
         }
 
         self.volatility = {s: random.uniform(0.01, 0.03) * vol_scale for s in symbols}
         self.t = {s: 0 for s in symbols}
 
         # --- Drift & noise scales ---
-        self.cycle_length = 2000                   # fast oscillation (intraday)
+        self.cycle_length = 2000  # fast oscillation (intraday)
         self.max_drift = 0.00005 * drift_scale
-        self.bias_period = bias_period             # long-term regime cycle
-        self.bias_strength = bias_strength         # amplitude for oscillating bias
+        self.bias_period = bias_period  # long-term regime cycle
+        self.bias_strength = bias_strength  # amplitude for oscillating bias
         self.dt = dt
         self.log_prices = log_prices
         # Logger - own file with propagation to app.log
-        self.logger = Logger(
-            log_file="gbm_simulator.log",
-            logger_name="GBMSimulator",
-            propagate=True
-        ).get_logger()
+        self.logger = Logger(log_file="gbm_simulator.log", logger_name="GBMSimulator", propagate=True).get_logger()
 
         self.logger.info(f"GBMSimulator initialized for symbols: {symbols}")
 
@@ -90,11 +89,7 @@ class GBMSimulator:
         fast_mu = self.max_drift * math.sin(2 * math.pi * self.t[symbol] / self.cycle_length)
 
         # Long-term oscillating bias (slow regime shifts)
-        bias_mu = (
-            self.max_drift
-            * self.bias_strength
-            * math.sin(2 * math.pi * self.t[symbol] / self.bias_period)
-        )
+        bias_mu = self.max_drift * self.bias_strength * math.sin(2 * math.pi * self.t[symbol] / self.bias_period)
 
         # Add small random local drift for micro variation
         noise_mu = np.random.normal(0, self.max_drift * 0.5)
@@ -141,10 +136,10 @@ class GBMSimulator:
             "volume": volume,
         }
         payload = {
-                "symbol": symbol,
-                "price": bar["close"],
-                "timestamp": bar["timestamp"].isoformat(),
-            }
+            "symbol": symbol,
+            "price": bar["close"],
+            "timestamp": bar["timestamp"].isoformat(),
+        }
         barpayload = {
             "symbol": symbol,
             "timestamp": bar["timestamp"].isoformat(),
@@ -159,7 +154,6 @@ class GBMSimulator:
         # Schedule asynchronously so we don’t block bar generation
         asyncio.create_task(self.bus.emit(EVENT_PRICE_UPDATE, payload))
         asyncio.create_task(self.bus.emit(EVENT_NEW_BAR, barpayload))
-
 
         if self.log_prices:
             self.logger.info(

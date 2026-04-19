@@ -3,22 +3,25 @@ Health check and monitoring utilities.
 
 Provides health status tracking for system components.
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Awaitable
-import threading
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
 class HealthStatus(Enum):
     """Component health status."""
+
     HEALTHY = "healthy"
     DEGRADED = "degraded"
     UNHEALTHY = "unhealthy"
@@ -28,16 +31,17 @@ class HealthStatus(Enum):
 @dataclass
 class ComponentHealth:
     """Health status for a single component."""
+
     name: str
     status: HealthStatus = HealthStatus.UNKNOWN
     message: str = ""
-    last_check: Optional[datetime] = None
-    last_success: Optional[datetime] = None
+    last_check: datetime | None = None
+    last_success: datetime | None = None
     consecutive_failures: int = 0
-    latency_ms: Optional[float] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    latency_ms: float | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "status": self.status.value,
@@ -53,19 +57,18 @@ class ComponentHealth:
 @dataclass
 class SystemHealth:
     """Aggregate health status for the system."""
+
     status: HealthStatus
-    components: Dict[str, ComponentHealth]
+    components: dict[str, ComponentHealth]
     timestamp: datetime
     uptime_seconds: float
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "status": self.status.value,
             "timestamp": self.timestamp.isoformat(),
             "uptime_seconds": self.uptime_seconds,
-            "components": {
-                name: comp.to_dict() for name, comp in self.components.items()
-            },
+            "components": {name: comp.to_dict() for name, comp in self.components.items()},
         }
 
 
@@ -80,10 +83,10 @@ class HealthChecker:
     - Health history tracking
     """
 
-    _instance: Optional["HealthChecker"] = None
+    _instance: HealthChecker | None = None
     _lock = threading.Lock()
 
-    def __new__(cls) -> "HealthChecker":
+    def __new__(cls) -> HealthChecker:
         with cls._lock:
             if cls._instance is None:
                 cls._instance = super().__new__(cls)
@@ -94,11 +97,11 @@ class HealthChecker:
         if self._initialized:
             return
 
-        self._components: Dict[str, ComponentHealth] = {}
-        self._checks: Dict[str, Callable[[], Awaitable[bool]]] = {}
+        self._components: dict[str, ComponentHealth] = {}
+        self._checks: dict[str, Callable[[], Awaitable[bool]]] = {}
         self._check_interval: float = 30.0  # seconds
         self._running = False
-        self._task: Optional[asyncio.Task] = None
+        self._task: asyncio.Task | None = None
         self._start_time = time.monotonic()
         self._initialized = True
 
@@ -106,7 +109,7 @@ class HealthChecker:
         self,
         name: str,
         check_func: Callable[[], Awaitable[bool]],
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """
         Register a health check for a component.
@@ -231,7 +234,7 @@ class HealthChecker:
 
             await asyncio.sleep(self._check_interval)
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> dict[str, Any]:
         """Get current health status synchronously (cached)."""
         statuses = [c.status for c in self._components.values()]
 
@@ -247,9 +250,7 @@ class HealthChecker:
         return {
             "status": aggregate.value,
             "uptime_seconds": time.monotonic() - self._start_time,
-            "components": {
-                name: comp.to_dict() for name, comp in self._components.items()
-            },
+            "components": {name: comp.to_dict() for name, comp in self._components.items()},
         }
 
 

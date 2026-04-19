@@ -1,46 +1,47 @@
 from __future__ import annotations
+
 import asyncio
 import inspect
 import uuid
-from typing import Optional, List, Dict, Any
+from datetime import datetime, timezone
+from typing import Any
 
 import alpaca
-from alpaca.trading.client import TradingClient
-from alpaca.data.live import StockDataStream
 from alpaca.data.enums import DataFeed
-from datetime import datetime, timezone
-
-from alpaca.trading.requests import (
-    MarketOrderRequest,
-    LimitOrderRequest,
-    GetOrdersRequest,
+from alpaca.data.historical.stock import StockHistoricalDataClient
+from alpaca.data.live import StockDataStream
+from alpaca.data.requests import StockBarsRequest, StockLatestQuoteRequest
+from alpaca.data.timeframe import TimeFrame
+from alpaca.trading.client import TradingClient
+from alpaca.trading.enums import (
+    OrderClass,
+    QueryOrderStatus,
+    TimeInForce,
 )
 from alpaca.trading.enums import (
     OrderSide as AlpacaOrderSide,
-    TimeInForce,
-    QueryOrderStatus,
-    OrderClass,
+)
+from alpaca.trading.requests import (
+    GetOrdersRequest,
+    LimitOrderRequest,
+    MarketOrderRequest,
+)
+
+from core.app_types import BrokerSnapshot, OrderResult, PositionView
+from core.base.base_broker_interface import BaseBrokerInterface
+from core.contracts.events import (
+    EVENT_ALERT,
+    EVENT_HEALTH_UPDATE,
+    EVENT_ORDER_STATUS,
+    AlertPayload,
+    HealthPayload,
+    OrderStatusPayload,
 )
 from core.enums import OrderSide  # Our canonical enum
-
-from alpaca.data.historical.stock import StockHistoricalDataClient
-from alpaca.data.requests import StockLatestQuoteRequest, StockBarsRequest
-from alpaca.data.timeframe import TimeFrame
-
-from core.base.base_broker_interface import BaseBrokerInterface
-from core.app_types import OrderResult, PositionView, BrokerSnapshot
-from loggers.logger import Logger
 from core.events.eventhandler import EventHandler, get_event_handler
-from core.contracts.events import (
-    EVENT_ORDER_STATUS, OrderStatusPayload,
-    EVENT_NEW_TRADE, TradePayload,
-    EVENT_POSITION_UPDATE, PositionPayload,
-    EVENT_PNL_UPDATE, PnLPayload,
-    EVENT_HEALTH_UPDATE, HealthPayload,
-    EVENT_ALERT, AlertPayload
-)
-from core.utils.retry import retry, async_retry, get_circuit_breaker, CircuitOpenError
 from core.utils.health import get_health_checker
+from core.utils.retry import async_retry, retry
+from loggers.logger import Logger
 
 
 def _map_side(side: OrderSide | str) -> AlpacaOrderSide:
@@ -72,23 +73,30 @@ class AlpacaBroker(BaseBrokerInterface):
     you originally used (connect/start_stream/subscribe_bars/execute_trade).
     """
 
-    def __init__(self, api_key: str, api_secret: str, event_handler: EventHandler | None = None, paper: bool = True, poll_timeout: int = 30):
+    def __init__(
+        self,
+        api_key: str,
+        api_secret: str,
+        event_handler: EventHandler | None = None,
+        paper: bool = True,
+        poll_timeout: int = 30,
+    ):
         self.api_key = api_key
         self.api_secret = api_secret
         self.paper = paper
-        self.trading_client: Optional[TradingClient] = None
-        self.stream: Optional[StockDataStream] = None
-        self.data_rest: Optional[StockHistoricalDataClient] = None
-        self._last_price: Dict[str, float] = {}
+        self.trading_client: TradingClient | None = None
+        self.stream: StockDataStream | None = None
+        self.data_rest: StockHistoricalDataClient | None = None
+        self._last_price: dict[str, float] = {}
         self._connected = False
         self.logger = Logger("alpaca.log", "AlpacaBroker").get_logger()
         self.event_handler = get_event_handler()
         # Track subscriptions for re-subscribing after reconnection
-        self._bar_subscriptions: Dict[str, Any] = {}  # symbol -> callback
+        self._bar_subscriptions: dict[str, Any] = {}  # symbol -> callback
         self._streaming = False  # Flag to control streaming loop
 
         # Polling fallback
-        self._last_bar_time: Dict[str, datetime] = {}  # symbol -> last bar timestamp
+        self._last_bar_time: dict[str, datetime] = {}  # symbol -> last bar timestamp
         self._polling_active = False  # Whether polling fallback is active
         self._poll_interval = 60  # Poll every 60 seconds
         self._stale_threshold = 120  # Consider stale if no bar for 2 minutes
@@ -147,9 +155,9 @@ class AlpacaBroker(BaseBrokerInterface):
         if self.stream is not None:
             try:
                 # Stop the websocket stream
-                if hasattr(self.stream, 'stop'):
+                if hasattr(self.stream, "stop"):
                     self.stream.stop()
-                elif hasattr(self.stream, 'close'):
+                elif hasattr(self.stream, "close"):
                     self.stream.close()
                 self.logger.info("Stream disconnected.")
             except Exception as e:
@@ -163,11 +171,7 @@ class AlpacaBroker(BaseBrokerInterface):
 
         # Register health check
         health_checker = get_health_checker()
-        health_checker.register(
-            "alpaca_broker",
-            self._health_check,
-            metadata={"paper": self.paper}
-        )
+        health_checker.register("alpaca_broker", self._health_check, metadata={"paper": self.paper})
 
         if self.event_handler:
             payload: HealthPayload = {
@@ -209,17 +213,20 @@ class AlpacaBroker(BaseBrokerInterface):
         if not self.stream:
             self.logger.warning("Stream not initialized. Call connect() first.")
             if self.event_handler:
-                await self.event_handler.emit(EVENT_HEALTH_UPDATE, {
-                    "broker": "alpaca",
-                    "status": "not_initialized",
-                    "details": {"error": "Stream not initialized"},
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                })
+                await self.event_handler.emit(
+                    EVENT_HEALTH_UPDATE,
+                    {
+                        "broker": "alpaca",
+                        "status": "not_initialized",
+                        "details": {"error": "Stream not initialized"},
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    },
+                )
             return
 
         self._streaming = True
         self.logger.info(
-            f"[stream] starting... alpaca-py={getattr(alpaca,'__version__','unknown')} feed={getattr(self, 'feed', '?')}"
+            f"[stream] starting... alpaca-py={getattr(alpaca, '__version__', 'unknown')} feed={getattr(self, 'feed', '?')}"
         )
         if self.event_handler:
             payload: HealthPayload = {
@@ -316,8 +323,10 @@ class AlpacaBroker(BaseBrokerInterface):
             return
 
         if not asyncio.iscoroutinefunction(callback):
+
             async def _async_wrap(bar):
                 return callback(bar)
+
             base_cb = _async_wrap
         else:
             base_cb = callback
@@ -334,12 +343,17 @@ class AlpacaBroker(BaseBrokerInterface):
         self.logger.info(f"[stream] subscribed bars: {symbol}")
 
         if self.event_handler:
-            asyncio.create_task(self.event_handler.emit(EVENT_HEALTH_UPDATE, {
-                "broker": "alpaca",
-                "status": "subscribed",
-                "details": {"symbol": symbol},
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-            }))
+            asyncio.create_task(
+                self.event_handler.emit(
+                    EVENT_HEALTH_UPDATE,
+                    {
+                        "broker": "alpaca",
+                        "status": "subscribed",
+                        "details": {"symbol": symbol},
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    },
+                )
+            )
 
     def _resubscribe_all(self):
         """Re-subscribe to all tracked bar subscriptions after reconnection."""
@@ -358,11 +372,11 @@ class AlpacaBroker(BaseBrokerInterface):
             self.logger.info("[stream] Closing old stream object...")
             try:
                 # Try to close the websocket connection
-                if hasattr(self.stream, 'close'):
+                if hasattr(self.stream, "close"):
                     self.stream.close()
-                elif hasattr(self.stream, 'stop'):
+                elif hasattr(self.stream, "stop"):
                     self.stream.stop()
-                elif hasattr(self.stream, '_ws') and self.stream._ws is not None:
+                elif hasattr(self.stream, "_ws") and self.stream._ws is not None:
                     # Direct websocket access as fallback
                     pass  # Let it be garbage collected
             except Exception as e:
@@ -380,12 +394,17 @@ class AlpacaBroker(BaseBrokerInterface):
         self.logger.info(f"[RECONNECTED] Stream restored with {len(symbols)} subscriptions: {symbols}")
 
         if self.event_handler:
-            asyncio.create_task(self.event_handler.emit(EVENT_HEALTH_UPDATE, {
-                "broker": "alpaca",
-                "status": "reconnected",
-                "details": {"symbols": symbols},
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-            }))
+            asyncio.create_task(
+                self.event_handler.emit(
+                    EVENT_HEALTH_UPDATE,
+                    {
+                        "broker": "alpaca",
+                        "status": "reconnected",
+                        "details": {"symbols": symbols},
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    },
+                )
+            )
 
     # ---------------------------------------------------------
     # Polling Fallback
@@ -395,7 +414,7 @@ class AlpacaBroker(BaseBrokerInterface):
         """Record that a bar was received for a symbol (called by streaming callback)."""
         self._last_bar_time[symbol] = datetime.now(timezone.utc)
 
-    def _get_stale_symbols(self) -> List[str]:
+    def _get_stale_symbols(self) -> list[str]:
         """Get symbols that haven't received a bar recently."""
         now = datetime.now(timezone.utc)
         stale = []
@@ -405,7 +424,7 @@ class AlpacaBroker(BaseBrokerInterface):
                 stale.append(symbol)
         return stale
 
-    async def _poll_bars(self, symbols: List[str]) -> Dict[str, Any]:
+    async def _poll_bars(self, symbols: list[str]) -> dict[str, Any]:
         """
         Fetch latest bars for symbols via REST API.
 
@@ -422,16 +441,11 @@ class AlpacaBroker(BaseBrokerInterface):
 
         try:
             # Get the last 2 bars to ensure we have the most recent complete bar
-            request = StockBarsRequest(
-                symbol_or_symbols=symbols,
-                timeframe=TimeFrame.Minute,
-                limit=2
-            )
+            request = StockBarsRequest(symbol_or_symbols=symbols, timeframe=TimeFrame.Minute, limit=2)
 
             # Use wait_for to prevent hanging indefinitely on API calls
             bars = await asyncio.wait_for(
-                asyncio.to_thread(self.data_rest.get_stock_bars, request),
-                timeout=self._poll_timeout
+                asyncio.to_thread(self.data_rest.get_stock_bars, request), timeout=self._poll_timeout
             )
 
             result = {}
@@ -451,7 +465,7 @@ class AlpacaBroker(BaseBrokerInterface):
             self.logger.error(f"[poll] Error fetching bars: {e}")
             # If auth error, log more details
             if "unauthorized" in str(e).lower() or "401" in str(e):
-                self.logger.error(f"[poll] Auth error - check ALPACA_API_KEY and ALPACA_SECRET_KEY env vars")
+                self.logger.error("[poll] Auth error - check ALPACA_API_KEY and ALPACA_SECRET_KEY env vars")
             return {}
 
     async def _polling_fallback_loop(self):
@@ -461,7 +475,9 @@ class AlpacaBroker(BaseBrokerInterface):
         Checks every poll_interval seconds. If any symbols haven't received
         a bar via streaming in stale_threshold seconds, fetches via REST.
         """
-        self.logger.info(f"[poll] Polling fallback started (interval={self._poll_interval}s, stale={self._stale_threshold}s)")
+        self.logger.info(
+            f"[poll] Polling fallback started (interval={self._poll_interval}s, stale={self._stale_threshold}s)"
+        )
 
         while self._streaming:
             await asyncio.sleep(self._poll_interval)
@@ -491,12 +507,15 @@ class AlpacaBroker(BaseBrokerInterface):
                             self.logger.error(f"[poll] Error in callback for {symbol}: {e}")
 
                 if self.event_handler:
-                    await self.event_handler.emit(EVENT_HEALTH_UPDATE, {
-                        "broker": "alpaca",
-                        "status": "polling_fallback",
-                        "details": {"symbols": stale_symbols, "bars_fetched": len(bars)},
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                    })
+                    await self.event_handler.emit(
+                        EVENT_HEALTH_UPDATE,
+                        {
+                            "broker": "alpaca",
+                            "status": "polling_fallback",
+                            "details": {"symbols": stale_symbols, "bars_fetched": len(bars)},
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                        },
+                    )
             else:
                 if self._polling_active:
                     self.logger.info("[poll] All symbols receiving streaming data, polling inactive")
@@ -627,19 +646,23 @@ class AlpacaBroker(BaseBrokerInterface):
         last_error = None
         for attempt in range(1, max_retries + 1):
             try:
+
                 def _submit():
                     ot = (order_type or "market").lower()
                     if ot == "market":
                         req = MarketOrderRequest(
-                            symbol=symbol, qty=qty, side=s, time_in_force=tif,
-                            client_order_id=client_order_id
+                            symbol=symbol, qty=qty, side=s, time_in_force=tif, client_order_id=client_order_id
                         )
                     elif ot == "limit":
                         if limit_price is None:
                             raise ValueError("limit_price is required for limit orders")
                         req = LimitOrderRequest(
-                            symbol=symbol, qty=qty, side=s, time_in_force=tif,
-                            limit_price=limit_price, client_order_id=client_order_id
+                            symbol=symbol,
+                            qty=qty,
+                            side=s,
+                            time_in_force=tif,
+                            limit_price=limit_price,
+                            client_order_id=client_order_id,
                         )
                     else:
                         raise ValueError(f"Unsupported order_type: {order_type}")
@@ -667,9 +690,7 @@ class AlpacaBroker(BaseBrokerInterface):
 
                 # Check if this is a duplicate order error
                 if "duplicate" in error_str or "already exists" in error_str:
-                    self.logger.info(
-                        f"[{symbol}] Order {client_order_id} already exists, fetching status..."
-                    )
+                    self.logger.info(f"[{symbol}] Order {client_order_id} already exists, fetching status...")
                     try:
                         existing = await self._get_order_by_client_id(client_order_id)
                         if existing:
@@ -680,8 +701,7 @@ class AlpacaBroker(BaseBrokerInterface):
                 # Log and retry
                 if attempt < max_retries:
                     self.logger.warning(
-                        f"[{symbol}] Order failed (attempt {attempt}/{max_retries}): {e}, "
-                        f"retrying in {retry_delay}s..."
+                        f"[{symbol}] Order failed (attempt {attempt}/{max_retries}): {e}, retrying in {retry_delay}s..."
                     )
                     await asyncio.sleep(retry_delay)
                 else:
@@ -698,7 +718,6 @@ class AlpacaBroker(BaseBrokerInterface):
                         await self.event_handler.emit(EVENT_ORDER_STATUS, payload)
 
         raise RuntimeError(f"Order failed after {max_retries} attempts: {last_error}")
-
 
     async def cancel_order(self, order_id: str) -> None:  # no return; emits instead
         if not self.trading_client:
@@ -784,7 +803,7 @@ class AlpacaBroker(BaseBrokerInterface):
         if isinstance(side, str):
             alpaca_side = _map_side(side)
         else:
-            alpaca_side = _map_side(side.value if hasattr(side, 'value') else str(side))
+            alpaca_side = _map_side(side.value if hasattr(side, "value") else str(side))
 
         # Generate unique client_order_id to prevent duplicates on retry
         client_order_id = f"st_{symbol}_{uuid.uuid4().hex[:12]}"
@@ -792,6 +811,7 @@ class AlpacaBroker(BaseBrokerInterface):
         last_error = None
         for attempt in range(1, max_retries + 1):
             try:
+
                 def _submit():
                     return self.trading_client.submit_order(
                         MarketOrderRequest(
@@ -828,9 +848,7 @@ class AlpacaBroker(BaseBrokerInterface):
 
                 # Check if this is a duplicate order error (order already exists)
                 if "duplicate" in error_str or "already exists" in error_str:
-                    self.logger.info(
-                        f"[{symbol}] Order {client_order_id} already exists, fetching status..."
-                    )
+                    self.logger.info(f"[{symbol}] Order {client_order_id} already exists, fetching status...")
                     try:
                         existing = await self._get_order_by_client_id(client_order_id)
                         if existing:
@@ -841,21 +859,19 @@ class AlpacaBroker(BaseBrokerInterface):
                 # Log and retry
                 if attempt < max_retries:
                     self.logger.warning(
-                        f"[{symbol}] Order failed (attempt {attempt}/{max_retries}): {e}, "
-                        f"retrying in {retry_delay}s..."
+                        f"[{symbol}] Order failed (attempt {attempt}/{max_retries}): {e}, retrying in {retry_delay}s..."
                     )
                     await asyncio.sleep(retry_delay)
                 else:
-                    self.logger.error(
-                        f"[{symbol}] Order failed after {max_retries} attempts: {e}"
-                    )
+                    self.logger.error(f"[{symbol}] Order failed after {max_retries} attempts: {e}")
 
         # All retries exhausted
         raise RuntimeError(f"Order failed after {max_retries} attempts: {last_error}")
 
-    async def _get_order_by_client_id(self, client_order_id: str) -> Optional[OrderResult]:
+    async def _get_order_by_client_id(self, client_order_id: str) -> OrderResult | None:
         """Fetch an order by client_order_id."""
         try:
+
             def _fetch():
                 return self.trading_client.get_order_by_client_id(client_order_id)
 
@@ -864,7 +880,6 @@ class AlpacaBroker(BaseBrokerInterface):
         except Exception as e:
             self.logger.debug(f"Could not fetch order by client_id {client_order_id}: {e}")
             return None
-
 
     async def place_oco_order(
         self,
@@ -901,6 +916,7 @@ class AlpacaBroker(BaseBrokerInterface):
         last_error = None
         for attempt in range(1, max_retries + 1):
             try:
+
                 def _submit():
                     req = MarketOrderRequest(
                         symbol=symbol,
@@ -939,9 +955,7 @@ class AlpacaBroker(BaseBrokerInterface):
 
                 # Check if this is a duplicate order error
                 if "duplicate" in error_str or "already exists" in error_str:
-                    self.logger.info(
-                        f"[{symbol}] OCO order {client_order_id} already exists, fetching status..."
-                    )
+                    self.logger.info(f"[{symbol}] OCO order {client_order_id} already exists, fetching status...")
                     try:
                         existing = await self._get_order_by_client_id(client_order_id)
                         if existing:
@@ -957,14 +971,11 @@ class AlpacaBroker(BaseBrokerInterface):
                     )
                     await asyncio.sleep(retry_delay)
                 else:
-                    self.logger.error(
-                        f"[{symbol}] OCO order failed after {max_retries} attempts: {e}"
-                    )
+                    self.logger.error(f"[{symbol}] OCO order failed after {max_retries} attempts: {e}")
 
         raise RuntimeError(f"OCO order failed after {max_retries} attempts: {last_error}")
 
-
-    async def get_position(self, symbol: str) -> Optional[PositionView]:
+    async def get_position(self, symbol: str) -> PositionView | None:
         if not self.trading_client:
             raise RuntimeError("Not connected: call connect() first")
 
@@ -977,7 +988,7 @@ class AlpacaBroker(BaseBrokerInterface):
 
         return await asyncio.to_thread(_get)
 
-    async def get_positions(self) -> List[PositionView]:
+    async def get_positions(self) -> list[PositionView]:
         """Get all open positions."""
         if not self.trading_client:
             raise RuntimeError("Not connected: call connect() first")
@@ -995,10 +1006,12 @@ class AlpacaBroker(BaseBrokerInterface):
         def _acct():
             a = self.trading_client.get_account()
             # Debug: Log raw Alpaca account values
-            self.logger.info(f"[ALPACA RAW] cash={getattr(a, 'cash', '?')}, "
-                           f"equity={getattr(a, 'equity', '?')}, "
-                           f"buying_power={getattr(a, 'buying_power', '?')}, "
-                           f"portfolio_value={getattr(a, 'portfolio_value', '?')}")
+            self.logger.info(
+                f"[ALPACA RAW] cash={getattr(a, 'cash', '?')}, "
+                f"equity={getattr(a, 'equity', '?')}, "
+                f"buying_power={getattr(a, 'buying_power', '?')}, "
+                f"portfolio_value={getattr(a, 'portfolio_value', '?')}"
+            )
 
             # Also fetch all positions
             positions_list = self.trading_client.get_all_positions()
@@ -1008,10 +1021,12 @@ class AlpacaBroker(BaseBrokerInterface):
                 if symbol:
                     positions[symbol] = self._mk_position_view(p)
                     # Debug: Log raw position values
-                    self.logger.info(f"[ALPACA POS] {symbol}: qty={getattr(p, 'qty', '?')}, "
-                                   f"avg_entry={getattr(p, 'avg_entry_price', '?')}, "
-                                   f"current={getattr(p, 'current_price', '?')}, "
-                                   f"unrealized_pl={getattr(p, 'unrealized_pl', '?')}")
+                    self.logger.info(
+                        f"[ALPACA POS] {symbol}: qty={getattr(p, 'qty', '?')}, "
+                        f"avg_entry={getattr(p, 'avg_entry_price', '?')}, "
+                        f"current={getattr(p, 'current_price', '?')}, "
+                        f"unrealized_pl={getattr(p, 'unrealized_pl', '?')}"
+                    )
             return self._mk_broker_snapshot(a, positions)
 
         return await asyncio.to_thread(_acct)
@@ -1063,7 +1078,7 @@ class AlpacaBroker(BaseBrokerInterface):
         self.logger.debug(f"Buying power from API: ${bp:,.2f}")
         return bp
 
-    async def get_open_orders(self) -> List[OrderResult]:
+    async def get_open_orders(self) -> list[OrderResult]:
         if not self.trading_client:
             raise RuntimeError("Not connected: call connect() first")
 

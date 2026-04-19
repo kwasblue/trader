@@ -7,12 +7,14 @@ Tests the REAL implementation for:
 - Exit condition checks
 - Partial exit logic
 """
-import pytest
-from datetime import datetime, timezone, timedelta
 
+from datetime import datetime, timedelta, timezone
+
+import pytest
+
+from core.enums import OrderSide
 from core.logic.position_manager import PositionManager
 from core.logic.symbol_state import SymbolState
-from core.enums import OrderSide
 
 
 class TestPositionManagerInit:
@@ -29,12 +31,7 @@ class TestPositionManagerInit:
 
     def test_custom_initialization(self):
         """Test custom parameters."""
-        pm = PositionManager(
-            exit_fraction=0.5,
-            min_bars_to_hold=5,
-            swing_mode=True,
-            min_hold_days=2
-        )
+        pm = PositionManager(exit_fraction=0.5, min_bars_to_hold=5, swing_mode=True, min_hold_days=2)
 
         assert pm.exit_fraction == 0.5
         assert pm.min_bars_to_hold == 5
@@ -44,8 +41,7 @@ class TestPositionManagerInit:
     def test_multipliers_stored(self):
         """Test that multipliers are stored correctly."""
         pm = PositionManager(
-            tp_mults={"normal": 3.0, "high_volatility": 4.0},
-            sl_mults={"normal": 2.0, "high_volatility": 2.5}
+            tp_mults={"normal": 3.0, "high_volatility": 4.0}, sl_mults={"normal": 2.0, "high_volatility": 2.5}
         )
 
         assert pm.tp_mults["normal"] == 3.0
@@ -60,21 +56,14 @@ class TestCalculateLevels:
     @pytest.fixture
     def pm(self):
         return PositionManager(
-            tp_mults={"normal": 2.0, "high_volatility": 3.0},
-            sl_mults={"normal": 1.5, "high_volatility": 2.0}
+            tp_mults={"normal": 2.0, "high_volatility": 3.0}, sl_mults={"normal": 1.5, "high_volatility": 2.0}
         )
 
     def test_long_entry_levels(self, pm):
         """Test SL/TP calculation for long entry."""
         state = SymbolState(symbol="AAPL")
 
-        pm.calculate_levels(
-            state=state,
-            price=150.0,
-            atr=2.0,
-            condition="normal",
-            side=OrderSide.BUY
-        )
+        pm.calculate_levels(state=state, price=150.0, atr=2.0, condition="normal", side=OrderSide.BUY)
 
         # Long: SL below entry, TP above entry
         assert state.stop_loss == 150.0 - (2.0 * 1.5)  # 147.0
@@ -87,13 +76,7 @@ class TestCalculateLevels:
         """Test SL/TP calculation for short entry."""
         state = SymbolState(symbol="AAPL")
 
-        pm.calculate_levels(
-            state=state,
-            price=150.0,
-            atr=2.0,
-            condition="normal",
-            side=OrderSide.SELL
-        )
+        pm.calculate_levels(state=state, price=150.0, atr=2.0, condition="normal", side=OrderSide.SELL)
 
         # Short: SL above entry, TP below entry
         assert state.stop_loss == 150.0 + (2.0 * 1.5)  # 153.0
@@ -106,13 +89,7 @@ class TestCalculateLevels:
         """Test that high volatility regime uses different multipliers."""
         state = SymbolState(symbol="AAPL")
 
-        pm.calculate_levels(
-            state=state,
-            price=150.0,
-            atr=2.0,
-            condition="high_volatility",
-            side=OrderSide.BUY
-        )
+        pm.calculate_levels(state=state, price=150.0, atr=2.0, condition="high_volatility", side=OrderSide.BUY)
 
         # High vol: wider stops
         assert state.stop_loss == 150.0 - (2.0 * 2.0)  # 146.0 (vs 147.0 for normal)
@@ -124,13 +101,7 @@ class TestCalculateLevels:
         state.bars_held = 10
         state.max_favorable_excursion = 5.0
 
-        pm.calculate_levels(
-            state=state,
-            price=150.0,
-            atr=2.0,
-            condition="normal",
-            side=OrderSide.BUY
-        )
+        pm.calculate_levels(state=state, price=150.0, atr=2.0, condition="normal", side=OrderSide.BUY)
 
         assert state.bars_held == 0
         assert state.max_favorable_excursion is None
@@ -142,9 +113,7 @@ class TestTrailingStop:
 
     @pytest.fixture
     def pm(self):
-        return PositionManager(
-            sl_mults={"normal": 1.5}
-        )
+        return PositionManager(sl_mults={"normal": 1.5})
 
     def test_long_trailing_stop_moves_up(self, pm):
         """Trailing stop should move up as price rises for long."""

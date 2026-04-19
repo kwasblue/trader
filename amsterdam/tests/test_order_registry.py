@@ -8,12 +8,13 @@ Tests cover:
 - Conflicting order detection
 - Concurrent access safety
 """
-import asyncio
-import pytest
-from datetime import datetime, timezone
 
-from core.order_registry import OrderRegistry, TrackedOrder
+import asyncio
+
+import pytest
+
 from core.enums import OrderStatus
+from core.order_registry import OrderRegistry, TrackedOrder
 
 
 class TestTrackedOrder:
@@ -278,6 +279,7 @@ class TestOrderRegistry:
     @pytest.mark.asyncio
     async def test_concurrent_access(self, registry):
         """Test concurrent access to registry."""
+
         async def register_order(i):
             await registry.register(
                 order_id=f"ORD{i}",

@@ -7,12 +7,13 @@ Tests cover:
 - Position state management
 - State transition validation
 """
-import asyncio
-import pytest
-from unittest.mock import MagicMock
 
-from core.logic.portfolio_state import PortfolioState, SymbolPosition
+import asyncio
+
+import pytest
+
 from core.enums import PositionState
+from core.logic.portfolio_state import PortfolioState
 
 
 class TestPortfolioStatePositionStates:
@@ -82,11 +83,7 @@ class TestPortfolioStatePositionStates:
     @pytest.mark.asyncio
     async def test_position_state_with_order_id(self, portfolio):
         """Test position state with associated order ID."""
-        result = await portfolio.set_position_state(
-            "AAPL",
-            PositionState.PENDING_ENTRY,
-            order_id="ORD123"
-        )
+        result = await portfolio.set_position_state("AAPL", PositionState.PENDING_ENTRY, order_id="ORD123")
         assert result is True
 
 
@@ -129,6 +126,7 @@ class TestApplyFillSafe:
     @pytest.mark.asyncio
     async def test_concurrent_fills_same_symbol(self, portfolio):
         """Test concurrent fills for same symbol are serialized."""
+
         # This tests that the lock prevents race conditions
         async def apply_fill(side, qty, price):
             await portfolio.apply_fill_safe("AAPL", side, qty, price)
@@ -146,6 +144,7 @@ class TestApplyFillSafe:
     @pytest.mark.asyncio
     async def test_concurrent_fills_different_symbols(self, portfolio):
         """Test concurrent fills for different symbols."""
+
         async def apply_fill(symbol, qty, price):
             await portfolio.apply_fill_safe(symbol, "buy", qty, price)
 
@@ -179,7 +178,7 @@ class TestConcurrentStateTransitions:
         results = await asyncio.gather(
             portfolio.set_position_state("AAPL", PositionState.OPEN),
             portfolio.set_position_state("AAPL", PositionState.OPEN),
-            return_exceptions=True
+            return_exceptions=True,
         )
 
         # At least one should succeed
@@ -188,6 +187,7 @@ class TestConcurrentStateTransitions:
     @pytest.mark.asyncio
     async def test_concurrent_state_updates_different_symbols(self, portfolio):
         """Test concurrent state updates for different symbols."""
+
         async def transition_to_pending(symbol):
             return await portfolio.set_position_state(symbol, PositionState.PENDING_ENTRY)
 
@@ -215,7 +215,7 @@ class TestPortfolioLockBehavior:
     @pytest.mark.asyncio
     async def test_lock_exists(self, portfolio):
         """Test that portfolio has a lock."""
-        assert hasattr(portfolio, '_lock')
+        assert hasattr(portfolio, "_lock")
         assert isinstance(portfolio._lock, asyncio.Lock)
 
     @pytest.mark.asyncio

@@ -1,7 +1,9 @@
-from PySide6 import QtWidgets, QtGui
+from PySide6 import QtGui, QtWidgets
+
 # =====================================================
 # THEME (high-contrast dark)
 # =====================================================
+
 
 def apply_dark_palette(app: QtWidgets.QApplication) -> None:
     palette = QtGui.QPalette()

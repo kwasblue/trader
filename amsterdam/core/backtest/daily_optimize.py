@@ -20,13 +20,12 @@ True walk-forward (future improvement) would use:
 - More robust against overfitting to a single split
 """
 
-import os
-import sys
-import json
 import asyncio
-from pathlib import Path
+import json
+import sys
 from datetime import datetime
-from typing import Dict, Optional, Tuple
+from pathlib import Path
+
 import numpy as np
 
 # Ensure project root is in path
@@ -35,11 +34,11 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from dotenv import load_dotenv
+
 load_dotenv(ROOT / ".env")
 
 from core.unified_data_pipeline import UnifiedDataPipeline
 from loggers.logger import Logger
-
 
 # Setup logger
 logger = Logger("strategy_optimize.log", "StrategyOptimize", propagate=True).get_logger()
@@ -50,12 +49,13 @@ VALIDATION_SPLIT = 0.8  # Train on 80%, validate on 20%
 
 # Tiered minimum trade requirements
 MIN_TRADES_REJECT = 5  # Below this = always reject
-MIN_TRADES_WEAK = 10   # 5-10 trades = heavy confidence penalty
+MIN_TRADES_WEAK = 10  # 5-10 trades = heavy confidence penalty
 MIN_TRADES_MODERATE = 20  # 10-20 trades = moderate penalty
 
 # Config validation
-assert MIN_TRADES_REJECT < MIN_TRADES_WEAK < MIN_TRADES_MODERATE, \
+assert MIN_TRADES_REJECT < MIN_TRADES_WEAK < MIN_TRADES_MODERATE, (
     "Trade thresholds must be ordered: REJECT < WEAK < MODERATE"
+)
 
 # Minimum practical improvement threshold (NOT statistical significance)
 MIN_SHARPE_IMPROVEMENT = 0.3  # Heuristic threshold for meaningful improvement
@@ -66,7 +66,7 @@ MIN_REGIME_CONFIDENCE = 0.25  # Floor - no regime can be below this
 
 # Validation quality floors
 MIN_VALIDATION_SHARPE = 0.0  # Validation must be non-negative
-MIN_VALIDATION_TRADES = 5    # Validation must have some trades
+MIN_VALIDATION_TRADES = 5  # Validation must have some trades
 
 
 async def update_data(symbols, days=TRAIN_DAYS, force_reprocess=False):
@@ -81,7 +81,7 @@ async def update_data(symbols, days=TRAIN_DAYS, force_reprocess=False):
         results = await pipeline.update_symbols(
             symbols=symbols,
             days=days,
-            source='schwab',  # Use Schwab for more historical data
+            source="schwab",  # Use Schwab for more historical data
             force_reprocess=force_reprocess,
             process_data=True,
         )
@@ -112,11 +112,7 @@ def calculate_trade_score(num_trades: int) -> float:
         return min(0.7 + (num_trades - MIN_TRADES_MODERATE) / 10 * 0.3, 1.0)
 
 
-def calculate_confidence_score(
-    train_result,
-    validation_result,
-    regime_stats
-) -> float:
+def calculate_confidence_score(train_result, validation_result, regime_stats) -> float:
     """
     Calculate confidence score for a strategy selection.
 
@@ -181,17 +177,18 @@ def run_optimization(symbols, days=TRAIN_DAYS, existing_routing=None):
     5. Otherwise preserve ENTIRE existing symbol config
     """
     logger.info("=" * 80)
-    logger.info(f"RUNNING CHRONOLOGICAL HOLDOUT OPTIMIZATION")
+    logger.info("RUNNING CHRONOLOGICAL HOLDOUT OPTIMIZATION")
     logger.info(f"Training period: {int(days * VALIDATION_SPLIT)} days")
     logger.info(f"Validation period: {int(days * (1 - VALIDATION_SPLIT))} days")
     logger.info("=" * 80)
 
-    from core.backtest.regime_backtest import RegimeBacktester, REGIME_TYPES
+    from collections import Counter
+
+    from core.backtest.regime_backtest import REGIME_TYPES, RegimeBacktester
     from tools.optimize_routing import (
         DEFAULT_STRATEGIES,
         determine_hybrid_config,
     )
-    from collections import Counter
 
     pipeline = UnifiedDataPipeline()
 
@@ -205,7 +202,7 @@ def run_optimization(symbols, days=TRAIN_DAYS, existing_routing=None):
     low_confidence_symbols = []
 
     for i, symbol in enumerate(symbols):
-        logger.info(f"\n[{i+1}/{len(symbols)}] {symbol}...")
+        logger.info(f"\n[{i + 1}/{len(symbols)}] {symbol}...")
 
         try:
             # Get full dataset
@@ -217,8 +214,8 @@ def run_optimization(symbols, days=TRAIN_DAYS, existing_routing=None):
 
             if len(data) < days:
                 logger.warning(f"{symbol}: Only {len(data)} bars available (need {days})")
-                train_data = data.iloc[:int(len(data) * VALIDATION_SPLIT)]
-                validation_data = data.iloc[int(len(data) * VALIDATION_SPLIT):]
+                train_data = data.iloc[: int(len(data) * VALIDATION_SPLIT)]
+                validation_data = data.iloc[int(len(data) * VALIDATION_SPLIT) :]
             else:
                 # Use most recent data
                 data = data.tail(days).reset_index(drop=True)
@@ -271,7 +268,9 @@ def run_optimization(symbols, days=TRAIN_DAYS, existing_routing=None):
 
                 # Check minimum trade requirement
                 if not train_regime_result or train_regime_result.num_trades < MIN_TRADES_REJECT:
-                    logger.info(f"  {regime}: REJECT - insufficient trades ({train_regime_result.num_trades if train_regime_result else 0} < {MIN_TRADES_REJECT})")
+                    logger.info(
+                        f"  {regime}: REJECT - insufficient trades ({train_regime_result.num_trades if train_regime_result else 0} < {MIN_TRADES_REJECT})"
+                    )
                     regime_decisions[regime] = existing_strategy or "sma"
                     confidence_scores[regime] = 0.0
                     continue
@@ -286,7 +285,9 @@ def run_optimization(symbols, days=TRAIN_DAYS, existing_routing=None):
                 # Check validation quality floor
                 if val_regime_result:
                     if val_regime_result.num_trades < MIN_VALIDATION_TRADES:
-                        logger.info(f"  {regime}: LOW VAL TRADES - {val_regime_result.num_trades} < {MIN_VALIDATION_TRADES}")
+                        logger.info(
+                            f"  {regime}: LOW VAL TRADES - {val_regime_result.num_trades} < {MIN_VALIDATION_TRADES}"
+                        )
                         regime_decisions[regime] = existing_strategy or train_best
                         confidence_scores[regime] = 0.15
                         continue
@@ -311,7 +312,9 @@ def run_optimization(symbols, days=TRAIN_DAYS, existing_routing=None):
 
                         # Compare using VALIDATION Sharpe (not training)
                         candidate_val_sharpe = val_regime_result.sharpe_ratio
-                        incumbent_val_sharpe = incumbent_val_result.sharpe_ratio if incumbent_val_result else float("-inf")
+                        incumbent_val_sharpe = (
+                            incumbent_val_result.sharpe_ratio if incumbent_val_result else float("-inf")
+                        )
 
                         val_sharpe_improvement = candidate_val_sharpe - incumbent_val_sharpe
 
@@ -321,14 +324,20 @@ def run_optimization(symbols, days=TRAIN_DAYS, existing_routing=None):
 
                         if val_sharpe_improvement >= MIN_SHARPE_IMPROVEMENT:
                             regime_decisions[regime] = train_best
-                            logger.info(f"  {regime}: SWITCH to {train_best} (conf={confidence:.2f}, val_Sharpe +{val_sharpe_improvement:.2f}, train_Sharpe +{train_sharpe_improvement:.2f} vs {existing_strategy})")
+                            logger.info(
+                                f"  {regime}: SWITCH to {train_best} (conf={confidence:.2f}, val_Sharpe +{val_sharpe_improvement:.2f}, train_Sharpe +{train_sharpe_improvement:.2f} vs {existing_strategy})"
+                            )
                         else:
                             regime_decisions[regime] = existing_strategy
-                            logger.info(f"  {regime}: KEEP {existing_strategy} (candidate val_improvement {val_sharpe_improvement:.2f} < {MIN_SHARPE_IMPROVEMENT})")
+                            logger.info(
+                                f"  {regime}: KEEP {existing_strategy} (candidate val_improvement {val_sharpe_improvement:.2f} < {MIN_SHARPE_IMPROVEMENT})"
+                            )
                     else:
                         # No existing strategy or can't compare
                         regime_decisions[regime] = train_best
-                        logger.info(f"  {regime}: SELECT {train_best} (conf={confidence:.2f}, train={train_regime_result.sharpe_ratio:.2f}, val={val_regime_result.sharpe_ratio:.2f})")
+                        logger.info(
+                            f"  {regime}: SELECT {train_best} (conf={confidence:.2f}, train={train_regime_result.sharpe_ratio:.2f}, val={val_regime_result.sharpe_ratio:.2f})"
+                        )
                 else:
                     # Low confidence - preserve existing
                     regime_decisions[regime] = existing_strategy or train_best
@@ -358,7 +367,9 @@ def run_optimization(symbols, days=TRAIN_DAYS, existing_routing=None):
                 # Low confidence - preserve ENTIRE existing symbol config
                 if symbol in existing_routing:
                     combined_routing[symbol] = existing_routing[symbol].copy()
-                    logger.info(f"  ✗ PRESERVED existing config (avg_conf={avg_confidence:.2f}, min_conf={min_confidence:.2f})")
+                    logger.info(
+                        f"  ✗ PRESERVED existing config (avg_conf={avg_confidence:.2f}, min_conf={min_confidence:.2f})"
+                    )
                 else:
                     # No existing config - use decisions but mark as low confidence
                     combined_routing[symbol] = {
@@ -444,8 +455,12 @@ def run_optimization(symbols, days=TRAIN_DAYS, existing_routing=None):
     if optimization_details:
         confidences = [d["avg_confidence"] for d in optimization_details.values()]
         min_confidences = [d["min_confidence"] for d in optimization_details.values()]
-        logger.info(f"\n  Average confidence: {np.mean(confidences):.2f} (range: [{np.min(confidences):.2f}, {np.max(confidences):.2f}])")
-        logger.info(f"  Minimum regime confidence: {np.mean(min_confidences):.2f} (range: [{np.min(min_confidences):.2f}, {np.max(min_confidences):.2f}])")
+        logger.info(
+            f"\n  Average confidence: {np.mean(confidences):.2f} (range: [{np.min(confidences):.2f}, {np.max(confidences):.2f}])"
+        )
+        logger.info(
+            f"  Minimum regime confidence: {np.mean(min_confidences):.2f} (range: [{np.min(min_confidences):.2f}, {np.max(min_confidences):.2f}])"
+        )
 
     # Hybrid summary
     hybrid_enabled = sum(1 for h in hybrid_config.values() if h["enabled"])
@@ -471,7 +486,7 @@ async def main():
         logger.error(f"Routing config not found: {routing_path}")
         return 1
 
-    with open(routing_path, "r") as f:
+    with open(routing_path) as f:
         existing_routing = json.load(f)
 
     symbols = [s for s in existing_routing.keys() if s != "default"]

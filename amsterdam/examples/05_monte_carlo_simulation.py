@@ -5,40 +5,40 @@ Example 5: Monte Carlo Simulation
 Demonstrates confidence interval estimation by randomizing trade order.
 """
 
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import pandas as pd
-import numpy as np
 from datetime import datetime
 
-from core.backtest_suite import (
-    VectorizedBacktester,
-    monte_carlo_simulation,
-    validate_ohlcv_data
-)
+import numpy as np
+import pandas as pd
+
+from core.backtest_suite import VectorizedBacktester, monte_carlo_simulation, validate_ohlcv_data
 
 
 def generate_sample_data(days: int = 500) -> pd.DataFrame:
     """Generate synthetic price data."""
     np.random.seed(42)
 
-    dates = pd.date_range(end=datetime.now(), periods=days, freq='D')
+    dates = pd.date_range(end=datetime.now(), periods=days, freq="D")
     returns = np.random.randn(days) * 0.02 + 0.0003
     prices = 100 * np.exp(np.cumsum(returns))
 
-    data = pd.DataFrame({
-        'Date': dates,
-        'Open': prices * (1 + np.random.randn(days) * 0.005),
-        'High': prices * (1 + np.abs(np.random.randn(days) * 0.01)),
-        'Low': prices * (1 - np.abs(np.random.randn(days) * 0.01)),
-        'Close': prices,
-        'Volume': np.random.randint(100000, 1000000, days)
-    })
+    data = pd.DataFrame(
+        {
+            "Date": dates,
+            "Open": prices * (1 + np.random.randn(days) * 0.005),
+            "High": prices * (1 + np.abs(np.random.randn(days) * 0.01)),
+            "Low": prices * (1 - np.abs(np.random.randn(days) * 0.01)),
+            "Close": prices,
+            "Volume": np.random.randint(100000, 1000000, days),
+        }
+    )
 
-    data['High'] = data[['Open', 'High', 'Low', 'Close']].max(axis=1)
-    data['Low'] = data[['Open', 'High', 'Low', 'Close']].min(axis=1)
+    data["High"] = data[["Open", "High", "Low", "Close"]].max(axis=1)
+    data["Low"] = data[["Open", "High", "Low", "Close"]].min(axis=1)
 
     return data
 
@@ -56,21 +56,21 @@ def main():
 
     initial_capital = 10000
     bt = VectorizedBacktester(data, initial_capital=initial_capital)
-    results = bt.run('ema', {'short_window': 12, 'long_window': 26})
+    results = bt.run("ema", {"short_window": 12, "long_window": 26})
     metrics = bt.get_metrics(results)
 
-    print(f"   Strategy: EMA Crossover (12/26)")
+    print("   Strategy: EMA Crossover (12/26)")
     print(f"   Bars: {len(data)}")
     print(f"   Actual Return: {metrics['total_return']:.2%}")
     print(f"   Actual Sharpe: {metrics['sharpe_ratio']:.2f}")
 
     # Create synthetic trades from returns
-    returns = results['Strategy_Return'].values
+    returns = results["Strategy_Return"].values
     trades = []
     for r in returns:
         if r != 0:
             pnl = r * initial_capital
-            trades.append({'pnl': pnl})
+            trades.append({"pnl": pnl})
 
     print(f"   Total Trades: {len(trades)}")
 
@@ -79,12 +79,7 @@ def main():
     print("   Simulations: 5000")
     print("   (Randomizing trade order to estimate outcome distribution)")
 
-    mc = monte_carlo_simulation(
-        trades=trades,
-        initial_capital=initial_capital,
-        n_simulations=5000,
-        seed=42
-    )
+    mc = monte_carlo_simulation(trades=trades, initial_capital=initial_capital, n_simulations=5000, seed=42)
 
     # Display results
     print("\n" + "=" * 70)
@@ -101,7 +96,7 @@ def main():
     for pct in [5, 25, 50, 75, 95]:
         print(f"      {pct:>3}th: {mc.percentiles[pct]:+.2%}")
 
-    print(f"\n   95% Confidence Interval:")
+    print("\n   95% Confidence Interval:")
     print(f"      Lower: {mc.confidence_interval_95[0]:+.2%}")
     print(f"      Upper: {mc.confidence_interval_95[1]:+.2%}")
 
@@ -170,5 +165,5 @@ def main():
     print("\n" + "=" * 70)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

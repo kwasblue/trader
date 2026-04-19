@@ -8,6 +8,6 @@ Components:
 from core.ml.trade_quality_filter import TradeQualityFilter, get_trade_filter
 
 __all__ = [
-    'TradeQualityFilter',
-    'get_trade_filter',
+    "TradeQualityFilter",
+    "get_trade_filter",
 ]

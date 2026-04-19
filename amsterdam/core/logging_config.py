@@ -27,20 +27,21 @@ Environment Variables:
     STRUCTURED_LOGS: Set to "true" to enable JSON output (default: "false")
     LOG_LEVEL: Log level (default: "INFO")
 """
+
 from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Dict, Optional
+from typing import Any
 
 from core.utils.logging_utils import (
-    StructuredFormatter,
     ContextLogger,
-    generate_correlation_id,
-    set_correlation_id,
-    get_correlation_id,
-    setup_structured_logging,
+    StructuredFormatter,
     async_with_correlation_id,
+    generate_correlation_id,
+    get_correlation_id,
+    set_correlation_id,
+    setup_structured_logging,
     with_correlation_id,
 )
 
@@ -60,8 +61,8 @@ __all__ = [
 
 def get_component_logger(
     name: str,
-    structured: Optional[bool] = None,
-    context: Optional[Dict[str, Any]] = None,
+    structured: bool | None = None,
+    context: dict[str, Any] | None = None,
 ) -> ContextLogger:
     """
     Get a logger with correlation ID support and optional JSON formatting.
@@ -107,10 +108,9 @@ def get_component_logger(
             handler.setFormatter(StructuredFormatter())
         else:
             # Text format with correlation ID placeholder
-            handler.setFormatter(logging.Formatter(
-                "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
-                datefmt="%H:%M:%S"
-            ))
+            handler.setFormatter(
+                logging.Formatter("%(asctime)s | %(levelname)-8s | %(name)s | %(message)s", datefmt="%H:%M:%S")
+            )
 
         logger.addHandler(handler)
 
@@ -120,8 +120,8 @@ def get_component_logger(
 
 def get_trading_logger(
     symbol: str,
-    strategy: Optional[str] = None,
-    correlation_id: Optional[str] = None,
+    strategy: str | None = None,
+    correlation_id: str | None = None,
 ) -> ContextLogger:
     """
     Get a logger pre-configured for trading operations.
@@ -152,10 +152,7 @@ def get_trading_logger(
 
 
 def format_log_message(
-    message: str,
-    correlation_id: Optional[str] = None,
-    symbol: Optional[str] = None,
-    **kwargs: Any
+    message: str, correlation_id: str | None = None, symbol: str | None = None, **kwargs: Any
 ) -> str:
     """
     Format a log message with optional prefixes.

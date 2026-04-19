@@ -2,20 +2,20 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone, time as dt_time
-from typing import Optional, List, Dict, Any, Literal, Union, Callable
+from collections.abc import Callable
+from datetime import datetime, timezone
+from datetime import time as dt_time
+from typing import Any, Literal
 
+from core.app_types import BrokerSnapshot, OrderResult, PositionView
 from core.base.base_broker_interface import BaseBrokerInterface
-from core.app_types import OrderResult, PositionView, BrokerSnapshot
+from core.contracts.events import EVENT_HEALTH_UPDATE, EVENT_ORDER_STATUS
+from core.enums import OrderSide
 from core.events.eventhandler import get_event_handler
-from core.contracts.events import EVENT_ORDER_STATUS, EVENT_HEALTH_UPDATE
 from core.utils.retry import CircuitBreaker, CircuitBreakerConfig, async_retry
 from data.streaming.schwab_client import SchwabClient
 from data.streaming.streamer import SchwabStreamingClient
 from loggers.logger import Logger
-
-
-from core.enums import OrderSide
 
 # Keep Side for backward compat with short/cover
 Side = Literal["buy", "sell", "short", "cover"]
@@ -26,6 +26,8 @@ def _normalize_side(side: OrderSide | str) -> str:
     if isinstance(side, OrderSide):
         return side.value
     return str(side).lower()
+
+
 OrderType = Literal["market", "limit", "stop", "stop_limit"]
 TIF = Literal["day", "gtc", "fok"]
 Session = Literal["NORMAL", "AM", "PM"]
@@ -43,49 +45,50 @@ class SchwabBroker(BaseBrokerInterface):
     - Optional websocket streaming via your SchwabStreamingClient
     """
 
-    SIDE_MAP: Dict[str, str] = {
+    SIDE_MAP: dict[str, str] = {
         "buy": "BUY",
         "sell": "SELL",
         "short": "SELL_SHORT",
         "cover": "BUY_TO_COVER",
     }
-    DURATION_MAP: Dict[str, str] = {
+    DURATION_MAP: dict[str, str] = {
         "day": "DAY",
         "gtc": "GOOD_TILL_CANCEL",
         "fok": "FILL_OR_KILL",
     }
 
-    def __init__(self, client: SchwabClient, session: Session = "NORMAL", account_number: Optional[str] = None):
+    def __init__(self, client: SchwabClient, session: Session = "NORMAL", account_number: str | None = None):
         self.client = client
         self.session = session
         self.account_number = account_number or self.get_default_account()
-        self._last_price: Dict[str, float] = {}
+        self._last_price: dict[str, float] = {}
         self.logger = Logger("schwab_broker.log", "SchwabBroker").get_logger()
 
         # Event handler for emitting order/health events
         self._event_handler = get_event_handler()
 
         # Streaming (Alpaca-like façade)
-        self.stream: Optional[SchwabStreamingClient] = None
-        self._stream_task: Optional[asyncio.Task] = None
+        self.stream: SchwabStreamingClient | None = None
+        self._stream_task: asyncio.Task | None = None
         self._stream_symbols: set[str] = set()
 
         # Quote callbacks registry
-        self._quote_callbacks: Dict[str, List[Callable]] = {}
+        self._quote_callbacks: dict[str, list[Callable]] = {}
 
         # Circuit breaker for API calls - configurable via config
         from core.config_loader import get_config
+
         err_config = get_config().error_recovery
         self._circuit_breaker = CircuitBreaker(
             name="schwab_broker",
             config=CircuitBreakerConfig(
                 failure_threshold=err_config.circuit_breaker_failure_threshold,
                 timeout=err_config.circuit_breaker_timeout,
-            )
+            ),
         )
 
         # Health check callback
-        self._health_callback: Optional[Callable] = None
+        self._health_callback: Callable | None = None
 
         # Connection state
         self._connected = False
@@ -186,7 +189,7 @@ class SchwabBroker(BaseBrokerInterface):
             raise ValueError(f"Unsupported time_in_force '{tif}'. Use one of {list(self.DURATION_MAP)}")
 
     @staticmethod
-    def _fmt_price(v: Optional[Union[float, int]]) -> Optional[str]:
+    def _fmt_price(v: float | int | None) -> str | None:
         if v is None:
             return None
         return f"{float(v):.2f}"
@@ -215,7 +218,7 @@ class SchwabBroker(BaseBrokerInterface):
                 symbol=symbol,
                 side=side,
                 qty=qty,
-                raw={"error": "circuit_breaker_open"}
+                raw={"error": "circuit_breaker_open"},
             )
 
         if qty <= 0:
@@ -228,35 +231,55 @@ class SchwabBroker(BaseBrokerInterface):
         # Build order with your client's builder; add price/stop fields afterward when needed
         if ot == "market":
             od = self.client.generate_order(
-                orderType="MARKET", session=self.session, duration=duration,
-                orderStrategyType="SINGLE", instruction=instruction,
-                quantity=int(qty), symbol=symbol, assetType="EQUITY"
+                orderType="MARKET",
+                session=self.session,
+                duration=duration,
+                orderStrategyType="SINGLE",
+                instruction=instruction,
+                quantity=int(qty),
+                symbol=symbol,
+                assetType="EQUITY",
             )
         elif ot == "limit":
             if limit_price is None:
                 raise ValueError("limit_price required for limit orders")
             od = self.client.generate_order(
-                orderType="LIMIT", session=self.session, duration=duration,
-                orderStrategyType="SINGLE", instruction=instruction,
-                quantity=int(qty), symbol=symbol, assetType="EQUITY"
+                orderType="LIMIT",
+                session=self.session,
+                duration=duration,
+                orderStrategyType="SINGLE",
+                instruction=instruction,
+                quantity=int(qty),
+                symbol=symbol,
+                assetType="EQUITY",
             )
             od["price"] = self._fmt_price(limit_price)
         elif ot == "stop":
             if stop_price is None:
                 raise ValueError("stop_price required for stop orders")
             od = self.client.generate_order(
-                orderType="STOP", session=self.session, duration=duration,
-                orderStrategyType="SINGLE", instruction=instruction,
-                quantity=int(qty), symbol=symbol, assetType="EQUITY"
+                orderType="STOP",
+                session=self.session,
+                duration=duration,
+                orderStrategyType="SINGLE",
+                instruction=instruction,
+                quantity=int(qty),
+                symbol=symbol,
+                assetType="EQUITY",
             )
             od["stopPrice"] = self._fmt_price(stop_price)
         elif ot == "stop_limit":
             if stop_price is None or limit_price is None:
                 raise ValueError("Both stop_price and limit_price required for stop_limit orders")
             od = self.client.generate_order(
-                orderType="STOP_LIMIT", session=self.session, duration=duration,
-                orderStrategyType="SINGLE", instruction=instruction,
-                quantity=int(qty), symbol=symbol, assetType="EQUITY"
+                orderType="STOP_LIMIT",
+                session=self.session,
+                duration=duration,
+                orderStrategyType="SINGLE",
+                instruction=instruction,
+                quantity=int(qty),
+                symbol=symbol,
+                assetType="EQUITY",
             )
             od["stopPrice"] = self._fmt_price(stop_price)
             od["price"] = self._fmt_price(limit_price)
@@ -265,8 +288,9 @@ class SchwabBroker(BaseBrokerInterface):
 
         try:
             resp = await self._to_thread(self.client.place_orders, self.account_number, od)
-            result = self._mk_order_result(resp, symbol=symbol, qty=qty, side=side,
-                                           type=ot, limit_price=limit_price, stop_price=stop_price)
+            result = self._mk_order_result(
+                resp, symbol=symbol, qty=qty, side=side, type=ot, limit_price=limit_price, stop_price=stop_price
+            )
 
             # Record success for circuit breaker
             self._circuit_breaker.record_success()
@@ -287,11 +311,7 @@ class SchwabBroker(BaseBrokerInterface):
         """Cancel an order by ID."""
         if not self._circuit_breaker._should_allow_request():
             self.logger.warning("Circuit breaker is open, rejecting cancel request")
-            return OrderResult(
-                order_id=order_id,
-                status="rejected",
-                raw={"error": "circuit_breaker_open"}
-            )
+            return OrderResult(order_id=order_id, status="rejected", raw={"error": "circuit_breaker_open"})
 
         try:
             resp = await self._to_thread(self.client.cancel_order, self.account_number, order_id)
@@ -326,16 +346,16 @@ class SchwabBroker(BaseBrokerInterface):
         await self._event_handler.emit(EVENT_ORDER_STATUS, payload)
 
     @async_retry(max_attempts=3, base_delay=1.0)
-    async def get_position(self, symbol: str) -> Optional[PositionView]:
+    async def get_position(self, symbol: str) -> PositionView | None:
         acct = await self._to_thread(self.client.accounts_number, self.account_number)
         positions = (acct.get("securitiesAccount", {}) or {}).get("positions", []) or []
         for p in positions:
-            if ((p.get("instrument", {}) or {}).get("symbol") == symbol):
+            if (p.get("instrument", {}) or {}).get("symbol") == symbol:
                 return self._mk_position_view(p)
         return None
 
     @async_retry(max_attempts=3, base_delay=1.0)
-    async def get_positions(self) -> List[PositionView]:
+    async def get_positions(self) -> list[PositionView]:
         """Get all open positions."""
         acct = await self._to_thread(self.client.accounts_number, self.account_number)
         positions = (acct.get("securitiesAccount", {}) or {}).get("positions", []) or []
@@ -368,6 +388,7 @@ class SchwabBroker(BaseBrokerInterface):
         try:
             # Get current time in Eastern Time
             from zoneinfo import ZoneInfo
+
             et_tz = ZoneInfo("America/New_York")
             now_et = datetime.now(et_tz)
 
@@ -400,6 +421,7 @@ class SchwabBroker(BaseBrokerInterface):
             # Fallback if zoneinfo not available (Python < 3.9)
             try:
                 import pytz
+
                 et_tz = pytz.timezone("America/New_York")
                 now_et = datetime.now(et_tz)
 
@@ -421,7 +443,7 @@ class SchwabBroker(BaseBrokerInterface):
             return False
 
     @async_retry(max_attempts=3, base_delay=1.0)
-    async def get_open_orders(self) -> List[OrderResult]:
+    async def get_open_orders(self) -> list[OrderResult]:
         resp = await self._to_thread(self.client.all_orders, self.account_number)
         orders = resp if isinstance(resp, list) else (resp.get("orders", []) if isinstance(resp, dict) else [])
         return [self._mk_order_result(o) for o in orders]
@@ -448,15 +470,20 @@ class SchwabBroker(BaseBrokerInterface):
             OrderResult with execution details
         """
         # Handle both OrderSide enum and string
-        if hasattr(side, 'value'):
+        if hasattr(side, "value"):
             side_str = side.value.lower()
         else:
             side_str = str(side).lower()
 
         od = self.client.generate_order(
-            orderType="MARKET", session=self.session, duration="DAY",
-            orderStrategyType="SINGLE", instruction=self._instruction(side_str),
-            quantity=int(qty), symbol=symbol, assetType="EQUITY"
+            orderType="MARKET",
+            session=self.session,
+            duration="DAY",
+            orderStrategyType="SINGLE",
+            instruction=self._instruction(side_str),
+            quantity=int(qty),
+            symbol=symbol,
+            assetType="EQUITY",
         )
         resp = await self._to_thread(self.client.place_orders, self.account_number, od)
         if price is not None:
@@ -486,16 +513,26 @@ class SchwabBroker(BaseBrokerInterface):
         """
         # Typical long exit: SELL limit (TP) + SELL stop (SL)
         child_limit = self.client.generate_order(
-            orderType="LIMIT", session=self.session, duration="DAY",
-            orderStrategyType="SINGLE", instruction="SELL",
-            quantity=int(qty), symbol=symbol, assetType="EQUITY"
+            orderType="LIMIT",
+            session=self.session,
+            duration="DAY",
+            orderStrategyType="SINGLE",
+            instruction="SELL",
+            quantity=int(qty),
+            symbol=symbol,
+            assetType="EQUITY",
         )
         child_limit["price"] = self._fmt_price(limit_price)
 
         child_stop = self.client.generate_order(
-            orderType="STOP", session=self.session, duration="DAY",
-            orderStrategyType="SINGLE", instruction="SELL",
-            quantity=int(qty), symbol=symbol, assetType="EQUITY"
+            orderType="STOP",
+            session=self.session,
+            duration="DAY",
+            orderStrategyType="SINGLE",
+            instruction="SELL",
+            quantity=int(qty),
+            symbol=symbol,
+            assetType="EQUITY",
         )
         child_stop["stopPrice"] = self._fmt_price(stop_price)
 
@@ -506,8 +543,9 @@ class SchwabBroker(BaseBrokerInterface):
             "childOrderStrategies": [child_limit, child_stop],
         }
         resp = await self._to_thread(self.client.place_orders, self.account_number, oco)
-        result = self._mk_order_result(resp, symbol=symbol, qty=qty, type="oco",
-                                       limit_price=limit_price, stop_price=stop_price)
+        result = self._mk_order_result(
+            resp, symbol=symbol, qty=qty, type="oco", limit_price=limit_price, stop_price=stop_price
+        )
 
         # Emit order event
         await self._emit_order_event(result, "placed")
@@ -619,7 +657,7 @@ class SchwabBroker(BaseBrokerInterface):
             self._quote_callbacks[symbol].remove(callback)
             self.logger.debug(f"Unsubscribed from quotes for {symbol}")
 
-    async def _dispatch_quote(self, symbol: str, quote: Dict):
+    async def _dispatch_quote(self, symbol: str, quote: dict):
         """
         Dispatch quote to all registered callbacks for a symbol.
 
@@ -701,7 +739,7 @@ class SchwabBroker(BaseBrokerInterface):
             raw=resp,
         )
 
-    def _mk_position_view(self, p: Dict[str, Any]) -> PositionView:
+    def _mk_position_view(self, p: dict[str, Any]) -> PositionView:
         inst = p.get("instrument", {}) or {}
         sym = inst.get("symbol")
         long_q = _to_float(p.get("longQuantity")) or 0.0
@@ -718,7 +756,7 @@ class SchwabBroker(BaseBrokerInterface):
             side=side,
         )
 
-    def _mk_broker_snapshot(self, acct: Dict[str, Any], positions: dict = None) -> BrokerSnapshot:
+    def _mk_broker_snapshot(self, acct: dict[str, Any], positions: dict = None) -> BrokerSnapshot:
         bal = (acct.get("securitiesAccount", {}) or {}).get("currentBalances", {}) or {}
         return BrokerSnapshot(
             account_number=self.account_number,

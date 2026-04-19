@@ -13,11 +13,10 @@ Cron setup (daily at 2 AM):
 """
 
 import sys
-import os
-import requests
-import json
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
+
+import requests
 
 # Ensure project root is in path
 ROOT = Path(__file__).resolve().parents[1]
@@ -36,8 +35,8 @@ def load_slack_webhook():
 
     with open(env_file) as f:
         for line in f:
-            if line.startswith('SLACK_WEBHOOK_URL='):
-                url = line.split('=', 1)[1].strip()
+            if line.startswith("SLACK_WEBHOOK_URL="):
+                url = line.split("=", 1)[1].strip()
                 # Remove quotes if present
                 return url.strip('"').strip("'")
     return None
@@ -51,25 +50,19 @@ def send_slack_alert(webhook_url, title, message, auth_url=None):
 
     payload = {
         "text": f"🔐 *{title}*",
-        "blocks": [
+        "blocks": [{"type": "section", "text": {"type": "mrkdwn", "text": f"🔐 *{title}*\n\n{message}"}}],
+    }
+
+    if auth_url:
+        payload["blocks"].append(
             {
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
-                    "text": f"🔐 *{title}*\n\n{message}"
-                }
+                    "text": f"*Re-authentication Required:*\n<{auth_url}|Click here to authenticate>",
+                },
             }
-        ]
-    }
-
-    if auth_url:
-        payload["blocks"].append({
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": f"*Re-authentication Required:*\n<{auth_url}|Click here to authenticate>"
-            }
-        })
+        )
 
     try:
         response = requests.post(webhook_url, json=payload, timeout=10)
@@ -89,14 +82,10 @@ def get_auth_url():
     try:
         auth = Authenticator()
         # The auth URL format - adjust based on your Schwab app setup
-        redirect_uri = getattr(auth, 'redirect_url', 'https://127.0.0.1')
-        app_key = getattr(auth, 'apikey', 'YOUR_APP_KEY')
+        redirect_uri = getattr(auth, "redirect_url", "https://127.0.0.1")
+        app_key = getattr(auth, "apikey", "YOUR_APP_KEY")
 
-        auth_url = (
-            f"https://api.schwabapi.com/v1/oauth/authorize"
-            f"?client_id={app_key}"
-            f"&redirect_uri={redirect_uri}"
-        )
+        auth_url = f"https://api.schwabapi.com/v1/oauth/authorize?client_id={app_key}&redirect_uri={redirect_uri}"
         return auth_url
     except:
         return "https://developer.schwab.com"
@@ -110,9 +99,9 @@ def main():
 
     webhook_url = load_slack_webhook()
     if webhook_url:
-        print(f"✓ Slack webhook configured")
+        print("✓ Slack webhook configured")
     else:
-        print(f"⚠ Slack webhook not configured - notifications disabled")
+        print("⚠ Slack webhook not configured - notifications disabled")
 
     try:
         auth = Authenticator()
@@ -143,12 +132,7 @@ def main():
 
             # Send Slack notification
             if webhook_url:
-                send_slack_alert(
-                    webhook_url,
-                    "Schwab Token Expired - Action Required",
-                    message,
-                    auth_url
-                )
+                send_slack_alert(webhook_url, "Schwab Token Expired - Action Required", message, auth_url)
 
             return 1  # Exit code 1 = manual action needed
 
@@ -157,6 +141,7 @@ def main():
 
         # The renew_access method refreshes the access token
         import asyncio
+
         success = asyncio.run(auth.renew_access())
 
         if success:
@@ -166,14 +151,14 @@ def main():
             # Send success notification (optional, maybe only on first success after failure)
             if webhook_url:
                 token_file = auth._read_token_file()
-                expires_in = token_file.get('expires_in', 1800) // 60  # Convert to minutes
+                expires_in = token_file.get("expires_in", 1800) // 60  # Convert to minutes
 
                 send_slack_alert(
                     webhook_url,
                     "Schwab Token Refreshed",
                     f"Access token refreshed successfully.\n"
                     f"Valid for: {expires_in} minutes\n"
-                    f"Auto-refreshes daily at 2 AM"
+                    f"Auto-refreshes daily at 2 AM",
                 )
 
             return 0  # Success
@@ -182,18 +167,10 @@ def main():
             print()
 
             auth_url = get_auth_url()
-            message = (
-                "Automatic token refresh failed.\n\n"
-                "Manual re-authentication may be required."
-            )
+            message = "Automatic token refresh failed.\n\nManual re-authentication may be required."
 
             if webhook_url:
-                send_slack_alert(
-                    webhook_url,
-                    "Schwab Token Refresh Failed",
-                    message,
-                    auth_url
-                )
+                send_slack_alert(webhook_url, "Schwab Token Refresh Failed", message, auth_url)
 
             return 1
 
@@ -203,13 +180,11 @@ def main():
 
         if webhook_url:
             send_slack_alert(
-                webhook_url,
-                "Schwab Token Refresh Error",
-                f"An error occurred during token refresh:\n\n```{str(e)}```"
+                webhook_url, "Schwab Token Refresh Error", f"An error occurred during token refresh:\n\n```{str(e)}```"
             )
 
         return 2  # Exit code 2 = error
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

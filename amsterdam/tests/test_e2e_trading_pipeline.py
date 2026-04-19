@@ -12,21 +12,21 @@ Tests the complete data flow from market data to trade execution:
 
 Run with: pytest tests/test_e2e_trading_pipeline.py -v
 """
-import pytest
+
 import asyncio
-import pandas as pd
+from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock
+
 import numpy as np
-from datetime import datetime, timezone, timedelta
-from unittest.mock import MagicMock, AsyncMock, patch
-from typing import List, Dict, Any
-from dataclasses import dataclass
+import pandas as pd
+import pytest
 
-from core.app_types import OrderResult, PositionView, BrokerSnapshot
-
+from core.app_types import BrokerSnapshot, OrderResult, PositionView
 
 # ============================================================================
 # FIXTURES
 # ============================================================================
+
 
 @pytest.fixture
 def sample_ohlcv_data():
@@ -40,7 +40,7 @@ def sample_ohlcv_data():
     prices = base_price * np.cumprod(1 + returns)
 
     # Generate OHLCV with Date column (required by validation)
-    dates = pd.date_range(end=datetime.now(timezone.utc), periods=n_bars, freq='1min')
+    dates = pd.date_range(end=datetime.now(timezone.utc), periods=n_bars, freq="1min")
     data = []
     for i in range(n_bars):
         close = prices[i]
@@ -49,14 +49,16 @@ def sample_ohlcv_data():
         open_price = (high + low) / 2 + np.random.normal(0, 0.5)
         volume = int(np.random.uniform(100000, 500000))
 
-        data.append({
-            'Date': dates[i],
-            'Open': open_price,
-            'High': max(high, open_price, close),
-            'Low': min(low, open_price, close),
-            'Close': close,
-            'Volume': volume
-        })
+        data.append(
+            {
+                "Date": dates[i],
+                "Open": open_price,
+                "High": max(high, open_price, close),
+                "Low": min(low, open_price, close),
+                "Close": close,
+                "Volume": volume,
+            }
+        )
 
     df = pd.DataFrame(data)
     return df
@@ -73,26 +75,26 @@ def mock_broker():
     broker._cash = 100000.0
     broker._order_id_counter = 1000
 
-    async def place_order(symbol, qty, side, order_type='market', limit_price=None, **kwargs):
+    async def place_order(symbol, qty, side, order_type="market", limit_price=None, **kwargs):
         order_id = f"ORD{broker._order_id_counter}"
         broker._order_id_counter += 1
 
         # Simulate fill at current price
-        fill_price = kwargs.get('price', 150.0)
+        fill_price = kwargs.get("price", 150.0)
 
         # Update position
         if symbol not in broker._positions:
-            broker._positions[symbol] = {'qty': 0, 'avg_price': 0}
+            broker._positions[symbol] = {"qty": 0, "avg_price": 0}
 
         pos = broker._positions[symbol]
-        if side == 'buy':
-            total_cost = pos['qty'] * pos['avg_price'] + qty * fill_price
-            pos['qty'] += qty
-            pos['avg_price'] = total_cost / pos['qty'] if pos['qty'] > 0 else 0
+        if side == "buy":
+            total_cost = pos["qty"] * pos["avg_price"] + qty * fill_price
+            pos["qty"] += qty
+            pos["avg_price"] = total_cost / pos["qty"] if pos["qty"] > 0 else 0
             broker._cash -= qty * fill_price
         else:  # sell
             broker._cash += qty * fill_price
-            pos['qty'] -= qty
+            pos["qty"] -= qty
 
         return OrderResult(
             order_id=order_id,
@@ -100,37 +102,35 @@ def mock_broker():
             side=side,
             qty=qty,
             type=order_type,
-            status='filled',
+            status="filled",
             filled_qty=qty,
             avg_fill_price=fill_price,
-            raw={'simulated': True}
+            raw={"simulated": True},
         )
 
     async def get_position(symbol):
-        pos = broker._positions.get(symbol, {'qty': 0, 'avg_price': 0})
+        pos = broker._positions.get(symbol, {"qty": 0, "avg_price": 0})
         return PositionView(
             symbol=symbol,
-            qty=pos['qty'],
-            avg_entry_price=pos['avg_price'],
+            qty=pos["qty"],
+            avg_entry_price=pos["avg_price"],
             market_price=150.0,
-            side='long' if pos['qty'] > 0 else ('short' if pos['qty'] < 0 else 'flat')
+            side="long" if pos["qty"] > 0 else ("short" if pos["qty"] < 0 else "flat"),
         )
 
     async def get_account():
-        total_position_value = sum(
-            p['qty'] * 150.0 for p in broker._positions.values()
-        )
+        total_position_value = sum(p["qty"] * 150.0 for p in broker._positions.values())
         return BrokerSnapshot(
-            account_number='TEST123',
-            status='active',
+            account_number="TEST123",
+            status="active",
             cash=broker._cash,
             buying_power=broker._cash,
             equity=broker._cash + total_position_value,
             portfolio_value=broker._cash + total_position_value,
             positions={
-                sym: PositionView(symbol=sym, qty=p['qty'], avg_entry_price=p['avg_price'])
+                sym: PositionView(symbol=sym, qty=p["qty"], avg_entry_price=p["avg_price"])
                 for sym, p in broker._positions.items()
-            }
+            },
         )
 
     async def is_market_open():
@@ -140,7 +140,7 @@ def mock_broker():
     broker.get_position = AsyncMock(side_effect=get_position)
     broker.get_account = AsyncMock(side_effect=get_account)
     broker.is_market_open = AsyncMock(side_effect=is_market_open)
-    broker.cancel_order = AsyncMock(return_value=OrderResult(status='cancelled'))
+    broker.cancel_order = AsyncMock(return_value=OrderResult(status="cancelled"))
 
     return broker
 
@@ -148,6 +148,7 @@ def mock_broker():
 @pytest.fixture
 def event_collector():
     """Collect events emitted during the test."""
+
     class EventCollector:
         def __init__(self):
             self.events = []
@@ -155,7 +156,7 @@ def event_collector():
 
         async def handler(self, event):
             self.events.append(event)
-            event_name = event.name if hasattr(event, 'name') else str(type(event))
+            event_name = event.name if hasattr(event, "name") else str(type(event))
             if event_name not in self.by_type:
                 self.by_type[event_name] = []
             self.by_type[event_name].append(event)
@@ -176,6 +177,7 @@ def event_collector():
 # TEST: DATA GATHERING & VALIDATION
 # ============================================================================
 
+
 class TestDataGathering:
     """Test data gathering and validation layer."""
 
@@ -191,24 +193,22 @@ class TestDataGathering:
 
     def test_historical_data_format(self, sample_ohlcv_data):
         """Test that data has correct format for strategy consumption."""
-        required_columns = ['Open', 'High', 'Low', 'Close', 'Volume']
+        required_columns = ["Open", "High", "Low", "Close", "Volume"]
 
         for col in required_columns:
             assert col in sample_ohlcv_data.columns, f"Missing column: {col}"
 
         # Check data types
-        assert sample_ohlcv_data['Close'].dtype in [np.float64, np.float32]
+        assert sample_ohlcv_data["Close"].dtype in [np.float64, np.float32]
 
     def test_atr_calculation(self, sample_ohlcv_data):
         """Test ATR indicator calculation."""
         # Compute ATR manually for validation
-        high = sample_ohlcv_data['High'].values
-        low = sample_ohlcv_data['Low'].values
-        close = sample_ohlcv_data['Close'].values
+        high = sample_ohlcv_data["High"].values
+        low = sample_ohlcv_data["Low"].values
+        close = sample_ohlcv_data["Close"].values
 
-        tr = np.maximum(high - low,
-                       np.maximum(np.abs(high - np.roll(close, 1)),
-                                 np.abs(low - np.roll(close, 1))))
+        tr = np.maximum(high - low, np.maximum(np.abs(high - np.roll(close, 1)), np.abs(low - np.roll(close, 1))))
         tr[0] = high[0] - low[0]
         atr = pd.Series(tr).rolling(14).mean().values
 
@@ -216,12 +216,13 @@ class TestDataGathering:
         valid_atr = atr[~np.isnan(atr)]
         assert len(valid_atr) > 0
         assert all(valid_atr > 0)
-        assert all(valid_atr < sample_ohlcv_data['Close'].max() * 0.1)  # ATR < 10% of price
+        assert all(valid_atr < sample_ohlcv_data["Close"].max() * 0.1)  # ATR < 10% of price
 
 
 # ============================================================================
 # TEST: STRATEGY SIGNAL GENERATION
 # ============================================================================
+
 
 class TestStrategySignalGeneration:
     """Test strategy signal generation layer."""
@@ -232,17 +233,17 @@ class TestStrategySignalGeneration:
 
         strategies = list_strategies()
         assert len(strategies) > 0, "No strategies registered"
-        assert 'sma' in strategies, f"sma not in strategies: {strategies}"
+        assert "sma" in strategies, f"sma not in strategies: {strategies}"
 
         # Load a strategy
-        strategy = load_strategy('sma')
+        strategy = load_strategy("sma")
         assert strategy is not None
 
     def test_strategy_generates_signal(self, sample_ohlcv_data):
         """Test that a strategy generates valid signals."""
         from strategies.strategy_registry import load_strategy
 
-        strategy = load_strategy('sma', params={'fast': 10, 'slow': 30})
+        strategy = load_strategy("sma", params={"fast": 10, "slow": 30})
 
         # Generate signal
         result = strategy.generate_signal(sample_ohlcv_data)
@@ -251,36 +252,37 @@ class TestStrategySignalGeneration:
         if isinstance(result, (int, float)):
             assert result in [-1, 0, 1], f"Invalid signal: {result}"
         elif isinstance(result, pd.DataFrame):
-            assert 'Signal' in result.columns
+            assert "Signal" in result.columns
 
     def test_vectorized_signal_generation(self, sample_ohlcv_data):
         """Test vectorized signal generation for backtesting."""
         from strategies.strategy_registry import load_strategy
 
-        strategy = load_strategy('sma', params={'fast': 10, 'slow': 30})
+        strategy = load_strategy("sma", params={"fast": 10, "slow": 30})
 
         # Check if vectorized method exists
-        if hasattr(strategy, 'generate_signals_vectorized'):
+        if hasattr(strategy, "generate_signals_vectorized"):
             signals = strategy.generate_signals_vectorized(sample_ohlcv_data)
             if signals is not None:
                 assert len(signals) == len(sample_ohlcv_data)
 
     def test_multiple_strategies(self, sample_ohlcv_data):
         """Test that multiple strategies can generate signals."""
-        from strategies.strategy_registry import load_strategy, list_strategies
+        from strategies.strategy_registry import list_strategies, load_strategy
 
-        strategies_to_test = ['sma', 'momentum', 'rsi', 'macd']
+        strategies_to_test = ["sma", "momentum", "rsi", "macd"]
 
         for name in strategies_to_test:
             if name in list_strategies():
                 strategy = load_strategy(name)
-                result = strategy.generate_signal(sample_ohlcv_data)
+                strategy.generate_signal(sample_ohlcv_data)
                 # Should not raise exception
 
 
 # ============================================================================
 # TEST: TRADE LOGIC & RISK MANAGEMENT
 # ============================================================================
+
 
 class TestTradeLogicAndRisk:
     """Test trade logic and risk management layer."""
@@ -292,48 +294,44 @@ class TestTradeLogicAndRisk:
         gate = TradeGate(max_layers=3)
 
         # Update state for a new bar
-        gate.on_new_bar('AAPL', bar_id=1, regime='normal')
+        gate.on_new_bar("AAPL", bar_id=1, regime="normal")
 
         # Check layer count
-        assert gate.get_state('AAPL').layers == 0
+        assert gate.get_state("AAPL").layers == 0
 
     def test_trade_gate_layering(self):
         """Test trade gate layer counting."""
-        from core.logic.trade_gate import TradeGate
         from datetime import datetime, timezone
+
+        from core.logic.trade_gate import TradeGate
 
         gate = TradeGate(max_layers=2)
 
         # Simulate entries
-        gate.on_new_bar('AAPL', bar_id=1, regime='normal')
-        gate.mark_action('AAPL', ts=datetime.now(timezone.utc), bar_id=1,
-                        new_side='long', action='entry')
+        gate.on_new_bar("AAPL", bar_id=1, regime="normal")
+        gate.mark_action("AAPL", ts=datetime.now(timezone.utc), bar_id=1, new_side="long", action="entry")
 
-        state = gate.get_state('AAPL')
+        state = gate.get_state("AAPL")
         assert state.layers == 1
 
     def test_position_sizer(self):
         """Test position sizing calculation."""
-        from core.position_sizer import KellyPositionSizer
         from core.logic.portfolio_state import PortfolioState
+        from core.position_sizer import KellyPositionSizer
 
-        sizer = KellyPositionSizer(
-            risk_percentage=0.01,
-            max_trade_pct=0.10,
-            max_holding_pct=0.20
-        )
+        sizer = KellyPositionSizer(risk_percentage=0.01, max_trade_pct=0.10, max_holding_pct=0.20)
 
         portfolio = PortfolioState(cash=100000.0)
 
         # Calculate position size using correct API
         size = sizer.calculate_position_size(
-            symbol='AAPL',
+            symbol="AAPL",
             price=150.0,
             account_value=100000.0,
             atr=3.0,
             portfolio=portfolio,
             sl_mult=1.5,
-            regime='normal'
+            regime="normal",
         )
 
         assert size >= 0
@@ -343,40 +341,29 @@ class TestTradeLogicAndRisk:
 # TEST: ORDER EXECUTION
 # ============================================================================
 
+
 class TestOrderExecution:
     """Test order execution layer."""
 
     @pytest.mark.asyncio
     async def test_broker_place_order(self, mock_broker):
         """Test placing an order through broker."""
-        result = await mock_broker.place_order(
-            symbol='AAPL',
-            qty=10,
-            side='buy',
-            order_type='market',
-            price=150.0
-        )
+        result = await mock_broker.place_order(symbol="AAPL", qty=10, side="buy", order_type="market", price=150.0)
 
-        assert result.status == 'filled'
+        assert result.status == "filled"
         assert result.filled_qty == 10
-        assert result.symbol == 'AAPL'
+        assert result.symbol == "AAPL"
 
     @pytest.mark.asyncio
     async def test_broker_position_tracking(self, mock_broker):
         """Test position tracking after order execution."""
         # Place buy order
-        await mock_broker.place_order(
-            symbol='AAPL',
-            qty=10,
-            side='buy',
-            order_type='market',
-            price=150.0
-        )
+        await mock_broker.place_order(symbol="AAPL", qty=10, side="buy", order_type="market", price=150.0)
 
         # Check position
-        position = await mock_broker.get_position('AAPL')
+        position = await mock_broker.get_position("AAPL")
         assert position.qty == 10
-        assert position.side == 'long'
+        assert position.side == "long"
 
     @pytest.mark.asyncio
     async def test_broker_account_update(self, mock_broker):
@@ -385,23 +372,18 @@ class TestOrderExecution:
         initial_cash = initial_account.cash
 
         # Place order
-        await mock_broker.place_order(
-            symbol='AAPL',
-            qty=10,
-            side='buy',
-            order_type='market',
-            price=150.0
-        )
+        await mock_broker.place_order(symbol="AAPL", qty=10, side="buy", order_type="market", price=150.0)
 
         # Check account
         account = await mock_broker.get_account()
         assert account.cash < initial_cash  # Cash decreased
-        assert 'AAPL' in account.positions
+        assert "AAPL" in account.positions
 
 
 # ============================================================================
 # TEST: P&L TRACKING
 # ============================================================================
+
 
 class TestPnLTracking:
     """Test P&L tracking layer."""
@@ -413,13 +395,13 @@ class TestPnLTracking:
         portfolio = PortfolioState(cash=100000.0)
 
         # Simulate buy
-        portfolio.apply_fill('AAPL', side='buy', qty=10, price=150.0)
+        portfolio.apply_fill("AAPL", side="buy", qty=10, price=150.0)
 
         assert portfolio.cash == 100000.0 - (10 * 150.0)
-        assert portfolio.get_position('AAPL') is not None
+        assert portfolio.get_position("AAPL") is not None
 
         # Update price for unrealized P&L
-        portfolio.update_price('AAPL', 155.0)
+        portfolio.update_price("AAPL", 155.0)
 
         unrealized = portfolio.total_unrealized()
         assert unrealized == 10 * (155.0 - 150.0)  # $50 profit
@@ -431,10 +413,10 @@ class TestPnLTracking:
         portfolio = PortfolioState(cash=100000.0)
 
         # Open position
-        portfolio.apply_fill('AAPL', side='buy', qty=10, price=150.0)
+        portfolio.apply_fill("AAPL", side="buy", qty=10, price=150.0)
 
         # Close position at profit
-        portfolio.apply_fill('AAPL', side='sell', qty=10, price=160.0)
+        portfolio.apply_fill("AAPL", side="sell", qty=10, price=160.0)
 
         # Check realized P&L
         realized = portfolio.total_realized()
@@ -461,6 +443,7 @@ class TestPnLTracking:
 # TEST: EVENT EMISSION
 # ============================================================================
 
+
 class TestEventEmission:
     """Test event emission throughout the pipeline."""
 
@@ -479,21 +462,24 @@ class TestEventEmission:
         await handler.subscribe(EVENT_NEW_BAR, event_collector.handler)
 
         # Emit event
-        await handler.emit(EVENT_NEW_BAR, {
-            'symbol': 'AAPL',
-            'timestamp': datetime.now(timezone.utc).isoformat(),
-            'open': 150.0,
-            'high': 151.0,
-            'low': 149.0,
-            'close': 150.5,
-            'volume': 100000
-        })
+        await handler.emit(
+            EVENT_NEW_BAR,
+            {
+                "symbol": "AAPL",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "open": 150.0,
+                "high": 151.0,
+                "low": 149.0,
+                "close": 150.5,
+                "volume": 100000,
+            },
+        )
 
         await asyncio.sleep(0.1)  # Allow async processing
 
         events = event_collector.get_events(EVENT_NEW_BAR)
         assert len(events) == 1
-        assert events[0].payload['symbol'] == 'AAPL'
+        assert events[0].payload["symbol"] == "AAPL"
 
         # Cleanup
         EventHandler._instance = None
@@ -511,22 +497,25 @@ class TestEventEmission:
 
         await handler.subscribe(EVENT_ORDER_STATUS, event_collector.handler)
 
-        await handler.emit(EVENT_ORDER_STATUS, {
-            'order_id': 'ORD123',
-            'symbol': 'AAPL',
-            'side': 'buy',
-            'qty': 10,
-            'status': 'filled',
-            'filled_qty': 10,
-            'avg_price': 150.0,
-            'timestamp': datetime.now(timezone.utc).isoformat()
-        })
+        await handler.emit(
+            EVENT_ORDER_STATUS,
+            {
+                "order_id": "ORD123",
+                "symbol": "AAPL",
+                "side": "buy",
+                "qty": 10,
+                "status": "filled",
+                "filled_qty": 10,
+                "avg_price": 150.0,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            },
+        )
 
         await asyncio.sleep(0.1)
 
         events = event_collector.get_events(EVENT_ORDER_STATUS)
         assert len(events) == 1
-        assert events[0].payload['status'] == 'filled'
+        assert events[0].payload["status"] == "filled"
 
         EventHandler._instance = None
         EventHandler._initialized = False
@@ -536,41 +525,40 @@ class TestEventEmission:
 # TEST: FULL E2E PIPELINE
 # ============================================================================
 
+
 class TestFullE2EPipeline:
     """Test the complete end-to-end trading pipeline."""
 
     @pytest.mark.asyncio
     async def test_data_to_signal_pipeline(self, sample_ohlcv_data):
         """Test pipeline from data to signal generation."""
-        from strategies.strategy_registry import load_strategy
-
         # 1. Validate data
         from core.backtest.validation import validate_ohlcv_data
+        from strategies.strategy_registry import load_strategy
+
         validation = validate_ohlcv_data(sample_ohlcv_data)
         assert validation.is_valid
 
         # 2. Calculate indicators (ATR)
-        high = sample_ohlcv_data['High'].values
-        low = sample_ohlcv_data['Low'].values
-        close = sample_ohlcv_data['Close'].values
+        high = sample_ohlcv_data["High"].values
+        low = sample_ohlcv_data["Low"].values
+        close = sample_ohlcv_data["Close"].values
 
-        tr = np.maximum(high - low,
-                       np.maximum(np.abs(high - np.roll(close, 1)),
-                                 np.abs(low - np.roll(close, 1))))
+        tr = np.maximum(high - low, np.maximum(np.abs(high - np.roll(close, 1)), np.abs(low - np.roll(close, 1))))
         tr[0] = high[0] - low[0]
         atr = pd.Series(tr).rolling(14).mean().iloc[-1]
 
         # 3. Classify regime (simplified)
         atr_pct = atr / close[-1]
         if atr_pct < 0.01:
-            regime = 'low_volatility'
+            pass
         elif atr_pct > 0.03:
-            regime = 'high_volatility'
+            pass
         else:
-            regime = 'normal'
+            pass
 
         # 4. Load strategy
-        strategy = load_strategy('sma', params={'fast': 10, 'slow': 30})
+        strategy = load_strategy("sma", params={"fast": 10, "slow": 30})
         assert strategy is not None
 
         # 5. Generate signal
@@ -586,27 +574,22 @@ class TestFullE2EPipeline:
         gate = TradeGate(max_layers=3)
 
         # Current market state
-        current_price = sample_ohlcv_data['Close'].iloc[-1]
+        current_price = sample_ohlcv_data["Close"].iloc[-1]
 
         # Simulate signal
-        signal = 1  # Buy signal
 
         # 1. Update trade gate
-        gate.on_new_bar('AAPL', bar_id=1, regime='normal')
+        gate.on_new_bar("AAPL", bar_id=1, regime="normal")
 
         # 2. Execute order
         result = await mock_broker.place_order(
-            symbol='AAPL',
-            qty=10,
-            side='buy',
-            order_type='market',
-            price=current_price
+            symbol="AAPL", qty=10, side="buy", order_type="market", price=current_price
         )
 
-        assert result.status == 'filled'
+        assert result.status == "filled"
 
         # 3. Verify position
-        position = await mock_broker.get_position('AAPL')
+        position = await mock_broker.get_position("AAPL")
         assert position.qty > 0
 
     @pytest.mark.asyncio
@@ -621,20 +604,16 @@ class TestFullE2EPipeline:
 
         # 1. ENTRY
         entry_result = await mock_broker.place_order(
-            symbol='AAPL',
-            qty=qty,
-            side='buy',
-            order_type='market',
-            price=entry_price
+            symbol="AAPL", qty=qty, side="buy", order_type="market", price=entry_price
         )
-        assert entry_result.status == 'filled'
+        assert entry_result.status == "filled"
 
         # Apply to portfolio
-        portfolio.apply_fill('AAPL', 'buy', qty, entry_price)
+        portfolio.apply_fill("AAPL", "buy", qty, entry_price)
 
         # 2. PRICE MOVEMENT & P&L TRACKING
         new_price = 155.0
-        portfolio.update_price('AAPL', new_price)
+        portfolio.update_price("AAPL", new_price)
 
         unrealized_pnl = portfolio.total_unrealized()
         expected_unrealized = qty * (new_price - entry_price)
@@ -642,16 +621,12 @@ class TestFullE2EPipeline:
 
         # 3. EXIT
         exit_result = await mock_broker.place_order(
-            symbol='AAPL',
-            qty=qty,
-            side='sell',
-            order_type='market',
-            price=new_price
+            symbol="AAPL", qty=qty, side="sell", order_type="market", price=new_price
         )
-        assert exit_result.status == 'filled'
+        assert exit_result.status == "filled"
 
         # Apply to portfolio
-        portfolio.apply_fill('AAPL', 'sell', qty, new_price)
+        portfolio.apply_fill("AAPL", "sell", qty, new_price)
 
         # 4. VERIFY FINAL STATE
         realized_pnl = portfolio.total_realized()
@@ -664,23 +639,17 @@ class TestFullE2EPipeline:
         from core.logic.portfolio_state import PortfolioState
 
         portfolio = PortfolioState(cash=100000.0)
-        symbols = ['AAPL', 'GOOGL', 'MSFT']
+        symbols = ["AAPL", "GOOGL", "MSFT"]
 
         # Open positions in multiple symbols
         for i, symbol in enumerate(symbols):
             price = 150.0 + i * 50  # Different prices
             qty = 5
 
-            result = await mock_broker.place_order(
-                symbol=symbol,
-                qty=qty,
-                side='buy',
-                order_type='market',
-                price=price
-            )
-            assert result.status == 'filled'
+            result = await mock_broker.place_order(symbol=symbol, qty=qty, side="buy", order_type="market", price=price)
+            assert result.status == "filled"
 
-            portfolio.apply_fill(symbol, 'buy', qty, price)
+            portfolio.apply_fill(symbol, "buy", qty, price)
 
         # Verify all positions exist
         for symbol in symbols:
@@ -695,79 +664,74 @@ class TestFullE2EPipeline:
     @pytest.mark.asyncio
     async def test_risk_management_in_pipeline(self, mock_broker):
         """Test risk management integration in pipeline."""
-        from core.logic.trade_gate import TradeGate
         from datetime import datetime, timezone
+
+        from core.logic.trade_gate import TradeGate
 
         gate = TradeGate(max_layers=2)
 
         # Update state
-        gate.on_new_bar('AAPL', bar_id=1, regime='normal')
-        gate.mark_action('AAPL', ts=datetime.now(timezone.utc), bar_id=1,
-                        new_side='long', action='entry')
+        gate.on_new_bar("AAPL", bar_id=1, regime="normal")
+        gate.mark_action("AAPL", ts=datetime.now(timezone.utc), bar_id=1, new_side="long", action="entry")
 
-        assert gate.get_state('AAPL').layers == 1
+        assert gate.get_state("AAPL").layers == 1
 
         # Second layer (pyramid)
-        gate.on_new_bar('AAPL', bar_id=2, regime='normal')
-        gate.mark_action('AAPL', ts=datetime.now(timezone.utc), bar_id=2,
-                        new_side='long', action='pyramid', pyramided=True)
+        gate.on_new_bar("AAPL", bar_id=2, regime="normal")
+        gate.mark_action(
+            "AAPL", ts=datetime.now(timezone.utc), bar_id=2, new_side="long", action="pyramid", pyramided=True
+        )
 
-        assert gate.get_state('AAPL').layers == 2
+        assert gate.get_state("AAPL").layers == 2
 
 
 # ============================================================================
 # TEST: BACKTEST VALIDATION
 # ============================================================================
 
+
 class TestBacktestValidation:
     """Test backtesting functionality."""
 
     def test_vectorized_backtest(self, sample_ohlcv_data):
         """Test vectorized backtesting."""
-        from core.backtest import VectorizedBacktester, BacktestConfig
+        from core.backtest import VectorizedBacktester
 
-        backtester = VectorizedBacktester(
-            data=sample_ohlcv_data,
-            initial_capital=10000,
-            transaction_cost=0.001
-        )
+        backtester = VectorizedBacktester(data=sample_ohlcv_data, initial_capital=10000, transaction_cost=0.001)
 
         # Run backtest
-        result = backtester.run(
-            strategy_name='sma',
-            strategy_params={'fast': 10, 'slow': 30},
-            position_size=0.1
-        )
+        result = backtester.run(strategy_name="sma", strategy_params={"fast": 10, "slow": 30}, position_size=0.1)
 
         # Verify result structure
-        assert 'Portfolio_Value' in result.columns
-        assert 'Position' in result.columns
-        assert 'Strategy_Return' in result.columns
+        assert "Portfolio_Value" in result.columns
+        assert "Position" in result.columns
+        assert "Strategy_Return" in result.columns
 
         # Get metrics
         metrics = backtester.get_metrics(result)
 
-        assert 'total_return' in metrics
-        assert 'sharpe_ratio' in metrics
-        assert 'max_drawdown' in metrics
+        assert "total_return" in metrics
+        assert "sharpe_ratio" in metrics
+        assert "max_drawdown" in metrics
 
     def test_benchmark_comparison(self, sample_ohlcv_data):
         """Test benchmark comparison."""
         from core.backtest import compare_to_benchmark
 
         # Generate synthetic returns
-        strategy_returns = sample_ohlcv_data['Close'].pct_change().dropna()
+        strategy_returns = sample_ohlcv_data["Close"].pct_change().dropna()
         benchmark_returns = strategy_returns * 0.8 + 0.0001  # Correlated benchmark
 
         comparison = compare_to_benchmark(strategy_returns, benchmark_returns)
 
-        assert hasattr(comparison, 'alpha')
-        assert hasattr(comparison, 'beta')
+        assert hasattr(comparison, "alpha")
+        assert hasattr(comparison, "beta")
 
 
 # ============================================================================
 # TEST: INTEGRATION SCENARIOS
 # ============================================================================
+
 
 class TestIntegrationScenarios:
     """Test realistic trading scenarios."""
@@ -779,43 +743,39 @@ class TestIntegrationScenarios:
         from strategies.strategy_registry import load_strategy
 
         portfolio = PortfolioState(cash=100000.0)
-        strategy = load_strategy('sma', params={'fast': 5, 'slow': 20})
+        strategy = load_strategy("sma", params={"fast": 5, "slow": 20})
 
-        initial_equity = portfolio.total_equity()
+        portfolio.total_equity()
 
         # Simulate trading loop
         trades = []
         for i in range(50, len(sample_ohlcv_data)):
-            df_slice = sample_ohlcv_data.iloc[:i+1]
-            price = df_slice['Close'].iloc[-1]
+            df_slice = sample_ohlcv_data.iloc[: i + 1]
+            price = df_slice["Close"].iloc[-1]
 
             # Generate signal
             signal = strategy.generate_signal(df_slice)
             if isinstance(signal, pd.DataFrame):
-                signal = signal['Signal'].iloc[-1] if 'Signal' in signal.columns else 0
+                signal = signal["Signal"].iloc[-1] if "Signal" in signal.columns else 0
 
-            pos = portfolio.get_position('AAPL')
+            pos = portfolio.get_position("AAPL")
             current_qty = pos.qty if pos else 0
 
             # Execute based on signal
             if signal == 1 and current_qty == 0:  # Buy
-                result = await mock_broker.place_order(
-                    symbol='AAPL', qty=10, side='buy', price=price
-                )
-                if result.status == 'filled':
-                    portfolio.apply_fill('AAPL', 'buy', 10, price)
-                    trades.append({'type': 'buy', 'price': price})
+                result = await mock_broker.place_order(symbol="AAPL", qty=10, side="buy", price=price)
+                if result.status == "filled":
+                    portfolio.apply_fill("AAPL", "buy", 10, price)
+                    trades.append({"type": "buy", "price": price})
 
             elif signal == -1 and current_qty > 0:  # Sell
-                result = await mock_broker.place_order(
-                    symbol='AAPL', qty=current_qty, side='sell', price=price
-                )
-                if result.status == 'filled':
-                    portfolio.apply_fill('AAPL', 'sell', current_qty, price)
-                    trades.append({'type': 'sell', 'price': price})
+                result = await mock_broker.place_order(symbol="AAPL", qty=current_qty, side="sell", price=price)
+                if result.status == "filled":
+                    portfolio.apply_fill("AAPL", "sell", current_qty, price)
+                    trades.append({"type": "sell", "price": price})
 
             # Update price
-            portfolio.update_price('AAPL', price)
+            portfolio.update_price("AAPL", price)
 
         # Verify some trading activity occurred
         final_equity = portfolio.total_equity()
@@ -834,21 +794,22 @@ class TestIntegrationScenarios:
         await handler.subscribe(EVENT_ORDER_STATUS, event_collector.handler)
 
         # Place order
-        result = await mock_broker.place_order(
-            symbol='AAPL', qty=10, side='buy', price=150.0
-        )
+        result = await mock_broker.place_order(symbol="AAPL", qty=10, side="buy", price=150.0)
 
         # Emit order status event
-        await handler.emit(EVENT_ORDER_STATUS, {
-            'order_id': result.order_id,
-            'symbol': 'AAPL',
-            'side': 'buy',
-            'qty': 10,
-            'status': 'filled',
-            'filled_qty': 10,
-            'avg_price': 150.0,
-            'timestamp': datetime.now(timezone.utc).isoformat()
-        })
+        await handler.emit(
+            EVENT_ORDER_STATUS,
+            {
+                "order_id": result.order_id,
+                "symbol": "AAPL",
+                "side": "buy",
+                "qty": 10,
+                "status": "filled",
+                "filled_qty": 10,
+                "avg_price": 150.0,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            },
+        )
 
         await asyncio.sleep(0.1)
 
@@ -860,5 +821,5 @@ class TestIntegrationScenarios:
         EventHandler._initialized = False
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

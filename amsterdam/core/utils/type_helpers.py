@@ -5,12 +5,13 @@ Type conversion and normalization utilities.
 Shared helpers for safely converting and normalizing values across the codebase.
 Centralizes common patterns to avoid duplication.
 """
+
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 
-def to_float(value: Any) -> Optional[float]:
+def to_float(value: Any) -> float | None:
     """
     Safely convert a value to float.
 
@@ -36,7 +37,7 @@ def to_float(value: Any) -> Optional[float]:
         return None
 
 
-def to_int(value: Any) -> Optional[int]:
+def to_int(value: Any) -> int | None:
     """
     Safely convert a value to int.
 
@@ -54,7 +55,7 @@ def to_int(value: Any) -> Optional[int]:
         return None
 
 
-def to_bool(value: Any) -> Optional[bool]:
+def to_bool(value: Any) -> bool | None:
     """
     Safely convert a value to bool.
 

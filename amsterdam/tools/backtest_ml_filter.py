@@ -11,12 +11,12 @@ Usage:
     python tools/backtest_ml_filter.py --model models/trade_quality_model.joblib
 """
 
-import json
 import argparse
+import json
 import sys
-from pathlib import Path
-from typing import Dict, List, Any, Tuple
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 
 # Add project root to path
 ROOT = Path(__file__).resolve().parents[1]
@@ -29,6 +29,7 @@ from core.ml.trade_quality_filter import TradeQualityFilter
 @dataclass
 class TradeResult:
     """Result of a single trade."""
+
     trade_id: str
     symbol: str
     strategy: str
@@ -38,23 +39,23 @@ class TradeResult:
     won: bool
     ml_score: float
     ml_approved: bool
-    features: Dict[str, float]
+    features: dict[str, float]
 
 
-def load_trades_with_features(path: str) -> List[Dict]:
+def load_trades_with_features(path: str) -> list[dict]:
     """Load completed trades that have features."""
     entries = {}
     exits = {}
 
-    with open(path, 'r') as f:
+    with open(path) as f:
         for line in f:
             try:
                 event = json.loads(line.strip())
-                trade_id = event.get('trade_id')
+                trade_id = event.get("trade_id")
 
-                if event.get('event') == 'entry':
+                if event.get("event") == "entry":
                     entries[trade_id] = event
-                elif event.get('event') == 'exit':
+                elif event.get("event") == "exit":
                     exits[trade_id] = event
             except json.JSONDecodeError:
                 continue
@@ -65,50 +66,52 @@ def load_trades_with_features(path: str) -> List[Dict]:
         if trade_id not in exits:
             continue
 
-        features = entry.get('features', {})
+        features = entry.get("features", {})
         # Skip trades without ML features
-        if not any(k.startswith('feat_') or k in ['atr_percentile', 'hour_of_day'] for k in features.keys()):
+        if not any(k.startswith("feat_") or k in ["atr_percentile", "hour_of_day"] for k in features.keys()):
             # Try to extract features from available data
             features = extract_features_from_entry(entry)
             if not features:
                 continue
 
         exit_event = exits[trade_id]
-        pnl = exit_event.get('outcome', {}).get('pnl_dollars', 0)
+        pnl = exit_event.get("outcome", {}).get("pnl_dollars", 0)
 
-        trades.append({
-            'trade_id': trade_id,
-            'symbol': entry['symbol'],
-            'strategy': features.get('strategy', 'unknown'),
-            'entry_price': entry['price'],
-            'exit_price': exit_event['price'],
-            'pnl': pnl,
-            'won': pnl > 0,
-            'features': features,
-        })
+        trades.append(
+            {
+                "trade_id": trade_id,
+                "symbol": entry["symbol"],
+                "strategy": features.get("strategy", "unknown"),
+                "entry_price": entry["price"],
+                "exit_price": exit_event["price"],
+                "pnl": pnl,
+                "won": pnl > 0,
+                "features": features,
+            }
+        )
 
     return trades
 
 
-def extract_features_from_entry(entry: Dict) -> Dict[str, float]:
+def extract_features_from_entry(entry: dict) -> dict[str, float]:
     """Extract or infer features from entry data."""
-    features = entry.get('features', {})
+    features = entry.get("features", {})
 
     # Map raw features to feat_ prefixed names
     result = {}
 
     # Direct mappings
     mappings = {
-        'atr_percentile': 'feat_atr_percentile',
-        'drawdown_portfolio_pct': 'feat_drawdown_portfolio_pct',
-        'drawdown_symbol_pct': 'feat_drawdown_symbol_pct',
-        'position_size_pct': 'feat_position_size_pct',
-        'hour_of_day': 'feat_hour_of_day',
-        'day_of_week': 'feat_day_of_week',
-        'minutes_since_open': 'feat_minutes_since_open',
-        'bars_in_regime': 'feat_bars_in_regime',
-        'hours_since_last_trade': 'feat_hours_since_last_trade',
-        'signal_strength': 'feat_signal_strength',
+        "atr_percentile": "feat_atr_percentile",
+        "drawdown_portfolio_pct": "feat_drawdown_portfolio_pct",
+        "drawdown_symbol_pct": "feat_drawdown_symbol_pct",
+        "position_size_pct": "feat_position_size_pct",
+        "hour_of_day": "feat_hour_of_day",
+        "day_of_week": "feat_day_of_week",
+        "minutes_since_open": "feat_minutes_since_open",
+        "bars_in_regime": "feat_bars_in_regime",
+        "hours_since_last_trade": "feat_hours_since_last_trade",
+        "signal_strength": "feat_signal_strength",
     }
 
     for src, dst in mappings.items():
@@ -117,17 +120,13 @@ def extract_features_from_entry(entry: Dict) -> Dict[str, float]:
 
     # Also check for already prefixed features
     for k, v in features.items():
-        if k.startswith('feat_'):
+        if k.startswith("feat_"):
             result[k] = v
 
     return result if len(result) >= 3 else {}  # Need at least 3 features
 
 
-def run_backtest(
-    trades: List[Dict],
-    model_path: str,
-    threshold: float
-) -> Tuple[List[TradeResult], Dict[str, Any]]:
+def run_backtest(trades: list[dict], model_path: str, threshold: float) -> tuple[list[TradeResult], dict[str, Any]]:
     """Run ML filter on historical trades."""
     # Load filter
     ml_filter = TradeQualityFilter(
@@ -142,33 +141,35 @@ def run_backtest(
 
     results = []
     for trade in trades:
-        features = trade['features']
+        features = trade["features"]
 
         # Evaluate with filter
-        approved, score = ml_filter.evaluate(features, symbol=trade['symbol'])
+        approved, score = ml_filter.evaluate(features, symbol=trade["symbol"])
 
-        results.append(TradeResult(
-            trade_id=trade['trade_id'],
-            symbol=trade['symbol'],
-            strategy=trade['strategy'],
-            entry_price=trade['entry_price'],
-            exit_price=trade['exit_price'],
-            pnl=trade['pnl'],
-            won=trade['won'],
-            ml_score=score,
-            ml_approved=approved,
-            features=features,
-        ))
+        results.append(
+            TradeResult(
+                trade_id=trade["trade_id"],
+                symbol=trade["symbol"],
+                strategy=trade["strategy"],
+                entry_price=trade["entry_price"],
+                exit_price=trade["exit_price"],
+                pnl=trade["pnl"],
+                won=trade["won"],
+                ml_score=score,
+                ml_approved=approved,
+                features=features,
+            )
+        )
 
     # Calculate statistics
     stats = calculate_stats(results, threshold)
     return results, stats
 
 
-def calculate_stats(results: List[TradeResult], threshold: float) -> Dict[str, Any]:
+def calculate_stats(results: list[TradeResult], threshold: float) -> dict[str, Any]:
     """Calculate backtest statistics."""
     if not results:
-        return {'error': 'No results'}
+        return {"error": "No results"}
 
     total = len(results)
     total_wins = sum(1 for r in results if r.won)
@@ -198,67 +199,61 @@ def calculate_stats(results: List[TradeResult], threshold: float) -> Dict[str, A
     loser_scores = [r.ml_score for r in results if not r.won]
 
     return {
-        'threshold': threshold,
-        'total_trades': total,
-
-        'baseline': {
-            'trades': total,
-            'wins': total_wins,
-            'losses': total - total_wins,
-            'win_rate': baseline_win_rate,
-            'total_pnl': total_pnl,
-            'avg_pnl': total_pnl / total if total > 0 else 0,
+        "threshold": threshold,
+        "total_trades": total,
+        "baseline": {
+            "trades": total,
+            "wins": total_wins,
+            "losses": total - total_wins,
+            "win_rate": baseline_win_rate,
+            "total_pnl": total_pnl,
+            "avg_pnl": total_pnl / total if total > 0 else 0,
         },
-
-        'with_filter': {
-            'trades_taken': len(approved),
-            'trades_blocked': len(rejected),
-            'block_rate': len(rejected) / total if total > 0 else 0,
+        "with_filter": {
+            "trades_taken": len(approved),
+            "trades_blocked": len(rejected),
+            "block_rate": len(rejected) / total if total > 0 else 0,
         },
-
-        'approved': {
-            'trades': len(approved),
-            'wins': approved_wins,
-            'losses': len(approved) - approved_wins,
-            'win_rate': approved_win_rate,
-            'total_pnl': approved_pnl,
-            'avg_pnl': approved_pnl / len(approved) if approved else 0,
+        "approved": {
+            "trades": len(approved),
+            "wins": approved_wins,
+            "losses": len(approved) - approved_wins,
+            "win_rate": approved_win_rate,
+            "total_pnl": approved_pnl,
+            "avg_pnl": approved_pnl / len(approved) if approved else 0,
         },
-
-        'rejected': {
-            'trades': len(rejected),
-            'wins': rejected_wins,
-            'losses': rejected_losses,
-            'win_rate': rejected_win_rate,
-            'total_pnl': rejected_pnl,
-            'avg_pnl': rejected_pnl / len(rejected) if rejected else 0,
+        "rejected": {
+            "trades": len(rejected),
+            "wins": rejected_wins,
+            "losses": rejected_losses,
+            "win_rate": rejected_win_rate,
+            "total_pnl": rejected_pnl,
+            "avg_pnl": rejected_pnl / len(rejected) if rejected else 0,
         },
-
-        'effectiveness': {
-            'win_rate_improvement': approved_win_rate - baseline_win_rate,
-            'pnl_improvement': approved_pnl - total_pnl,  # Would have saved this
-            'correct_rejections': rejected_losses,
-            'incorrect_rejections': rejected_wins,
-            'rejection_accuracy': rejected_losses / len(rejected) if rejected else 0,
+        "effectiveness": {
+            "win_rate_improvement": approved_win_rate - baseline_win_rate,
+            "pnl_improvement": approved_pnl - total_pnl,  # Would have saved this
+            "correct_rejections": rejected_losses,
+            "incorrect_rejections": rejected_wins,
+            "rejection_accuracy": rejected_losses / len(rejected) if rejected else 0,
         },
-
-        'score_analysis': {
-            'avg_score': sum(scores) / len(scores) if scores else 0,
-            'avg_winner_score': sum(winner_scores) / len(winner_scores) if winner_scores else 0,
-            'avg_loser_score': sum(loser_scores) / len(loser_scores) if loser_scores else 0,
-            'score_separation': (sum(winner_scores) / len(winner_scores) if winner_scores else 0) -
-                               (sum(loser_scores) / len(loser_scores) if loser_scores else 0),
+        "score_analysis": {
+            "avg_score": sum(scores) / len(scores) if scores else 0,
+            "avg_winner_score": sum(winner_scores) / len(winner_scores) if winner_scores else 0,
+            "avg_loser_score": sum(loser_scores) / len(loser_scores) if loser_scores else 0,
+            "score_separation": (sum(winner_scores) / len(winner_scores) if winner_scores else 0)
+            - (sum(loser_scores) / len(loser_scores) if loser_scores else 0),
         },
     }
 
 
-def print_report(stats: Dict[str, Any], show_thresholds: bool = False) -> None:
+def print_report(stats: dict[str, Any], show_thresholds: bool = False) -> None:
     """Print formatted backtest report."""
     print("\n" + "=" * 65)
     print("ML FILTER BACKTEST RESULTS")
     print("=" * 65)
 
-    if 'error' in stats:
+    if "error" in stats:
         print(f"\nError: {stats['error']}")
         return
 
@@ -269,7 +264,7 @@ def print_report(stats: Dict[str, Any], show_thresholds: bool = False) -> None:
     print("\n" + "-" * 45)
     print("BASELINE (No Filter)")
     print("-" * 45)
-    b = stats['baseline']
+    b = stats["baseline"]
     print(f"  Trades:   {b['trades']}")
     print(f"  Wins:     {b['wins']} ({b['win_rate']:.1%})")
     print(f"  Losses:   {b['losses']}")
@@ -280,13 +275,13 @@ def print_report(stats: Dict[str, Any], show_thresholds: bool = False) -> None:
     print("\n" + "-" * 45)
     print("WITH ML FILTER")
     print("-" * 45)
-    wf = stats['with_filter']
+    wf = stats["with_filter"]
     print(f"  Trades Taken:   {wf['trades_taken']}")
     print(f"  Trades Blocked: {wf['trades_blocked']} ({wf['block_rate']:.1%})")
 
     # Approved
     print("\n  APPROVED (would trade):")
-    a = stats['approved']
+    a = stats["approved"]
     print(f"    Trades:   {a['trades']}")
     print(f"    Wins:     {a['wins']} ({a['win_rate']:.1%})")
     print(f"    Total P&L: ${a['total_pnl']:,.2f}")
@@ -294,7 +289,7 @@ def print_report(stats: Dict[str, Any], show_thresholds: bool = False) -> None:
 
     # Rejected
     print("\n  REJECTED (would block):")
-    r = stats['rejected']
+    r = stats["rejected"]
     print(f"    Trades:   {r['trades']}")
     print(f"    Wins:     {r['wins']} ({r['win_rate']:.1%})")
     print(f"    Losses:   {r['losses']}")
@@ -305,14 +300,14 @@ def print_report(stats: Dict[str, Any], show_thresholds: bool = False) -> None:
     print("\n" + "-" * 45)
     print("FILTER EFFECTIVENESS")
     print("-" * 45)
-    e = stats['effectiveness']
+    e = stats["effectiveness"]
     print(f"  Win Rate Improvement:    {e['win_rate_improvement']:+.1%}")
     print(f"  Correct Rejections:      {e['correct_rejections']} (blocked losers)")
     print(f"  Incorrect Rejections:    {e['incorrect_rejections']} (blocked winners)")
     print(f"  Rejection Accuracy:      {e['rejection_accuracy']:.1%}")
 
     # P&L analysis
-    if r['total_pnl'] < 0:
+    if r["total_pnl"] < 0:
         print(f"  P&L Saved by Blocking:   ${-r['total_pnl']:,.2f}")
     else:
         print(f"  P&L Lost by Blocking:    ${r['total_pnl']:,.2f}")
@@ -321,7 +316,7 @@ def print_report(stats: Dict[str, Any], show_thresholds: bool = False) -> None:
     print("\n" + "-" * 45)
     print("SCORE ANALYSIS")
     print("-" * 45)
-    s = stats['score_analysis']
+    s = stats["score_analysis"]
     print(f"  Avg Score (all):     {s['avg_score']:.3f}")
     print(f"  Avg Score (winners): {s['avg_winner_score']:.3f}")
     print(f"  Avg Score (losers):  {s['avg_loser_score']:.3f}")
@@ -332,7 +327,7 @@ def print_report(stats: Dict[str, Any], show_thresholds: bool = False) -> None:
     print("RECOMMENDATION")
     print("=" * 65)
 
-    improvement = e['win_rate_improvement']
+    improvement = e["win_rate_improvement"]
     if improvement > 0.10:
         print(f"  ✓✓ Strong improvement ({improvement:+.1%}) - Enable the filter")
     elif improvement > 0.05:
@@ -342,7 +337,7 @@ def print_report(stats: Dict[str, Any], show_thresholds: bool = False) -> None:
     else:
         print(f"  ✗  No improvement ({improvement:+.1%}) - Keep disabled")
 
-    if s['score_separation'] > 0.1:
+    if s["score_separation"] > 0.1:
         print(f"  ✓  Good score separation ({s['score_separation']:.3f}) - Model discriminates well")
     else:
         print(f"  ✗  Poor score separation ({s['score_separation']:.3f}) - Model struggles to discriminate")
@@ -350,11 +345,7 @@ def print_report(stats: Dict[str, Any], show_thresholds: bool = False) -> None:
     print()
 
 
-def sweep_thresholds(
-    trades: List[Dict],
-    model_path: str,
-    thresholds: List[float]
-) -> None:
+def sweep_thresholds(trades: list[dict], model_path: str, thresholds: list[float]) -> None:
     """Test multiple thresholds and show comparison."""
     print("\n" + "=" * 75)
     print("THRESHOLD SWEEP")
@@ -364,24 +355,26 @@ def sweep_thresholds(
 
     # First show baseline
     _, baseline_stats = run_backtest(trades, model_path, 0.0)
-    if 'error' in baseline_stats:
+    if "error" in baseline_stats:
         print("Error running backtest")
         return
 
-    baseline_wr = baseline_stats['baseline']['win_rate']
-    baseline_pnl = baseline_stats['baseline']['total_pnl']
-    print(f"{'Baseline':<12} {baseline_stats['baseline']['trades']:<10} {baseline_wr:<12.1%} {'---':<14} ${baseline_pnl:<14,.2f}")
+    baseline_wr = baseline_stats["baseline"]["win_rate"]
+    baseline_pnl = baseline_stats["baseline"]["total_pnl"]
+    print(
+        f"{'Baseline':<12} {baseline_stats['baseline']['trades']:<10} {baseline_wr:<12.1%} {'---':<14} ${baseline_pnl:<14,.2f}"
+    )
     print("-" * 75)
 
     for threshold in thresholds:
         _, stats = run_backtest(trades, model_path, threshold)
-        if 'error' in stats:
+        if "error" in stats:
             continue
 
-        trades_taken = stats['approved']['trades']
-        win_rate = stats['approved']['win_rate']
-        improvement = stats['effectiveness']['win_rate_improvement']
-        pnl = stats['approved']['total_pnl']
+        trades_taken = stats["approved"]["trades"]
+        win_rate = stats["approved"]["win_rate"]
+        improvement = stats["effectiveness"]["win_rate_improvement"]
+        pnl = stats["approved"]["total_pnl"]
 
         marker = "  ✓" if improvement > 0.05 else "   "
         print(f"{threshold:<12.2f} {trades_taken:<10} {win_rate:<12.1%} {improvement:<+14.1%} ${pnl:<14,.2f}{marker}")
@@ -391,16 +384,11 @@ def sweep_thresholds(
 
 def main():
     parser = argparse.ArgumentParser(description="Backtest ML Filter on historical trades")
-    parser.add_argument('--trades', default='logs/meta_trades_live.jsonl',
-                        help='Path to trade data file')
-    parser.add_argument('--model', default='models/trade_quality_model.joblib',
-                        help='Path to ML model')
-    parser.add_argument('--threshold', type=float, default=0.5,
-                        help='Confidence threshold (default: 0.5)')
-    parser.add_argument('--sweep', action='store_true',
-                        help='Test multiple thresholds')
-    parser.add_argument('--json', action='store_true',
-                        help='Output as JSON')
+    parser.add_argument("--trades", default="logs/meta_trades_live.jsonl", help="Path to trade data file")
+    parser.add_argument("--model", default="models/trade_quality_model.joblib", help="Path to ML model")
+    parser.add_argument("--threshold", type=float, default=0.5, help="Confidence threshold (default: 0.5)")
+    parser.add_argument("--sweep", action="store_true", help="Test multiple thresholds")
+    parser.add_argument("--json", action="store_true", help="Output as JSON")
 
     args = parser.parse_args()
 
@@ -428,11 +416,7 @@ def main():
 
     # Threshold sweep
     if args.sweep:
-        sweep_thresholds(
-            trades,
-            str(model_path),
-            [0.3, 0.4, 0.5, 0.6, 0.7, 0.8]
-        )
+        sweep_thresholds(trades, str(model_path), [0.3, 0.4, 0.5, 0.6, 0.7, 0.8])
         return
 
     # Single threshold backtest
@@ -445,5 +429,5 @@ def main():
         print_report(stats)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

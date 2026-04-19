@@ -1,30 +1,33 @@
 """
 Tests for core utilities: retry, health, logging, persistence, shutdown.
 """
+
 import asyncio
 import os
 import sys
 import tempfile
 import unittest
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.utils.retry import (
-    retry, async_retry, CircuitBreaker, CircuitBreakerConfig,
-    CircuitOpenError, CircuitState, get_circuit_breaker, calculate_delay,
-    RetryConfig
-)
-from core.utils.health import (
-    HealthChecker, HealthStatus, ComponentHealth, get_health_checker
-)
+from core.utils.health import HealthChecker, HealthStatus
 from core.utils.logging_utils import (
-    mask_sensitive_data, get_correlation_id, set_correlation_id,
-    generate_correlation_id, StructuredFormatter
+    StructuredFormatter,
+    generate_correlation_id,
+    get_correlation_id,
+    mask_sensitive_data,
+    set_correlation_id,
 )
-from core.utils.persistence import (
-    StatePersistence, PersistedPosition, PersistedOrder
+from core.utils.persistence import PersistedOrder, PersistedPosition, StatePersistence
+from core.utils.retry import (
+    CircuitBreaker,
+    CircuitBreakerConfig,
+    CircuitState,
+    RetryConfig,
+    async_retry,
+    calculate_delay,
+    retry,
 )
 
 
@@ -140,11 +143,7 @@ class TestCircuitBreaker(unittest.TestCase):
 
     def test_circuit_closes_on_success(self):
         """Circuit should close after successes in half-open state."""
-        config = CircuitBreakerConfig(
-            failure_threshold=1,
-            success_threshold=2,
-            timeout=0.01
-        )
+        config = CircuitBreakerConfig(failure_threshold=1, success_threshold=2, timeout=0.01)
         cb = CircuitBreaker(name="test", config=config)
 
         cb.record_failure(Exception("fail"))
@@ -152,6 +151,7 @@ class TestCircuitBreaker(unittest.TestCase):
 
         # Wait for timeout
         import time
+
         time.sleep(0.02)
 
         # Should transition to half-open
@@ -182,12 +182,7 @@ class TestDelayCalculation(unittest.TestCase):
 
     def test_max_delay_cap(self):
         """Delay should not exceed max_delay."""
-        config = RetryConfig(
-            base_delay=1.0,
-            max_delay=10.0,
-            exponential_base=2.0,
-            jitter=False
-        )
+        config = RetryConfig(base_delay=1.0, max_delay=10.0, exponential_base=2.0, jitter=False)
 
         delay = calculate_delay(10, config)  # Would be 1024 without cap
         self.assertEqual(delay, 10.0)
@@ -261,11 +256,7 @@ class TestMaskSensitiveData(unittest.TestCase):
 
     def test_mask_nested_sensitive(self):
         """Should mask nested sensitive fields."""
-        data = {
-            "config": {
-                "api_secret": "secret_value_here"
-            }
-        }
+        data = {"config": {"api_secret": "secret_value_here"}}
         masked = mask_sensitive_data(data)
         self.assertEqual(masked["config"]["api_secret"], "***MASKED***")
 
@@ -383,8 +374,8 @@ class TestStructuredFormatter(unittest.TestCase):
 
     def test_format_includes_required_fields(self):
         """Formatted log should include required fields."""
-        import logging
         import json
+        import logging
 
         formatter = StructuredFormatter()
         record = logging.LogRecord(
@@ -407,5 +398,5 @@ class TestStructuredFormatter(unittest.TestCase):
         self.assertIn("source", data)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

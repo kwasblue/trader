@@ -8,36 +8,35 @@ Coverage:
 - Global config access
 - Config reload
 """
-import pytest
-from unittest.mock import patch, MagicMock
-import json
-import tempfile
-from pathlib import Path
 
+import json
 import sys
+from pathlib import Path
+from unittest.mock import patch
+
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from core.config_loader import (
-    load_config,
-    get_config,
-    reload_config,
-    TradingConfig,
-    GeneralConfig,
-    SimulationConfig,
     AlpacaConfig,
-    SchwabConfig,
-    RiskConfig,
-    DrawdownMonitorConfig,
-    PositionSizerConfig,
-    TradeLogicConfig,
-    IndicatorsConfig,
-    DataConfig,
-    GUIConfig,
-    LoggingConfig,
     AutoTraderConfig,
-    _dict_to_dataclass
+    DataConfig,
+    DrawdownMonitorConfig,
+    GeneralConfig,
+    GUIConfig,
+    IndicatorsConfig,
+    LoggingConfig,
+    PositionSizerConfig,
+    RiskConfig,
+    SchwabConfig,
+    SimulationConfig,
+    TradeLogicConfig,
+    TradingConfig,
+    _dict_to_dataclass,
+    get_config,
+    load_config,
+    reload_config,
 )
 
 
@@ -150,11 +149,7 @@ class TestDictToDataclass:
 
     def test_converts_valid_dict(self):
         """Test conversion of valid dictionary."""
-        data = {
-            "default_symbols": ["TSLA", "GOOGL"],
-            "default_mode": "live",
-            "log_level": "DEBUG"
-        }
+        data = {"default_symbols": ["TSLA", "GOOGL"], "default_mode": "live", "log_level": "DEBUG"}
         config = _dict_to_dataclass(GeneralConfig, data)
         assert config.default_symbols == ["TSLA", "GOOGL"]
         assert config.default_mode == "live"
@@ -162,11 +157,7 @@ class TestDictToDataclass:
 
     def test_ignores_unknown_fields(self):
         """Test that unknown fields are ignored."""
-        data = {
-            "default_symbols": ["AAPL"],
-            "unknown_field": "should be ignored",
-            "another_unknown": 123
-        }
+        data = {"default_symbols": ["AAPL"], "unknown_field": "should be ignored", "another_unknown": 123}
         config = _dict_to_dataclass(GeneralConfig, data)
         assert config.default_symbols == ["AAPL"]
         # Should not raise, just ignore unknown fields
@@ -199,13 +190,8 @@ class TestLoadConfig:
         """Test loading config from a file."""
         config_file = tmp_path / "trading_config.json"
         config_data = {
-            "general": {
-                "default_symbols": ["NVDA"],
-                "log_level": "DEBUG"
-            },
-            "simulation": {
-                "starting_cash": 50000.0
-            }
+            "general": {"default_symbols": ["NVDA"], "log_level": "DEBUG"},
+            "simulation": {"starting_cash": 50000.0},
         }
         config_file.write_text(json.dumps(config_data))
 
@@ -235,10 +221,7 @@ class TestLoadConfig:
     def test_load_config_preserves_raw(self, tmp_path):
         """Test that raw dict is preserved."""
         config_file = tmp_path / "trading_config.json"
-        config_data = {
-            "general": {"default_symbols": ["AAPL"]},
-            "custom_section": {"custom_value": 123}
-        }
+        config_data = {"general": {"default_symbols": ["AAPL"]}, "custom_section": {"custom_value": 123}}
         config_file.write_text(json.dumps(config_data))
 
         config = load_config(str(config_file))
@@ -262,7 +245,7 @@ class TestLoadConfig:
             "data": {"max_stale_minutes": 30},
             "gui": {"update_interval_ms": 500},
             "logging": {"console_enabled": False},
-            "autotrader": {"dry_run": True}
+            "autotrader": {"dry_run": True},
         }
         config_file.write_text(json.dumps(config_data))
 
@@ -290,9 +273,10 @@ class TestGetConfig:
         """Test that config is cached."""
         # Reset global config
         import core.config_loader as cl
+
         cl._config = None
 
-        with patch('core.config_loader.load_config') as mock_load:
+        with patch("core.config_loader.load_config") as mock_load:
             mock_load.return_value = TradingConfig()
 
             config1 = get_config()
@@ -305,13 +289,14 @@ class TestGetConfig:
     def test_get_config_reload(self):
         """Test config reload."""
         import core.config_loader as cl
+
         cl._config = None
 
-        with patch('core.config_loader.load_config') as mock_load:
+        with patch("core.config_loader.load_config") as mock_load:
             mock_load.return_value = TradingConfig()
 
-            config1 = get_config()
-            config2 = get_config(reload=True)
+            get_config()
+            get_config(reload=True)
 
             # Should load twice
             assert mock_load.call_count == 2
@@ -323,9 +308,10 @@ class TestReloadConfig:
     def test_reload_config(self):
         """Test reload_config function."""
         import core.config_loader as cl
+
         cl._config = None
 
-        with patch('core.config_loader.load_config') as mock_load:
+        with patch("core.config_loader.load_config") as mock_load:
             mock_load.return_value = TradingConfig()
 
             # First load
@@ -344,7 +330,7 @@ class TestConfigProxy:
         """Test accessing config through proxy."""
         import core.config_loader as cl
 
-        with patch.object(cl, 'get_config') as mock_get:
+        with patch.object(cl, "get_config") as mock_get:
             mock_config = TradingConfig()
             mock_get.return_value = mock_config
 

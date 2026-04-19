@@ -1,33 +1,26 @@
-from PySide6 import QtWidgets, QtCore, QtGui
-import pyqtgraph as pg
 import os
-from pathlib import Path
-import pandas as pd
-import numpy as np
-
 from datetime import datetime, timezone
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import pyqtgraph as pg
+from PySide6 import QtCore, QtGui, QtWidgets
 
 # Project root for relative path resolution
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
-from core.simulator.gbm_simulator import GBMSimulator
-from core.historical_loader import HistoricalBarLoader
-from core.mock_executor import MockExecutor
-from core.simulator.simulation import SimulationRunner, SimConfig
-import random
-
-from monitoring.bus import ControlBridge
-from monitoring.models import SymbolsTableModel
-from monitoring.dialogs.manual_order import ManualOrderDialog
-from monitoring.views.symbol_list_widget import SymbolListWidget
-# StateAggregator removed - using direct feeder connections now
-
-from core.events.eventhandler import EventHandler, get_event_handler
-from monitoring.feeds.feeder import DataFeeder
-from core.events import events
 import asyncio
 
+from core.events import events
 
-
+# StateAggregator removed - using direct feeder connections now
+from core.events.eventhandler import get_event_handler
+from core.simulator.simulation import SimConfig, SimulationRunner
+from monitoring.bus import ControlBridge
+from monitoring.dialogs.manual_order import ManualOrderDialog
+from monitoring.feeds.feeder import DataFeeder
+from monitoring.models import SymbolsTableModel
+from monitoring.views.symbol_list_widget import SymbolListWidget
 
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -179,22 +172,21 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Event → CSV map
         self._event_csv_map = {
-            events.EVENT_NEW_TRADE:      "trades.csv",
-            events.EVENT_PNL_UPDATE:     "pnl_updates.csv",
-            events.EVENT_ORDER_STATUS:   "orders.csv",
-            events.EVENT_ALERT:          "alerts.csv",
-            events.EVENT_POSITION_UPDATE:"positions.csv",
-            events.EVENT_PRICE_UPDATE:   "prices.csv",
-            events.EVENT_FLATTEN_ALL:    "ui_actions.csv",
-            events.EVENT_CANCEL_ALL:     "ui_actions.csv",
+            events.EVENT_NEW_TRADE: "trades.csv",
+            events.EVENT_PNL_UPDATE: "pnl_updates.csv",
+            events.EVENT_ORDER_STATUS: "orders.csv",
+            events.EVENT_ALERT: "alerts.csv",
+            events.EVENT_POSITION_UPDATE: "positions.csv",
+            events.EVENT_PRICE_UPDATE: "prices.csv",
+            events.EVENT_FLATTEN_ALL: "ui_actions.csv",
+            events.EVENT_CANCEL_ALL: "ui_actions.csv",
             events.EVENT_FLATTEN_SYMBOL: "ui_actions.csv",
-            events.EVENT_MANUAL_ORDER:   "ui_actions.csv",
-            events.EVENT_HALTED:         "ui_actions.csv",
+            events.EVENT_MANUAL_ORDER: "ui_actions.csv",
+            events.EVENT_HALTED: "ui_actions.csv",
         }
         self._buffers = {fname: [] for fname in set(self._event_csv_map.values())}
         self._buffer_limit = 50
         self._csv_path = lambda fname: os.path.join(self._csv_dir, f"{self._session_id}_{fname}")
-
 
         # === Theme ===
         pg.setConfigOption("background", "#0a0a0a")
@@ -220,9 +212,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.panic_btn.setText("HALT ✖")
         self._style_panic(False)
 
-        self.flatten_btn_tb = QtWidgets.QToolButton(); self.flatten_btn_tb.setText("Flatten All")
-        self.cancel_all_btn_tb = QtWidgets.QToolButton(); self.cancel_all_btn_tb.setText("Cancel All")
-        self.manual_order_btn_tb = QtWidgets.QToolButton(); self.manual_order_btn_tb.setText("Manual Order")
+        self.flatten_btn_tb = QtWidgets.QToolButton()
+        self.flatten_btn_tb.setText("Flatten All")
+        self.cancel_all_btn_tb = QtWidgets.QToolButton()
+        self.cancel_all_btn_tb.setText("Cancel All")
+        self.manual_order_btn_tb = QtWidgets.QToolButton()
+        self.manual_order_btn_tb.setText("Manual Order")
 
         # Mode selector
         self.mode_label = QtWidgets.QLabel("Mode:")
@@ -262,7 +257,8 @@ class MainWindow(QtWidgets.QMainWindow):
         QtGui.QShortcut(QtGui.QKeySequence("Ctrl+K"), self, activated=self._confirm_cancel_all)
 
         # Tabs
-        self.tabs = QtWidgets.QTabWidget(); self.setCentralWidget(self.tabs)
+        self.tabs = QtWidgets.QTabWidget()
+        self.setCentralWidget(self.tabs)
         self._build_dashboard_tab()
         self._build_market_tab()
         self._build_performance_tab()
@@ -279,8 +275,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.stop_act.triggered.connect(self._stop_trading)
         self.clear_logs_act.triggered.connect(lambda: self.logs_view.clear())
         self.export_csv_act.triggered.connect(self._export_all_csvs)
-        self.export_pdf_act.triggered.connect(lambda: QtWidgets.QMessageBox.information(
-            self, "Export", "PDF export is a stub. Wire reportlab/wkhtmltopdf."))
+        self.export_pdf_act.triggered.connect(
+            lambda: QtWidgets.QMessageBox.information(
+                self, "Export", "PDF export is a stub. Wire reportlab/wkhtmltopdf."
+            )
+        )
 
         self.panic_btn.clicked.connect(self._toggle_panic)
         self.flatten_btn_tb.clicked.connect(self._confirm_flatten)
@@ -319,7 +318,7 @@ class MainWindow(QtWidgets.QMainWindow):
         """Load historical P&L from trade logs on GUI startup."""
         import csv
         from collections import defaultdict
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
         trade_log = _PROJECT_ROOT / "logs" / "live_trades.csv"
         if not trade_log.exists():
@@ -330,12 +329,12 @@ class MainWindow(QtWidgets.QMainWindow):
         cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).date().isoformat()
 
         try:
-            with open(trade_log, 'r') as f:
+            with open(trade_log) as f:
                 reader = csv.DictReader(f)
                 for row in reader:
                     try:
-                        ts = row.get('timestamp', '')
-                        pnl_str = row.get('pnl', '')
+                        ts = row.get("timestamp", "")
+                        pnl_str = row.get("pnl", "")
 
                         if not ts or not pnl_str:
                             continue
@@ -350,12 +349,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
             if pnl_by_day:
                 # Manually call the history handler
-                self._gui_on_history({'pnl_by_day': dict(pnl_by_day)})
+                self._gui_on_history({"pnl_by_day": dict(pnl_by_day)})
                 total = sum(pnl_by_day.values())
-                self._append_log(
-                    f"[HISTORY] Loaded {len(pnl_by_day)} days of P&L "
-                    f"(total: ${total:,.2f})"
-                )
+                self._append_log(f"[HISTORY] Loaded {len(pnl_by_day)} days of P&L (total: ${total:,.2f})")
             else:
                 self._append_log("[HISTORY] No P&L data in last 30 days")
 
@@ -409,10 +405,10 @@ class MainWindow(QtWidgets.QMainWindow):
     def _gui_on_pnl(self, data: dict):
         """Handle P&L update from feeder Qt signal (SYNC)."""
         try:
-            value = data.get('portfolio_value', 0)
-            unrealized = data.get('unrealized', 0)
-            realized = data.get('realized', 0)
-            drawdown = data.get('drawdown', 0)
+            value = data.get("portfolio_value", 0)
+            unrealized = data.get("unrealized", 0)
+            realized = data.get("realized", 0)
+            drawdown = data.get("drawdown", 0)
 
             # Debug: Print to console for visibility
             if len(self._eq_y) < 3:
@@ -424,31 +420,31 @@ class MainWindow(QtWidgets.QMainWindow):
 
             # === Update Dashboard KPIs ===
             # Portfolio Value (big label)
-            if hasattr(self, 'portfolio_value_lbl') and value:
+            if hasattr(self, "portfolio_value_lbl") and value:
                 color = "#22c55e" if value >= 100000 else "#ef4444"
                 self.portfolio_value_lbl.setText(f"${value:,.2f}")
                 self.portfolio_value_lbl.setStyleSheet(f"font-weight: 700; font-size: 20px; color: {color};")
 
             # Total P&L
-            if hasattr(self, 'total_pnl_lbl'):
+            if hasattr(self, "total_pnl_lbl"):
                 total_pnl = unrealized + realized
                 self._set_kpi(self.total_pnl_lbl, total_pnl, money=True)
 
             # Daily P&L (use realized for now)
-            if hasattr(self, 'daily_pnl_lbl'):
+            if hasattr(self, "daily_pnl_lbl"):
                 self._set_kpi(self.daily_pnl_lbl, realized, money=True)
 
             # Standard KPI labels
-            if 'unrealized' in data:
+            if "unrealized" in data:
                 self._set_kpi(self.unreal_lbl, unrealized, money=True)
-            if 'realized' in data:
+            if "realized" in data:
                 self._set_kpi(self.realized_lbl, realized, money=True)
-            if 'drawdown' in data:
+            if "drawdown" in data:
                 self._set_kpi(self.dd_lbl, drawdown, pct=True)
 
             # Buying Power and Cash from broker
-            if hasattr(self, 'buying_power_lbl'):
-                buying_power = data.get('buying_power')
+            if hasattr(self, "buying_power_lbl"):
+                buying_power = data.get("buying_power")
                 if buying_power is not None:
                     self.buying_power_lbl.setText(f"${buying_power:,.0f}")
                 else:
@@ -457,8 +453,8 @@ class MainWindow(QtWidgets.QMainWindow):
                     self.buying_power_lbl.setText(f"${cash:,.0f}")
 
             # Cash label if exists
-            if hasattr(self, 'cash_lbl'):
-                cash = data.get('cash')
+            if hasattr(self, "cash_lbl"):
+                cash = data.get("cash")
                 if cash is not None:
                     self.cash_lbl.setText(f"${cash:,.0f}")
 
@@ -469,11 +465,11 @@ class MainWindow(QtWidgets.QMainWindow):
                 self._update_equity_chart()
 
                 # Update status bar
-                if hasattr(self, 'status_bars_lbl'):
+                if hasattr(self, "status_bars_lbl"):
                     self.status_bars_lbl.setText(f"Bars: {len(self._eq_y)}")
 
                 # Calculate win rate from equity changes
-                if len(self._eq_y) > 2 and hasattr(self, 'win_rate_lbl'):
+                if len(self._eq_y) > 2 and hasattr(self, "win_rate_lbl"):
                     returns = np.diff(self._eq_y[-100:])
                     wins = np.sum(returns > 0)
                     total = len(returns)
@@ -491,7 +487,7 @@ class MainWindow(QtWidgets.QMainWindow):
                     self._refresh_history_from_session()
 
                 # Auto-update Replay tab
-                if hasattr(self, 'replay_slider') and len(self._eq_y) > 10:
+                if hasattr(self, "replay_slider") and len(self._eq_y) > 10:
                     self.replay_slider.setMaximum(len(self._eq_y) - 1)
                     self.replay_frame_lbl.setText(f"Frame: {self.replay_slider.value()} / {len(self._eq_y)}")
 
@@ -516,11 +512,11 @@ class MainWindow(QtWidgets.QMainWindow):
     def _gui_on_bar(self, symbol: str, bar: dict):
         """Handle bar update from feeder (SYNC)."""
         try:
-            close = bar.get('close', 0)
-            open_price = bar.get('open', close)
+            close = bar.get("close", 0)
+            open_price = bar.get("open", close)
 
             # Debug: Count and log bars
-            if not hasattr(self, '_gui_bar_count'):
+            if not hasattr(self, "_gui_bar_count"):
                 self._gui_bar_count = 0
             self._gui_bar_count += 1
 
@@ -529,14 +525,14 @@ class MainWindow(QtWidgets.QMainWindow):
                 print(f"[MainWindow] BAR #{self._gui_bar_count}: {symbol} ${close:.2f}")
 
             # Update dashboard symbol prices
-            if hasattr(self, '_update_symbol_price') and close > 0:
+            if hasattr(self, "_update_symbol_price") and close > 0:
                 # Calculate change percentage from open
                 change_pct = ((close - open_price) / open_price * 100) if open_price > 0 else 0
                 self._update_symbol_price(symbol, close, change_pct)
 
             # Update status bar symbols
-            if hasattr(self, 'status_symbols_lbl'):
-                if not hasattr(self, '_tracked_symbols'):
+            if hasattr(self, "status_symbols_lbl"):
+                if not hasattr(self, "_tracked_symbols"):
                     self._tracked_symbols = set()
                 self._tracked_symbols.add(symbol)
                 self.status_symbols_lbl.setText(f"Symbols: {', '.join(sorted(self._tracked_symbols))}")
@@ -553,12 +549,12 @@ class MainWindow(QtWidgets.QMainWindow):
     def _gui_on_health(self, data: dict):
         """Handle health status update (SYNC)."""
         try:
-            status = data.get('status', 'unknown')
-            details = data.get('details', {})
-            age = details.get('last_emit_age', 0) if isinstance(details, dict) else 0
-            count = details.get('event_count', 0) if isinstance(details, dict) else 0
+            status = data.get("status", "unknown")
+            details = data.get("details", {})
+            age = details.get("last_emit_age", 0) if isinstance(details, dict) else 0
+            count = details.get("event_count", 0) if isinstance(details, dict) else 0
 
-            if status == 'healthy':
+            if status == "healthy":
                 self.heartbeat_indicator.setStyleSheet("color: #22c55e; font-size: 18px;")
                 self.halt_banner.setStyleSheet("background:#166534;color:#fff;padding:6px;border-radius:6px;")
                 self.halt_banner.setText(f"Feed OK | Events: {count}")
@@ -574,25 +570,25 @@ class MainWindow(QtWidgets.QMainWindow):
     def _gui_on_trade(self, data: dict):
         """Handle trade update from feeder (SYNC)."""
         try:
-            symbol = data.get('symbol', 'UNKNOWN')
-            side = data.get('side', 'unknown')
-            qty = data.get('qty', 0)
-            price = data.get('price', 0)
-            timestamp = data.get('timestamp', '')
+            symbol = data.get("symbol", "UNKNOWN")
+            side = data.get("side", "unknown")
+            qty = data.get("qty", 0)
+            price = data.get("price", 0)
+            timestamp = data.get("timestamp", "")
 
             self._append_log(f"[TRADE] {side.upper()} {qty} {symbol} @ ${price:.2f}")
 
             # Update trade counter
-            if not hasattr(self, '_trade_count'):
+            if not hasattr(self, "_trade_count"):
                 self._trade_count = 0
             self._trade_count += 1
 
             # Update status bar
-            if hasattr(self, 'status_trades_lbl'):
+            if hasattr(self, "status_trades_lbl"):
                 self.status_trades_lbl.setText(f"Trades: {self._trade_count}")
 
             # Add to recent trades table on Dashboard
-            if hasattr(self, 'recent_trades_table'):
+            if hasattr(self, "recent_trades_table"):
                 row = 0  # Insert at top
                 self.recent_trades_table.insertRow(row)
 
@@ -604,7 +600,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
                 # Color-code side
                 side_item = QtWidgets.QTableWidgetItem(side.upper())
-                if side.lower() in ('buy', 'long'):
+                if side.lower() in ("buy", "long"):
                     side_item.setForeground(QtGui.QColor(34, 197, 94))  # Green
                 else:
                     side_item.setForeground(QtGui.QColor(239, 68, 68))  # Red
@@ -625,21 +621,21 @@ class MainWindow(QtWidgets.QMainWindow):
     def _gui_on_position(self, data: dict):
         """Handle position update from feeder (SYNC)."""
         try:
-            symbol = data.get('symbol', '')
-            qty = data.get('qty', 0)
+            symbol = data.get("symbol", "")
+            qty = data.get("qty", 0)
 
-            if hasattr(self, 'pos_model'):
+            if hasattr(self, "pos_model"):
                 if qty != 0:
                     # Update or add position
-                    if hasattr(self.pos_model, 'update_position'):
+                    if hasattr(self.pos_model, "update_position"):
                         self.pos_model.update_position(data)
                 else:
                     # Remove position when qty is 0
-                    if hasattr(self.pos_model, 'remove_position'):
+                    if hasattr(self.pos_model, "remove_position"):
                         self.pos_model.remove_position(symbol)
 
             # Track open positions
-            if not hasattr(self, '_open_positions'):
+            if not hasattr(self, "_open_positions"):
                 self._open_positions = {}
 
             if symbol:
@@ -649,7 +645,7 @@ class MainWindow(QtWidgets.QMainWindow):
                     del self._open_positions[symbol]
 
                 # Update open positions count on dashboard
-                if hasattr(self, 'open_positions_lbl'):
+                if hasattr(self, "open_positions_lbl"):
                     self.open_positions_lbl.setText(str(len(self._open_positions)))
 
             self.log_event(events.EVENT_POSITION_UPDATE, data)
@@ -659,13 +655,13 @@ class MainWindow(QtWidgets.QMainWindow):
     def _gui_on_order(self, data: dict):
         """Handle order status update from feeder (SYNC)."""
         try:
-            order_id = data.get('order_id', 'N/A')
-            status = data.get('status', 'unknown')
-            symbol = data.get('symbol', 'N/A')
-            side = data.get('side', 'N/A')
-            qty = data.get('filled_qty', data.get('qty', 0))
-            price = data.get('avg_price', data.get('price', 0))
-            timestamp = data.get('timestamp', '')
+            data.get("order_id", "N/A")
+            status = data.get("status", "unknown")
+            symbol = data.get("symbol", "N/A")
+            side = data.get("side", "N/A")
+            qty = data.get("filled_qty", data.get("qty", 0))
+            price = data.get("avg_price", data.get("price", 0))
+            timestamp = data.get("timestamp", "")
 
             self._append_log(f"[ORDER] {symbol} {side} {qty} @ ${price:.2f} - {status}")
 
@@ -673,12 +669,12 @@ class MainWindow(QtWidgets.QMainWindow):
             self._update_order_kpis(data)
 
             # Add to order history table
-            if hasattr(self, 'order_table'):
+            if hasattr(self, "order_table"):
                 row = self.order_table.rowCount()
                 self.order_table.insertRow(row)
 
                 # Format timestamp
-                time_str = timestamp[-8:] if timestamp else 'N/A'
+                time_str = timestamp[-8:] if timestamp else "N/A"
 
                 self.order_table.setItem(row, 0, QtWidgets.QTableWidgetItem(time_str))
                 self.order_table.setItem(row, 1, QtWidgets.QTableWidgetItem(str(symbol)))
@@ -688,9 +684,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
                 # Color-code status
                 status_item = QtWidgets.QTableWidgetItem(status)
-                if status == 'filled':
+                if status == "filled":
                     status_item.setForeground(QtGui.QColor(34, 197, 94))  # Green
-                elif status in ('canceled', 'rejected'):
+                elif status in ("canceled", "rejected"):
                     status_item.setForeground(QtGui.QColor(248, 113, 113))  # Red
                 self.order_table.setItem(row, 5, status_item)
 
@@ -708,15 +704,15 @@ class MainWindow(QtWidgets.QMainWindow):
     def _gui_on_alert(self, data: dict):
         """Handle alert from feeder (SYNC)."""
         try:
-            level = data.get('level', 'info') if isinstance(data, dict) else 'info'
-            message = data.get('message', str(data)) if isinstance(data, dict) else str(data)
-            symbol = data.get('symbol', '') if isinstance(data, dict) else ''
-            timestamp = data.get('timestamp', '') if isinstance(data, dict) else ''
+            level = data.get("level", "info") if isinstance(data, dict) else "info"
+            message = data.get("message", str(data)) if isinstance(data, dict) else str(data)
+            symbol = data.get("symbol", "") if isinstance(data, dict) else ""
+            timestamp = data.get("timestamp", "") if isinstance(data, dict) else ""
 
             self._append_log(f"[ALERT] {level.upper()}: {message}")
 
             # Update alert counts
-            if not hasattr(self, '_alert_counts'):
+            if not hasattr(self, "_alert_counts"):
                 self._alert_counts = {"error": 0, "warning": 0, "info": 0, "total": 0}
 
             self._alert_counts["total"] += 1
@@ -727,7 +723,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self._update_alert_counts()
 
             # Add to alerts list with formatting
-            if hasattr(self, 'alerts_list'):
+            if hasattr(self, "alerts_list"):
                 time_str = timestamp[-8:] if timestamp else datetime.now().strftime("%H:%M:%S")
                 sym_str = f"[{symbol}] " if symbol else ""
                 item_text = f"[{time_str}] {level.upper()}: {sym_str}{message}"
@@ -735,10 +731,10 @@ class MainWindow(QtWidgets.QMainWindow):
                 item = QtWidgets.QListWidgetItem(item_text)
 
                 # Color-code by level
-                if level_lower == 'error':
+                if level_lower == "error":
                     item.setForeground(QtGui.QColor(239, 68, 68))  # Red
                     item.setBackground(QtGui.QColor(50, 20, 20))
-                elif level_lower == 'warning':
+                elif level_lower == "warning":
                     item.setForeground(QtGui.QColor(245, 158, 11))  # Orange
                     item.setBackground(QtGui.QColor(50, 40, 10))
                 else:
@@ -756,40 +752,40 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _update_alert_counts(self):
         """Update alert count labels."""
-        if hasattr(self, 'alert_total_lbl'):
+        if hasattr(self, "alert_total_lbl"):
             self.alert_total_lbl.setText(str(self._alert_counts.get("total", 0)))
-        if hasattr(self, 'alert_error_lbl'):
+        if hasattr(self, "alert_error_lbl"):
             self.alert_error_lbl.setText(str(self._alert_counts.get("error", 0)))
-        if hasattr(self, 'alert_warning_lbl'):
+        if hasattr(self, "alert_warning_lbl"):
             self.alert_warning_lbl.setText(str(self._alert_counts.get("warning", 0)))
-        if hasattr(self, 'alert_info_lbl'):
+        if hasattr(self, "alert_info_lbl"):
             self.alert_info_lbl.setText(str(self._alert_counts.get("info", 0)))
 
     def _gui_on_strategy_signal(self, data: dict):
         """Handle strategy signal from feeder (SYNC)."""
         try:
-            symbol = data.get('symbol', 'N/A')
-            strategy = data.get('strategy', 'unknown')
-            signal_raw = data.get('signal', 0)
-            regime = data.get('regime', 'N/A')
-            timestamp = data.get('timestamp', '')
+            symbol = data.get("symbol", "N/A")
+            strategy = data.get("strategy", "unknown")
+            signal_raw = data.get("signal", 0)
+            regime = data.get("regime", "N/A")
+            timestamp = data.get("timestamp", "")
 
             # Map signal to int and text
-            if signal_raw in (1, 'buy'):
+            if signal_raw in (1, "buy"):
                 signal = 1
-            elif signal_raw in (-1, 'sell'):
+            elif signal_raw in (-1, "sell"):
                 signal = -1
             else:
                 signal = 0
-            signal_text = {1: 'BUY', -1: 'SELL', 0: 'HOLD'}.get(signal, str(signal_raw))
+            signal_text = {1: "BUY", -1: "SELL", 0: "HOLD"}.get(signal, str(signal_raw))
 
             # Count signals
-            if not hasattr(self, '_signal_count'):
+            if not hasattr(self, "_signal_count"):
                 self._signal_count = 0
             self._signal_count += 1
 
             # Update signal counters
-            if not hasattr(self, '_signal_counts'):
+            if not hasattr(self, "_signal_counts"):
                 self._signal_counts = {"buy": 0, "sell": 0, "hold": 0, "total": 0}
             self._signal_counts["total"] += 1
             if signal == 1:
@@ -800,11 +796,11 @@ class MainWindow(QtWidgets.QMainWindow):
                 self._signal_counts["hold"] += 1
 
             # Update Strategy tab KPIs
-            if hasattr(self, 'strat_signals_lbl'):
+            if hasattr(self, "strat_signals_lbl"):
                 self.strat_signals_lbl.setText(str(self._signal_counts["total"]))
-            if hasattr(self, 'strat_buy_lbl'):
+            if hasattr(self, "strat_buy_lbl"):
                 self.strat_buy_lbl.setText(str(self._signal_counts["buy"]))
-            if hasattr(self, 'strat_sell_lbl'):
+            if hasattr(self, "strat_sell_lbl"):
                 self.strat_sell_lbl.setText(str(self._signal_counts["sell"]))
 
             # Log signal (only non-HOLD to reduce spam, or every 50th)
@@ -812,7 +808,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 self._append_log(f"[SIGNAL] {symbol}/{strategy}: {signal_text} (regime={regime})")
 
                 # Add to signal history list
-                if hasattr(self, 'signal_history_list'):
+                if hasattr(self, "signal_history_list"):
                     time_str = timestamp[-8:] if timestamp else datetime.now().strftime("%H:%M:%S")
                     item_text = f"[{time_str}] {symbol}/{strategy}: {signal_text}"
                     item = QtWidgets.QListWidgetItem(item_text)
@@ -827,7 +823,7 @@ class MainWindow(QtWidgets.QMainWindow):
                         self.signal_history_list.takeItem(self.signal_history_list.count() - 1)
 
             # Track per-strategy signal counts
-            if not hasattr(self, '_strategy_signal_counts'):
+            if not hasattr(self, "_strategy_signal_counts"):
                 self._strategy_signal_counts = {}
             key = f"{symbol}/{strategy}"
             if key not in self._strategy_signal_counts:
@@ -836,7 +832,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 self._strategy_signal_counts[key] += 1
 
             # Update strategies table
-            if hasattr(self, 'sig_table'):
+            if hasattr(self, "sig_table"):
                 # Find or create row for this symbol/strategy
                 row = -1
                 for i in range(self.sig_table.rowCount()):
@@ -850,7 +846,7 @@ class MainWindow(QtWidgets.QMainWindow):
                     self.sig_table.insertRow(row)
 
                     # Update active strategies count
-                    if hasattr(self, 'strat_active_lbl'):
+                    if hasattr(self, "strat_active_lbl"):
                         self.strat_active_lbl.setText(str(self.sig_table.rowCount()))
 
                 # Update cells
@@ -867,14 +863,16 @@ class MainWindow(QtWidgets.QMainWindow):
 
                 # Regime with color
                 regime_item = QtWidgets.QTableWidgetItem(regime)
-                if 'high' in regime.lower():
+                if "high" in regime.lower():
                     regime_item.setForeground(QtGui.QColor(239, 68, 68))
-                elif 'low' in regime.lower():
+                elif "low" in regime.lower():
                     regime_item.setForeground(QtGui.QColor(34, 197, 94))
                 self.sig_table.setItem(row, 2, regime_item)
 
-                self.sig_table.setItem(row, 3, QtWidgets.QTableWidgetItem(timestamp[-8:] if timestamp else 'N/A'))
-                self.sig_table.setItem(row, 4, QtWidgets.QTableWidgetItem(str(self._strategy_signal_counts.get(key, 0))))
+                self.sig_table.setItem(row, 3, QtWidgets.QTableWidgetItem(timestamp[-8:] if timestamp else "N/A"))
+                self.sig_table.setItem(
+                    row, 4, QtWidgets.QTableWidgetItem(str(self._strategy_signal_counts.get(key, 0)))
+                )
 
             self.log_event(events.EVENT_STRATEGY_SIGNAL, data)
         except Exception as e:
@@ -883,12 +881,12 @@ class MainWindow(QtWidgets.QMainWindow):
     def _gui_on_history(self, data: dict):
         """Handle history update from feeder (SYNC) - updates History tab."""
         try:
-            pnl_by_day = data.get('pnl_by_day', {})
+            pnl_by_day = data.get("pnl_by_day", {})
             if not pnl_by_day:
                 return
 
             # Store history data for calendar plot
-            if not hasattr(self, '_history_data'):
+            if not hasattr(self, "_history_data"):
                 self._history_data = {}
             self._history_data.update(pnl_by_day)
 
@@ -900,8 +898,8 @@ class MainWindow(QtWidgets.QMainWindow):
     def _gui_on_benchmark(self, data: dict):
         """Handle benchmark update from feeder (SYNC) - updates History tab."""
         try:
-            equity = data.get('equity_curve', [])
-            benchmark = data.get('benchmark_curve', [])
+            equity = data.get("equity_curve", [])
+            benchmark = data.get("benchmark_curve", [])
 
             if not equity or not benchmark:
                 return
@@ -918,41 +916,41 @@ class MainWindow(QtWidgets.QMainWindow):
     def _gui_on_replay_frame(self, data: dict):
         """Handle replay frame from feeder (SYNC) - updates Replay tab."""
         try:
-            frame_idx = data.get('frame_idx', 0)
-            equity = data.get('equity', 0)
+            frame_idx = data.get("frame_idx", 0)
+            equity = data.get("equity", 0)
 
             # Update replay curve
-            if not hasattr(self, '_replay_data'):
-                self._replay_data = {'x': [], 'y': []}
+            if not hasattr(self, "_replay_data"):
+                self._replay_data = {"x": [], "y": []}
 
-            self._replay_data['x'].append(frame_idx)
-            self._replay_data['y'].append(equity)
+            self._replay_data["x"].append(frame_idx)
+            self._replay_data["y"].append(equity)
 
             # Limit to last 1000 points
-            if len(self._replay_data['x']) > 1000:
-                self._replay_data['x'] = self._replay_data['x'][-1000:]
-                self._replay_data['y'] = self._replay_data['y'][-1000:]
+            if len(self._replay_data["x"]) > 1000:
+                self._replay_data["x"] = self._replay_data["x"][-1000:]
+                self._replay_data["y"] = self._replay_data["y"][-1000:]
 
-            self.replay_curve.setData(self._replay_data['x'], self._replay_data['y'])
+            self.replay_curve.setData(self._replay_data["x"], self._replay_data["y"])
         except Exception as e:
             self._append_log(f"[ERR] Replay frame update failed: {e}")
 
     def _gui_on_news(self, data: dict):
         """Handle news update from feeder (SYNC) - updates Market tab."""
         try:
-            headline = data.get('headline', 'No headline')
-            source = data.get('source', 'Unknown')
-            sentiment = data.get('sentiment', 'neutral')
-            timestamp = data.get('timestamp', '')
+            headline = data.get("headline", "No headline")
+            source = data.get("source", "Unknown")
+            sentiment = data.get("sentiment", "neutral")
+            data.get("timestamp", "")
 
             # Add to news list
-            if hasattr(self, 'news_list'):
+            if hasattr(self, "news_list"):
                 # Color based on sentiment
                 item_text = f"[{source}] {headline}"
                 item = QtWidgets.QListWidgetItem(item_text)
-                if sentiment == 'positive':
+                if sentiment == "positive":
                     item.setForeground(QtGui.QColor(34, 197, 94))  # Green
-                elif sentiment == 'negative':
+                elif sentiment == "negative":
                     item.setForeground(QtGui.QColor(248, 113, 113))  # Red
                 else:
                     item.setForeground(QtGui.QColor(148, 163, 184))  # Gray
@@ -968,14 +966,14 @@ class MainWindow(QtWidgets.QMainWindow):
     def _gui_on_regime(self, data: dict):
         """Handle regime update from feeder (SYNC)."""
         try:
-            symbol = data.get('symbol', 'N/A')
-            volatility = data.get('volatility', 'unknown')
-            trend = data.get('trend', 'unknown')
-            market = data.get('market', 'unknown')
-            timestamp = data.get('timestamp', '')
+            symbol = data.get("symbol", "N/A")
+            volatility = data.get("volatility", "unknown")
+            trend = data.get("trend", "unknown")
+            market = data.get("market", "unknown")
+            timestamp = data.get("timestamp", "")
 
             # Store last regime per symbol to detect changes
-            if not hasattr(self, '_last_regimes'):
+            if not hasattr(self, "_last_regimes"):
                 self._last_regimes = {}
 
             last = self._last_regimes.get(symbol)
@@ -987,15 +985,15 @@ class MainWindow(QtWidgets.QMainWindow):
                 self._append_log(f"[REGIME] {symbol}: vol={volatility}, trend={trend}, market={market}")
 
                 # Add to regime history list on Market tab
-                if hasattr(self, 'regime_list'):
+                if hasattr(self, "regime_list"):
                     time_str = timestamp[-8:] if timestamp else datetime.now().strftime("%H:%M:%S")
                     item_text = f"[{time_str}] {symbol}: {volatility} / {trend}"
                     item = QtWidgets.QListWidgetItem(item_text)
 
                     # Color-code based on volatility
-                    if 'high' in volatility.lower():
+                    if "high" in volatility.lower():
                         item.setForeground(QtGui.QColor(239, 68, 68))  # Red
-                    elif 'low' in volatility.lower():
+                    elif "low" in volatility.lower():
                         item.setForeground(QtGui.QColor(34, 197, 94))  # Green
                     else:
                         item.setForeground(QtGui.QColor(148, 163, 184))  # Gray
@@ -1007,21 +1005,27 @@ class MainWindow(QtWidgets.QMainWindow):
                         self.regime_list.takeItem(self.regime_list.count() - 1)
 
             # Update Market tab KPIs
-            if hasattr(self, 'market_regime_lbl'):
+            if hasattr(self, "market_regime_lbl"):
                 self.market_regime_lbl.setText(volatility.upper())
-                color = "#ef4444" if 'high' in volatility.lower() else "#22c55e" if 'low' in volatility.lower() else "#94a3b8"
+                color = (
+                    "#ef4444"
+                    if "high" in volatility.lower()
+                    else "#22c55e"
+                    if "low" in volatility.lower()
+                    else "#94a3b8"
+                )
                 self.market_regime_lbl.setStyleSheet(f"font-weight: 700; font-size: 16px; color: {color};")
 
-            if hasattr(self, 'market_volatility_lbl'):
+            if hasattr(self, "market_volatility_lbl"):
                 self.market_volatility_lbl.setText(volatility)
 
-            if hasattr(self, 'market_trend_lbl'):
+            if hasattr(self, "market_trend_lbl"):
                 self.market_trend_lbl.setText(trend.capitalize())
-                color = "#22c55e" if trend == 'bullish' else "#ef4444" if trend == 'bearish' else "#94a3b8"
+                color = "#22c55e" if trend == "bullish" else "#ef4444" if trend == "bearish" else "#94a3b8"
                 self.market_trend_lbl.setStyleSheet(f"font-weight: 700; font-size: 16px; color: {color};")
 
             # Update strategy table regime column if symbol exists
-            if hasattr(self, 'sig_table'):
+            if hasattr(self, "sig_table"):
                 for i in range(self.sig_table.rowCount()):
                     item = self.sig_table.item(i, 0)
                     if item and item.text().startswith(symbol):
@@ -1032,7 +1036,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def _update_calendar_plot(self):
         """Update the PnL calendar heat map."""
         try:
-            if not hasattr(self, '_history_data') or not self._history_data:
+            if not hasattr(self, "_history_data") or not self._history_data:
                 return
 
             # Convert to sorted lists for plotting
@@ -1041,13 +1045,13 @@ class MainWindow(QtWidgets.QMainWindow):
 
             # Simple bar chart representation
             x = list(range(len(dates)))
-            colors = ['g' if p >= 0 else 'r' for p in pnls]
+            colors = ["g" if p >= 0 else "r" for p in pnls]
 
             self.calendar_plot.clear()
             bar = pg.BarGraphItem(x=x, height=pnls, width=0.8, brushes=colors)
             self.calendar_plot.addItem(bar)
-            self.calendar_plot.setLabel('bottom', 'Day')
-            self.calendar_plot.setLabel('left', 'PnL ($)')
+            self.calendar_plot.setLabel("bottom", "Day")
+            self.calendar_plot.setLabel("left", "PnL ($)")
         except Exception as e:
             self._append_log(f"[ERR] Calendar plot update failed: {e}")
 
@@ -1060,7 +1064,7 @@ class MainWindow(QtWidgets.QMainWindow):
             x = np.asarray(self._eq_x[-1000:], dtype=float)  # Limit to last 1000 points
             y = np.asarray(self._eq_y[-1000:], dtype=float)
 
-            if hasattr(self, 'eq_curve'):
+            if hasattr(self, "eq_curve"):
                 self.eq_curve.setData(x, y)
         except Exception as e:
             self._append_log(f"[ERR] Equity chart update failed: {e}")
@@ -1075,6 +1079,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _emit_and_log(self, event_name: str, payload: dict):
         import asyncio
+
         asyncio.create_task(self.bus.emit(event_name, payload))
         self.log_event(event_name, payload)
 
@@ -1086,6 +1091,7 @@ class MainWindow(QtWidgets.QMainWindow):
         NOTE: The DataFeeder handles EventBus → Qt signal bridging.
         This method now only handles events that aren't covered by the feeder.
         """
+
         async def sub(event_name, handler):
             await self.bus.subscribe(event_name, handler)
 
@@ -1106,17 +1112,17 @@ class MainWindow(QtWidgets.QMainWindow):
         order_type = payload.get("type", "?")
 
         # Log to GUI (thread-safe via QTimer)
-        QtCore.QTimer.singleShot(0, lambda: self._append_log(
-            f"[UI] Manual order → {side.upper()} {qty} {sym} ({order_type})"
-        ))
-    
+        QtCore.QTimer.singleShot(
+            0, lambda: self._append_log(f"[UI] Manual order → {side.upper()} {qty} {sym} ({order_type})")
+        )
+
     def _on_mode_changed(self, mode: str):
         """Handle mode change from the combo box."""
         self._current_mode = mode
         self._append_log(f"[UI] Mode selected → {mode}")
 
         # Update status bar
-        if hasattr(self, 'status_mode_lbl'):
+        if hasattr(self, "status_mode_lbl"):
             self.status_mode_lbl.setText(f"Mode: {mode}")
 
         # Mode change just selects - Start button actually starts trading
@@ -1124,12 +1130,12 @@ class MainWindow(QtWidgets.QMainWindow):
     def _start_trading(self):
         """Start trading with the selected mode."""
         # Check if already running
-        if getattr(self, '_trading_active', False) or getattr(self, '_sim_running', False):
+        if getattr(self, "_trading_active", False) or getattr(self, "_sim_running", False):
             self._append_log("[ERROR] Trading/Simulation already running!")
             return
 
-        mode = getattr(self, '_current_mode', 'Simulation')
-        symbols_text = self.symbol_input.text() if hasattr(self, 'symbol_input') else "AAPL,MSFT"
+        mode = getattr(self, "_current_mode", "Simulation")
+        symbols_text = self.symbol_input.text() if hasattr(self, "symbol_input") else "AAPL,MSFT"
         symbols = [s.strip().upper() for s in symbols_text.split(",") if s.strip()]
 
         if not symbols:
@@ -1137,9 +1143,10 @@ class MainWindow(QtWidgets.QMainWindow):
             return
 
         # Enable day trade mode if checkbox is checked
-        day_trade = self.day_trade_checkbox.isChecked() if hasattr(self, 'day_trade_checkbox') else False
+        day_trade = self.day_trade_checkbox.isChecked() if hasattr(self, "day_trade_checkbox") else False
         if day_trade:
             from core.config_loader import enable_day_trade_mode
+
             enable_day_trade_mode()
             self._append_log("[CONFIG] Day trade mode enabled (swing mode disabled)")
 
@@ -1173,6 +1180,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self._append_log(f"[STOP] {mode} backend stopped")
         except Exception as e:
             import traceback
+
             self._append_log(f"[ERROR] Backend error: {e}")
             self._append_log(traceback.format_exc())
 
@@ -1207,8 +1215,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
     async def _run_schwab_backend(self, symbols: list):
         """Run Schwab live trading using SchwabLiveRunner."""
-        from core.schwab_runner import SchwabLiveRunner
         from core.config_loader import get_config
+        from core.schwab_runner import SchwabLiveRunner
 
         try:
             config = get_config()
@@ -1223,31 +1231,31 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _stop_trading(self):
         """Stop the current trading backend."""
-        if not getattr(self, '_trading_active', False) and not getattr(self, '_sim_running', False):
+        if not getattr(self, "_trading_active", False) and not getattr(self, "_sim_running", False):
             self._append_log("[STOP] No active trading to stop.")
             return
 
         self._append_log("[STOP] Stopping trading...")
 
         # Stop the simulation runner if it exists
-        if hasattr(self, '_sim_runner') and self._sim_runner is not None:
+        if hasattr(self, "_sim_runner") and self._sim_runner is not None:
             self._sim_runner.stop()
             self._append_log("[STOP] Stop signal sent to SimulationRunner.")
 
         # Cancel the backend task if it exists
-        if hasattr(self, '_backend_task') and self._backend_task is not None:
+        if hasattr(self, "_backend_task") and self._backend_task is not None:
             self._backend_task.cancel()
             self._append_log("[STOP] Backend task cancellation requested.")
 
         # Stop alpaca runner if it exists
-        if hasattr(self, '_alpaca_runner') and self._alpaca_runner is not None:
-            if hasattr(self._alpaca_runner, 'stop'):
+        if hasattr(self, "_alpaca_runner") and self._alpaca_runner is not None:
+            if hasattr(self._alpaca_runner, "stop"):
                 self._alpaca_runner.stop()
                 self._append_log("[STOP] Stop signal sent to AlpacaRunner.")
 
         # Stop schwab runner if it exists
-        if hasattr(self, '_schwab_runner') and self._schwab_runner is not None:
-            if hasattr(self._schwab_runner, 'stop'):
+        if hasattr(self, "_schwab_runner") and self._schwab_runner is not None:
+            if hasattr(self._schwab_runner, "stop"):
                 asyncio.create_task(self._schwab_runner.stop())
                 self._append_log("[STOP] Stop signal sent to SchwabRunner.")
 
@@ -1255,7 +1263,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self._sim_running = False
 
     # ---------------- Update Helpers ----------------
-
 
     # def _update_perf_dashboard(self, pnl: dict):
     #     # Update KPI labels
@@ -1294,16 +1301,16 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _update_perf_dashboard(self, pnl: dict):
         # === Update KPI labels ===
-        if 'unrealized' in pnl:
-            self._set_kpi(self.unreal_lbl, pnl['unrealized'], money=True)
-        if 'realized' in pnl:
-            self._set_kpi(self.realized_lbl, pnl['realized'], money=True)
-        if 'drawdown' in pnl:
-            self._set_kpi(self.dd_lbl, pnl['drawdown'], pct=True)
+        if "unrealized" in pnl:
+            self._set_kpi(self.unreal_lbl, pnl["unrealized"], money=True)
+        if "realized" in pnl:
+            self._set_kpi(self.realized_lbl, pnl["realized"], money=True)
+        if "drawdown" in pnl:
+            self._set_kpi(self.dd_lbl, pnl["drawdown"], pct=True)
 
         # === Update equity curve ===
-        if 'portfolio_value' in pnl and 'timestamp' in pnl:
-            ts = pnl['timestamp']
+        if "portfolio_value" in pnl and "timestamp" in pnl:
+            ts = pnl["timestamp"]
 
             # Convert timestamp → float (safe)
             if isinstance(ts, str):
@@ -1315,7 +1322,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 ts = ts.timestamp()
 
             try:
-                y_val = float(pnl['portfolio_value'])
+                y_val = float(pnl["portfolio_value"])
             except (ValueError, TypeError):
                 y_val = np.nan
 
@@ -1346,7 +1353,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 # Ensure uniqueness (optional safety)
                 _, unique_idx = np.unique(x, return_index=True)
                 x, y = x[unique_idx], y[unique_idx]
-            
+
             # --- 🧩 Normalize timestamps (FIX huge x-axis) ---
             if len(x) > 0:
                 x = x - x[0]
@@ -1362,7 +1369,6 @@ class MainWindow(QtWidgets.QMainWindow):
             except Exception as e:
                 self._append_log(f"[ERR] Plot update failed: {e}")
 
-    
     def _update_health_panel(self, payload: dict):
         status = payload.get("status", "unknown")
         details = payload.get("details", {})
@@ -1395,54 +1401,53 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             self.halt_banner.hide()
 
-
     def _handle_new_trade(self, trade: dict):
-        sym = trade.get('symbol', 'UNKNOWN')
+        sym = trade.get("symbol", "UNKNOWN")
         try:
-            px = float(trade.get('price', 0))
+            px = float(trade.get("price", 0))
         except (ValueError, TypeError):
             px = 0.0
-        side = trade.get('side', 'unknown')
-        qty = trade.get('qty', 0)
+        side = trade.get("side", "unknown")
+        qty = trade.get("qty", 0)
 
         x = len(self._eq_x)
-        if side in ('buy', 'long'):
-            self.entry_marks.addPoints([{'pos': (x, px)}])
+        if side in ("buy", "long"):
+            self.entry_marks.addPoints([{"pos": (x, px)}])
         else:
-            self.exit_marks.addPoints([{'pos': (x, px)}])
+            self.exit_marks.addPoints([{"pos": (x, px)}])
         self._append_log(f"[TRADE] {side.upper()} {sym} {qty} @ {px}")
 
     def _update_position_row(self, pos: dict):
-        if hasattr(self.pos_model, 'update_position'):
+        if hasattr(self.pos_model, "update_position"):
             self.pos_model.update_position(pos)
 
     def _update_order_kpis(self, order: dict):
-        status = order.get('status', '').lower()
+        status = order.get("status", "").lower()
 
         # Initialize counters if needed
-        if not hasattr(self, '_order_counts'):
+        if not hasattr(self, "_order_counts"):
             self._order_counts = {"pending": 0, "filled": 0, "canceled": 0, "total": 0}
 
         self._order_counts["total"] += 1
 
-        if status == 'submitted':
+        if status == "submitted":
             self._order_counts["pending"] += 1
-        elif status == 'filled':
+        elif status == "filled":
             self._order_counts["filled"] += 1
             # Decrement pending if we had one
             if self._order_counts["pending"] > 0:
                 self._order_counts["pending"] -= 1
-        elif status in ('canceled', 'rejected'):
+        elif status in ("canceled", "rejected"):
             self._order_counts["canceled"] += 1
             if self._order_counts["pending"] > 0:
                 self._order_counts["pending"] -= 1
 
         # Update labels
         self.q_pending.setText(str(self._order_counts["pending"]))
-        if hasattr(self, 'q_filled'):
+        if hasattr(self, "q_filled"):
             self.q_filled.setText(str(self._order_counts["filled"]))
         self.q_canceled.setText(str(self._order_counts["canceled"]))
-        if hasattr(self, 'q_total'):
+        if hasattr(self, "q_total"):
             self.q_total.setText(str(self._order_counts["total"]))
 
     def _update_price_chart(self, price: dict):
@@ -1470,11 +1475,11 @@ class MainWindow(QtWidgets.QMainWindow):
             data = price["data"]
 
             # Check if it's a DataFrame
-            if data is not None and hasattr(data, 'empty') and not data.empty:
+            if data is not None and hasattr(data, "empty") and not data.empty:
                 close_col = "Close" if "Close" in data.columns else "close"
                 if close_col in data.columns:
                     px = float(data[close_col].iloc[-1])
-                    if hasattr(data.index, 'to_pydatetime'):
+                    if hasattr(data.index, "to_pydatetime"):
                         try:
                             ts = data.index[-1].timestamp()
                         except Exception:
@@ -1484,8 +1489,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
             # Check if it's a dict with OHLC data
             elif isinstance(data, dict):
-                px = float(data.get('close', data.get('Close', 0)))
-                ts_raw = data.get('timestamp', '')
+                px = float(data.get("close", data.get("Close", 0)))
+                ts_raw = data.get("timestamp", "")
                 if ts_raw:
                     try:
                         if isinstance(ts_raw, str):
@@ -1525,7 +1530,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.price_plot.plot(d["x"], d["y"], pen=pg.mkPen("#22c55e", width=2))
         self.price_plot.setTitle(f"Price: {sym} (${d['y'][-1]:.2f})" if d["y"] else "Price Chart")
 
-
     def _append_log(self, msg: str):
         """
         Append a log message to the logs_view in Ops tab.
@@ -1533,10 +1537,11 @@ class MainWindow(QtWidgets.QMainWindow):
         ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
         if hasattr(self, "logs_view"):
             self.logs_view.appendPlainText(f"[{ts}] {msg}")
-    
+
     def _calculate_and_update_performance(self):
         """Calculate and update performance metrics from equity curve."""
         import numpy as np
+
         try:
             if len(self._eq_y) < 10:
                 return
@@ -1600,36 +1605,41 @@ class MainWindow(QtWidgets.QMainWindow):
                 kelly = 0.0
 
             # Get actual trade count from trade history if available
-            actual_trades = getattr(self, '_trade_count', 0)
+            actual_trades = getattr(self, "_trade_count", 0)
 
             # Debug output
             eq_len = len(self._eq_y)
             if eq_len <= 20 or eq_len % 50 == 0:
-                self._append_log(f"[PERF] bars={total_bars} Sharpe={sharpe:.3f} PF={profit_factor:.2f} Kelly={kelly:.1%}")
+                self._append_log(
+                    f"[PERF] bars={total_bars} Sharpe={sharpe:.3f} PF={profit_factor:.2f} Kelly={kelly:.1%}"
+                )
 
             # === Update UI ===
-            self._update_performance_tab({
-                "sharpe": round(sharpe, 3),
-                "sortino": round(sortino, 3),
-                "kelly": kelly,  # Keep as decimal for display formatting
-                "calmar": round(calmar, 3),
-                "total_bars": total_bars,
-                "actual_trades": actual_trades,
-                "win_rate": bar_win_rate,
-                "profit_factor": round(profit_factor, 2),
-                "avg_win": avg_pos,
-                "avg_loss": avg_neg,
-                "max_win": max_pos,
-                "max_loss": max_neg,
-                "max_dd": max_dd * 100,  # Convert to percentage
-                "expectancy_bps": expectancy_bps,
-                "total_return_pct": total_return * 100,
-                "returns": returns,
-                "drawdown": drawdown,
-            })
+            self._update_performance_tab(
+                {
+                    "sharpe": round(sharpe, 3),
+                    "sortino": round(sortino, 3),
+                    "kelly": kelly,  # Keep as decimal for display formatting
+                    "calmar": round(calmar, 3),
+                    "total_bars": total_bars,
+                    "actual_trades": actual_trades,
+                    "win_rate": bar_win_rate,
+                    "profit_factor": round(profit_factor, 2),
+                    "avg_win": avg_pos,
+                    "avg_loss": avg_neg,
+                    "max_win": max_pos,
+                    "max_loss": max_neg,
+                    "max_dd": max_dd * 100,  # Convert to percentage
+                    "expectancy_bps": expectancy_bps,
+                    "total_return_pct": total_return * 100,
+                    "returns": returns,
+                    "drawdown": drawdown,
+                }
+            )
         except Exception as e:
             self._append_log(f"[ERR] Performance calc failed: {e}")
             import traceback
+
             print(f"[MainWindow] Performance error: {e}\n{traceback.format_exc()}")
 
     def _periodic_perf_update(self):
@@ -1660,11 +1670,11 @@ class MainWindow(QtWidgets.QMainWindow):
 
         if metrics.get("kelly") is not None:
             val = metrics["kelly"]
-            self.kelly_lbl.setText(f"{val*100:.1f}%")
+            self.kelly_lbl.setText(f"{val * 100:.1f}%")
             color = "#22c55e" if val > 0.1 else "#f59e0b" if val > 0 else "#ef4444"
             self.kelly_lbl.setStyleSheet(f"font-weight: 700; font-size: 20px; color: {color};")
 
-        if metrics.get("calmar") is not None and hasattr(self, 'calmar_lbl'):
+        if metrics.get("calmar") is not None and hasattr(self, "calmar_lbl"):
             val = metrics["calmar"]
             color = "#22c55e" if val > 0 else "#ef4444"
             self.calmar_lbl.setText(f"{val:.3f}")
@@ -1672,7 +1682,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # === Bar/Trade Statistics ===
         # Show actual trades if available, otherwise show bars
-        if hasattr(self, 'perf_total_trades_lbl'):
+        if hasattr(self, "perf_total_trades_lbl"):
             actual = metrics.get("actual_trades", 0)
             bars = metrics.get("total_bars", 0)
             if actual > 0:
@@ -1680,76 +1690,73 @@ class MainWindow(QtWidgets.QMainWindow):
             else:
                 self.perf_total_trades_lbl.setText(f"{bars} bars")
 
-        if metrics.get("win_rate") is not None and hasattr(self, 'perf_win_rate_lbl'):
+        if metrics.get("win_rate") is not None and hasattr(self, "perf_win_rate_lbl"):
             self._set_kpi(self.perf_win_rate_lbl, metrics["win_rate"], pct=True)
 
-        if metrics.get("profit_factor") is not None and hasattr(self, 'perf_profit_factor_lbl'):
+        if metrics.get("profit_factor") is not None and hasattr(self, "perf_profit_factor_lbl"):
             val = metrics["profit_factor"]
             color = "#22c55e" if val > 1 else "#ef4444"
             self.perf_profit_factor_lbl.setText(f"{val:.2f}")
             self.perf_profit_factor_lbl.setStyleSheet(f"font-weight: 700; font-size: 16px; color: {color};")
 
         # Avg win/loss as percentage (already *100 in calculation)
-        if metrics.get("avg_win") is not None and hasattr(self, 'perf_avg_win_lbl'):
+        if metrics.get("avg_win") is not None and hasattr(self, "perf_avg_win_lbl"):
             val = metrics["avg_win"]
             self.perf_avg_win_lbl.setText(f"{val:.3f}%")
             self.perf_avg_win_lbl.setStyleSheet("font-weight: 700; font-size: 16px; color: #22c55e;")
 
-        if metrics.get("avg_loss") is not None and hasattr(self, 'perf_avg_loss_lbl'):
+        if metrics.get("avg_loss") is not None and hasattr(self, "perf_avg_loss_lbl"):
             val = metrics["avg_loss"]
             self.perf_avg_loss_lbl.setText(f"{val:.3f}%")
             self.perf_avg_loss_lbl.setStyleSheet("font-weight: 700; font-size: 16px; color: #ef4444;")
 
         # Expectancy in basis points
-        if metrics.get("expectancy_bps") is not None and hasattr(self, 'perf_expectancy_lbl'):
+        if metrics.get("expectancy_bps") is not None and hasattr(self, "perf_expectancy_lbl"):
             val = metrics["expectancy_bps"]
             color = "#22c55e" if val > 0 else "#ef4444"
             self.perf_expectancy_lbl.setText(f"{val:.2f} bps")
             self.perf_expectancy_lbl.setStyleSheet(f"font-weight: 700; font-size: 16px; color: {color};")
 
-        if metrics.get("max_win") is not None and hasattr(self, 'perf_max_win_lbl'):
+        if metrics.get("max_win") is not None and hasattr(self, "perf_max_win_lbl"):
             val = metrics["max_win"]
             self.perf_max_win_lbl.setText(f"{val:.3f}%")
             self.perf_max_win_lbl.setStyleSheet("font-weight: 700; font-size: 16px; color: #22c55e;")
 
-        if metrics.get("max_loss") is not None and hasattr(self, 'perf_max_loss_lbl'):
+        if metrics.get("max_loss") is not None and hasattr(self, "perf_max_loss_lbl"):
             val = metrics["max_loss"]
             self.perf_max_loss_lbl.setText(f"{val:.3f}%")
             self.perf_max_loss_lbl.setStyleSheet("font-weight: 700; font-size: 16px; color: #ef4444;")
 
         # Max drawdown (already as percentage)
-        if metrics.get("max_dd") is not None and hasattr(self, 'perf_max_dd_lbl'):
+        if metrics.get("max_dd") is not None and hasattr(self, "perf_max_dd_lbl"):
             val = metrics["max_dd"]
             self.perf_max_dd_lbl.setText(f"-{val:.2f}%")
             self.perf_max_dd_lbl.setStyleSheet("font-weight: 700; font-size: 16px; color: #ef4444;")
 
         # === Update Charts ===
         # Returns distribution histogram
-        if "returns" in metrics and hasattr(self, 'returns_plot'):
+        if "returns" in metrics and hasattr(self, "returns_plot"):
             try:
                 returns = metrics["returns"] * 100  # Convert to percentage
                 y, x = np.histogram(returns, bins=30)
                 self.returns_plot.clear()
                 # Create bar chart from histogram
-                bar = pg.BarGraphItem(x=x[:-1], height=y, width=(x[1]-x[0])*0.8,
-                                      brush=pg.mkBrush('#3b82f6'))
+                bar = pg.BarGraphItem(x=x[:-1], height=y, width=(x[1] - x[0]) * 0.8, brush=pg.mkBrush("#3b82f6"))
                 self.returns_plot.addItem(bar)
             except Exception:
                 pass
 
         # Drawdown chart
-        if "drawdown" in metrics and hasattr(self, 'dd_plot'):
+        if "drawdown" in metrics and hasattr(self, "dd_plot"):
             try:
                 dd = metrics["drawdown"] * 100  # Convert to percentage
                 x = list(range(len(dd)))
                 self.dd_plot.clear()
                 fill = pg.FillBetweenItem(
-                    pg.PlotDataItem(x, dd),
-                    pg.PlotDataItem(x, [0] * len(dd)),
-                    brush=pg.mkBrush(239, 68, 68, 100)
+                    pg.PlotDataItem(x, dd), pg.PlotDataItem(x, [0] * len(dd)), brush=pg.mkBrush(239, 68, 68, 100)
                 )
                 self.dd_plot.addItem(fill)
-                self.dd_plot.plot(x, dd, pen=pg.mkPen('#ef4444', width=1))
+                self.dd_plot.plot(x, dd, pen=pg.mkPen("#ef4444", width=1))
             except Exception:
                 pass
 
@@ -1761,7 +1768,6 @@ class MainWindow(QtWidgets.QMainWindow):
             b.setEnabled(not cooldown)
         for tb_btn in [self.flatten_btn_tb, self.cancel_all_btn_tb, self.manual_order_btn_tb]:
             tb_btn.setEnabled(not cooldown)
-
 
     def _update_from_snapshot(self, snap: dict):
         """
@@ -1777,13 +1783,15 @@ class MainWindow(QtWidgets.QMainWindow):
             trades = snap.get("trades", [])
 
             # === 1️⃣ Performance Dashboard (equity, drawdown, etc.) ===
-            self._update_perf_dashboard({
-                "portfolio_value": pnl.get("portfolio_value", 0.0),
-                "realized": pnl.get("realized", 0.0),
-                "unrealized": pnl.get("unrealized", 0.0),
-                "drawdown": pnl.get("drawdown", 0.0),
-                "timestamp": pnl.get("timestamp", None),
-            })
+            self._update_perf_dashboard(
+                {
+                    "portfolio_value": pnl.get("portfolio_value", 0.0),
+                    "realized": pnl.get("realized", 0.0),
+                    "unrealized": pnl.get("unrealized", 0.0),
+                    "drawdown": pnl.get("drawdown", 0.0),
+                    "timestamp": pnl.get("timestamp", None),
+                }
+            )
 
             # === 2️⃣ Performance Metrics (Sharpe, Sortino, Kelly, etc.) ===
             if metrics:
@@ -1827,23 +1835,26 @@ class MainWindow(QtWidgets.QMainWindow):
 
         except Exception as e:
             import traceback
-            self._append_log(f"[ERR] Snapshot update failed: {e}\n{traceback.format_exc()}")
 
+            self._append_log(f"[ERR] Snapshot update failed: {e}\n{traceback.format_exc()}")
 
     # ---------------- CSV Logging ----------------
     def log_event(self, event_name: str, payload: dict):
         fname = self._event_csv_map.get(event_name)
-        if not fname: return
+        if not fname:
+            return
         row = dict(payload)
         row.setdefault("timestamp", datetime.utcnow().isoformat())
         row.setdefault("event", event_name)
-        buf = self._buffers[fname]; buf.append(row)
+        buf = self._buffers[fname]
+        buf.append(row)
         if len(buf) >= self._buffer_limit:
             self._flush_csv(fname)
 
     def _flush_csv(self, fname: str):
         buf = self._buffers.get(fname, [])
-        if not buf: return
+        if not buf:
+            return
         path = self._csv_path(fname)
         all_keys = set().union(*[row.keys() for row in buf])
         df = pd.DataFrame(buf, columns=sorted(all_keys))
@@ -1878,7 +1889,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self._write_footer(fname)
 
         # Stop the trading backend
-        if hasattr(self, '_trading_backend') and self._trading_backend:
+        if hasattr(self, "_trading_backend") and self._trading_backend:
             asyncio.create_task(self._trading_backend.stop())
 
         # Stop the feeder
@@ -1886,6 +1897,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         event.accept()
         super().closeEvent(event)
+
     # ---------------- Tab Builders ----------------
     def _build_dashboard_tab(self):
         tab = QtWidgets.QWidget()
@@ -2019,15 +2031,15 @@ class MainWindow(QtWidgets.QMainWindow):
         eq_layout = QtWidgets.QVBoxLayout(eq_box)
 
         self.eq_plot = pg.PlotWidget()
-        self.eq_plot.setBackground('#0a0a0a')
+        self.eq_plot.setBackground("#0a0a0a")
         self.eq_plot.showGrid(x=True, y=True, alpha=0.3)
-        self.eq_plot.setLabel('left', 'Equity ($)')
-        self.eq_plot.setLabel('bottom', 'Bar #')
+        self.eq_plot.setLabel("left", "Equity ($)")
+        self.eq_plot.setLabel("bottom", "Bar #")
 
         # Gradient fill under curve
-        self.eq_curve = self.eq_plot.plot([], [], pen=pg.mkPen('#22c55e', width=2))
-        self.entry_marks = pg.ScatterPlotItem(size=10, symbol='t', brush=pg.mkBrush(34, 197, 94, 200))
-        self.exit_marks = pg.ScatterPlotItem(size=10, symbol='t1', brush=pg.mkBrush(239, 68, 68, 200))
+        self.eq_curve = self.eq_plot.plot([], [], pen=pg.mkPen("#22c55e", width=2))
+        self.entry_marks = pg.ScatterPlotItem(size=10, symbol="t", brush=pg.mkBrush(34, 197, 94, 200))
+        self.exit_marks = pg.ScatterPlotItem(size=10, symbol="t1", brush=pg.mkBrush(239, 68, 68, 200))
         self.eq_plot.addItem(self.entry_marks)
         self.eq_plot.addItem(self.exit_marks)
 
@@ -2227,10 +2239,10 @@ class MainWindow(QtWidgets.QMainWindow):
         price_layout = QtWidgets.QVBoxLayout(price_box)
 
         self.price_plot = pg.PlotWidget()
-        self.price_plot.setBackground('#0a0a0a')
+        self.price_plot.setBackground("#0a0a0a")
         self.price_plot.showGrid(x=True, y=True, alpha=0.3)
-        self.price_plot.setLabel('left', 'Price ($)')
-        self.price_plot.setLabel('bottom', 'Time')
+        self.price_plot.setLabel("left", "Price ($)")
+        self.price_plot.setLabel("bottom", "Time")
         price_layout.addWidget(self.price_plot)
 
         charts_layout.addWidget(price_box, 2)
@@ -2241,10 +2253,10 @@ class MainWindow(QtWidgets.QMainWindow):
         indicator_layout = QtWidgets.QVBoxLayout(indicator_box)
 
         self.indicator_plot = pg.PlotWidget()
-        self.indicator_plot.setBackground('#0a0a0a')
+        self.indicator_plot.setBackground("#0a0a0a")
         self.indicator_plot.showGrid(x=True, y=True, alpha=0.3)
-        self.indicator_plot.setLabel('left', 'ATR')
-        self.indicator_plot.setLabel('bottom', 'Time')
+        self.indicator_plot.setLabel("left", "ATR")
+        self.indicator_plot.setLabel("bottom", "Time")
         indicator_layout.addWidget(self.indicator_plot)
 
         charts_layout.addWidget(indicator_box, 1)
@@ -2385,10 +2397,10 @@ class MainWindow(QtWidgets.QMainWindow):
         returns_layout = QtWidgets.QVBoxLayout(returns_box)
 
         self.returns_plot = pg.PlotWidget()
-        self.returns_plot.setBackground('#0a0a0a')
+        self.returns_plot.setBackground("#0a0a0a")
         self.returns_plot.showGrid(x=True, y=True, alpha=0.3)
-        self.returns_plot.setLabel('left', 'Frequency')
-        self.returns_plot.setLabel('bottom', 'Return %')
+        self.returns_plot.setLabel("left", "Frequency")
+        self.returns_plot.setLabel("bottom", "Return %")
         returns_layout.addWidget(self.returns_plot)
 
         charts_layout.addWidget(returns_box)
@@ -2399,10 +2411,10 @@ class MainWindow(QtWidgets.QMainWindow):
         dd_layout = QtWidgets.QVBoxLayout(dd_box)
 
         self.dd_plot = pg.PlotWidget()
-        self.dd_plot.setBackground('#0a0a0a')
+        self.dd_plot.setBackground("#0a0a0a")
         self.dd_plot.showGrid(x=True, y=True, alpha=0.3)
-        self.dd_plot.setLabel('left', 'Drawdown %')
-        self.dd_plot.setLabel('bottom', 'Bar #')
+        self.dd_plot.setLabel("left", "Drawdown %")
+        self.dd_plot.setLabel("bottom", "Bar #")
         dd_layout.addWidget(self.dd_plot)
 
         charts_layout.addWidget(dd_box)
@@ -2456,9 +2468,7 @@ class MainWindow(QtWidgets.QMainWindow):
         order_layout = QtWidgets.QVBoxLayout(order_box)
 
         self.order_table = QtWidgets.QTableWidget(0, 6)
-        self.order_table.setHorizontalHeaderLabels([
-            "Time", "Symbol", "Side", "Qty", "Price", "Status"
-        ])
+        self.order_table.setHorizontalHeaderLabels(["Time", "Symbol", "Side", "Qty", "Price", "Status"])
         self.order_table.setStyleSheet("""
             QTableWidget {
                 background: #0f0f0f;
@@ -2578,7 +2588,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _clear_alerts(self):
         """Clear all alerts."""
-        if hasattr(self, 'alerts_list'):
+        if hasattr(self, "alerts_list"):
             self.alerts_list.clear()
         self._alert_counts = {"error": 0, "warning": 0, "info": 0, "total": 0}
         self._update_alert_counts()
@@ -2627,9 +2637,7 @@ class MainWindow(QtWidgets.QMainWindow):
         strat_layout = QtWidgets.QVBoxLayout(strat_box)
 
         self.sig_table = QtWidgets.QTableWidget(0, 5)
-        self.sig_table.setHorizontalHeaderLabels([
-            "Symbol/Strategy", "Last Signal", "Regime", "Timestamp", "Count"
-        ])
+        self.sig_table.setHorizontalHeaderLabels(["Symbol/Strategy", "Last Signal", "Regime", "Timestamp", "Count"])
         self.sig_table.setStyleSheet("""
             QTableWidget {
                 background: #0f0f0f;
@@ -2913,14 +2921,14 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # PnL Calendar (bar chart showing daily returns)
         self.calendar_plot = pg.PlotWidget(title="Daily PnL")
-        self.calendar_plot.setLabel('bottom', 'Day')
-        self.calendar_plot.setLabel('left', 'PnL ($)')
+        self.calendar_plot.setLabel("bottom", "Day")
+        self.calendar_plot.setLabel("left", "PnL ($)")
         grid.addWidget(self.calendar_plot, 1, 0)
 
         # Equity vs Benchmark
         self.bench_plot = pg.PlotWidget(title="Equity vs Benchmark")
-        self.bench_plot.setLabel('bottom', 'Time')
-        self.bench_plot.setLabel('left', 'Value ($)')
+        self.bench_plot.setLabel("bottom", "Time")
+        self.bench_plot.setLabel("left", "Value ($)")
         self.bench_plot.addLegend()
         grid.addWidget(self.bench_plot, 1, 1)
 
@@ -2967,12 +2975,12 @@ class MainWindow(QtWidgets.QMainWindow):
             chunk_size = max(1, len(returns) // 20)  # ~20 days
             daily_pnl = []
             for i in range(0, len(returns), chunk_size):
-                chunk = returns[i:i+chunk_size]
+                chunk = returns[i : i + chunk_size]
                 daily_pnl.append(np.sum(chunk))
 
             # Update calendar plot
             x = list(range(len(daily_pnl)))
-            colors = ['#22c55e' if p >= 0 else '#ef4444' for p in daily_pnl]
+            colors = ["#22c55e" if p >= 0 else "#ef4444" for p in daily_pnl]
             brushes = [pg.mkBrush(c) for c in colors]
 
             self.calendar_plot.clear()
@@ -2984,10 +2992,12 @@ class MainWindow(QtWidgets.QMainWindow):
             benchmark = np.linspace(initial, initial * 1.05, len(equity))  # Simple 5% growth line
 
             self.bench_plot.clear()
-            self.bench_plot.plot(list(range(len(equity))), equity.tolist(),
-                                 pen=pg.mkPen("#22c55e", width=2), name="Strategy")
-            self.bench_plot.plot(list(range(len(benchmark))), benchmark.tolist(),
-                                 pen=pg.mkPen("#64748b", width=2), name="Benchmark")
+            self.bench_plot.plot(
+                list(range(len(equity))), equity.tolist(), pen=pg.mkPen("#22c55e", width=2), name="Strategy"
+            )
+            self.bench_plot.plot(
+                list(range(len(benchmark))), benchmark.tolist(), pen=pg.mkPen("#64748b", width=2), name="Benchmark"
+            )
 
             # Calculate statistics
             wins = returns[returns > 0]
@@ -3024,10 +3034,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 return
 
             path = os.path.join(self._csv_dir, f"{self._session_id}_history.csv")
-            df = pd.DataFrame({
-                'frame': range(len(self._eq_y)),
-                'equity': self._eq_y
-            })
+            df = pd.DataFrame({"frame": range(len(self._eq_y)), "equity": self._eq_y})
             df.to_csv(path, index=False)
             self._append_log(f"[HISTORY] Exported to {path}")
             QtWidgets.QMessageBox.information(self, "Export", f"History exported to:\n{path}")
@@ -3110,8 +3117,7 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             self._append_log("[REPLAY] Not enough data to replay. Run a simulation first.")
             QtWidgets.QMessageBox.information(
-                self, "Replay",
-                "Not enough data to replay.\nRun a simulation first to generate equity data."
+                self, "Replay", "Not enough data to replay.\nRun a simulation first to generate equity data."
             )
 
     def _toggle_replay(self):
@@ -3153,8 +3159,12 @@ class MainWindow(QtWidgets.QMainWindow):
 
     # ---------------- Utility ----------------
     def _style_panic(self, halted: bool):
-        if halted: self.panic_btn.setChecked(True); self.panic_btn.setText("RESUME ▶")
-        else: self.panic_btn.setChecked(False); self.panic_btn.setText("HALT ✖")
+        if halted:
+            self.panic_btn.setChecked(True)
+            self.panic_btn.setText("RESUME ▶")
+        else:
+            self.panic_btn.setChecked(False)
+            self.panic_btn.setText("HALT ✖")
 
     def _show_manual_order(self):
         dlg = ManualOrderDialog(self)
@@ -3163,13 +3173,14 @@ class MainWindow(QtWidgets.QMainWindow):
             self._emit_and_log(events.EVENT_MANUAL_ORDER, payload)
 
     def _confirm_flatten(self):
-        if QtWidgets.QMessageBox.question(self, "Confirm Flatten", 
-            "Close all positions?") == QtWidgets.QMessageBox.Yes:
+        if QtWidgets.QMessageBox.question(self, "Confirm Flatten", "Close all positions?") == QtWidgets.QMessageBox.Yes:
             self._emit_and_log(events.EVENT_FLATTEN_ALL, {})
 
     def _confirm_cancel_all(self):
-        if QtWidgets.QMessageBox.question(self, "Confirm Cancel All", 
-            "Cancel all orders?") == QtWidgets.QMessageBox.Yes:
+        if (
+            QtWidgets.QMessageBox.question(self, "Confirm Cancel All", "Cancel all orders?")
+            == QtWidgets.QMessageBox.Yes
+        ):
             self._emit_and_log(events.EVENT_CANCEL_ALL, {})
 
     def _toggle_panic(self):
@@ -3179,7 +3190,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._emit_and_log(events.EVENT_HALTED, {"halted": self._halted})
 
         # Stop/resume the backend
-        if hasattr(self, '_trading_backend') and self._trading_backend:
+        if hasattr(self, "_trading_backend") and self._trading_backend:
             if self._halted:
                 # Stop the simulation/trading
                 asyncio.create_task(self._trading_backend.stop())
@@ -3187,7 +3198,6 @@ class MainWindow(QtWidgets.QMainWindow):
             else:
                 # Resume would require restarting - just log for now
                 self._append_log("[HALT] Resume requested - restart the application to resume trading")
-    
 
     def _kpi_label(self) -> QtWidgets.QLabel:
         """Create a styled KPI value label."""
@@ -3201,16 +3211,19 @@ class MainWindow(QtWidgets.QMainWindow):
         """)
         return lbl
 
-    def _set_kpi(self, lbl: QtWidgets.QLabel, val: float, money: bool=False, pct: bool=False):
+    def _set_kpi(self, lbl: QtWidgets.QLabel, val: float, money: bool = False, pct: bool = False):
         color = "#e5e5e5"
         try:
             if pct:
-                text = f"{val*100:.2f}%"; color = "#22c55e" if val >= 0 else "#f87171"
+                text = f"{val * 100:.2f}%"
+                color = "#22c55e" if val >= 0 else "#f87171"
             elif money:
-                text = f"{val:,.2f}"; color = "#22c55e" if val >= 0 else "#f87171"
+                text = f"{val:,.2f}"
+                color = "#22c55e" if val >= 0 else "#f87171"
             else:
                 text = f"{val}"
-            lbl.setText(text); lbl.setStyleSheet(f"font-weight:700; font-size:16px; color:{color};")
+            lbl.setText(text)
+            lbl.setStyleSheet(f"font-weight:700; font-size:16px; color:{color};")
         except Exception:
             lbl.setText(str(val))
 
@@ -3266,13 +3279,12 @@ class MainWindow(QtWidgets.QMainWindow):
             # Run the actual simulation pipeline
             await self._sim_runner.run()
 
-            self._append_log(
-                f"[SIM] Completed. Final equity: ${self._sim_runner.portfolio.total_equity():,.2f}"
-            )
+            self._append_log(f"[SIM] Completed. Final equity: ${self._sim_runner.portfolio.total_equity():,.2f}")
         except asyncio.CancelledError:
             self._append_log("[SIM] Simulation cancelled.")
         except Exception as e:
             import traceback
+
             self._append_log(f"[SIM] Error: {e}")
             self._append_log(traceback.format_exc())
         finally:
@@ -3288,12 +3300,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self._append_log("[SIM] Stopping simulation...")
 
         # Set stop flag on the runner
-        if hasattr(self, '_sim_runner') and self._sim_runner is not None:
+        if hasattr(self, "_sim_runner") and self._sim_runner is not None:
             self._sim_runner.stop()
             self._append_log("[SIM] Stop signal sent to SimulationRunner.")
 
         # Cancel the task if it exists
-        if hasattr(self, '_sim_task') and self._sim_task is not None:
+        if hasattr(self, "_sim_task") and self._sim_task is not None:
             self._sim_task.cancel()
             self._append_log("[SIM] Task cancellation requested.")
 

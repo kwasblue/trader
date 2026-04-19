@@ -34,11 +34,10 @@ Usage:
 
 from __future__ import annotations
 
-from typing import Dict, Optional, List, Callable
+import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from collections import defaultdict
-import logging
 
 from loggers.logger import Logger
 
@@ -58,6 +57,7 @@ class Bar:
         symbol: Stock symbol
         timeframe: Timeframe identifier (e.g., "5min", "15min")
     """
+
     timestamp: datetime
     open: float
     high: float
@@ -70,14 +70,14 @@ class Bar:
     def to_dict(self) -> dict:
         """Convert to dictionary format."""
         return {
-            'timestamp': self.timestamp.isoformat(),
-            'open': self.open,
-            'high': self.high,
-            'low': self.low,
-            'close': self.close,
-            'volume': self.volume,
-            'symbol': self.symbol,
-            'timeframe': self.timeframe,
+            "timestamp": self.timestamp.isoformat(),
+            "open": self.open,
+            "high": self.high,
+            "low": self.low,
+            "close": self.close,
+            "volume": self.volume,
+            "symbol": self.symbol,
+            "timeframe": self.timeframe,
         }
 
 
@@ -88,7 +88,7 @@ class TimeframeWindow:
     Accumulates incoming bars and emits completed bar when interval completes.
     """
 
-    def __init__(self, symbol: str, timeframe: str, logger: Optional[logging.Logger] = None):
+    def __init__(self, symbol: str, timeframe: str, logger: logging.Logger | None = None):
         """
         Initialize timeframe window.
 
@@ -103,8 +103,8 @@ class TimeframeWindow:
         self.logger = logger or logging.getLogger(__name__)
 
         # Current aggregation state
-        self.current_window_start: Optional[datetime] = None
-        self.bars_in_window: List[Bar] = []
+        self.current_window_start: datetime | None = None
+        self.bars_in_window: list[Bar] = []
 
     def _parse_timeframe(self, timeframe: str) -> int:
         """
@@ -128,10 +128,7 @@ class TimeframeWindow:
         }
 
         if timeframe not in timeframe_map:
-            raise ValueError(
-                f"Unsupported timeframe: {timeframe}. "
-                f"Supported: {list(timeframe_map.keys())}"
-            )
+            raise ValueError(f"Unsupported timeframe: {timeframe}. Supported: {list(timeframe_map.keys())}")
 
         return timeframe_map[timeframe]
 
@@ -158,13 +155,10 @@ class TimeframeWindow:
 
         # Create window start timestamp
         return timestamp.replace(
-            hour=window_start_minutes // 60,
-            minute=window_start_minutes % 60,
-            second=0,
-            microsecond=0
+            hour=window_start_minutes // 60, minute=window_start_minutes % 60, second=0, microsecond=0
         )
 
-    def add_bar(self, bar: Bar) -> Optional[Bar]:
+    def add_bar(self, bar: Bar) -> Bar | None:
         """
         Add incoming bar to aggregation window.
 
@@ -180,9 +174,7 @@ class TimeframeWindow:
         if self.current_window_start is None:
             self.current_window_start = window_start
             self.bars_in_window = [bar]
-            self.logger.debug(
-                f"[{self.symbol}/{self.timeframe}] Started new window at {window_start}"
-            )
+            self.logger.debug(f"[{self.symbol}/{self.timeframe}] Started new window at {window_start}")
             return None
 
         # Bar belongs to current window
@@ -199,7 +191,7 @@ class TimeframeWindow:
 
         return completed
 
-    def _complete_window(self) -> Optional[Bar]:
+    def _complete_window(self) -> Bar | None:
         """
         Aggregate bars in current window into single bar.
 
@@ -217,7 +209,7 @@ class TimeframeWindow:
             close=self.bars_in_window[-1].close,
             volume=sum(b.volume for b in self.bars_in_window),
             symbol=self.symbol,
-            timeframe=self.timeframe
+            timeframe=self.timeframe,
         )
 
         self.logger.debug(
@@ -229,7 +221,7 @@ class TimeframeWindow:
 
         return aggregated
 
-    def force_complete(self) -> Optional[Bar]:
+    def force_complete(self) -> Bar | None:
         """
         Force completion of current window (e.g., at market close).
 
@@ -238,8 +230,7 @@ class TimeframeWindow:
         """
         if self.bars_in_window:
             self.logger.info(
-                f"[{self.symbol}/{self.timeframe}] Force completing window with "
-                f"{len(self.bars_in_window)} bars"
+                f"[{self.symbol}/{self.timeframe}] Force completing window with {len(self.bars_in_window)} bars"
             )
             return self._complete_window()
         return None
@@ -270,31 +261,34 @@ class BarAggregator:
         aggregator.set_timeframe("AAPL", "15min")  # Seamlessly switches
     """
 
-    def __init__(self, logger: Optional[logging.Logger] = None):
+    def __init__(self, logger: logging.Logger | None = None):
         """
         Initialize bar aggregator.
 
         Args:
             logger: Optional logger instance
         """
-        self.logger = logger or Logger(
-            "bar_aggregator.log",
-            "BarAggregator",
-            propagate=True,
-            level=10  # DEBUG
-        ).get_logger()
+        self.logger = (
+            logger
+            or Logger(
+                "bar_aggregator.log",
+                "BarAggregator",
+                propagate=True,
+                level=10,  # DEBUG
+            ).get_logger()
+        )
 
         # Map: symbol → TimeframeWindow
-        self.windows: Dict[str, TimeframeWindow] = {}
+        self.windows: dict[str, TimeframeWindow] = {}
 
         # Callbacks for completed bars
-        self.bar_callbacks: List[Callable[[Bar], None]] = []
+        self.bar_callbacks: list[Callable[[Bar], None]] = []
 
         # Stats
         self.stats = {
-            'bars_received': 0,
-            'bars_emitted': 0,
-            'timeframe_changes': 0,
+            "bars_received": 0,
+            "bars_emitted": 0,
+            "timeframe_changes": 0,
         }
 
         self.logger.info("BarAggregator initialized")
@@ -319,16 +313,14 @@ class BarAggregator:
                 if completed:
                     self._emit_bar(completed)
 
-                self.stats['timeframe_changes'] += 1
-                self.logger.info(
-                    f"[{symbol}] Timeframe changed: {old_timeframe} → {timeframe}"
-                )
+                self.stats["timeframe_changes"] += 1
+                self.logger.info(f"[{symbol}] Timeframe changed: {old_timeframe} → {timeframe}")
 
         # Create new window with target timeframe
         self.windows[symbol] = TimeframeWindow(symbol, timeframe, self.logger)
         self.logger.info(f"[{symbol}] Configured for {timeframe} bars")
 
-    def process_bar(self, bar: Bar) -> List[Bar]:
+    def process_bar(self, bar: Bar) -> list[Bar]:
         """
         Process incoming bar from websocket.
 
@@ -338,7 +330,7 @@ class BarAggregator:
         Returns:
             List of completed aggregated bars (usually 0 or 1)
         """
-        self.stats['bars_received'] += 1
+        self.stats["bars_received"] += 1
 
         # Unknown symbol - skip (not configured for trading)
         if bar.symbol not in self.windows:
@@ -348,7 +340,7 @@ class BarAggregator:
         completed = window.add_bar(bar)
 
         if completed:
-            self.stats['bars_emitted'] += 1
+            self.stats["bars_emitted"] += 1
             self._emit_bar(completed)
             return [completed]
 
@@ -361,10 +353,7 @@ class BarAggregator:
         Args:
             bar: Completed aggregated bar
         """
-        self.logger.debug(
-            f"[{bar.symbol}/{bar.timeframe}] Emitting bar: "
-            f"{bar.timestamp.strftime('%Y-%m-%d %H:%M:%S')}"
-        )
+        self.logger.debug(f"[{bar.symbol}/{bar.timeframe}] Emitting bar: {bar.timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
 
         for callback in self.bar_callbacks:
             try:
@@ -403,11 +392,8 @@ class BarAggregator:
         """
         return {
             **self.stats,
-            'active_symbols': len(self.windows),
-            'timeframes': {
-                symbol: window.timeframe
-                for symbol, window in self.windows.items()
-            }
+            "active_symbols": len(self.windows),
+            "timeframes": {symbol: window.timeframe for symbol, window in self.windows.items()},
         }
 
     def force_complete_all(self):
@@ -422,7 +408,7 @@ class BarAggregator:
         for symbol, window in self.windows.items():
             completed = window.force_complete()
             if completed:
-                self.stats['bars_emitted'] += 1
+                self.stats["bars_emitted"] += 1
                 self._emit_bar(completed)
 
     def remove_symbol(self, symbol: str):
@@ -438,7 +424,7 @@ class BarAggregator:
             # Complete partial window
             completed = self.windows[symbol].force_complete()
             if completed:
-                self.stats['bars_emitted'] += 1
+                self.stats["bars_emitted"] += 1
                 self._emit_bar(completed)
 
             # Remove window
@@ -455,7 +441,7 @@ class BarAggregator:
         self.windows.clear()
         self.logger.info("All windows cleared")
 
-    def get_configured_symbols(self) -> List[str]:
+    def get_configured_symbols(self) -> list[str]:
         """
         Get list of symbols currently configured.
 
@@ -464,7 +450,7 @@ class BarAggregator:
         """
         return list(self.windows.keys())
 
-    def get_timeframe(self, symbol: str) -> Optional[str]:
+    def get_timeframe(self, symbol: str) -> str | None:
         """
         Get current timeframe for a symbol.
 
@@ -483,16 +469,12 @@ class BarAggregator:
 # STANDALONE TESTING
 # ============================================================================
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     """Standalone testing and demonstration."""
-    import sys
     from datetime import datetime, timedelta
 
     # Setup logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
     # Create aggregator
     aggregator = BarAggregator()
@@ -503,8 +485,10 @@ if __name__ == '__main__':
 
     # Register callback
     def on_bar(bar: Bar):
-        print(f"✓ [{bar.symbol}/{bar.timeframe}] {bar.timestamp.strftime('%H:%M:%S')} "
-              f"OHLCV({bar.open:.2f}, {bar.high:.2f}, {bar.low:.2f}, {bar.close:.2f}, {bar.volume})")
+        print(
+            f"✓ [{bar.symbol}/{bar.timeframe}] {bar.timestamp.strftime('%H:%M:%S')} "
+            f"OHLCV({bar.open:.2f}, {bar.high:.2f}, {bar.low:.2f}, {bar.close:.2f}, {bar.volume})"
+        )
 
     aggregator.register_callback(on_bar)
 
@@ -522,7 +506,7 @@ if __name__ == '__main__':
             close=150.2 + i * 0.1,
             volume=1000 * (i + 1),
             symbol="AAPL",
-            timeframe="1min"
+            timeframe="1min",
         )
         aggregator.process_bar(bar)
 
@@ -535,7 +519,7 @@ if __name__ == '__main__':
             close=200.1 + i * 0.2,
             volume=2000 * (i + 1),
             symbol="TSLA",
-            timeframe="1min"
+            timeframe="1min",
         )
         aggregator.process_bar(bar)
 

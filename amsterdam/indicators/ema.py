@@ -1,5 +1,6 @@
 from core.base.base_indicator import BaseIndicator
 
+
 class EMAIndicator(BaseIndicator):
     def __init__(self, df, window=20):
         super().__init__(df)

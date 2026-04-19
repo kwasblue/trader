@@ -9,10 +9,11 @@ Run with:
 
 import sys
 import unittest
-import pandas as pd
-import numpy as np
-from pathlib import Path
 from datetime import datetime, timedelta
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
 
 # Add project root to path
 ROOT = Path(__file__).resolve().parents[1]
@@ -35,21 +36,23 @@ class TestContinuousMetrics(unittest.TestCase):
 
     def _create_test_bars(self, n_bars: int) -> pd.DataFrame:
         """Create synthetic bar data for testing."""
-        dates = pd.date_range(end=datetime.now(), periods=n_bars, freq='D')
+        dates = pd.date_range(end=datetime.now(), periods=n_bars, freq="D")
 
         # Generate realistic price data with volatility
         base_price = 100
         returns = np.random.normal(0.001, 0.02, n_bars)  # 0.1% mean, 2% std
         prices = base_price * (1 + returns).cumprod()
 
-        bars = pd.DataFrame({
-            'timestamp': dates,
-            'open': prices * 0.995,
-            'high': prices * 1.01,
-            'low': prices * 0.99,
-            'close': prices,
-            'volume': np.random.randint(1000000, 5000000, n_bars)
-        })
+        bars = pd.DataFrame(
+            {
+                "timestamp": dates,
+                "open": prices * 0.995,
+                "high": prices * 1.01,
+                "low": prices * 0.99,
+                "close": prices,
+                "volume": np.random.randint(1000000, 5000000, n_bars),
+            }
+        )
 
         return bars
 
@@ -62,11 +65,7 @@ class TestContinuousMetrics(unittest.TestCase):
 
     def test_atr_percentile(self):
         """Test ATR percentile calculation."""
-        percentile = self.metrics_calc.calculate_atr_percentile(
-            'TEST',
-            self.test_bars,
-            lookback=250
-        )
+        percentile = self.metrics_calc.calculate_atr_percentile("TEST", self.test_bars, lookback=250)
 
         self.assertGreaterEqual(percentile, 0, "Percentile should be >= 0")
         self.assertLessEqual(percentile, 100, "Percentile should be <= 100")
@@ -76,20 +75,15 @@ class TestContinuousMetrics(unittest.TestCase):
         # Create mock trades
         mock_trades = [
             {
-                'pnl': 100 if i % 2 == 0 else -50,
-                'entry_value': 10000,
-                'return_pct': 1.0 if i % 2 == 0 else -0.5,
-                'timestamp': datetime.now() - timedelta(days=i)
+                "pnl": 100 if i % 2 == 0 else -50,
+                "entry_value": 10000,
+                "return_pct": 1.0 if i % 2 == 0 else -0.5,
+                "timestamp": datetime.now() - timedelta(days=i),
             }
             for i in range(20)
         ]
 
-        sharpe = self.metrics_calc.calculate_rolling_sharpe(
-            'TEST',
-            'rsi',
-            mock_trades,
-            lookback_days=30
-        )
+        sharpe = self.metrics_calc.calculate_rolling_sharpe("TEST", "rsi", mock_trades, lookback_days=30)
 
         self.assertIsInstance(sharpe, float, "Sharpe should be float")
         # With 67% win rate and positive mean, should be positive
@@ -138,19 +132,21 @@ class TestContinuousPositionSizer(unittest.TestCase):
 
     def _create_test_bars(self, n_bars: int) -> pd.DataFrame:
         """Create synthetic bar data."""
-        dates = pd.date_range(end=datetime.now(), periods=n_bars, freq='D')
+        dates = pd.date_range(end=datetime.now(), periods=n_bars, freq="D")
         base_price = 100
         returns = np.random.normal(0.001, 0.02, n_bars)
         prices = base_price * (1 + returns).cumprod()
 
-        return pd.DataFrame({
-            'timestamp': dates,
-            'open': prices * 0.995,
-            'high': prices * 1.01,
-            'low': prices * 0.99,
-            'close': prices,
-            'volume': np.random.randint(1000000, 5000000, n_bars)
-        })
+        return pd.DataFrame(
+            {
+                "timestamp": dates,
+                "open": prices * 0.995,
+                "high": prices * 1.01,
+                "low": prices * 0.99,
+                "close": prices,
+                "volume": np.random.randint(1000000, 5000000, n_bars),
+            }
+        )
 
     def _create_test_trades(self, n_trades: int, win_rate: float) -> list:
         """Create mock trade history."""
@@ -158,28 +154,30 @@ class TestContinuousPositionSizer(unittest.TestCase):
         for i in range(n_trades):
             is_win = i < (n_trades * win_rate)
             pnl = 100 if is_win else -50
-            trades.append({
-                'pnl': pnl,
-                'entry_value': 10000,
-                'return_pct': 1.0 if is_win else -0.5,
-                'timestamp': datetime.now() - timedelta(days=i)
-            })
+            trades.append(
+                {
+                    "pnl": pnl,
+                    "entry_value": 10000,
+                    "return_pct": 1.0 if is_win else -0.5,
+                    "timestamp": datetime.now() - timedelta(days=i),
+                }
+            )
         return trades
 
     def test_calculate_position_size(self):
         """Test position size calculation."""
         result = self.sizer.calculate_position_size(
-            symbol='TEST',
-            strategy='rsi',
+            symbol="TEST",
+            strategy="rsi",
             base_capital=100000,
             max_position_pct=0.10,
             bars=self.test_bars,
-            recent_trades=self.test_trades
+            recent_trades=self.test_trades,
         )
 
         # Verify result structure
-        self.assertEqual(result.symbol, 'TEST')
-        self.assertEqual(result.strategy, 'rsi')
+        self.assertEqual(result.symbol, "TEST")
+        self.assertEqual(result.strategy, "rsi")
         self.assertGreater(result.base_size, 0)
         self.assertGreaterEqual(result.multiplier, 0)
         self.assertLessEqual(result.multiplier, 1.0)
@@ -193,18 +191,18 @@ class TestContinuousPositionSizer(unittest.TestCase):
 
         metrics = RiskMetrics(
             atr_percentile=25.0,  # Low volatility
-            rolling_sharpe=1.6,   # Good performance
+            rolling_sharpe=1.6,  # Good performance
             volatility_score=0.75,
             performance_score=0.8,
-            combined_score=0.77
+            combined_score=0.77,
         )
 
         # Test discrete
-        self.sizer.config['use_continuous_formula'] = False
+        self.sizer.config["use_continuous_formula"] = False
         mult_discrete, _ = self.sizer.calculate_discrete_multiplier(metrics)
 
         # Test continuous
-        self.sizer.config['use_continuous_formula'] = True
+        self.sizer.config["use_continuous_formula"] = True
         trade_count = 50  # Provide a reasonable trade count for testing
         mult_continuous, _, _ = self.sizer.calculate_continuous_multiplier(metrics, trade_count)
 
@@ -216,19 +214,19 @@ class TestContinuousPositionSizer(unittest.TestCase):
 
     def test_should_skip_trade(self):
         """Test trade skip logic."""
-        from core.continuous_position_sizer import PositionSizeResult
         from core.continuous_metrics import RiskMetrics
+        from core.continuous_position_sizer import PositionSizeResult
 
         # Create result with very low multiplier
         low_multiplier_result = PositionSizeResult(
-            symbol='TEST',
-            strategy='rsi',
+            symbol="TEST",
+            strategy="rsi",
             base_size=10000,
             raw_score=0.03,  # Below default skip_trade_threshold of 0.05
             multiplier=0.05,  # Very low
             final_size=500,
             metrics=RiskMetrics(0, 0, 0, 0, 0),
-            rationale="Low multiplier test"
+            rationale="Low multiplier test",
         )
 
         # Should skip (raw_score 0.03 is below default threshold of 0.05)
@@ -237,14 +235,14 @@ class TestContinuousPositionSizer(unittest.TestCase):
 
         # Create result with good multiplier
         good_multiplier_result = PositionSizeResult(
-            symbol='TEST',
-            strategy='rsi',
+            symbol="TEST",
+            strategy="rsi",
             base_size=10000,
             raw_score=0.75,
             multiplier=0.75,
             final_size=7500,
             metrics=RiskMetrics(0, 0, 0, 0, 0),
-            rationale="Good multiplier test"
+            rationale="Good multiplier test",
         )
 
         # Should not skip
@@ -265,6 +263,6 @@ def run_tests():
     return result.wasSuccessful()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     success = run_tests()
     sys.exit(0 if success else 1)

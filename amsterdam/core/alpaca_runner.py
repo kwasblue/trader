@@ -7,20 +7,21 @@ Extends BaseLiveRunner with Alpaca-specific:
 - Bar canonicalization for Alpaca streaming format
 - Connection and streaming setup
 """
+
 from __future__ import annotations
 
 import asyncio
 import json
 import os
-from datetime import datetime, timezone
+from datetime import timezone
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Any
 
 from dotenv import load_dotenv
 
 from core.base.base_live_runner import BaseLiveRunner
 from core.broker.alpaca_broker import AlpacaBroker
-from core.config_loader import get_config, TradingConfig
+from core.config_loader import TradingConfig, get_config
 from core.credential_validator import CredentialValidator
 
 ROOT = Path(__file__).resolve().parents[1]  # .../schwab_trader
@@ -39,7 +40,7 @@ class AlpacaLiveRunner(BaseLiveRunner):
     LOG_FILE_KEY = "AlpacaLive"
     TRADE_LOG_FILE = "live_trades.csv"
 
-    def __init__(self, symbols: list[str], config: Optional[TradingConfig] = None):
+    def __init__(self, symbols: list[str], config: TradingConfig | None = None):
         """
         Initialize the Alpaca live runner.
 
@@ -62,15 +63,15 @@ class AlpacaLiveRunner(BaseLiveRunner):
 
     def _create_broker(self) -> AlpacaBroker:
         """Create and configure the Alpaca broker instance."""
-        config = getattr(self, '_init_config', None) or self.config
+        config = getattr(self, "_init_config", None) or self.config
         return AlpacaBroker(
             api_key=os.getenv("ALPACA_API_KEY"),
             api_secret=os.getenv("ALPACA_SECRET_KEY"),
             paper=config.alpaca.paper,
-            poll_timeout=getattr(config.alpaca, 'poll_timeout_seconds', 30),
+            poll_timeout=getattr(config.alpaca, "poll_timeout_seconds", 30),
         )
 
-    def _canonicalize_bar(self, raw_bar: Any) -> Dict:
+    def _canonicalize_bar(self, raw_bar: Any) -> dict:
         """
         Convert Alpaca bar to canonical format.
 
@@ -136,50 +137,62 @@ def _ensure_live_config(dir_path: str = "config"):
     sr_path = os.path.join(dir_path, "strategy_routing.json")
     if not os.path.exists(sr_path):
         with open(sr_path, "w") as f:
-            json.dump({
-                "AAPL": {
-                    "low_volatility": "sma_strategy",
-                    "normal": "momentum_strategy",
-                    "high_volatility": "mean_reversion_strategy"
+            json.dump(
+                {
+                    "AAPL": {
+                        "low_volatility": "sma_strategy",
+                        "normal": "momentum_strategy",
+                        "high_volatility": "mean_reversion_strategy",
+                    },
+                    "MSFT": {
+                        "low_volatility": "sma_strategy",
+                        "normal": "momentum_strategy",
+                        "high_volatility": "mean_reversion_strategy",
+                    },
                 },
-                "MSFT": {
-                    "low_volatility": "sma_strategy",
-                    "normal": "momentum_strategy",
-                    "high_volatility": "mean_reversion_strategy"
-                }
-            }, f, indent=2)
+                f,
+                indent=2,
+            )
 
     sp_path = os.path.join(dir_path, "strategy_params.json")
     if not os.path.exists(sp_path):
         with open(sp_path, "w") as f:
-            json.dump({
-                "AAPL": {
-                    "low_volatility": {"params": {"fast": 10, "slow": 30}},
-                    "normal": {"params": {"lookback": 20}},
-                    "high_volatility": {"params": {"window": 14}}
+            json.dump(
+                {
+                    "AAPL": {
+                        "low_volatility": {"params": {"fast": 10, "slow": 30}},
+                        "normal": {"params": {"lookback": 20}},
+                        "high_volatility": {"params": {"window": 14}},
+                    },
+                    "MSFT": {
+                        "low_volatility": {"params": {"fast": 10, "slow": 30}},
+                        "normal": {"params": {"lookback": 20}},
+                        "high_volatility": {"params": {"window": 14}},
+                    },
                 },
-                "MSFT": {
-                    "low_volatility": {"params": {"fast": 10, "slow": 30}},
-                    "normal": {"params": {"lookback": 20}},
-                    "high_volatility": {"params": {"window": 14}}
-                }
-            }, f, indent=2)
+                f,
+                indent=2,
+            )
 
     tl_path = os.path.join(dir_path, "trade_logic_routing.json")
     if not os.path.exists(tl_path):
         with open(tl_path, "w") as f:
-            json.dump({
-                "AAPL": {
-                    "low_volatility": {"trade_logic_class": "default", "params": {}},
-                    "normal": {"trade_logic_class": "default", "params": {}},
-                    "high_volatility": {"trade_logic_class": "default", "params": {}}
+            json.dump(
+                {
+                    "AAPL": {
+                        "low_volatility": {"trade_logic_class": "default", "params": {}},
+                        "normal": {"trade_logic_class": "default", "params": {}},
+                        "high_volatility": {"trade_logic_class": "default", "params": {}},
+                    },
+                    "MSFT": {
+                        "low_volatility": {"trade_logic_class": "default", "params": {}},
+                        "normal": {"trade_logic_class": "default", "params": {}},
+                        "high_volatility": {"trade_logic_class": "default", "params": {}},
+                    },
                 },
-                "MSFT": {
-                    "low_volatility": {"trade_logic_class": "default", "params": {}},
-                    "normal": {"trade_logic_class": "default", "params": {}},
-                    "high_volatility": {"trade_logic_class": "default", "params": {}}
-                }
-            }, f, indent=2)
+                f,
+                indent=2,
+            )
 
     return sr_path, sp_path, tl_path
 

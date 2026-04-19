@@ -34,11 +34,11 @@ Usage:
     amsterdam logs [OPTIONS]       View logs
 """
 
-import sys
 import os
 import signal
-from pathlib import Path
+import sys
 from datetime import datetime
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 # Ensure project root is in path (required before imports)
@@ -51,6 +51,7 @@ from dotenv import load_dotenv
 
 # Use canonical path helper for root path resolution
 from core.config_loader import get_app_path
+
 APP_ROOT = get_app_path()
 
 # Load environment (canonical location)
@@ -67,6 +68,7 @@ ET = ZoneInfo("America/New_York")
 # =============================================================================
 # PROCESS MANAGEMENT UTILITIES
 # =============================================================================
+
 
 def _get_pid() -> int | None:
     """Get the PID of running autotrader."""
@@ -119,7 +121,9 @@ def _show_positions():
                 total_pnl += pnl
                 pnl_pct = float(pos.unrealized_plpc) * 100
                 pnl_sign = "+" if pnl >= 0 else ""
-                click.echo(f"      {pos.symbol}: {pos.qty} @ ${float(pos.avg_entry_price):.2f} | P/L: {pnl_sign}${pnl:.2f} ({pnl_sign}{pnl_pct:.1f}%)")
+                click.echo(
+                    f"      {pos.symbol}: {pos.qty} @ ${float(pos.avg_entry_price):.2f} | P/L: {pnl_sign}${pnl:.2f} ({pnl_sign}{pnl_pct:.1f}%)"
+                )
             click.echo(f"    Total Unrealized P/L: ${total_pnl:,.2f}")
         else:
             click.echo("    No open positions")
@@ -165,12 +169,13 @@ def cli():
 # START COMMAND
 # =============================================================================
 
+
 @cli.command()
-@click.option('--symbols', '-s', default=None, help='Comma-separated symbols (e.g., AAPL,MSFT)')
-@click.option('--broker', '-b', type=click.Choice(['alpaca', 'schwab']), default='alpaca', help='Broker to use')
-@click.option('--dry-run', is_flag=True, help='Run without executing real trades')
-@click.option('--daemon', '-d', is_flag=True, default=True, help='Run as background daemon (default: True)')
-@click.option('--foreground', '-f', is_flag=True, help='Run in foreground (not as daemon)')
+@click.option("--symbols", "-s", default=None, help="Comma-separated symbols (e.g., AAPL,MSFT)")
+@click.option("--broker", "-b", type=click.Choice(["alpaca", "schwab"]), default="alpaca", help="Broker to use")
+@click.option("--dry-run", is_flag=True, help="Run without executing real trades")
+@click.option("--daemon", "-d", is_flag=True, default=True, help="Run as background daemon (default: True)")
+@click.option("--foreground", "-f", is_flag=True, help="Run in foreground (not as daemon)")
 def start(symbols, broker, dry_run, daemon, foreground):
     """Start the autonomous trading daemon.
 
@@ -186,7 +191,7 @@ def start(symbols, broker, dry_run, daemon, foreground):
 
     # Check if already running
     if _is_running():
-        click.secho(f"AutoTrader is already running (PID: {_get_pid()})", fg='yellow')
+        click.secho(f"AutoTrader is already running (PID: {_get_pid()})", fg="yellow")
         click.echo("Use 'amsterdam restart' to restart, or 'amsterdam stop' first.")
         return
 
@@ -197,18 +202,19 @@ def start(symbols, broker, dry_run, daemon, foreground):
     cmd = [sys.executable, str(APP_ROOT / "app" / "daemon.py")]
 
     if symbols:
-        cmd.extend(['--symbols'] + symbols.split(','))
+        cmd.extend(["--symbols"] + symbols.split(","))
     if broker:
-        cmd.extend(['--broker', broker])
+        cmd.extend(["--broker", broker])
     if dry_run:
-        cmd.append('--dry-run')
+        cmd.append("--dry-run")
 
     # Get symbols for display
     if symbols:
-        display_symbols = symbols.split(',')
+        display_symbols = symbols.split(",")
     else:
         from core.symbol_list_manager import get_list_manager
-        display_symbols = get_list_manager().get_trade_list() or ['(from config)']
+
+        display_symbols = get_list_manager().get_trade_list() or ["(from config)"]
 
     if foreground:
         # Run in foreground
@@ -222,11 +228,11 @@ def start(symbols, broker, dry_run, daemon, foreground):
         click.echo(f"  Broker: {broker}")
         click.echo(f"  Dry run: {dry_run}")
 
-        with open(STDOUT_LOG, 'a') as stdout_file:
-            stdout_file.write(f"\n{'='*60}\n")
+        with open(STDOUT_LOG, "a") as stdout_file:
+            stdout_file.write(f"\n{'=' * 60}\n")
             stdout_file.write(f"AutoTrader started at {datetime.now(ET)}\n")
             stdout_file.write(f"Command: {' '.join(cmd)}\n")
-            stdout_file.write(f"{'='*60}\n\n")
+            stdout_file.write(f"{'=' * 60}\n\n")
             stdout_file.flush()
 
             process = subprocess.Popen(
@@ -240,7 +246,7 @@ def start(symbols, broker, dry_run, daemon, foreground):
         # Save PID
         PID_FILE.write_text(str(process.pid))
 
-        click.secho(f"\nAutoTrader started (PID: {process.pid})", fg='green')
+        click.secho(f"\nAutoTrader started (PID: {process.pid})", fg="green")
         click.echo(f"  Log file: {LOG_FILE}")
         click.echo(f"  Stdout: {STDOUT_LOG}")
         click.echo("\nMonitor with: amsterdam logs -f")
@@ -249,6 +255,7 @@ def start(symbols, broker, dry_run, daemon, foreground):
 # =============================================================================
 # STOP COMMAND
 # =============================================================================
+
 
 @cli.command()
 def stop():
@@ -276,44 +283,46 @@ def stop():
                 break
         else:
             # Force kill if still running
-            click.secho("Process didn't stop gracefully, sending SIGKILL...", fg='yellow')
+            click.secho("Process didn't stop gracefully, sending SIGKILL...", fg="yellow")
             os.kill(pid, signal.SIGKILL)
 
         PID_FILE.unlink(missing_ok=True)
-        click.secho("AutoTrader stopped", fg='green')
+        click.secho("AutoTrader stopped", fg="green")
 
     except ProcessLookupError:
         click.echo("Process already stopped")
         PID_FILE.unlink(missing_ok=True)
     except PermissionError:
-        click.secho(f"Permission denied stopping PID {pid}", fg='red')
+        click.secho(f"Permission denied stopping PID {pid}", fg="red")
 
 
 # =============================================================================
 # STATUS COMMAND
 # =============================================================================
 
+
 @cli.command()
-@click.option('--positions', '-p', is_flag=True, help='Show positions and P&L')
-@click.option('--lists', '-l', is_flag=True, help='Show trade/watch lists')
-@click.option('--all', '-a', 'show_all', is_flag=True, help='Show all info')
+@click.option("--positions", "-p", is_flag=True, help="Show positions and P&L")
+@click.option("--lists", "-l", is_flag=True, help="Show trade/watch lists")
+@click.option("--all", "-a", "show_all", is_flag=True, help="Show all info")
 def status(positions, lists, show_all):
     """Check trading daemon status."""
     pid = _get_pid()
 
-    click.echo(f"\n{'='*50}")
+    click.echo(f"\n{'=' * 50}")
     click.echo("  AUTOTRADER STATUS")
-    click.echo(f"{'='*50}")
+    click.echo(f"{'=' * 50}")
 
     if pid is None:
-        click.secho("  Status: STOPPED", fg='red')
+        click.secho("  Status: STOPPED", fg="red")
     else:
-        click.secho("  Status: RUNNING", fg='green')
+        click.secho("  Status: RUNNING", fg="green")
         click.echo(f"  PID: {pid}")
 
     # Show market status
     try:
         from app.daemon import MarketScheduler
+
         scheduler = MarketScheduler()
         now = scheduler.now_et()
 
@@ -345,17 +354,18 @@ def status(positions, lists, show_all):
         except Exception:
             pass
 
-    click.echo(f"{'='*50}\n")
+    click.echo(f"{'=' * 50}\n")
 
 
 # =============================================================================
 # RESTART COMMAND
 # =============================================================================
 
+
 @cli.command()
-@click.option('--symbols', '-s', default=None, help='Comma-separated symbols')
-@click.option('--broker', '-b', type=click.Choice(['alpaca', 'schwab']), default='alpaca', help='Broker to use')
-@click.option('--dry-run', is_flag=True, help='Run without executing real trades')
+@click.option("--symbols", "-s", default=None, help="Comma-separated symbols")
+@click.option("--broker", "-b", type=click.Choice(["alpaca", "schwab"]), default="alpaca", help="Broker to use")
+@click.option("--dry-run", is_flag=True, help="Run without executing real trades")
 @click.pass_context
 def restart(ctx, symbols, broker, dry_run):
     """Restart the trading daemon."""
@@ -376,12 +386,14 @@ def restart(ctx, symbols, broker, dry_run):
 # GUI COMMAND
 # =============================================================================
 
+
 @cli.command()
-@click.option('--mode', '-m', type=click.Choice(['simulation', 'alpaca', 'schwab']),
-              default='simulation', help='Trading mode')
-@click.option('--symbols', '-s', default='AAPL,MSFT', help='Comma-separated symbols')
-@click.option('--speed', type=float, default=0.1, help='Simulation speed (seconds per bar)')
-@click.option('--steps', type=int, default=600, help='Number of bars to simulate (default: 600 = ~2 min)')
+@click.option(
+    "--mode", "-m", type=click.Choice(["simulation", "alpaca", "schwab"]), default="simulation", help="Trading mode"
+)
+@click.option("--symbols", "-s", default="AAPL,MSFT", help="Comma-separated symbols")
+@click.option("--speed", type=float, default=0.1, help="Simulation speed (seconds per bar)")
+@click.option("--steps", type=int, default=600, help="Number of bars to simulate (default: 600 = ~2 min)")
 def gui(mode, symbols, speed, steps):
     """Launch the GUI trading application.
 
@@ -398,11 +410,16 @@ def gui(mode, symbols, speed, steps):
         amsterdam gui -s AAPL,GOOGL,TSLA          # Custom symbols
     """
     cmd = [
-        sys.executable, str(APP_ROOT / "monitoring" / "gui_app.py"),
-        "--mode", mode,
-        "--symbols", symbols,
-        "--speed", str(speed),
-        "--steps", str(steps)
+        sys.executable,
+        str(APP_ROOT / "monitoring" / "gui_app.py"),
+        "--mode",
+        mode,
+        "--symbols",
+        symbols,
+        "--speed",
+        str(speed),
+        "--steps",
+        str(steps),
     ]
 
     click.echo(f"Launching GUI ({mode} mode, {steps} bars)...")
@@ -413,10 +430,11 @@ def gui(mode, symbols, speed, steps):
 # PREFLIGHT COMMAND
 # =============================================================================
 
+
 @cli.command()
-@click.option('--verbose', '-v', is_flag=True, help='Verbose output')
-@click.option('--update-data', is_flag=True, help='Update stale historical data')
-@click.option('--reauth-schwab', is_flag=True, help='Force Schwab re-authentication')
+@click.option("--verbose", "-v", is_flag=True, help="Verbose output")
+@click.option("--update-data", is_flag=True, help="Update stale historical data")
+@click.option("--reauth-schwab", is_flag=True, help="Force Schwab re-authentication")
 def preflight(verbose, update_data, reauth_schwab):
     """Run pre-flight system checks.
 
@@ -435,11 +453,11 @@ def preflight(verbose, update_data, reauth_schwab):
     cmd = [sys.executable, str(APP_ROOT / "preflight.py")]
 
     if verbose:
-        cmd.append('-v')
+        cmd.append("-v")
     if update_data:
-        cmd.append('--update-data')
+        cmd.append("--update-data")
     if reauth_schwab:
-        cmd.append('--reauth-schwab')
+        cmd.append("--reauth-schwab")
 
     os.execv(sys.executable, cmd)
 
@@ -447,6 +465,7 @@ def preflight(verbose, update_data, reauth_schwab):
 # =============================================================================
 # TOKEN COMMAND GROUP
 # =============================================================================
+
 
 @cli.group()
 def token():
@@ -461,10 +480,11 @@ def token():
     pass
 
 
-@token.command('status')
+@token.command("status")
 def token_status():
     """Check Schwab token status."""
     import asyncio
+
     from core.credential_validator import CredentialValidator
 
     async def check():
@@ -472,30 +492,30 @@ def token_status():
         result = await validator.validate_schwab()
 
         status_colors = {
-            'VALID': 'green',
-            'EXPIRING_SOON': 'yellow',
-            'EXPIRED': 'red',
-            'MISSING': 'red',
-            'INVALID': 'red'
+            "VALID": "green",
+            "EXPIRING_SOON": "yellow",
+            "EXPIRED": "red",
+            "MISSING": "red",
+            "INVALID": "red",
         }
 
-        color = status_colors.get(result.status.name, 'white')
-        click.echo(f"Schwab Token: ", nl=False)
+        color = status_colors.get(result.status.name, "white")
+        click.echo("Schwab Token: ", nl=False)
         click.secho(result.status.name, fg=color, bold=True)
         click.echo(f"  {result.message}")
 
         # Also check Alpaca
         alpaca_result = await validator.validate_alpaca()
-        color = status_colors.get(alpaca_result.status.name, 'white')
-        click.echo(f"Alpaca API:   ", nl=False)
+        color = status_colors.get(alpaca_result.status.name, "white")
+        click.echo("Alpaca API:   ", nl=False)
         click.secho(alpaca_result.status.name, fg=color, bold=True)
         click.echo(f"  {alpaca_result.message}")
 
     asyncio.run(check())
 
 
-@token.command('refresh')
-@click.option('--force', '-f', is_flag=True, help='Force full re-authentication')
+@token.command("refresh")
+@click.option("--force", "-f", is_flag=True, help="Force full re-authentication")
 def token_refresh(force):
     """Refresh Schwab tokens.
 
@@ -506,14 +526,14 @@ def token_refresh(force):
     """
     cmd = [sys.executable, str(APP_ROOT / "refresh_schwab_token.py")]
     if force:
-        cmd.append('--force')
+        cmd.append("--force")
 
     os.execv(sys.executable, cmd)
 
 
-@token.command('keeper')
-@click.option('--interval', '-i', type=int, default=60, help='Check interval in seconds')
-@click.option('--daemon', '-d', is_flag=True, help='Run as background daemon')
+@token.command("keeper")
+@click.option("--interval", "-i", type=int, default=60, help="Check interval in seconds")
+@click.option("--daemon", "-d", is_flag=True, help="Run as background daemon")
 def token_keeper(interval, daemon):
     """Run the token keeper service.
 
@@ -525,10 +545,10 @@ def token_keeper(interval, daemon):
         amsterdam token keeper --daemon           # Background mode
         amsterdam token keeper -i 300             # Check every 5 minutes
     """
-    cmd = [sys.executable, str(APP_ROOT / "token_keeper.py"), '--interval', str(interval)]
+    cmd = [sys.executable, str(APP_ROOT / "token_keeper.py"), "--interval", str(interval)]
 
     if daemon:
-        cmd.append('--daemon')
+        cmd.append("--daemon")
 
     os.execv(sys.executable, cmd)
 
@@ -537,12 +557,13 @@ def token_keeper(interval, daemon):
 # TEST COMMAND
 # =============================================================================
 
+
 @cli.command()
-@click.option('--coverage', '-c', is_flag=True, help='Run with coverage report')
-@click.option('--verbose', '-v', is_flag=True, help='Verbose output')
-@click.option('--unit', is_flag=True, help='Run only unit tests')
-@click.option('--integration', is_flag=True, help='Run only integration tests')
-@click.argument('path', required=False)
+@click.option("--coverage", "-c", is_flag=True, help="Run with coverage report")
+@click.option("--verbose", "-v", is_flag=True, help="Verbose output")
+@click.option("--unit", is_flag=True, help="Run only unit tests")
+@click.option("--integration", is_flag=True, help="Run only integration tests")
+@click.argument("path", required=False)
 def test(coverage, verbose, unit, integration, path):
     """Run the test suite.
 
@@ -553,17 +574,17 @@ def test(coverage, verbose, unit, integration, path):
         amsterdam test --coverage                 # With coverage report
         amsterdam test tests/test_autotrader.py      # Specific file
     """
-    cmd = [sys.executable, '-m', 'pytest']
+    cmd = [sys.executable, "-m", "pytest"]
 
     if path:
         cmd.append(path)
     else:
-        cmd.append('tests/')
+        cmd.append("tests/")
 
     if verbose:
-        cmd.append('-v')
+        cmd.append("-v")
     if coverage:
-        cmd.extend(['--cov=core', '--cov=strategies', '--cov-report=html'])
+        cmd.extend(["--cov=core", "--cov=strategies", "--cov-report=html"])
 
     click.echo("Running tests...")
     os.execv(sys.executable, cmd)
@@ -573,11 +594,13 @@ def test(coverage, verbose, unit, integration, path):
 # LOGS COMMAND
 # =============================================================================
 
+
 @cli.command()
-@click.option('--follow', '-f', is_flag=True, help='Follow log output')
-@click.option('--lines', '-n', type=int, default=50, help='Number of lines to show')
-@click.option('--file', '-l', type=click.Choice(['app', 'trades', 'daemon', 'preflight']),
-              default='app', help='Log file to view')
+@click.option("--follow", "-f", is_flag=True, help="Follow log output")
+@click.option("--lines", "-n", type=int, default=50, help="Number of lines to show")
+@click.option(
+    "--file", "-l", type=click.Choice(["app", "trades", "daemon", "preflight"]), default="app", help="Log file to view"
+)
 def logs(follow, lines, file):
     """View application logs.
 
@@ -596,12 +619,7 @@ def logs(follow, lines, file):
     """
     import subprocess
 
-    log_files = {
-        'app': 'app.log',
-        'trades': 'trades.log',
-        'daemon': 'autotrader.log',
-        'preflight': 'preflight.log'
-    }
+    log_files = {"app": "app.log", "trades": "trades.log", "daemon": "autotrader.log", "preflight": "preflight.log"}
 
     log_path = APP_ROOT / "logs" / log_files[file]
 
@@ -610,22 +628,23 @@ def logs(follow, lines, file):
         return
 
     if follow:
-        subprocess.run(['tail', '-f', str(log_path)])
+        subprocess.run(["tail", "-f", str(log_path)])
     else:
-        subprocess.run(['tail', f'-{lines}', str(log_path)])
+        subprocess.run(["tail", f"-{lines}", str(log_path)])
 
 
 # =============================================================================
 # STATS COMMAND
 # =============================================================================
 
+
 @cli.command()
-@click.option('--summary', is_flag=True, help='Show summary only')
-@click.option('--by-day', is_flag=True, help='Show daily breakdown')
-@click.option('--by-symbol', is_flag=True, help='Show per-symbol stats')
-@click.option('--by-hour', is_flag=True, help='Show hourly performance')
-@click.option('--by-strategy', is_flag=True, help='Show per-strategy stats')
-@click.option('--worst', type=int, metavar='N', help='Show worst N trades')
+@click.option("--summary", is_flag=True, help="Show summary only")
+@click.option("--by-day", is_flag=True, help="Show daily breakdown")
+@click.option("--by-symbol", is_flag=True, help="Show per-symbol stats")
+@click.option("--by-hour", is_flag=True, help="Show hourly performance")
+@click.option("--by-strategy", is_flag=True, help="Show per-strategy stats")
+@click.option("--worst", type=int, metavar="N", help="Show worst N trades")
 def stats(summary, by_day, by_symbol, by_hour, by_strategy, worst):
     """Analyze trading performance and win rate.
 
@@ -648,17 +667,17 @@ def stats(summary, by_day, by_symbol, by_hour, by_strategy, worst):
     cmd = [sys.executable, str(APP_ROOT / "tools" / "analyze_trades.py")]
 
     if summary:
-        cmd.append('--summary')
+        cmd.append("--summary")
     if by_day:
-        cmd.append('--by-day')
+        cmd.append("--by-day")
     if by_symbol:
-        cmd.append('--by-symbol')
+        cmd.append("--by-symbol")
     if by_hour:
-        cmd.append('--by-hour')
+        cmd.append("--by-hour")
     if by_strategy:
-        cmd.append('--by-strategy')
+        cmd.append("--by-strategy")
     if worst:
-        cmd.extend(['--worst', str(worst)])
+        cmd.extend(["--worst", str(worst)])
 
     subprocess.run(cmd)
 
@@ -666,6 +685,7 @@ def stats(summary, by_day, by_symbol, by_hour, by_strategy, worst):
 # =============================================================================
 # SYMBOLS COMMAND GROUP
 # =============================================================================
+
 
 @cli.group()
 def symbols():
@@ -683,9 +703,9 @@ def symbols():
     pass
 
 
-@symbols.command('list')
-@click.option('--trade', '-t', is_flag=True, help='Show trade list only')
-@click.option('--watch', '-w', is_flag=True, help='Show watch list only')
+@symbols.command("list")
+@click.option("--trade", "-t", is_flag=True, help="Show trade list only")
+@click.option("--watch", "-w", is_flag=True, help="Show watch list only")
 def symbols_list(trade, watch):
     """List configured symbols."""
     from core.symbol_list_manager import get_list_manager
@@ -695,9 +715,9 @@ def symbols_list(trade, watch):
     show_trade = trade or (not trade and not watch)
     show_watch = watch or (not trade and not watch)
 
-    click.echo(f"\n{'='*50}")
+    click.echo(f"\n{'=' * 50}")
     click.echo("  SYMBOL LISTS")
-    click.echo(f"{'='*50}")
+    click.echo(f"{'=' * 50}")
 
     if show_trade:
         trade_list = manager.get_trade_list()
@@ -721,14 +741,14 @@ def symbols_list(trade, watch):
         else:
             click.echo("    (empty)")
 
-    click.echo(f"\n{'='*50}\n")
+    click.echo(f"\n{'=' * 50}\n")
 
 
-@symbols.command('add')
-@click.argument('symbol')
-@click.option('--trade', '-t', is_flag=True, help='Add to trade list (default)')
-@click.option('--watch', '-w', is_flag=True, help='Add to watch list')
-@click.option('--notes', '-n', default=None, help='Notes about the symbol')
+@symbols.command("add")
+@click.argument("symbol")
+@click.option("--trade", "-t", is_flag=True, help="Add to trade list (default)")
+@click.option("--watch", "-w", is_flag=True, help="Add to watch list")
+@click.option("--notes", "-n", default=None, help="Notes about the symbol")
 def symbols_add(symbol, trade, watch, notes):
     """Add a symbol to trade or watch list."""
     from core.symbol_list_manager import get_list_manager
@@ -739,7 +759,7 @@ def symbols_add(symbol, trade, watch, notes):
 
     if watch:
         if manager.add_to_watch_list(symbol, notes):
-            click.secho(f"Added {symbol} to watch list", fg='green')
+            click.secho(f"Added {symbol} to watch list", fg="green")
         else:
             existing = manager.get_list_type(symbol)
             if existing == "watch":
@@ -749,7 +769,7 @@ def symbols_add(symbol, trade, watch, notes):
     else:
         # Default to trade list
         if manager.add_to_trade_list(symbol, notes):
-            click.secho(f"Added {symbol} to trade list", fg='green')
+            click.secho(f"Added {symbol} to trade list", fg="green")
         else:
             existing = manager.get_list_type(symbol)
             if existing == "trade":
@@ -758,8 +778,8 @@ def symbols_add(symbol, trade, watch, notes):
                 click.echo(f"Moved {symbol} from watch list to trade list")
 
 
-@symbols.command('remove')
-@click.argument('symbol')
+@symbols.command("remove")
+@click.argument("symbol")
 def symbols_remove(symbol):
     """Remove a symbol from all lists."""
     from core.symbol_list_manager import get_list_manager
@@ -768,15 +788,15 @@ def symbols_remove(symbol):
     symbol = symbol.upper()
 
     if manager.remove_symbol(symbol):
-        click.secho(f"Removed {symbol} from lists", fg='green')
+        click.secho(f"Removed {symbol} from lists", fg="green")
     else:
-        click.secho(f"Symbol {symbol} not found in any list", fg='yellow')
+        click.secho(f"Symbol {symbol} not found in any list", fg="yellow")
 
 
-@symbols.command('move')
-@click.argument('symbol')
-@click.option('--to-trade', is_flag=True, help='Move to trade list')
-@click.option('--to-watch', is_flag=True, help='Move to watch list')
+@symbols.command("move")
+@click.argument("symbol")
+@click.option("--to-trade", is_flag=True, help="Move to trade list")
+@click.option("--to-watch", is_flag=True, help="Move to watch list")
 def symbols_move(symbol, to_trade, to_watch):
     """Move a symbol between lists."""
     from core.symbol_list_manager import get_list_manager
@@ -785,29 +805,30 @@ def symbols_move(symbol, to_trade, to_watch):
     symbol = symbol.upper()
 
     if not manager.symbol_exists(symbol):
-        click.secho(f"Symbol {symbol} not found in any list", fg='red')
+        click.secho(f"Symbol {symbol} not found in any list", fg="red")
         click.echo(f"Use 'amsterdam symbols add {symbol} --trade' or '--watch' first")
         return
 
     if to_watch:
         if manager.move_to_watch_list(symbol):
-            click.secho(f"Moved {symbol} to watch list", fg='green')
+            click.secho(f"Moved {symbol} to watch list", fg="green")
         else:
             click.echo(f"{symbol} is already in the watch list")
     elif to_trade:
         if manager.move_to_trade_list(symbol):
-            click.secho(f"Moved {symbol} to trade list", fg='green')
+            click.secho(f"Moved {symbol} to trade list", fg="green")
         else:
             click.echo(f"{symbol} is already in the trade list")
     else:
-        click.secho("Specify --to-trade or --to-watch", fg='red')
+        click.secho("Specify --to-trade or --to-watch", fg="red")
 
 
-@symbols.command('export')
-@click.argument('file', default='symbol_lists.json', required=False)
+@symbols.command("export")
+@click.argument("file", default="symbol_lists.json", required=False)
 def symbols_export(file):
     """Export trade/watch lists to JSON file."""
     import json
+
     from core.symbol_list_manager import get_list_manager
 
     manager = get_list_manager()
@@ -821,20 +842,21 @@ def symbols_export(file):
     with open(file, "w") as f:
         json.dump(data, f, indent=2)
 
-    click.secho(f"Exported lists to {file}", fg='green')
+    click.secho(f"Exported lists to {file}", fg="green")
     click.echo(f"  Trade list: {len(data['trade_list'])} symbols")
     click.echo(f"  Watch list: {len(data['watch_list'])} symbols")
 
 
-@symbols.command('import')
-@click.argument('file')
+@symbols.command("import")
+@click.argument("file")
 def symbols_import(file):
     """Import trade/watch lists from JSON file."""
     import json
+
     from core.symbol_list_manager import get_list_manager
 
     if not os.path.exists(file):
-        click.secho(f"File not found: {file}", fg='red')
+        click.secho(f"File not found: {file}", fg="red")
         return
 
     with open(file) as f:
@@ -854,7 +876,7 @@ def symbols_import(file):
         if manager.add_to_watch_list(symbol):
             watch_count += 1
 
-    click.secho(f"Imported from {file}", fg='green')
+    click.secho(f"Imported from {file}", fg="green")
     click.echo(f"  Trade list: {trade_count} symbols added")
     click.echo(f"  Watch list: {watch_count} symbols added")
 
@@ -862,6 +884,7 @@ def symbols_import(file):
 # =============================================================================
 # DATA COMMAND GROUP
 # =============================================================================
+
 
 @cli.group()
 def data():
@@ -875,13 +898,11 @@ def data():
     pass
 
 
-@data.command('update')
-@click.option('--symbols', '-s', default=None, help='Comma-separated symbols')
-@click.option('--days', '-d', type=int, default=30, help='Days of history to fetch')
-@click.option('--source', type=click.Choice(['alpaca', 'schwab', 'auto']), default='auto',
-              help='Data source')
-@click.option('--timeframes', '-t', default=None,
-              help='Comma-separated timeframes (e.g., 15min,30min,1hour)')
+@data.command("update")
+@click.option("--symbols", "-s", default=None, help="Comma-separated symbols")
+@click.option("--days", "-d", type=int, default=30, help="Days of history to fetch")
+@click.option("--source", type=click.Choice(["alpaca", "schwab", "auto"]), default="auto", help="Data source")
+@click.option("--timeframes", "-t", default=None, help="Comma-separated timeframes (e.g., 15min,30min,1hour)")
 def data_update(symbols, days, source, timeframes):
     """Update historical data for symbols.
 
@@ -892,51 +913,48 @@ def data_update(symbols, days, source, timeframes):
         amsterdam data update -d 750 -t 1hour --source alpaca # 2 years hourly
     """
     import asyncio
+
     from core.unified_data_pipeline import UnifiedDataPipeline
 
     async def update():
         pipeline = UnifiedDataPipeline()
 
         if symbols:
-            symbol_list = [s.strip().upper() for s in symbols.split(',')]
+            symbol_list = [s.strip().upper() for s in symbols.split(",")]
         else:
             # Load from config
             import json
+
             config_path = APP_ROOT / "config" / "symbols.json"
             if config_path.exists():
                 with open(config_path) as f:
                     cfg = json.load(f)
-                symbol_list = cfg.get('trade_list', []) + cfg.get('watch_list', [])
+                symbol_list = cfg.get("trade_list", []) + cfg.get("watch_list", [])
             else:
-                symbol_list = ['AAPL', 'MSFT']
+                symbol_list = ["AAPL", "MSFT"]
 
         # Parse timeframes
         timeframe_list = None
         if timeframes:
-            timeframe_list = [t.strip() for t in timeframes.split(',')]
+            timeframe_list = [t.strip() for t in timeframes.split(",")]
             click.echo(f"Updating data for: {', '.join(symbol_list)} at {', '.join(timeframe_list)}")
         else:
             click.echo(f"Updating data for: {', '.join(symbol_list)}")
 
-        src = None if source == 'auto' else source
-        results = await pipeline.update_symbols(
-            symbol_list,
-            days=days,
-            source=src,
-            timeframes=timeframe_list
-        )
+        src = None if source == "auto" else source
+        results = await pipeline.update_symbols(symbol_list, days=days, source=src, timeframes=timeframe_list)
 
         for sym, count in results.items():
             if count > 0:
-                click.secho(f"  {sym}: {count} bars", fg='green')
+                click.secho(f"  {sym}: {count} bars", fg="green")
             else:
-                click.secho(f"  {sym}: failed", fg='red')
+                click.secho(f"  {sym}: failed", fg="red")
 
     asyncio.run(update())
 
 
-@data.command('status')
-@click.option('--symbols', '-s', default=None, help='Comma-separated symbols')
+@data.command("status")
+@click.option("--symbols", "-s", default=None, help="Comma-separated symbols")
 def data_status(symbols):
     """Check data freshness for symbols."""
     from core.unified_data_pipeline import UnifiedDataPipeline
@@ -944,7 +962,7 @@ def data_status(symbols):
     pipeline = UnifiedDataPipeline()
 
     if symbols:
-        symbol_list = [s.strip().upper() for s in symbols.split(',')]
+        symbol_list = [s.strip().upper() for s in symbols.split(",")]
     else:
         symbol_list = pipeline.list_available_symbols()[:10]
 
@@ -954,24 +972,25 @@ def data_status(symbols):
     for sym in symbol_list:
         info = pipeline.get_cache_info(sym)
         if info:
-            age = info.get('age_minutes', 0)
-            bars = info.get('bar_count', 0)
+            age = info.get("age_minutes", 0)
+            bars = info.get("bar_count", 0)
             if age < 60:
-                color = 'green'
+                color = "green"
             elif age < 1440:
-                color = 'yellow'
+                color = "yellow"
             else:
-                color = 'red'
+                color = "red"
             click.echo(f"  {sym}: ", nl=False)
             click.secho(f"{bars} bars, {age:.0f}min old", fg=color)
         else:
             click.echo(f"  {sym}: ", nl=False)
-            click.secho("no data", fg='red')
+            click.secho("no data", fg="red")
 
 
 # =============================================================================
 # STRATEGY COMMAND GROUP
 # =============================================================================
+
 
 @cli.group()
 def strategy():
@@ -987,17 +1006,25 @@ def strategy():
     pass
 
 
-@strategy.command('select')
-@click.argument('symbol')
-@click.option('--days', '-d', type=int, default=365, help='Days of historical data')
-@click.option('--top', '-n', type=int, default=3, help='Number of top strategies to select')
-@click.option('--metric', type=click.Choice(['composite', 'sharpe_ratio', 'sortino_ratio', 'total_return']),
-              default='composite', help='Ranking metric')
-@click.option('--no-walk-forward', is_flag=True, help='Disable walk-forward validation')
-@click.option('--regime', type=click.Choice(['low_volatility', 'normal', 'high_volatility']),
-              default='normal', help='Market regime to optimize for')
-@click.option('--save', '-s', is_flag=True, help='Save results to config files')
-@click.option('--capital', type=float, default=100000, help='Initial capital for backtesting')
+@strategy.command("select")
+@click.argument("symbol")
+@click.option("--days", "-d", type=int, default=365, help="Days of historical data")
+@click.option("--top", "-n", type=int, default=3, help="Number of top strategies to select")
+@click.option(
+    "--metric",
+    type=click.Choice(["composite", "sharpe_ratio", "sortino_ratio", "total_return"]),
+    default="composite",
+    help="Ranking metric",
+)
+@click.option("--no-walk-forward", is_flag=True, help="Disable walk-forward validation")
+@click.option(
+    "--regime",
+    type=click.Choice(["low_volatility", "normal", "high_volatility"]),
+    default="normal",
+    help="Market regime to optimize for",
+)
+@click.option("--save", "-s", is_flag=True, help="Save results to config files")
+@click.option("--capital", type=float, default=100000, help="Initial capital for backtesting")
 def strategy_select(symbol, days, top, metric, no_walk_forward, regime, save, capital):
     """Evaluate all strategies and select the best performers for a symbol.
 
@@ -1012,9 +1039,6 @@ def strategy_select(symbol, days, top, metric, no_walk_forward, regime, save, ca
         amsterdam strategy select TSLA --regime high_volatility --save
     """
     import asyncio
-    import logging
-    import pandas as pd
-    from pathlib import Path
 
     from core.backtest.strategy_selector import StrategySelector
     from core.unified_data_pipeline import UnifiedDataPipeline
@@ -1038,7 +1062,7 @@ def strategy_select(symbol, days, top, metric, no_walk_forward, regime, save, ca
             data = pipeline.load_symbol_data(symbol)
 
         if data is None or data.empty:
-            click.secho(f"Error: Could not load data for {symbol}", fg='red')
+            click.secho(f"Error: Could not load data for {symbol}", fg="red")
             return
 
         # Limit to requested days
@@ -1048,7 +1072,7 @@ def strategy_select(symbol, days, top, metric, no_walk_forward, regime, save, ca
         click.echo(f"Loaded {len(data)} bars")
 
     except Exception as e:
-        click.secho(f"Error loading data: {e}", fg='red')
+        click.secho(f"Error loading data: {e}", fg="red")
         return
 
     # Run strategy selection
@@ -1061,39 +1085,38 @@ def strategy_select(symbol, days, top, metric, no_walk_forward, regime, save, ca
     try:
         selector = StrategySelector(data, initial_capital=capital)
         result = selector.select_best_strategies(
-            symbol=symbol,
-            top_n=top,
-            metric=metric,
-            use_walk_forward=not no_walk_forward,
-            verbose=True
+            symbol=symbol, top_n=top, metric=metric, use_walk_forward=not no_walk_forward, verbose=True
         )
 
         # Save if requested
         if save:
             routing_path, params_path = selector.save_to_config(result, regime=regime)
             click.echo()
-            click.secho("Configuration saved:", fg='green')
+            click.secho("Configuration saved:", fg="green")
             click.echo(f"  Routing: {routing_path}")
             click.echo(f"  Params:  {params_path}")
             click.echo()
             click.echo("Run 'amsterdam strategy show' to view current routing.")
 
     except Exception as e:
-        click.secho(f"Error during strategy selection: {e}", fg='red')
+        click.secho(f"Error during strategy selection: {e}", fg="red")
         import traceback
+
         traceback.print_exc()
 
 
-@strategy.command('optimize-multitf')
-@click.option('--symbols', '-s', required=True, help='Comma-separated symbols (e.g., AAPL,TSLA,MSFT)')
-@click.option('--timeframes', '-t', default='15min,30min,1hour',
-              help='Comma-separated timeframes to test')
-@click.option('--strategies', default='rsi,sma,meanreversion,bollinger',
-              help='Comma-separated strategies to test')
-@click.option('--days', '-d', type=int, default=750, help='Days of historical data')
-@click.option('--metric', type=click.Choice(['composite', 'sharpe_ratio', 'sortino_ratio', 'total_return']),
-              default='sharpe_ratio', help='Optimization metric')
-@click.option('--dry-run', is_flag=True, help='Preview without saving config')
+@strategy.command("optimize-multitf")
+@click.option("--symbols", "-s", required=True, help="Comma-separated symbols (e.g., AAPL,TSLA,MSFT)")
+@click.option("--timeframes", "-t", default="15min,30min,1hour", help="Comma-separated timeframes to test")
+@click.option("--strategies", default="rsi,sma,meanreversion,bollinger", help="Comma-separated strategies to test")
+@click.option("--days", "-d", type=int, default=750, help="Days of historical data")
+@click.option(
+    "--metric",
+    type=click.Choice(["composite", "sharpe_ratio", "sortino_ratio", "total_return"]),
+    default="sharpe_ratio",
+    help="Optimization metric",
+)
+@click.option("--dry-run", is_flag=True, help="Preview without saving config")
 def strategy_optimize_multitf(symbols, timeframes, strategies, days, metric, dry_run):
     """Optimize strategies across multiple timeframes.
 
@@ -1107,24 +1130,29 @@ def strategy_optimize_multitf(symbols, timeframes, strategies, days, metric, dry
         amsterdam strategy optimize-multitf -s AAPL,TSLA -d 365 --metric composite
         amsterdam strategy optimize-multitf -s AAPL --dry-run  # Preview without saving
     """
-    import sys
     import subprocess
+    import sys
 
     # Build command
     cmd = [
         sys.executable,
         str(APP_ROOT / "tools" / "optimize_routing_multitf.py"),
-        '--symbols', symbols,
-        '--timeframes', timeframes,
-        '--strategies', strategies,
-        '--days', str(days),
-        '--metric', metric
+        "--symbols",
+        symbols,
+        "--timeframes",
+        timeframes,
+        "--strategies",
+        strategies,
+        "--days",
+        str(days),
+        "--metric",
+        metric,
     ]
 
     if dry_run:
-        cmd.append('--dry-run')
+        cmd.append("--dry-run")
 
-    click.echo(f"Running multi-timeframe optimization...")
+    click.echo("Running multi-timeframe optimization...")
     click.echo(f"  Symbols: {symbols}")
     click.echo(f"  Timeframes: {timeframes}")
     click.echo(f"  Strategies: {strategies}")
@@ -1137,13 +1165,13 @@ def strategy_optimize_multitf(symbols, timeframes, strategies, days, metric, dry
 
     if result.returncode == 0 and not dry_run:
         click.echo()
-        click.secho("Optimization complete!", fg='green')
+        click.secho("Optimization complete!", fg="green")
         click.echo("Run 'amsterdam strategy show' to view routing configuration.")
     elif result.returncode != 0:
-        click.secho(f"Optimization failed with exit code {result.returncode}", fg='red')
+        click.secho(f"Optimization failed with exit code {result.returncode}", fg="red")
 
 
-@strategy.command('list')
+@strategy.command("list")
 def strategy_list():
     """List all available trading strategies."""
     from strategies.strategy_registry import list_strategies
@@ -1159,12 +1187,11 @@ def strategy_list():
     click.echo(f"\nTotal: {len(strategies)} strategies")
 
 
-@strategy.command('show')
-@click.option('--symbol', '-s', default=None, help='Show routing for specific symbol')
+@strategy.command("show")
+@click.option("--symbol", "-s", default=None, help="Show routing for specific symbol")
 def strategy_show(symbol):
     """Show current strategy routing configuration."""
     import json
-    from pathlib import Path
 
     config_dir = ROOT / "config"
     routing_path = config_dir / "strategy_routing.json"
@@ -1185,7 +1212,7 @@ def strategy_show(symbol):
         if symbol in routing:
             click.echo(f"\n{symbol}:")
             for regime, strat in routing[symbol].items():
-                if not regime.endswith('_ranked'):
+                if not regime.endswith("_ranked"):
                     click.echo(f"  {regime}: {strat}")
         else:
             click.echo(f"No routing configured for {symbol}")
@@ -1194,7 +1221,7 @@ def strategy_show(symbol):
             click.echo(f"\n{sym}:")
             if isinstance(regimes, dict):
                 for regime, strat in regimes.items():
-                    if not regime.endswith('_ranked'):
+                    if not regime.endswith("_ranked"):
                         click.echo(f"  {regime}: {strat}")
             else:
                 click.echo(f"  default: {regimes}")
@@ -1202,7 +1229,7 @@ def strategy_show(symbol):
     click.echo()
 
 
-@strategy.command('refresh')
+@strategy.command("refresh")
 def strategy_refresh():
     """Hot-reload strategy routing configuration.
 
@@ -1213,13 +1240,13 @@ def strategy_refresh():
     config_path = APP_ROOT / "config" / "strategy_routing.json"
 
     if not config_path.exists():
-        click.secho("No routing config found.", fg='yellow')
+        click.secho("No routing config found.", fg="yellow")
         return
 
     try:
         router = StrategyRoutingManager(str(config_path))
         router.refresh()
-        click.secho("Strategy routing reloaded successfully.", fg='green')
+        click.secho("Strategy routing reloaded successfully.", fg="green")
 
         # Show summary
         symbols = router.list_symbols()
@@ -1228,12 +1255,13 @@ def strategy_refresh():
             click.echo(f"  ... and {len(symbols) - 5} more")
 
     except Exception as e:
-        click.secho(f"Error reloading config: {e}", fg='red')
+        click.secho(f"Error reloading config: {e}", fg="red")
 
 
 # =============================================================================
 # BACKTEST COMMAND GROUP
 # =============================================================================
+
 
 @cli.group()
 def backtest():
@@ -1248,13 +1276,13 @@ def backtest():
     pass
 
 
-@backtest.command('run')
-@click.argument('symbol')
-@click.option('--strategy', '-s', default='sma', help='Strategy to backtest')
-@click.option('--days', '-d', type=int, default=365, help='Days of historical data')
-@click.option('--capital', type=float, default=10000, help='Initial capital')
-@click.option('--hybrid/--no-hybrid', default=False, help='Use hybrid sizing')
-@click.option('-v', '--verbose', is_flag=True, help='Verbose output')
+@backtest.command("run")
+@click.argument("symbol")
+@click.option("--strategy", "-s", default="sma", help="Strategy to backtest")
+@click.option("--days", "-d", type=int, default=365, help="Days of historical data")
+@click.option("--capital", type=float, default=10000, help="Initial capital")
+@click.option("--hybrid/--no-hybrid", default=False, help="Use hybrid sizing")
+@click.option("-v", "--verbose", is_flag=True, help="Verbose output")
 def backtest_run(symbol, strategy, days, capital, hybrid, verbose):
     """Run a backtest for a single strategy.
 
@@ -1265,8 +1293,9 @@ def backtest_run(symbol, strategy, days, capital, hybrid, verbose):
         amsterdam backtest run TSLA -s rsi -d 180 --capital 50000
     """
     import asyncio
+
+    from core.backtest.unified_backtest_runner import BacktestConfig, UnifiedBacktestRunner
     from core.unified_data_pipeline import UnifiedDataPipeline
-    from core.backtest.unified_backtest_runner import UnifiedBacktestRunner, BacktestConfig
 
     symbol = symbol.upper()
 
@@ -1287,7 +1316,7 @@ def backtest_run(symbol, strategy, days, capital, hybrid, verbose):
             data = pipeline.get_data(symbol)
 
         if data is None or data.empty:
-            click.secho(f"Error: Could not load data for {symbol}", fg='red')
+            click.secho(f"Error: Could not load data for {symbol}", fg="red")
             return
 
         if len(data) > days:
@@ -1296,7 +1325,7 @@ def backtest_run(symbol, strategy, days, capital, hybrid, verbose):
         click.echo(f"Loaded {len(data)} bars")
 
     except Exception as e:
-        click.secho(f"Error loading data: {e}", fg='red')
+        click.secho(f"Error loading data: {e}", fg="red")
         return
 
     # Run backtest
@@ -1337,20 +1366,24 @@ def backtest_run(symbol, strategy, days, capital, hybrid, verbose):
         click.echo("=" * 50)
 
     except Exception as e:
-        click.secho(f"Error running backtest: {e}", fg='red')
+        click.secho(f"Error running backtest: {e}", fg="red")
         import traceback
+
         traceback.print_exc()
 
 
-@backtest.command('compare')
-@click.argument('symbol')
-@click.option('--strategies', '-s', default='sma,ema,macd,rsi',
-              help='Comma-separated strategies to compare')
-@click.option('--days', '-d', type=int, default=365, help='Days of data')
-@click.option('--metric', '-m', default='sharpe_ratio',
-              type=click.Choice(['sharpe_ratio', 'total_return', 'sortino_ratio']),
-              help='Metric for ranking')
-@click.option('--capital', type=float, default=10000, help='Initial capital')
+@backtest.command("compare")
+@click.argument("symbol")
+@click.option("--strategies", "-s", default="sma,ema,macd,rsi", help="Comma-separated strategies to compare")
+@click.option("--days", "-d", type=int, default=365, help="Days of data")
+@click.option(
+    "--metric",
+    "-m",
+    default="sharpe_ratio",
+    type=click.Choice(["sharpe_ratio", "total_return", "sortino_ratio"]),
+    help="Metric for ranking",
+)
+@click.option("--capital", type=float, default=10000, help="Initial capital")
 def backtest_compare(symbol, strategies, days, metric, capital):
     """Compare multiple strategies.
 
@@ -1361,23 +1394,27 @@ def backtest_compare(symbol, strategies, days, metric, capital):
     """
     # Delegate to compare_strategies tool
     cmd = [
-        sys.executable, str(APP_ROOT / "tools" / "compare_strategies.py"),
+        sys.executable,
+        str(APP_ROOT / "tools" / "compare_strategies.py"),
         symbol.upper(),
-        "-s", strategies,
-        "-d", str(days),
-        "-m", metric,
-        "--capital", str(capital),
+        "-s",
+        strategies,
+        "-d",
+        str(days),
+        "-m",
+        metric,
+        "--capital",
+        str(capital),
     ]
 
     os.execv(sys.executable, cmd)
 
 
-@backtest.command('hybrid')
-@click.argument('symbol')
-@click.option('--strategies', '-s', default='sma,macd,rsi',
-              help='Comma-separated strategies')
-@click.option('--days', '-d', type=int, default=365, help='Days of data')
-@click.option('--capital', type=float, default=10000, help='Initial capital')
+@backtest.command("hybrid")
+@click.argument("symbol")
+@click.option("--strategies", "-s", default="sma,macd,rsi", help="Comma-separated strategies")
+@click.option("--days", "-d", type=int, default=365, help="Days of data")
+@click.option("--capital", type=float, default=10000, help="Initial capital")
 def backtest_hybrid(symbol, strategies, days, capital):
     """Compare hybrid vs standard sizing.
 
@@ -1388,23 +1425,26 @@ def backtest_hybrid(symbol, strategies, days, capital):
     """
     # Delegate to compare_strategies tool with hybrid flag
     cmd = [
-        sys.executable, str(APP_ROOT / "tools" / "compare_strategies.py"),
+        sys.executable,
+        str(APP_ROOT / "tools" / "compare_strategies.py"),
         symbol.upper(),
-        "-s", strategies,
-        "-d", str(days),
-        "--capital", str(capital),
+        "-s",
+        strategies,
+        "-d",
+        str(days),
+        "--capital",
+        str(capital),
         "--hybrid-comparison",
     ]
 
     os.execv(sys.executable, cmd)
 
 
-@backtest.command('categories')
-@click.argument('symbol')
-@click.option('--categories', '-c', default='trend_following,mean_reversion',
-              help='Comma-separated categories')
-@click.option('--days', '-d', type=int, default=365, help='Days of data')
-@click.option('--capital', type=float, default=10000, help='Initial capital')
+@backtest.command("categories")
+@click.argument("symbol")
+@click.option("--categories", "-c", default="trend_following,mean_reversion", help="Comma-separated categories")
+@click.option("--days", "-d", type=int, default=365, help="Days of data")
+@click.option("--capital", type=float, default=10000, help="Initial capital")
 def backtest_categories(symbol, categories, days, capital):
     """Compare strategy categories.
 
@@ -1421,22 +1461,26 @@ def backtest_categories(symbol, categories, days, capital):
     """
     # Delegate to compare_strategies tool
     cmd = [
-        sys.executable, str(APP_ROOT / "tools" / "compare_strategies.py"),
+        sys.executable,
+        str(APP_ROOT / "tools" / "compare_strategies.py"),
         symbol.upper(),
-        "--categories", categories,
-        "-d", str(days),
-        "--capital", str(capital),
+        "--categories",
+        categories,
+        "-d",
+        str(days),
+        "--capital",
+        str(capital),
     ]
 
     os.execv(sys.executable, cmd)
 
 
-@backtest.command('full')
-@click.argument('symbol')
-@click.option('--strategies', '-s', default=None, help='Strategies to include')
-@click.option('--days', '-d', type=int, default=365, help='Days of data')
-@click.option('-o', '--output', default=None, help='Output file (.md or .json)')
-@click.option('--capital', type=float, default=10000, help='Initial capital')
+@backtest.command("full")
+@click.argument("symbol")
+@click.option("--strategies", "-s", default=None, help="Strategies to include")
+@click.option("--days", "-d", type=int, default=365, help="Days of data")
+@click.option("-o", "--output", default=None, help="Output file (.md or .json)")
+@click.option("--capital", type=float, default=10000, help="Initial capital")
 def backtest_full(symbol, strategies, days, output, capital):
     """Run full comparison analysis.
 
@@ -1447,10 +1491,13 @@ def backtest_full(symbol, strategies, days, output, capital):
         amsterdam backtest full TSLA -s sma,macd,rsi,momentum --days 180
     """
     cmd = [
-        sys.executable, str(APP_ROOT / "tools" / "compare_strategies.py"),
+        sys.executable,
+        str(APP_ROOT / "tools" / "compare_strategies.py"),
         symbol.upper(),
-        "-d", str(days),
-        "--capital", str(capital),
+        "-d",
+        str(days),
+        "--capital",
+        str(capital),
         "--full",
     ]
 
@@ -1463,14 +1510,18 @@ def backtest_full(symbol, strategies, days, output, capital):
     os.execv(sys.executable, cmd)
 
 
-@backtest.command('optimize')
-@click.argument('mode', required=False, default=None)
-@click.option('--symbols', '-s', default=None, help='Comma-separated symbols (default: all)')
-@click.option('--days', '-d', type=int, default=365, help='Days of data')
-@click.option('--strategies', default=None, help='Comma-separated strategies to test')
-@click.option('--timeframes', '-t', default=None,
-              help='Comma-separated timeframes (e.g., 15min,30min,1hour) - enables multi-TF optimization')
-@click.option('--dry-run', is_flag=True, help="Don't save config")
+@backtest.command("optimize")
+@click.argument("mode", required=False, default=None)
+@click.option("--symbols", "-s", default=None, help="Comma-separated symbols (default: all)")
+@click.option("--days", "-d", type=int, default=365, help="Days of data")
+@click.option("--strategies", default=None, help="Comma-separated strategies to test")
+@click.option(
+    "--timeframes",
+    "-t",
+    default=None,
+    help="Comma-separated timeframes (e.g., 15min,30min,1hour) - enables multi-TF optimization",
+)
+@click.option("--dry-run", is_flag=True, help="Don't save config")
 def backtest_optimize(mode, symbols, days, strategies, timeframes, dry_run):
     """Optimize strategy routing for all symbols.
 
@@ -1491,22 +1542,22 @@ def backtest_optimize(mode, symbols, days, strategies, timeframes, dry_run):
         amsterdam backtest optimize --dry-run               # Don't save
     """
     # Handle 'all' mode - comprehensive optimization
-    if mode == 'all':
+    if mode == "all":
         # Default to all strategies
         if not strategies:
-            strategies = 'adx,bollinger,breakout,combined,donchian,ema,ichimoku,logisticregression,macd,meanreversion,momentum,psar,rsi,sma,stochastic,vwap'
+            strategies = "adx,bollinger,breakout,combined,donchian,ema,ichimoku,logisticregression,macd,meanreversion,momentum,psar,rsi,sma,stochastic,vwap"
 
         # Default to all timeframes
         if not timeframes:
-            timeframes = '15min,30min,1hour,day'
+            timeframes = "15min,30min,1hour,day"
 
         # Default to 750 days for comprehensive backtest
         if days == 365:  # If using default value
             days = 750
 
         click.echo("Running comprehensive optimization:")
-        click.echo(f"  • All 16 strategies")
-        click.echo(f"  • All 4 timeframes (15min, 30min, 1hour, day)")
+        click.echo("  • All 16 strategies")
+        click.echo("  • All 4 timeframes (15min, 30min, 1hour, day)")
         click.echo(f"  • {days} days of data")
         click.echo()
 
@@ -1514,15 +1565,20 @@ def backtest_optimize(mode, symbols, days, strategies, timeframes, dry_run):
     if timeframes:
         # Use multi-timeframe optimizer
         cmd = [
-            sys.executable, str(APP_ROOT / "tools" / "optimize_routing_multitf.py"),
-            "-d", str(days),
-            "--timeframes", timeframes,
+            sys.executable,
+            str(APP_ROOT / "tools" / "optimize_routing_multitf.py"),
+            "-d",
+            str(days),
+            "--timeframes",
+            timeframes,
         ]
     else:
         # Use single-timeframe optimizer (backward compatible)
         cmd = [
-            sys.executable, str(APP_ROOT / "tools" / "optimize_routing.py"),
-            "-d", str(days),
+            sys.executable,
+            str(APP_ROOT / "tools" / "optimize_routing.py"),
+            "-d",
+            str(days),
         ]
 
     if symbols:
@@ -1541,6 +1597,7 @@ def backtest_optimize(mode, symbols, days, strategies, timeframes, dry_run):
 # SCANNER
 # =============================================================================
 
+
 @cli.group()
 def scan():
     """Stock scanner — screen and rank symbols for trading.
@@ -1555,18 +1612,19 @@ def scan():
     pass
 
 
-@scan.command('run')
-@click.option('-s', '--symbols', default=None, help='Comma-separated symbols to scan (overrides universe)')
-@click.option('-u', '--universe', default=None, type=click.Choice(['sp500', 'custom', 'watchlist', 'all']),
-              help='Universe source')
-@click.option('--apply', 'apply_results', is_flag=True, default=False,
-              help='Auto-update trade/watch lists with results')
-@click.option('--optimize', is_flag=True, default=False,
-              help='Run regime backtest optimization on trade candidates')
-@click.option('-d', '--days', default=365, type=int, help='Days of data for optimization (default: 365)')
-@click.option('-n', '--top', default=20, help='Number of results to display')
-@click.option('--min-score', default=0.0, type=float, help='Minimum score filter')
-@click.option('--json-output', is_flag=True, default=False, help='Output results as JSON')
+@scan.command("run")
+@click.option("-s", "--symbols", default=None, help="Comma-separated symbols to scan (overrides universe)")
+@click.option(
+    "-u", "--universe", default=None, type=click.Choice(["sp500", "custom", "watchlist", "all"]), help="Universe source"
+)
+@click.option(
+    "--apply", "apply_results", is_flag=True, default=False, help="Auto-update trade/watch lists with results"
+)
+@click.option("--optimize", is_flag=True, default=False, help="Run regime backtest optimization on trade candidates")
+@click.option("-d", "--days", default=365, type=int, help="Days of data for optimization (default: 365)")
+@click.option("-n", "--top", default=20, help="Number of results to display")
+@click.option("--min-score", default=0.0, type=float, help="Minimum score filter")
+@click.option("--json-output", is_flag=True, default=False, help="Output results as JSON")
 def scan_run(symbols, universe, apply_results, optimize, days, top, min_score, json_output):
     """Run the stock scanner.
 
@@ -1574,6 +1632,7 @@ def scan_run(symbols, universe, apply_results, optimize, days, top, min_score, j
     Use --optimize to also run regime backtest and assign best strategies.
     """
     import json as json_mod
+
     from core.config_loader import get_config
     from scanner.engine import get_scanner
 
@@ -1591,7 +1650,9 @@ def scan_run(symbols, universe, apply_results, optimize, days, top, min_score, j
     if symbols:
         symbol_list = [s.strip().upper() for s in symbols.split(",")]
 
-    click.echo(f"Scanning {'universe: ' + (universe or cfg.scanner.universe_source) if not symbol_list else str(len(symbol_list)) + ' symbols'}...")
+    click.echo(
+        f"Scanning {'universe: ' + (universe or cfg.scanner.universe_source) if not symbol_list else str(len(symbol_list)) + ' symbols'}..."
+    )
 
     report = scanner.scan(symbols=symbol_list, update_lists=apply_results)
 
@@ -1602,12 +1663,12 @@ def scan_run(symbols, universe, apply_results, optimize, days, top, min_score, j
     # Display results table
     click.echo(f"\nScan completed in {report.duration_seconds}s — {report.universe_size} symbols screened")
     if report.errors:
-        click.secho(f"  {len(report.errors)} errors encountered", fg='yellow')
+        click.secho(f"  {len(report.errors)} errors encountered", fg="yellow")
     click.echo()
 
     results = [r for r in report.top_n(top) if r.total_score >= min_score]
     if not results:
-        click.secho("No symbols matched the criteria.", fg='yellow')
+        click.secho("No symbols matched the criteria.", fg="yellow")
         return
 
     # Header
@@ -1615,13 +1676,13 @@ def scan_run(symbols, universe, apply_results, optimize, days, top, min_score, j
     click.echo("-" * 85)
 
     for i, r in enumerate(results, 1):
-        rec_color = {'trade': 'green', 'watch': 'yellow', 'skip': 'white'}.get(r.recommendation, 'white')
+        rec_color = {"trade": "green", "watch": "yellow", "skip": "white"}.get(r.recommendation, "white")
 
-        rsi = r.metadata.get('RSI')
+        rsi = r.metadata.get("RSI")
         rsi_str = f"{rsi:.1f}" if rsi is not None else "—"
 
-        vol = r.metadata.get('volume')
-        avg_vol = r.metadata.get('avg_volume_20')
+        vol = r.metadata.get("volume")
+        avg_vol = r.metadata.get("avg_volume_20")
         vol_ratio = f"{vol / avg_vol:.1f}x" if vol and avg_vol and avg_vol > 0 else "—"
 
         criteria_str = " | ".join(f"{k}={v:.2f}" for k, v in r.criteria_scores.items())
@@ -1634,30 +1695,31 @@ def scan_run(symbols, universe, apply_results, optimize, days, top, min_score, j
     trade_count = len(report.trade_candidates())
     watch_count = len(report.watch_candidates())
     click.echo()
-    click.secho(f"Trade candidates: {trade_count}", fg='green')
-    click.secho(f"Watch candidates: {watch_count}", fg='yellow')
+    click.secho(f"Trade candidates: {trade_count}", fg="green")
+    click.secho(f"Watch candidates: {watch_count}", fg="yellow")
 
     if apply_results:
-        click.secho(f"\nTrade/watch lists updated.", fg='green')
+        click.secho("\nTrade/watch lists updated.", fg="green")
 
     if optimize:
         trade_syms = report.trade_candidates()
         if not trade_syms:
-            click.secho("\nNo trade candidates to optimize.", fg='yellow')
+            click.secho("\nNo trade candidates to optimize.", fg="yellow")
         else:
             click.echo(f"\nOptimizing strategies for {len(trade_syms)} trade candidates ({days} days)...")
             opt_results = scanner.optimize_strategies(symbols=trade_syms, days=days)
             for sym, strategies in opt_results.items():
                 strat_str = ", ".join(f"{regime}={strat}" for regime, strat in strategies.items())
                 click.echo(f"  {sym}: {strat_str}")
-            click.secho(f"\nStrategy routing updated for {len(opt_results)} symbols.", fg='green')
+            click.secho(f"\nStrategy routing updated for {len(opt_results)} symbols.", fg="green")
 
 
-@scan.command('results')
-@click.option('--json-output', is_flag=True, default=False, help='Output as JSON')
+@scan.command("results")
+@click.option("--json-output", is_flag=True, default=False, help="Output as JSON")
 def scan_results(json_output):
     """Show the last scan report."""
     import json as json_mod
+
     from core.config_loader import get_config
     from scanner.engine import get_scanner
 
@@ -1666,7 +1728,7 @@ def scan_results(json_output):
 
     report = scanner.last_report
     if not report:
-        click.secho("No scan results available. Run 'amsterdam scan run' first.", fg='yellow')
+        click.secho("No scan results available. Run 'amsterdam scan run' first.", fg="yellow")
         return
 
     if json_output:
@@ -1679,10 +1741,10 @@ def scan_results(json_output):
         click.echo(f"Duration: {report.duration_seconds}s")
 
 
-@scan.command('apply')
-@click.option('-t', '--trade-count', default=None, type=int, help='Max trade symbols to add')
-@click.option('-w', '--watch-count', default=None, type=int, help='Max watch symbols to add')
-@click.confirmation_option(prompt='Apply scan results to trade/watch lists?')
+@scan.command("apply")
+@click.option("-t", "--trade-count", default=None, type=int, help="Max trade symbols to add")
+@click.option("-w", "--watch-count", default=None, type=int, help="Max watch symbols to add")
+@click.confirmation_option(prompt="Apply scan results to trade/watch lists?")
 def scan_apply(trade_count, watch_count):
     """Apply last scan results to trade/watch lists."""
     from core.config_loader import get_config
@@ -1694,7 +1756,7 @@ def scan_apply(trade_count, watch_count):
 
     report = scanner.last_report
     if not report:
-        click.secho("No scan results available. Run 'amsterdam scan run' first.", fg='yellow')
+        click.secho("No scan results available. Run 'amsterdam scan run' first.", fg="yellow")
         return
 
     manager = get_list_manager()
@@ -1724,17 +1786,18 @@ def scan_apply(trade_count, watch_count):
                 added["watch"] += 1
                 click.echo(f"  + {result.symbol} -> watch (score={result.total_score})")
 
-    click.secho(f"\nAdded {added['trade']} to trade, {added['watch']} to watch.", fg='green')
+    click.secho(f"\nAdded {added['trade']} to trade, {added['watch']} to watch.", fg="green")
 
 
 # =============================================================================
 # MAIN
 # =============================================================================
 
+
 def main():
     """Entry point for the CLI."""
     cli()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

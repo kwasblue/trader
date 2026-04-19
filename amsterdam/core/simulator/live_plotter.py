@@ -6,7 +6,7 @@ import asyncio
 import threading
 from collections import deque
 from dataclasses import dataclass
-from typing import Dict, Deque, List, Optional, Tuple, Any
+from typing import Any
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -50,10 +50,10 @@ class AsyncLivePlotter:
 
     def __init__(
         self,
-        symbols: List[str],
+        symbols: list[str],
         window: int = 500,
         refresh_hz: int = 5,
-        backend: Optional[str] = None,    # e.g. "Agg" for headless
+        backend: str | None = None,  # e.g. "Agg" for headless
         save_snapshots: bool = False,
         snapshot_path: str = "plots/live_snapshot.png",
     ):
@@ -67,22 +67,22 @@ class AsyncLivePlotter:
         self.snapshot_path = snapshot_path
 
         # Buffers
-        self._prices: Dict[str, Deque[float]] = {s: deque(maxlen=window) for s in self.symbols}
-        self._times: Dict[str, Deque[Any]] = {s: deque(maxlen=window) for s in self.symbols}
-        self._volumes: Dict[str, Deque[float]] = {s: deque(maxlen=window) for s in self.symbols}
-        self._signals: Dict[str, Deque[Tuple[Any, int]]] = {s: deque(maxlen=window) for s in self.symbols}
-        self._pnl: Dict[str, Deque[Tuple[Any, float]]] = {s: deque(maxlen=window) for s in self.symbols}
-        self._trades: Dict[str, List[TradeMarker]] = {s: [] for s in self.symbols}
+        self._prices: dict[str, deque[float]] = {s: deque(maxlen=window) for s in self.symbols}
+        self._times: dict[str, deque[Any]] = {s: deque(maxlen=window) for s in self.symbols}
+        self._volumes: dict[str, deque[float]] = {s: deque(maxlen=window) for s in self.symbols}
+        self._signals: dict[str, deque[tuple[Any, int]]] = {s: deque(maxlen=window) for s in self.symbols}
+        self._pnl: dict[str, deque[tuple[Any, float]]] = {s: deque(maxlen=window) for s in self.symbols}
+        self._trades: dict[str, list[TradeMarker]] = {s: [] for s in self.symbols}
 
         # Plot objects
-        self._fig: Optional[plt.Figure] = None
-        self._axes: Dict[str, plt.Axes] = {}
+        self._fig: plt.Figure | None = None
+        self._axes: dict[str, plt.Axes] = {}
 
         # Control
         self._lock = threading.Lock()
         self._dirty = False
         self._running = False
-        self._task: Optional[asyncio.Task] = None
+        self._task: asyncio.Task | None = None
 
         self._logger = _Logger("plotter.log", self.__class__.__name__).get_logger()
         self._logger.info("AsyncLivePlotter initialized")
@@ -186,7 +186,7 @@ class AsyncLivePlotter:
         with self._lock:
             times = {s: list(self._times[s]) for s in self.symbols}
             prices = {s: list(self._prices[s]) for s in self.symbols}
-            volumes = {s: list(self._volumes[s]) for s in self.symbols}
+            {s: list(self._volumes[s]) for s in self.symbols}
             signals = {s: list(self._signals[s]) for s in self.symbols}
             pnl = {s: list(self._pnl[s]) for s in self.symbols}
             trades = {s: list(self._trades[s]) for s in self.symbols}
@@ -215,7 +215,7 @@ class AsyncLivePlotter:
             # Signals (optional markers at current price)
             if signals[sym] and prices[sym]:
                 latest_px = prices[sym][-1]
-                for (ts, sig) in signals[sym][-min(20, len(signals[sym])):]:
+                for ts, sig in signals[sym][-min(20, len(signals[sym])) :]:
                     if sig == 1:
                         ax.plot(ts, latest_px, "^", alpha=0.3)
                     elif sig == -1:

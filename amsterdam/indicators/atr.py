@@ -1,5 +1,7 @@
-from core.base.base_indicator import BaseIndicator
 import pandas as pd
+
+from core.base.base_indicator import BaseIndicator
+
 
 class ATRIndicator(BaseIndicator):
     def __init__(self, df, window=14):
@@ -7,9 +9,9 @@ class ATRIndicator(BaseIndicator):
         self.window = window
 
     def compute(self):
-        high_low = self.df['High'] - self.df['Low']
-        high_close = (self.df['High'] - self.df['Close'].shift()).abs()
-        low_close = (self.df['Low'] - self.df['Close'].shift()).abs()
+        high_low = self.df["High"] - self.df["Low"]
+        high_close = (self.df["High"] - self.df["Close"].shift()).abs()
+        low_close = (self.df["Low"] - self.df["Close"].shift()).abs()
         tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
-        self.df['ATR'] = tr.rolling(window=self.window).mean()
+        self.df["ATR"] = tr.rolling(window=self.window).mean()
         return self.df

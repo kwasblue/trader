@@ -15,9 +15,10 @@ Usage:
     # Or create directly
     runner = RunnerFactory.create("schwab", symbols=["AAPL"], config=config)
 """
+
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Dict, List, Optional, Type
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from core.base.base_live_runner import BaseLiveRunner
@@ -32,7 +33,7 @@ class RunnerFactory:
     All runners must inherit from BaseLiveRunner.
     """
 
-    _registry: Dict[str, Type["BaseLiveRunner"]] = {}
+    _registry: dict[str, type[BaseLiveRunner]] = {}
     _loaded: bool = False
 
     @classmethod
@@ -45,18 +46,21 @@ class RunnerFactory:
         # These imports are deferred to avoid circular dependencies
         try:
             from core.alpaca_runner import AlpacaLiveRunner
+
             cls._registry["alpaca"] = AlpacaLiveRunner
         except ImportError:
             pass  # Alpaca dependencies not installed
 
         try:
             from core.schwab_runner import SchwabLiveRunner
+
             cls._registry["schwab"] = SchwabLiveRunner
         except ImportError:
             pass  # Schwab dependencies not installed
 
         try:
             from core.schwab_runner_multitf import SchwabLiveRunnerMultiTF
+
             cls._registry["schwab_multitf"] = SchwabLiveRunnerMultiTF
             cls._registry["schwab-mtf"] = SchwabLiveRunnerMultiTF  # Alias
         except ImportError:
@@ -64,6 +68,7 @@ class RunnerFactory:
 
         try:
             from core.alpaca_schwab_hybrid_runner import AlpacaSchwabHybridRunner
+
             cls._registry["alpaca-schwab"] = AlpacaSchwabHybridRunner
             cls._registry["alpaca_schwab"] = AlpacaSchwabHybridRunner  # Alias
             cls._registry["hybrid"] = AlpacaSchwabHybridRunner  # Alias
@@ -73,7 +78,7 @@ class RunnerFactory:
         cls._loaded = True
 
     @classmethod
-    def register(cls, name: str, runner_class: Type["BaseLiveRunner"]) -> None:
+    def register(cls, name: str, runner_class: type[BaseLiveRunner]) -> None:
         """
         Register a runner class.
 
@@ -90,7 +95,7 @@ class RunnerFactory:
         cls._registry[name.lower()] = runner_class
 
     @classmethod
-    def get(cls, broker: str) -> Type["BaseLiveRunner"]:
+    def get(cls, broker: str) -> type[BaseLiveRunner]:
         """
         Get a runner class by broker name.
 
@@ -108,21 +113,12 @@ class RunnerFactory:
         broker_lower = broker.lower()
         if broker_lower not in cls._registry:
             available = ", ".join(cls._registry.keys())
-            raise ValueError(
-                f"Unknown broker: '{broker}'. "
-                f"Available brokers: {available}"
-            )
+            raise ValueError(f"Unknown broker: '{broker}'. Available brokers: {available}")
 
         return cls._registry[broker_lower]
 
     @classmethod
-    def create(
-        cls,
-        broker: str,
-        symbols: List[str],
-        config: Optional["TradingConfig"] = None,
-        **kwargs
-    ) -> "BaseLiveRunner":
+    def create(cls, broker: str, symbols: list[str], config: TradingConfig | None = None, **kwargs) -> BaseLiveRunner:
         """
         Create a runner instance.
 
@@ -147,7 +143,7 @@ class RunnerFactory:
         return runner_class(symbols=symbols, config=config, **kwargs)
 
     @classmethod
-    def available_brokers(cls) -> List[str]:
+    def available_brokers(cls) -> list[str]:
         """
         Get list of registered broker names.
 

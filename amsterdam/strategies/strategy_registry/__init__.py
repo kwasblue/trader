@@ -1,6 +1,7 @@
-import pkgutil
 import importlib
 import inspect
+import pkgutil
+
 from core.base.base_strategy import BaseStrategy
 
 STRATEGY_MAP = {}
@@ -12,6 +13,7 @@ for _, module_name, _ in pkgutil.iter_modules(__path__):
         if issubclass(obj, BaseStrategy) and obj is not BaseStrategy:
             key = name.replace("Strategy", "").lower()  # e.g., 'SMAStrategy' → 'sma'
             STRATEGY_MAP[key] = obj
+
 
 def load_strategy(name, params=None):
     cls = STRATEGY_MAP.get(name)
@@ -26,6 +28,7 @@ def load_strategy(name, params=None):
             # Fallback for strategies expecting params as dict
             return cls(params)
     return cls()
+
 
 def list_strategies():
     return list(STRATEGY_MAP.keys())

@@ -3,7 +3,7 @@
 This module provides unified initialization for all Amsterdam entrypoints.
 """
 
-from app.bootstrap import bootstrap_app, AppContext
+from app.bootstrap import AppContext, bootstrap_app
 from app.container import AppContainer
 
-__all__ = ['bootstrap_app', 'AppContext', 'AppContainer']
+__all__ = ["bootstrap_app", "AppContext", "AppContainer"]

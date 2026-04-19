@@ -16,18 +16,13 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-from typing import Optional, List
-from datetime import datetime, timezone
-from loggers.logger import Logger
+from datetime import datetime
 
 from core.enums import PositionState
+from loggers.logger import Logger
 
 # Module-level logger instance
-_logger_instance = Logger(
-    log_file="symbol_state.log",
-    logger_name="SymbolState",
-    propagate=True
-)
+_logger_instance = Logger(log_file="symbol_state.log", logger_name="SymbolState", propagate=True)
 logger = _logger_instance.get_logger()
 
 
@@ -35,30 +30,30 @@ logger = _logger_instance.get_logger()
 class SymbolState:
     """
     Per-symbol trading state.
-    
+
     Tracks all information needed for trade logic decisions and
     position management for a single symbol.
-    
+
     Position State:
     - side: "long", "short", or None
     - current_position: Quantity (from portfolio)
     - entry_price: Average entry price
-    
+
     Risk Management:
     - stop_loss: Stop loss price level
     - take_profit: Take profit price level
     - partial_exit_targets: List of partial exit prices
-    
+
     Performance Tracking:
     - bars_held: Bars since entry
     - max_favorable_excursion: Best price move
     - max_adverse_excursion: Worst price move
-    
+
     Trade Logic:
     - pyramid_layer: Number of adds to position
     - last_trade_time: When last trade occurred
     - strategy_name: Active strategy
-    
+
     Example:
         state = SymbolState(symbol="AAPL")
 
@@ -76,72 +71,72 @@ class SymbolState:
         # Position closed
         state.reset()
     """
-    
+
     # Core identification
     symbol: str
-    
+
     # Position state (synced from portfolio)
-    side: Optional[str] = None  # "long", "short", or None
-    current_position: int = 0    # Actual position from portfolio
-    entry_price: Optional[float] = None
-    
+    side: str | None = None  # "long", "short", or None
+    current_position: int = 0  # Actual position from portfolio
+    entry_price: float | None = None
+
     # Risk management levels
-    stop_loss: Optional[float] = None
-    take_profit: Optional[float] = None
-    partial_exit_targets: List[float] = field(default_factory=list)
-    
+    stop_loss: float | None = None
+    take_profit: float | None = None
+    partial_exit_targets: list[float] = field(default_factory=list)
+
     # Position tracking
     pyramid_layer: int = 0
     bars_held: int = 0
-    last_trade_time: Optional[datetime] = None
-    entry_date: Optional[datetime] = None  # Date position was opened (for swing mode)
-    
+    last_trade_time: datetime | None = None
+    entry_date: datetime | None = None  # Date position was opened (for swing mode)
+
     # Performance metrics
-    max_favorable_excursion: Optional[float] = None  # MFE
-    max_adverse_excursion: Optional[float] = None    # MAE
-    
+    max_favorable_excursion: float | None = None  # MFE
+    max_adverse_excursion: float | None = None  # MAE
+
     # Strategy tracking
-    strategy_name: Optional[str] = None
-    entry_regime: Optional[str] = None  # Regime when position was opened
-    
+    strategy_name: str | None = None
+    entry_regime: str | None = None  # Regime when position was opened
+
     # Legacy/optional fields
     portfolio_value: float = 0.0  # For reference if needed
 
     # Concurrency control
     position_state: PositionState = PositionState.NONE
-    pending_order_id: Optional[str] = None
+    pending_order_id: str | None = None
 
     # Meta trade logging (for ML training)
-    trade_id: Optional[str] = None  # Links entry/exit for meta-model training
+    trade_id: str | None = None  # Links entry/exit for meta-model training
 
     def __post_init__(self):
         """Initialize asyncio lock for thread-safe operations."""
         self._lock = asyncio.Lock()
-    
+
     # ========================================================================
     # PROPERTIES
     # ========================================================================
-    
+
     @property
     def is_long(self) -> bool:
         """Check if currently long."""
         return self.side == "long"
-    
+
     @property
     def is_short(self) -> bool:
         """Check if currently short."""
         return self.side == "short"
-    
+
     @property
     def is_flat(self) -> bool:
         """Check if currently flat (no position)."""
         return self.side is None or self.current_position == 0
-    
+
     @property
     def is_in_position(self) -> bool:
         """Check if in any position."""
         return not self.is_flat
-    
+
     @property
     def unrealized_pnl(self) -> float:
         """
@@ -160,44 +155,44 @@ class SymbolState:
         # For accurate P&L, portfolio should be used.
         # Return 0.0 rather than None to avoid None propagation.
         return 0.0
-    
+
     @property
     def has_stop_loss(self) -> bool:
         """Check if stop loss is set."""
         return self.stop_loss is not None
-    
+
     @property
     def has_take_profit(self) -> bool:
         """Check if take profit is set."""
         return self.take_profit is not None
-    
+
     @property
     def has_partial_targets(self) -> bool:
         """Check if partial exit targets exist."""
         return len(self.partial_exit_targets) > 0
-    
+
     # ========================================================================
     # PARTIAL TARGET HELPERS
     # ========================================================================
 
-    def pop_partial_target(self) -> Optional[float]:
+    def pop_partial_target(self) -> float | None:
         """
         Remove and return first partial target.
-        
+
         Call this after executing partial exit.
-        
+
         Returns:
             Target price, or None if no targets
         """
         if not self.has_partial_targets:
             return None
-        
+
         return self.partial_exit_targets.pop(0)
-    
+
     # ========================================================================
     # STATE MANAGEMENT
     # ========================================================================
-    
+
     def reset(self) -> None:
         """
         Reset state when position closed.
@@ -224,21 +219,17 @@ class SymbolState:
         self.entry_regime = None
 
         logger.debug(f"[{self.symbol}] State reset")
-    
-    def update_from_portfolio(
-        self,
-        qty: int,
-        avg_price: Optional[float] = None
-    ) -> None:
+
+    def update_from_portfolio(self, qty: int, avg_price: float | None = None) -> None:
         """
         Sync state from portfolio position.
-        
+
         Args:
             qty: Current position quantity
             avg_price: Average entry price (if available)
         """
         self.current_position = qty
-        
+
         # Determine side from quantity
         if qty > 0:
             self.side = "long"
@@ -246,78 +237,78 @@ class SymbolState:
             self.side = "short"
         else:
             self.side = None
-        
+
         # Update entry price if provided and we're in position
         if avg_price is not None and qty != 0:
             self.entry_price = avg_price
         elif qty == 0:
             self.entry_price = None
-    
+
     # ========================================================================
     # UTILITY METHODS
     # ========================================================================
-    
-    def get_risk_distance(self) -> Optional[float]:
+
+    def get_risk_distance(self) -> float | None:
         """
         Get distance from entry to stop loss.
-        
+
         Returns:
             Distance in dollars, or None if no stop
         """
         if self.entry_price is None or self.stop_loss is None:
             return None
-        
+
         return abs(self.entry_price - self.stop_loss)
-    
-    def get_reward_distance(self) -> Optional[float]:
+
+    def get_reward_distance(self) -> float | None:
         """
         Get distance from entry to take profit.
-        
+
         Returns:
             Distance in dollars, or None if no target
         """
         if self.entry_price is None or self.take_profit is None:
             return None
-        
+
         return abs(self.take_profit - self.entry_price)
-    
-    def get_risk_reward_ratio(self) -> Optional[float]:
+
+    def get_risk_reward_ratio(self) -> float | None:
         """
         Calculate risk/reward ratio.
-        
+
         Returns:
             Reward/risk ratio, or None if can't calculate
         """
         risk = self.get_risk_distance()
         reward = self.get_reward_distance()
-        
+
         if risk is None or reward is None or risk == 0:
             return None
-        
+
         return reward / risk
-    
+
     def to_dict(self) -> dict:
         """
         Convert state to dictionary.
-        
+
         Useful for logging or serialization.
-        
+
         Returns:
             Dictionary representation
         """
         return {
-            'symbol': self.symbol,
-            'side': self.side,
-            'position': self.current_position,
-            'entry_price': self.entry_price,
-            'stop_loss': self.stop_loss,
-            'take_profit': self.take_profit,
-            'bars_held': self.bars_held,
-            'mfe': self.max_favorable_excursion,
-            'mae': self.max_adverse_excursion,
-            'strategy': self.strategy_name,
+            "symbol": self.symbol,
+            "side": self.side,
+            "position": self.current_position,
+            "entry_price": self.entry_price,
+            "stop_loss": self.stop_loss,
+            "take_profit": self.take_profit,
+            "bars_held": self.bars_held,
+            "mfe": self.max_favorable_excursion,
+            "mae": self.max_adverse_excursion,
+            "strategy": self.strategy_name,
         }
-    
+
     def __repr__(self) -> str:
         position_str = f"{self.side.upper()} {abs(self.current_position)}" if self.side else "FLAT"
         return (

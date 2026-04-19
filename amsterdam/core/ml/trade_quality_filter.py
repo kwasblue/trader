@@ -28,11 +28,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Dict, Any, Tuple, Optional, List
+from typing import Any
+
 import numpy as np
 
 try:
     import joblib
+
     HAS_JOBLIB = True
 except ImportError:
     HAS_JOBLIB = False
@@ -49,24 +51,24 @@ class TradeQualityFilter:
     """
 
     DEFAULT_FEATURES = [
-        'feat_atr_percentile',
-        'feat_drawdown_portfolio_pct',
-        'feat_drawdown_symbol_pct',
-        'feat_position_size_pct',
-        'feat_hour_of_day',
-        'feat_day_of_week',
-        'feat_minutes_since_open',
-        'feat_bars_in_regime',
-        'feat_hours_since_last_trade',
-        'feat_signal_strength',
+        "feat_atr_percentile",
+        "feat_drawdown_portfolio_pct",
+        "feat_drawdown_symbol_pct",
+        "feat_position_size_pct",
+        "feat_hour_of_day",
+        "feat_day_of_week",
+        "feat_minutes_since_open",
+        "feat_bars_in_regime",
+        "feat_hours_since_last_trade",
+        "feat_signal_strength",
     ]
 
     def __init__(
         self,
-        model_path: Optional[str] = None,
+        model_path: str | None = None,
         min_confidence: float = 0.5,
         enabled: bool = True,
-        features: Optional[List[str]] = None,
+        features: list[str] | None = None,
     ):
         """
         Initialize trade quality filter.
@@ -88,17 +90,15 @@ class TradeQualityFilter:
 
         # Logger
         self.logger = Logger(
-            log_file="trade_quality_filter.log",
-            logger_name="TradeQualityFilter",
-            propagate=True
+            log_file="trade_quality_filter.log", logger_name="TradeQualityFilter", propagate=True
         ).get_logger()
 
         # Stats
         self.stats = {
-            'total_evaluated': 0,
-            'approved': 0,
-            'rejected': 0,
-            'avg_score': 0.0,
+            "total_evaluated": 0,
+            "approved": 0,
+            "rejected": 0,
+            "avg_score": 0.0,
         }
 
         if model_path and enabled:
@@ -129,14 +129,11 @@ class TradeQualityFilter:
             if metrics_path.exists():
                 with open(metrics_path) as f:
                     metrics = json.load(f)
-                    if 'features' in metrics:
-                        self.features = metrics['features']
+                    if "features" in metrics:
+                        self.features = metrics["features"]
 
             self._loaded = True
-            self.logger.info(
-                f"Loaded trade quality model: {model_path} "
-                f"(min_confidence={self.min_confidence})"
-            )
+            self.logger.info(f"Loaded trade quality model: {model_path} (min_confidence={self.min_confidence})")
             return True
 
         except Exception as e:
@@ -146,9 +143,9 @@ class TradeQualityFilter:
 
     def evaluate(
         self,
-        features: Dict[str, Any],
+        features: dict[str, Any],
         symbol: str = "",
-    ) -> Tuple[bool, float]:
+    ) -> tuple[bool, float]:
         """
         Evaluate a potential trade.
 
@@ -159,7 +156,7 @@ class TradeQualityFilter:
         Returns:
             (should_trade, confidence_score)
         """
-        self.stats['total_evaluated'] += 1
+        self.stats["total_evaluated"] += 1
 
         # If disabled or no model, approve all
         if not self.enabled or not self._loaded:
@@ -177,24 +174,18 @@ class TradeQualityFilter:
             prob = self.model.predict_proba(X)[0, 1]  # P(profitable)
 
             # Update running average
-            n = self.stats['total_evaluated']
-            self.stats['avg_score'] = (
-                (self.stats['avg_score'] * (n - 1) + prob) / n
-            )
+            n = self.stats["total_evaluated"]
+            self.stats["avg_score"] = (self.stats["avg_score"] * (n - 1) + prob) / n
 
             # Decision
             should_trade = prob >= self.min_confidence
 
             if should_trade:
-                self.stats['approved'] += 1
-                self.logger.debug(
-                    f"[{symbol}] APPROVED (score={prob:.3f} >= {self.min_confidence})"
-                )
+                self.stats["approved"] += 1
+                self.logger.debug(f"[{symbol}] APPROVED (score={prob:.3f} >= {self.min_confidence})")
             else:
-                self.stats['rejected'] += 1
-                self.logger.info(
-                    f"[{symbol}] REJECTED (score={prob:.3f} < {self.min_confidence})"
-                )
+                self.stats["rejected"] += 1
+                self.logger.info(f"[{symbol}] REJECTED (score={prob:.3f} < {self.min_confidence})")
 
             return should_trade, float(prob)
 
@@ -205,7 +196,7 @@ class TradeQualityFilter:
     def build_features(
         self,
         atr: float,
-        atr_history: List[float],
+        atr_history: list[float],
         portfolio_drawdown: float,
         symbol_drawdown: float,
         position_size_pct: float,
@@ -215,7 +206,7 @@ class TradeQualityFilter:
         bars_in_regime: int,
         hours_since_last_trade: float,
         signal_strength: int,
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         """
         Build feature dictionary from raw values.
 
@@ -228,34 +219,34 @@ class TradeQualityFilter:
             atr_percentile = 0.5
 
         return {
-            'feat_atr_percentile': atr_percentile,
-            'feat_drawdown_portfolio_pct': portfolio_drawdown,
-            'feat_drawdown_symbol_pct': symbol_drawdown,
-            'feat_position_size_pct': position_size_pct,
-            'feat_hour_of_day': hour,
-            'feat_day_of_week': day_of_week,
-            'feat_minutes_since_open': minutes_since_open,
-            'feat_bars_in_regime': bars_in_regime,
-            'feat_hours_since_last_trade': hours_since_last_trade,
-            'feat_signal_strength': signal_strength,
+            "feat_atr_percentile": atr_percentile,
+            "feat_drawdown_portfolio_pct": portfolio_drawdown,
+            "feat_drawdown_symbol_pct": symbol_drawdown,
+            "feat_position_size_pct": position_size_pct,
+            "feat_hour_of_day": hour,
+            "feat_day_of_week": day_of_week,
+            "feat_minutes_since_open": minutes_since_open,
+            "feat_bars_in_regime": bars_in_regime,
+            "feat_hours_since_last_trade": hours_since_last_trade,
+            "feat_signal_strength": signal_strength,
         }
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get filtering statistics."""
-        total = self.stats['total_evaluated']
+        total = self.stats["total_evaluated"]
         return {
             **self.stats,
-            'approval_rate': self.stats['approved'] / total if total > 0 else 0,
-            'rejection_rate': self.stats['rejected'] / total if total > 0 else 0,
+            "approval_rate": self.stats["approved"] / total if total > 0 else 0,
+            "rejection_rate": self.stats["rejected"] / total if total > 0 else 0,
         }
 
     def reset_stats(self) -> None:
         """Reset statistics."""
         self.stats = {
-            'total_evaluated': 0,
-            'approved': 0,
-            'rejected': 0,
-            'avg_score': 0.0,
+            "total_evaluated": 0,
+            "approved": 0,
+            "rejected": 0,
+            "avg_score": 0.0,
         }
 
     def set_min_confidence(self, value: float) -> None:
@@ -265,13 +256,10 @@ class TradeQualityFilter:
 
 
 # Singleton instance for easy access
-_default_filter: Optional[TradeQualityFilter] = None
+_default_filter: TradeQualityFilter | None = None
 
 
-def get_trade_filter(
-    model_path: str = "models/trade_quality_model.joblib",
-    **kwargs
-) -> TradeQualityFilter:
+def get_trade_filter(model_path: str = "models/trade_quality_model.joblib", **kwargs) -> TradeQualityFilter:
     """
     Get or create the default trade quality filter.
 
@@ -291,6 +279,6 @@ def get_trade_filter(
 
 
 __all__ = [
-    'TradeQualityFilter',
-    'get_trade_filter',
+    "TradeQualityFilter",
+    "get_trade_filter",
 ]

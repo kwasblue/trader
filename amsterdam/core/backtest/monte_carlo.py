@@ -4,29 +4,27 @@ Monte Carlo Simulation Module
 Provides Monte Carlo simulation for estimating strategy outcome distributions.
 """
 
-import numpy as np
-from typing import Dict, List, Tuple
 from dataclasses import dataclass
+
+import numpy as np
 
 
 @dataclass
 class MonteCarloResult:
     """Result of Monte Carlo simulation."""
+
     mean_return: float
     median_return: float
     std_return: float
-    percentiles: Dict[int, float]
-    max_drawdowns: List[float]
-    sharpe_ratios: List[float]
-    final_values: List[float]
-    confidence_interval_95: Tuple[float, float]
+    percentiles: dict[int, float]
+    max_drawdowns: list[float]
+    sharpe_ratios: list[float]
+    final_values: list[float]
+    confidence_interval_95: tuple[float, float]
 
 
 def monte_carlo_simulation(
-    trades: List[Dict],
-    initial_capital: float = 10000,
-    n_simulations: int = 1000,
-    seed: int = None
+    trades: list[dict], initial_capital: float = 10000, n_simulations: int = 1000, seed: int = None
 ) -> MonteCarloResult:
     """
     Monte Carlo simulation by randomizing trade order.
@@ -50,18 +48,18 @@ def monte_carlo_simulation(
         raise ValueError("No trades provided for Monte Carlo simulation")
 
     # Extract P&L from trades
-    trade_pnls = [t.get('pnl', 0) for t in trades if 'pnl' in t]
+    trade_pnls = [t.get("pnl", 0) for t in trades if "pnl" in t]
     if not trade_pnls:
         # Try to calculate from price and quantity
         trade_pnls = []
         for t in trades:
-            action = t.get('Action', '').upper()
-            price = t.get('Price', 0)
-            qty = t.get('Quantity', 0)
-            if action == 'SELL':
+            action = t.get("Action", "").upper()
+            price = t.get("Price", 0)
+            qty = t.get("Quantity", 0)
+            if action == "SELL":
                 # Approximate P&L (would need entry price for accuracy)
                 trade_pnls.append(price * qty * 0.01)  # Assume 1% profit
-            elif action == 'BUY':
+            elif action == "BUY":
                 trade_pnls.append(-price * qty * 0.01)  # Buying is cost
 
     if not trade_pnls:
@@ -108,20 +106,17 @@ def monte_carlo_simulation(
             25: np.percentile(returns, 25),
             50: np.percentile(returns, 50),
             75: np.percentile(returns, 75),
-            95: np.percentile(returns, 95)
+            95: np.percentile(returns, 95),
         },
         max_drawdowns=max_drawdowns,
         sharpe_ratios=sharpe_ratios,
         final_values=final_values.tolist(),
-        confidence_interval_95=(np.percentile(returns, 2.5), np.percentile(returns, 97.5))
+        confidence_interval_95=(np.percentile(returns, 2.5), np.percentile(returns, 97.5)),
     )
 
 
 def bootstrap_returns(
-    returns: np.ndarray,
-    n_simulations: int = 1000,
-    block_size: int = 20,
-    seed: int = None
+    returns: np.ndarray, n_simulations: int = 1000, block_size: int = 20, seed: int = None
 ) -> MonteCarloResult:
     """
     Block bootstrap simulation for returns series.
@@ -153,7 +148,7 @@ def bootstrap_returns(
         sampled_returns = []
 
         for idx in block_indices:
-            sampled_returns.extend(returns[idx:idx + block_size])
+            sampled_returns.extend(returns[idx : idx + block_size])
 
         sampled_returns = np.array(sampled_returns[:n_returns])
 
@@ -185,10 +180,10 @@ def bootstrap_returns(
             25: np.percentile(total_returns, 25),
             50: np.percentile(total_returns, 50),
             75: np.percentile(total_returns, 75),
-            95: np.percentile(total_returns, 95)
+            95: np.percentile(total_returns, 95),
         },
         max_drawdowns=max_drawdowns,
         sharpe_ratios=sharpe_ratios,
         final_values=final_values.tolist(),
-        confidence_interval_95=(np.percentile(total_returns, 2.5), np.percentile(total_returns, 97.5))
+        confidence_interval_95=(np.percentile(total_returns, 2.5), np.percentile(total_returns, 97.5)),
     )

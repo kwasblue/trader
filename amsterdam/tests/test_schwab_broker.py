@@ -10,14 +10,14 @@ Coverage:
 - Circuit breaker functionality
 - Event emission
 """
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime, timezone
-import asyncio
 
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+from core.app_types import BrokerSnapshot
 from core.broker.schwab_broker import SchwabBroker
 from core.utils.retry import CircuitBreaker, CircuitBreakerConfig, CircuitState
-from core.app_types import OrderResult, PositionView, BrokerSnapshot
 
 
 @pytest.fixture
@@ -33,7 +33,7 @@ def mock_client():
                 "availableFunds": 10000.0,
                 "buyingPower": 20000.0,
                 "liquidationValue": 25000.0,
-            }
+            },
         }
     }
     client.generate_order.return_value = {
@@ -41,11 +41,9 @@ def mock_client():
         "session": "NORMAL",
         "duration": "DAY",
         "orderStrategyType": "SINGLE",
-        "orderLegCollection": [{
-            "instruction": "BUY",
-            "quantity": 10,
-            "instrument": {"symbol": "AAPL", "assetType": "EQUITY"}
-        }]
+        "orderLegCollection": [
+            {"instruction": "BUY", "quantity": 10, "instrument": {"symbol": "AAPL", "assetType": "EQUITY"}}
+        ],
     }
     client.place_orders.return_value = {
         "orderId": "ORD123",
@@ -62,16 +60,14 @@ def mock_client():
         "orderId": "ORD123",
         "status": "FILLED",
     }
-    client.quote.return_value = {
-        "AAPL": {"lastPrice": 150.0}
-    }
+    client.quote.return_value = {"AAPL": {"lastPrice": 150.0}}
     return client
 
 
 @pytest.fixture
 def broker(mock_client):
     """Create a SchwabBroker instance with mocked client."""
-    with patch('core.broker.schwab_broker.get_event_handler') as mock_eh:
+    with patch("core.broker.schwab_broker.get_event_handler") as mock_eh:
         mock_eh.return_value = AsyncMock()
         broker = SchwabBroker(mock_client)
         return broker
@@ -189,12 +185,14 @@ class TestSchwabBrokerAccount:
         """Test retrieving position for a symbol."""
         mock_client.accounts_number.return_value = {
             "securitiesAccount": {
-                "positions": [{
-                    "instrument": {"symbol": "AAPL"},
-                    "longQuantity": 100,
-                    "shortQuantity": 0,
-                    "averagePrice": 145.0,
-                }]
+                "positions": [
+                    {
+                        "instrument": {"symbol": "AAPL"},
+                        "longQuantity": 100,
+                        "shortQuantity": 0,
+                        "averagePrice": 145.0,
+                    }
+                ]
             }
         }
 
@@ -238,19 +236,13 @@ class TestCircuitBreaker:
 
     def test_initial_state(self):
         """Test circuit breaker starts closed."""
-        cb = CircuitBreaker(
-            name="test",
-            config=CircuitBreakerConfig(failure_threshold=3, timeout=60)
-        )
+        cb = CircuitBreaker(name="test", config=CircuitBreakerConfig(failure_threshold=3, timeout=60))
         assert cb.state == CircuitState.CLOSED
         assert cb._should_allow_request() is True
 
     def test_opens_after_threshold(self):
         """Test circuit breaker opens after failure threshold."""
-        cb = CircuitBreaker(
-            name="test",
-            config=CircuitBreakerConfig(failure_threshold=3, timeout=60)
-        )
+        cb = CircuitBreaker(name="test", config=CircuitBreakerConfig(failure_threshold=3, timeout=60))
 
         for _ in range(3):
             cb.record_failure(Exception("test error"))
@@ -260,10 +252,7 @@ class TestCircuitBreaker:
 
     def test_resets_on_success(self):
         """Test circuit breaker resets on success."""
-        cb = CircuitBreaker(
-            name="test",
-            config=CircuitBreakerConfig(failure_threshold=3, timeout=60)
-        )
+        cb = CircuitBreaker(name="test", config=CircuitBreakerConfig(failure_threshold=3, timeout=60))
 
         cb.record_failure(Exception("test error"))
         cb.record_failure(Exception("test error"))
@@ -354,7 +343,7 @@ class TestSchwabBrokerEventEmission:
     @pytest.mark.asyncio
     async def test_order_event_emitted(self, broker, mock_client):
         """Test that order events are emitted."""
-        with patch.object(broker._event_handler, 'emit', new_callable=AsyncMock) as mock_emit:
+        with patch.object(broker._event_handler, "emit", new_callable=AsyncMock) as mock_emit:
             await broker.place_order(
                 symbol="AAPL",
                 qty=10,
@@ -365,15 +354,15 @@ class TestSchwabBrokerEventEmission:
             assert mock_emit.called
             call_args = mock_emit.call_args_list
             # Find the order status event call
-            order_events = [c for c in call_args if 'ORDER' in str(c)]
+            order_events = [c for c in call_args if "ORDER" in str(c)]
             assert len(order_events) > 0
 
     @pytest.mark.asyncio
     async def test_health_event_emitted_on_connect(self, broker, mock_client):
         """Test that health event is emitted on connect."""
-        with patch.object(broker._event_handler, 'emit', new_callable=AsyncMock) as mock_emit:
+        with patch.object(broker._event_handler, "emit", new_callable=AsyncMock) as mock_emit:
             await broker.connect()
 
             # Verify health event was emitted
-            health_events = [c for c in mock_emit.call_args_list if 'HEALTH' in str(c)]
+            health_events = [c for c in mock_emit.call_args_list if "HEALTH" in str(c)]
             assert len(health_events) > 0

@@ -11,18 +11,19 @@ Features:
 - Buying power verification
 - Position existence checks for exits
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING
 
 from core.enums import PositionState
 
 if TYPE_CHECKING:
+    from core.base.base_broker_interface import BaseBrokerInterface
     from core.logic.portfolio_state import PortfolioState
     from core.order_registry import OrderRegistry
     from core.state_reconciler import StateReconciler
-    from core.base.base_broker_interface import BaseBrokerInterface
 
 
 @dataclass
@@ -35,17 +36,18 @@ class ValidationResult:
         errors: List of validation errors (trade should not proceed)
         warnings: List of warnings (trade can proceed but note issues)
     """
+
     valid: bool
-    errors: List[str] = field(default_factory=list)
-    warnings: List[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
     @classmethod
-    def success(cls, warnings: Optional[List[str]] = None) -> "ValidationResult":
+    def success(cls, warnings: list[str] | None = None) -> ValidationResult:
         """Create a successful validation result."""
         return cls(valid=True, warnings=warnings or [])
 
     @classmethod
-    def failure(cls, errors: List[str], warnings: Optional[List[str]] = None) -> "ValidationResult":
+    def failure(cls, errors: list[str], warnings: list[str] | None = None) -> ValidationResult:
         """Create a failed validation result."""
         return cls(valid=False, errors=errors, warnings=warnings or [])
 
@@ -96,10 +98,10 @@ class TradeValidator:
 
     def __init__(
         self,
-        portfolio: "PortfolioState",
-        order_registry: "OrderRegistry",
-        reconciler: Optional["StateReconciler"] = None,
-        broker: Optional["BaseBrokerInterface"] = None,
+        portfolio: PortfolioState,
+        order_registry: OrderRegistry,
+        reconciler: StateReconciler | None = None,
+        broker: BaseBrokerInterface | None = None,
     ):
         """
         Initialize trade validator.
@@ -122,7 +124,7 @@ class TradeValidator:
         qty: int,
         price: float,
         action_type: str,
-        position_state: Optional[PositionState] = None,
+        position_state: PositionState | None = None,
     ) -> ValidationResult:
         """
         Validate a trade before execution.
@@ -170,12 +172,7 @@ class TradeValidator:
         if self.reconciler and self.reconciler.is_halted:
             result.add_error("Trading halted by reconciler due to state mismatch")
 
-    async def _check_conflicting_orders(
-        self,
-        result: ValidationResult,
-        symbol: str,
-        side: str
-    ) -> None:
+    async def _check_conflicting_orders(self, result: ValidationResult, symbol: str, side: str) -> None:
         """Check for conflicting orders that would cause wash trade."""
         if self.order_registry is None:
             return
@@ -184,60 +181,37 @@ class TradeValidator:
         if conflicting:
             # Note: This is a warning, not error - we'll cancel them
             order_ids = [o.order_id for o in conflicting]
-            result.add_warning(
-                f"Conflicting orders will be cancelled: {order_ids}"
-            )
+            result.add_warning(f"Conflicting orders will be cancelled: {order_ids}")
 
-    def _check_position_state(
-        self,
-        result: ValidationResult,
-        position_state: Optional[PositionState]
-    ) -> None:
+    def _check_position_state(self, result: ValidationResult, position_state: PositionState | None) -> None:
         """Check if position state allows new orders."""
         if position_state is None:
             return
 
         if not position_state.allows_new_orders:
-            result.add_error(
-                f"Position state '{position_state.value}' does not allow new orders"
-            )
+            result.add_error(f"Position state '{position_state.value}' does not allow new orders")
 
-    async def _check_buying_power(
-        self,
-        result: ValidationResult,
-        qty: int,
-        price: float
-    ) -> None:
+    async def _check_buying_power(self, result: ValidationResult, qty: int, price: float) -> None:
         """Check if sufficient buying power for buy order."""
         required = qty * price
 
         if self.broker:
             try:
-                if hasattr(self.broker, 'get_buying_power'):
+                if hasattr(self.broker, "get_buying_power"):
                     available = self.broker.get_buying_power()
                 else:
                     available = self.broker.get_available_funds()
 
                 if required > available:
-                    result.add_error(
-                        f"Insufficient buying power: need ${required:,.2f}, "
-                        f"have ${available:,.2f}"
-                    )
+                    result.add_error(f"Insufficient buying power: need ${required:,.2f}, have ${available:,.2f}")
             except Exception as e:
                 result.add_warning(f"Could not verify buying power: {e}")
         else:
             # Fall back to portfolio cash
             if required > self.portfolio.cash:
-                result.add_error(
-                    f"Insufficient cash: need ${required:,.2f}, "
-                    f"have ${self.portfolio.cash:,.2f}"
-                )
+                result.add_error(f"Insufficient cash: need ${required:,.2f}, have ${self.portfolio.cash:,.2f}")
 
-    def _check_position_exists(
-        self,
-        result: ValidationResult,
-        symbol: str
-    ) -> None:
+    def _check_position_exists(self, result: ValidationResult, symbol: str) -> None:
         """Check that position exists for exit orders."""
         position = self.portfolio.positions.get(symbol)
         if not position or position.qty == 0:
@@ -249,7 +223,7 @@ class TradeValidator:
         side: str,
         qty: int,
         price: float,
-        position_state: Optional[PositionState] = None,
+        position_state: PositionState | None = None,
     ) -> ValidationResult:
         """Convenience method for validating entry orders."""
         return await self.validate(
@@ -267,7 +241,7 @@ class TradeValidator:
         side: str,
         qty: int,
         price: float,
-        position_state: Optional[PositionState] = None,
+        position_state: PositionState | None = None,
     ) -> ValidationResult:
         """Convenience method for validating exit orders."""
         return await self.validate(

@@ -11,40 +11,53 @@ Simulates trade execution without real broker:
 
 from __future__ import annotations
 
-from typing import Optional, Dict, Any
-from datetime import datetime, timezone, time
-from zoneinfo import ZoneInfo
 import asyncio
-import logging
 import math
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING
+from zoneinfo import ZoneInfo
+
+if TYPE_CHECKING:
+    from core.logic.position_manager import PositionManager
 
 # US Eastern timezone for market hours calculations
 ET = ZoneInfo("America/New_York")
 
+from core.app_types import OrderResult, SignalContext
+from core.base.base_broker_interface import BaseBrokerInterface
 from core.base.execution_engine_base import ExecutionEngineBase
 from core.base.executor_base import BaseExecutor
-from core.base.base_broker_interface import BaseBrokerInterface
 from core.base.position_sizer_base import PositionSizerBase
 from core.base.trade_logger_base import TradeLoggerBase
 from core.base.trade_logic_manager_base import TradeLogicManagerBase
-from core.logic.default_trade_logic import DefaultTradeLogicManager
+from core.contracts.events import (
+    EVENT_ALERT,
+    EVENT_CANCEL_ALL,
+    EVENT_FLATTEN_ALL,
+    EVENT_FLATTEN_SYMBOL,
+    EVENT_HALTED,
+    EVENT_MANUAL_ORDER,
+    EVENT_NEW_TRADE,
+    EVENT_ORDER_STATUS,
+    EVENT_PNL_UPDATE,
+    EVENT_POSITION_UPDATE,
+    EVENT_STRATEGY_SIGNAL,
+    AlertPayload,
+    OrderStatusPayload,
+    PnLPayload,
+    PositionPayload,
+    TradePayload,
+)
+from core.contracts.meta_types import TradeEntryContext, TradeExitContext
+from core.drawdown_monitor import DrawdownMonitor
+from core.enums import OrderSide
+from core.events.eventhandler import EventHandler
 from core.logic.portfolio_state import PortfolioState
 from core.logic.symbol_state import SymbolState
-from core.drawdown_monitor import DrawdownMonitor
-from core.app_types import OrderResult, SignalContext
-from core.enums import OrderSide
-from loggers.logger import Logger
-from loggers.meta_trade_logger import MetaTradeLogger, generate_trade_id
-from core.contracts.meta_types import TradeEntryContext, TradeExitContext
-from core.events.eventhandler import EventHandler
-from core.contracts.events import (
-    EVENT_NEW_TRADE, EVENT_POSITION_UPDATE, EVENT_PNL_UPDATE, EVENT_STRATEGY_SIGNAL,
-    EVENT_FLATTEN_ALL, EVENT_CANCEL_ALL, EVENT_FLATTEN_SYMBOL, EVENT_MANUAL_ORDER,
-    EVENT_HALTED, EVENT_ALERT, EVENT_ORDER_STATUS,
-    TradePayload, PositionPayload, PnLPayload, AlertPayload, OrderStatusPayload
-)
 from core.logic.trade_logic_router import TradeApproverRouter
 from core.tracing import trace
+from loggers.logger import Logger
+from loggers.meta_trade_logger import MetaTradeLogger, generate_trade_id
 
 
 class MockExecutionEngine(ExecutionEngineBase):
@@ -94,7 +107,7 @@ class MockExecutionEngine(ExecutionEngineBase):
 
         # Signals will be handled automatically via events
     """
-    
+
     def __init__(
         self,
         broker: BaseBrokerInterface,
@@ -103,12 +116,12 @@ class MockExecutionEngine(ExecutionEngineBase):
         performance_tracker: TradeLoggerBase,
         trade_logic_manager: TradeLogicManagerBase,
         portfolio: PortfolioState,
-        drawdown_monitor: Optional[DrawdownMonitor] = None,
-        event_handler: Optional[EventHandler] = None,
-        position_manager: Optional["PositionManager"] = None,
-        meta_logger: Optional[MetaTradeLogger] = None,
-        slippage_pct: Optional[float] = None,
-        commission: Optional[float] = None,
+        drawdown_monitor: DrawdownMonitor | None = None,
+        event_handler: EventHandler | None = None,
+        position_manager: PositionManager | None = None,
+        meta_logger: MetaTradeLogger | None = None,
+        slippage_pct: float | None = None,
+        commission: float | None = None,
     ):
         """
         Initialize mock execution engine.
@@ -151,13 +164,14 @@ class MockExecutionEngine(ExecutionEngineBase):
         if slippage_pct is None or commission is None:
             try:
                 from core.config_loader import get_config
+
                 cfg = get_config()
-                exec_cfg = getattr(cfg, 'execution', None)
+                exec_cfg = getattr(cfg, "execution", None)
                 if exec_cfg:
                     if slippage_pct is None:
-                        slippage_pct = getattr(exec_cfg, 'slippage_pct', 0.001)
+                        slippage_pct = getattr(exec_cfg, "slippage_pct", 0.001)
                     if commission is None:
-                        commission = getattr(exec_cfg, 'commission_per_trade', 0.0)
+                        commission = getattr(exec_cfg, "commission_per_trade", 0.0)
             except Exception:
                 pass  # Use defaults
 
@@ -174,22 +188,19 @@ class MockExecutionEngine(ExecutionEngineBase):
         self.meta_logger = meta_logger
 
         # ATR history reference (set by runner for ATR percentile calculation)
-        self._atr_hist_ref: Optional[Dict] = None
+        self._atr_hist_ref: dict | None = None
 
         # Track symbol states
-        self.symbol_states: Dict[str, SymbolState] = {}
+        self.symbol_states: dict[str, SymbolState] = {}
 
         # Equity history for PnL events (equity_curve field)
         from collections import deque
+
         self.equity_history: deque = deque(maxlen=1000)
         self.equity_history.append(portfolio.cash)
 
         # Setup logging - own file with propagation to app.log
-        self.logger = Logger(
-            log_file="mock_engine.log",
-            logger_name="MockExecutionEngine",
-            propagate=True
-        ).get_logger()
+        self.logger = Logger(log_file="mock_engine.log", logger_name="MockExecutionEngine", propagate=True).get_logger()
 
         # Halt state for GUI control
         self._halted = False
@@ -199,10 +210,9 @@ class MockExecutionEngine(ExecutionEngineBase):
             friction_info = f", slippage={self.slippage_pct:.3%}, commission=${self.commission:.2f}"
 
         self.logger.info(
-            f"MockExecutionEngine initialized "
-            f"(meta_logging={'enabled' if meta_logger else 'disabled'}{friction_info})"
+            f"MockExecutionEngine initialized (meta_logging={'enabled' if meta_logger else 'disabled'}{friction_info})"
         )
-    
+
     # ========================================================================
     # MAIN SIGNAL HANDLING
     # ========================================================================
@@ -211,10 +221,7 @@ class MockExecutionEngine(ExecutionEngineBase):
     min_signal_confidence: float = 0.0
 
     @trace
-    async def handle_signal_context(
-        self,
-        context: SignalContext
-    ) -> Optional[OrderResult]:
+    async def handle_signal_context(self, context: SignalContext) -> OrderResult | None:
         """
         Handle signal with mock execution using unified context.
 
@@ -235,22 +242,22 @@ class MockExecutionEngine(ExecutionEngineBase):
             return None
 
         # Check if trading is halted
-        if getattr(self, '_halted', False):
+        if getattr(self, "_halted", False):
             self.logger.debug(f"[{context.symbol}] Trading halted - ignoring signal")
             return None
 
         # Get or create state from metadata or symbol_states
-        state = context.metadata.get('state')
+        state = context.metadata.get("state")
         if state is None:
             if context.symbol not in self.symbol_states:
                 self.symbol_states[context.symbol] = SymbolState(symbol=context.symbol)
             state = self.symbol_states[context.symbol]
 
         # Track bar for bar-based cooldown (call on every signal = every bar)
-        if hasattr(self, 'trade_logic_manager') and self.trade_logic_manager:
+        if hasattr(self, "trade_logic_manager") and self.trade_logic_manager:
             # Get the trade logic and notify of new bar
             trade_logic = self.trade_logic_manager.get(context.symbol, context.regime)
-            if hasattr(trade_logic, 'on_bar'):
+            if hasattr(trade_logic, "on_bar"):
                 trade_logic.on_bar(context.symbol)
 
         # Skip hold signals
@@ -261,8 +268,7 @@ class MockExecutionEngine(ExecutionEngineBase):
         # Drawdown monitor check - only if drawdown_monitor is set
         if self.drawdown_monitor and not self.drawdown_monitor.can_trade(context.symbol):
             self.logger.warning(
-                f"[{context.symbol}] Trade blocked by drawdown monitor "
-                f"(drawdown lock or cooldown active)"
+                f"[{context.symbol}] Trade blocked by drawdown monitor (drawdown lock or cooldown active)"
             )
             return None
 
@@ -278,33 +284,31 @@ class MockExecutionEngine(ExecutionEngineBase):
             # Get appropriate trade logic
             trade_logic = self.trade_logic_manager.get(context.symbol, context.regime)
 
-            self.logger.debug(
-                f"[{context.symbol}] Using logic: {trade_logic.__class__.__name__}"
-            )
+            self.logger.debug(f"[{context.symbol}] Using logic: {trade_logic.__class__.__name__}")
 
             # 1. Check trade approval (pass context directly)
-            should_trade, reason = self._check_trade_approval(
-                trade_logic, context, state
-            )
+            should_trade, reason = self._check_trade_approval(trade_logic, context, state)
 
             if not should_trade:
                 self.logger.info(f"[MOCK] [{context.symbol}] Trade blocked: {reason}")
                 return None
 
             # 2. Determine action
-            action_type, side = self._determine_action(
-                context.symbol, state, context.signal, reason
-            )
+            action_type, side = self._determine_action(context.symbol, state, context.signal, reason)
 
-            self.logger.info(
-                f"[MOCK] [{context.symbol}] Action approved: {action_type} {side.value}"
-            )
+            self.logger.info(f"[MOCK] [{context.symbol}] Action approved: {action_type} {side.value}")
 
             # 3. Calculate quantity
             qty = self._calculate_quantity(
-                context.symbol, state, action_type, context.price, context.atr,
-                context.regime, trade_logic, signal=context.signal,
-                df=context.df
+                context.symbol,
+                state,
+                action_type,
+                context.price,
+                context.atr,
+                context.regime,
+                trade_logic,
+                signal=context.signal,
+                df=context.df,
             )
 
             if qty <= 0:
@@ -312,9 +316,7 @@ class MockExecutionEngine(ExecutionEngineBase):
                 return None
 
             # 4. Execute mock trade (instant fill)
-            result = self._execute_mock_trade(
-                context.symbol, state, side, qty, context.price, action_type
-            )
+            result = self._execute_mock_trade(context.symbol, state, side, qty, context.price, action_type)
 
             if result:
                 # 5. Update portfolio (use slippage-adjusted price from result)
@@ -331,12 +333,10 @@ class MockExecutionEngine(ExecutionEngineBase):
                     self._log_meta_entry(context, state, result, qty)
 
                 # 6. Post-execution tasks
-                self._post_execution(
-                    context.symbol, state, result, action_type, context.regime, context.strategy_name
-                )
+                self._post_execution(context.symbol, state, result, action_type, context.regime, context.strategy_name)
 
                 # 7. Reset bar-based cooldown after trade
-                if hasattr(trade_logic, 'on_trade'):
+                if hasattr(trade_logic, "on_trade"):
                     trade_logic.on_trade(context.symbol)
 
                 # 8. Emit events
@@ -353,7 +353,7 @@ class MockExecutionEngine(ExecutionEngineBase):
         self,
         context: SignalContext,
         state: SymbolState,
-    ) -> Optional[OrderResult]:
+    ) -> OrderResult | None:
         """
         Handle signal with mock execution.
 
@@ -368,23 +368,16 @@ class MockExecutionEngine(ExecutionEngineBase):
             OrderResult if trade executed, None otherwise
         """
         # Store state in metadata so handle_signal_context can use it
-        context.metadata['state'] = state
+        context.metadata["state"] = state
         return await self.handle_signal_context(context)
 
-        
     # ========================================================================
     # MOCK-SPECIFIC METHODS
     # ========================================================================
 
     @trace
     def _execute_mock_trade(
-        self,
-        symbol: str,
-        state: SymbolState,
-        side: OrderSide,
-        qty: int,
-        price: float,
-        action_type: str
+        self, symbol: str, state: SymbolState, side: OrderSide, qty: int, price: float, action_type: str
     ) -> OrderResult:
         """
         Execute mock trade with instant fill.
@@ -398,10 +391,7 @@ class MockExecutionEngine(ExecutionEngineBase):
         Returns:
             OrderResult with mock fill details
         """
-        self.logger.info(
-            f"[MOCK EXECUTION] [{symbol}] Simulating {side.value} order: "
-            f"{qty} shares @ ${price:.2f}"
-        )
+        self.logger.info(f"[MOCK EXECUTION] [{symbol}] Simulating {side.value} order: {qty} shares @ ${price:.2f}")
 
         # Apply slippage (always adverse to trader)
         fill_price = price
@@ -439,22 +429,15 @@ class MockExecutionEngine(ExecutionEngineBase):
             commission_info = f" (commission: ${self.commission:.2f})"
 
         self.logger.info(
-            f"[MOCK] [{symbol}] Order filled: {side.value} {qty}@${fill_price:.2f}"
-            f"{slippage_info}{commission_info}"
+            f"[MOCK] [{symbol}] Order filled: {side.value} {qty}@${fill_price:.2f}{slippage_info}{commission_info}"
         )
 
         return result
-    
-    def _update_mock_portfolio(
-        self,
-        symbol: str,
-        side: OrderSide,
-        qty: int,
-        price: float
-    ) -> None:
+
+    def _update_mock_portfolio(self, symbol: str, side: OrderSide, qty: int, price: float) -> None:
         """
         Update portfolio state with mock fill.
-        
+
         Args:
             symbol: Trading symbol
             side: Order side
@@ -463,16 +446,16 @@ class MockExecutionEngine(ExecutionEngineBase):
         """
         # Convert OrderSide to string for portfolio
         side_str = "buy" if side == OrderSide.BUY else "sell"
-        
+
         # Apply fill to portfolio
         self.portfolio.apply_fill(symbol, side_str, qty, price)
-        
+
         self.logger.debug(
             f"[{symbol}] Portfolio updated: "
             f"cash=${self.portfolio.cash:,.2f}, "
             f"equity=${self.portfolio.total_equity():,.2f}"
         )
-        
+
         # Update drawdown monitor if present
         if self.drawdown_monitor:
             # Update portfolio-level drawdown first
@@ -490,15 +473,8 @@ class MockExecutionEngine(ExecutionEngineBase):
 
             if symbol_equity is not None and symbol_equity > 0:
                 self.drawdown_monitor.update_symbol(symbol, symbol_equity)
-            
-    
-    async def _emit_trade_events(
-        self,
-        symbol: str,
-        side: OrderSide,
-        qty: int,
-        price: float
-    ) -> None:
+
+    async def _emit_trade_events(self, symbol: str, side: OrderSide, qty: int, price: float) -> None:
         """
         Emit trade-related events.
 
@@ -523,9 +499,7 @@ class MockExecutionEngine(ExecutionEngineBase):
                 "avg_price": float(price),
                 "timestamp": timestamp,
             }
-            asyncio.create_task(
-                self.event_handler.emit(EVENT_ORDER_STATUS, order_payload)
-            )
+            asyncio.create_task(self.event_handler.emit(EVENT_ORDER_STATUS, order_payload))
 
             # Trade event
             trade_payload: TradePayload = {
@@ -536,10 +510,8 @@ class MockExecutionEngine(ExecutionEngineBase):
                 "timestamp": timestamp,
                 "pnl": self.portfolio.unrealized_pnl(symbol),
             }
-            asyncio.create_task(
-                self.event_handler.emit(EVENT_NEW_TRADE, trade_payload)
-            )
-            
+            asyncio.create_task(self.event_handler.emit(EVENT_NEW_TRADE, trade_payload))
+
             # Position update event
             position = self.portfolio.positions.get(symbol)
             if position:
@@ -557,10 +529,8 @@ class MockExecutionEngine(ExecutionEngineBase):
                     "market_value": position.qty * position.last_price,
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
-                asyncio.create_task(
-                    self.event_handler.emit(EVENT_POSITION_UPDATE, position_payload)
-                )
-            
+                asyncio.create_task(self.event_handler.emit(EVENT_POSITION_UPDATE, position_payload))
+
             # P&L update event
             equity = self.portfolio.total_equity()
             self.equity_history.append(equity)
@@ -572,15 +542,13 @@ class MockExecutionEngine(ExecutionEngineBase):
                 "drawdown": self.portfolio.drawdown(),
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
-            asyncio.create_task(
-                self.event_handler.emit(EVENT_PNL_UPDATE, pnl_payload)
-            )
-            
+            asyncio.create_task(self.event_handler.emit(EVENT_PNL_UPDATE, pnl_payload))
+
             self.logger.debug(f"[{symbol}] Trade events emitted")
-            
+
         except Exception as e:
             self.logger.error(f"[{symbol}] Failed to emit events: {e}")
-    
+
     # ========================================================================
     # DELEGATION (Reuse logic from base)
     # ========================================================================
@@ -600,17 +568,16 @@ class MockExecutionEngine(ExecutionEngineBase):
             return qty if qty > 0 else 5  # Mock fallback for testing
 
         # Get signal from kwargs
-        signal = kwargs.get('signal', 0)
+        signal = kwargs.get("signal", 0)
 
         # Guard against NaN ATR (not enough bars yet)
         if atr is None or math.isnan(atr):
             self.logger.debug(f"[MOCK] [{symbol}] Skipping trade - ATR not yet available")
             return 0
 
-        sl_mults = getattr(trade_logic, 'sl_mults', {"normal": 1.5})
+        sl_mults = getattr(trade_logic, "sl_mults", {"normal": 1.5})
         sl_mult = sl_mults.get(regime, 1.5)
-        stop_loss_price = (price - (atr * sl_mult) if state.side != "short"
-                        else price + (atr * sl_mult))
+        stop_loss_price = price - (atr * sl_mult) if state.side != "short" else price + (atr * sl_mult)
 
         return self.sizer.calculate_position_size(
             symbol=symbol,
@@ -621,7 +588,7 @@ class MockExecutionEngine(ExecutionEngineBase):
             stop_loss_price=stop_loss_price,
             signal=signal,
             portfolio=self.portfolio,
-            market_conditions=regime
+            market_conditions=regime,
         )
 
     def _update_portfolio_after_execution(self, symbol: str, result) -> None:
@@ -707,7 +674,7 @@ class MockExecutionEngine(ExecutionEngineBase):
                 minutes_since_open = 0
 
             # Get bars in regime
-            bars_in_regime = getattr(state, 'regime_persist', 1)
+            bars_in_regime = getattr(state, "regime_persist", 1)
 
             # Build entry context (use ET hour/day for market-aware features)
             entry_context = TradeEntryContext(
@@ -820,7 +787,7 @@ class MockExecutionEngine(ExecutionEngineBase):
         except Exception as e:
             self.logger.warning(f"[{symbol}] Failed to log meta exit: {e}")
 
-    def set_atr_hist_reference(self, atr_hist: Dict) -> None:
+    def set_atr_hist_reference(self, atr_hist: dict) -> None:
         """
         Set reference to ATR history for ATR percentile calculation.
 
@@ -830,11 +797,11 @@ class MockExecutionEngine(ExecutionEngineBase):
             atr_hist: Dict mapping symbol to deque of ATR values
         """
         self._atr_hist_ref = atr_hist
-    
+
     # ========================================================================
     # EVENT SUBSCRIPTION
     # ========================================================================
-    
+
     async def subscribe_signals(self) -> None:
         """
         Subscribe to strategy signal events and GUI commands.
@@ -1000,4 +967,3 @@ class MockExecutionEngine(ExecutionEngineBase):
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
         asyncio.create_task(self.event_handler.emit(EVENT_ALERT, payload))
-    

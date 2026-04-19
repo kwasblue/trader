@@ -16,22 +16,20 @@ The router is the ONLY authority for approver selection.
 DynamicTradeLogicManager can populate the router on startup.
 Engines depend on the router, not the manager.
 """
+
 from __future__ import annotations
 
-from typing import Optional, Dict, Union, TYPE_CHECKING
+from typing import TYPE_CHECKING
+
 from core.base.trade_logic_manager_base import TradeApprover
-from loggers.logger import Logger
 from core.tracing import trace
+from loggers.logger import Logger
 
 if TYPE_CHECKING:
     from core.logic.trade_logic_manager import DynamicTradeLogicManager
 
 # Dedicated log file for trade approver routing
-logger = Logger(
-    log_file="trade_logic_router.log",
-    logger_name="TradeApproverRouter",
-    propagate=True
-).get_logger()
+logger = Logger(log_file="trade_logic_router.log", logger_name="TradeApproverRouter", propagate=True).get_logger()
 
 
 class TradeApproverRouter:
@@ -60,7 +58,7 @@ class TradeApproverRouter:
         approver = router.get_approver(symbol="AAPL", strategy="momentum", regime="normal")
     """
 
-    def __init__(self, default_approver: Union[TradeApprover, "DynamicTradeLogicManager"]):
+    def __init__(self, default_approver: TradeApprover | DynamicTradeLogicManager):
         """
         Initialize router with default approver.
 
@@ -73,12 +71,12 @@ class TradeApproverRouter:
         self.default_approver = default_approver
 
         # Check if default_approver is a DynamicTradeLogicManager (has .get() method)
-        self._is_dynamic_router = hasattr(default_approver, 'get') and callable(getattr(default_approver, 'get', None))
+        self._is_dynamic_router = hasattr(default_approver, "get") and callable(getattr(default_approver, "get", None))
 
         # Routing tables
-        self.approver_by_symbol: Dict[str, TradeApprover] = {}
-        self.approver_by_strategy: Dict[str, TradeApprover] = {}
-        self.approver_by_regime: Dict[str, TradeApprover] = {}
+        self.approver_by_symbol: dict[str, TradeApprover] = {}
+        self.approver_by_strategy: dict[str, TradeApprover] = {}
+        self.approver_by_regime: dict[str, TradeApprover] = {}
 
     def register_symbol_approver(self, symbol: str, approver: TradeApprover) -> None:
         """Register approver for specific symbol."""
@@ -96,12 +94,7 @@ class TradeApproverRouter:
         logger.debug(f"Registered regime approver for {regime}: {approver.__class__.__name__}")
 
     @trace
-    def get_approver(
-        self,
-        symbol: str,
-        strategy: Optional[str] = None,
-        regime: Optional[str] = None
-    ) -> TradeApprover:
+    def get_approver(self, symbol: str, strategy: str | None = None, regime: str | None = None) -> TradeApprover:
         """
         Get appropriate approver for context.
 
@@ -164,4 +157,4 @@ class TradeApproverRouter:
         )
 
 
-__all__ = ['TradeApproverRouter']
+__all__ = ["TradeApproverRouter"]

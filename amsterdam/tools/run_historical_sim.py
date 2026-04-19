@@ -63,7 +63,7 @@ async def run_simulation(args: argparse.Namespace) -> None:
     print(f"Symbols:    {cfg.symbols}")
     print(f"Bars:       {cfg.steps}")
     print(f"Data path:  {cfg.historical_data_path}")
-    print(f"Slippage:   {cfg.slippage:.4f} ({cfg.slippage*100:.2f}%)")
+    print(f"Slippage:   {cfg.slippage:.4f} ({cfg.slippage * 100:.2f}%)")
     print(f"Commission: ${cfg.commission:.2f}")
     print(f"Output:     logs/{cfg.meta_log_file}")
     print("=" * 60 + "\n")
@@ -76,11 +76,11 @@ async def run_simulation(args: argparse.Namespace) -> None:
     print("\n" + "=" * 60)
     print("NEXT STEPS")
     print("=" * 60)
-    print(f"1. Convert to Parquet for training:")
-    print(f"   python tools/convert_meta_trades.py \\")
+    print("1. Convert to Parquet for training:")
+    print("   python tools/convert_meta_trades.py \\")
     print(f"       --input logs/{cfg.meta_log_file} \\")
-    print(f"       --output data/trades_historical.parquet \\")
-    print(f"       --stats")
+    print("       --output data/trades_historical.parquet \\")
+    print("       --stats")
     print()
     print("2. Load in pandas for analysis:")
     print("   import pandas as pd")
@@ -95,63 +95,23 @@ def main():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
-    parser.add_argument(
-        "--symbols", "-s",
-        nargs="+",
-        default=["AAPL", "MSFT", "NVDA"],
-        help="Symbols to simulate"
-    )
-    parser.add_argument(
-        "--bars", "-b",
-        type=int,
-        default=500,
-        help="Number of bars to simulate"
-    )
+    parser.add_argument("--symbols", "-s", nargs="+", default=["AAPL", "MSFT", "NVDA"], help="Symbols to simulate")
+    parser.add_argument("--bars", "-b", type=int, default=500, help="Number of bars to simulate")
     parser.add_argument(
         "--data-path",
         default="data/data_storage/proc_data",
-        help="Path to historical data files (use proc_data for indicators)"
+        help="Path to historical data files (use proc_data for indicators)",
     )
     parser.add_argument(
-        "--start-index",
-        type=int,
-        default=50,
-        help="Starting bar index (skip early bars for indicator warmup)"
+        "--start-index", type=int, default=50, help="Starting bar index (skip early bars for indicator warmup)"
     )
+    parser.add_argument("--warmup", type=int, default=200, help="Warmup bars for indicators")
+    parser.add_argument("--slippage", type=float, default=0.001, help="Slippage as fraction (0.001 = 0.1%% = 10 bps)")
+    parser.add_argument("--commission", type=float, default=0.0, help="Commission per trade in dollars")
+    parser.add_argument("--cash", type=float, default=100_000.0, help="Starting cash")
+    parser.add_argument("--bar-sleep", type=float, default=0.001, help="Sleep between bars (lower = faster)")
     parser.add_argument(
-        "--warmup",
-        type=int,
-        default=200,
-        help="Warmup bars for indicators"
-    )
-    parser.add_argument(
-        "--slippage",
-        type=float,
-        default=0.001,
-        help="Slippage as fraction (0.001 = 0.1%% = 10 bps)"
-    )
-    parser.add_argument(
-        "--commission",
-        type=float,
-        default=0.0,
-        help="Commission per trade in dollars"
-    )
-    parser.add_argument(
-        "--cash",
-        type=float,
-        default=100_000.0,
-        help="Starting cash"
-    )
-    parser.add_argument(
-        "--bar-sleep",
-        type=float,
-        default=0.001,
-        help="Sleep between bars (lower = faster)"
-    )
-    parser.add_argument(
-        "--output", "-o",
-        default="meta_trades_historical.jsonl",
-        help="Output JSONL filename (in logs/)"
+        "--output", "-o", default="meta_trades_historical.jsonl", help="Output JSONL filename (in logs/)"
     )
 
     args = parser.parse_args()

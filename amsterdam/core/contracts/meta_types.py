@@ -7,9 +7,10 @@ a meta-model that can improve trade selection.
 Usage:
     from core.contracts.meta_types import TradeEntryContext, TradeExitContext
 """
-from dataclasses import dataclass, asdict
+
+from dataclasses import asdict, dataclass
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Any
 
 
 @dataclass
@@ -43,6 +44,7 @@ class TradeEntryContext:
             signal_strength=1,
         )
     """
+
     # Trade identification
     trade_id: str
     timestamp: datetime
@@ -74,7 +76,7 @@ class TradeEntryContext:
     hours_since_last_trade: float  # Time since last trade for this symbol
     signal_strength: int  # Signal value (-1, 0, 1)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         d = asdict(self)
         # Convert datetime to ISO string
@@ -103,6 +105,7 @@ class TradeExitContext:
             exit_reason="take_profit",
         )
     """
+
     # Trade identification
     trade_id: str
     timestamp: datetime
@@ -122,7 +125,7 @@ class TradeExitContext:
     # Exit classification
     exit_reason: str  # "take_profit", "stop_loss", "signal_reversal", "time_exit", etc.
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         d = asdict(self)
         # Convert datetime to ISO string
@@ -131,6 +134,6 @@ class TradeExitContext:
 
 
 __all__ = [
-    'TradeEntryContext',
-    'TradeExitContext',
+    "TradeEntryContext",
+    "TradeExitContext",
 ]

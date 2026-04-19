@@ -10,11 +10,11 @@ Usage:
     python tools/migrate_database_schema.py --backup  # Creates backup first
 """
 
-import sys
-import sqlite3
 import shutil
-from pathlib import Path
+import sqlite3
+import sys
 from datetime import datetime
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -42,16 +42,14 @@ def migrate_stock_table(db_path: str, create_backup: bool = True):
         backup_path = db_path.parent / f"{db_path.stem}_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
         print(f"\n📦 Creating backup: {backup_path}")
         shutil.copy2(db_path, backup_path)
-        print(f"✓ Backup created")
+        print("✓ Backup created")
 
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
     try:
         # Check if stock_table exists
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='stock_table'"
-        )
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='stock_table'")
         if not cursor.fetchone():
             print("\n✓ stock_table doesn't exist yet - no migration needed")
             print("  (Table will be created with correct schema on first use)")
@@ -64,16 +62,14 @@ def migrate_stock_table(db_path: str, create_backup: bool = True):
         print(f"\nCurrent columns in stock_table: {list(columns.keys())}")
 
         # Check if timeframe column exists
-        if 'timeframe' in columns:
+        if "timeframe" in columns:
             print("\n✓ timeframe column already exists - no migration needed")
             return True
 
         print("\n🔧 Adding timeframe column...")
 
         # Add timeframe column with default value
-        cursor.execute(
-            "ALTER TABLE stock_table ADD COLUMN timeframe TEXT DEFAULT 'day'"
-        )
+        cursor.execute("ALTER TABLE stock_table ADD COLUMN timeframe TEXT DEFAULT 'day'")
 
         conn.commit()
         print("✓ timeframe column added successfully")
@@ -121,6 +117,7 @@ def migrate_stock_table(db_path: str, create_backup: bool = True):
             print(f"\n📦 You can restore from backup: {backup_path}")
 
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -133,7 +130,7 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(
-        description='Migrate database schema to support timeframe column',
+        description="Migrate database schema to support timeframe column",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -145,26 +142,16 @@ Examples:
 
   # Custom database path
   python tools/migrate_database_schema.py --db /path/to/stock_base.db
-        """
+        """,
     )
 
     parser.add_argument(
-        '--db',
-        default='data/stock_base.db',
-        help='Path to database file (default: data/stock_base.db)'
+        "--db", default="data/stock_base.db", help="Path to database file (default: data/stock_base.db)"
     )
     parser.add_argument(
-        '--backup',
-        action='store_true',
-        default=True,
-        help='Create backup before migration (default: True)'
+        "--backup", action="store_true", default=True, help="Create backup before migration (default: True)"
     )
-    parser.add_argument(
-        '--no-backup',
-        dest='backup',
-        action='store_false',
-        help='Skip backup creation'
-    )
+    parser.add_argument("--no-backup", dest="backup", action="store_false", help="Skip backup creation")
 
     args = parser.parse_args()
 
@@ -187,5 +174,5 @@ Examples:
         return 1
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

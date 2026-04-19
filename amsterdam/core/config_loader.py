@@ -23,22 +23,22 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 from dataclasses import dataclass, field, fields
-from typing import TYPE_CHECKING, List, Optional, Dict, Any, Type, TypeVar
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, TypeVar
 
 if TYPE_CHECKING:
-    from core.position_sizer import KellyPositionSizer
     from core.drawdown_monitor import DrawdownMonitor
     from core.logic.default_trade_logic import StandardTradeApprover
     from core.logic.position_manager import PositionManager
+    from core.position_sizer import KellyPositionSizer
 
 T = TypeVar("T")
 
 
 @dataclass
 class GeneralConfig:
-    default_symbols: List[str] = field(default_factory=lambda: ["AAPL", "MSFT"])
+    default_symbols: list[str] = field(default_factory=lambda: ["AAPL", "MSFT"])
     default_mode: str = "simulation"
     log_level: str = "INFO"
 
@@ -81,6 +81,7 @@ class RiskConfig:
 @dataclass
 class ExecutionConfig:
     """Configuration for execution friction (slippage, commission)."""
+
     slippage_pct: float = 0.001  # 0.1% slippage
     commission_per_trade: float = 0.0  # Commission per trade in dollars
     apply_friction_in_simulation: bool = True  # Apply friction in simulation mode
@@ -194,6 +195,7 @@ class AutoTraderConfig:
 @dataclass
 class ErrorRecoveryConfig:
     """Configuration for error recovery and retry behavior."""
+
     retry_max_attempts: int = 3
     retry_base_delay: float = 1.0
     circuit_breaker_failure_threshold: int = 5
@@ -203,21 +205,24 @@ class ErrorRecoveryConfig:
 @dataclass
 class MLTrainingConfig:
     """Configuration for ML training and trade quality prediction."""
+
     meta_logging_enabled: bool = True
     meta_log_file: str = "meta_trades_live.jsonl"
     training_data_path: str = "data/ml_training"
     model_path: str = "models/trade_quality_model.joblib"
     min_trades_for_training: int = 100
     retrain_interval_days: int = 7
-    features: List[str] = field(default_factory=lambda: [
-        "feat_atr_percentile",
-        "feat_drawdown_portfolio_pct",
-        "feat_position_size_pct",
-        "feat_hour_of_day",
-        "feat_day_of_week",
-        "feat_bars_in_regime",
-        "feat_signal_strength",
-    ])
+    features: list[str] = field(
+        default_factory=lambda: [
+            "feat_atr_percentile",
+            "feat_drawdown_portfolio_pct",
+            "feat_position_size_pct",
+            "feat_hour_of_day",
+            "feat_day_of_week",
+            "feat_bars_in_regime",
+            "feat_signal_strength",
+        ]
+    )
     # ML Trade Quality Filter settings
     filter_enabled: bool = False  # Off by default
     filter_min_confidence: float = 0.5  # Minimum score to approve trade (0-1)
@@ -228,44 +233,53 @@ class MLTrainingConfig:
 @dataclass
 class ScannerConfig:
     """Configuration for the stock scanner/screener."""
+
     enabled: bool = True
     universe_source: str = "sp500"
-    universe: List[str] = field(default_factory=list)
-    providers: Dict[str, Any] = field(default_factory=lambda: {
-        "technical_enabled": True,
-        "fundamental_enabled": False,
-        "sentiment_enabled": False,
-        "insider_enabled": False,
-        "lookback_bars": 200,
-    })
-    scoring: Dict[str, Any] = field(default_factory=lambda: {
-        "weights": {
-            "momentum_breakout": 0.30,
-            "relative_strength": 0.25,
-            "volume_surge": 0.20,
-            "trend_following": 0.25,
-        },
-        "trade_threshold": 0.7,
-        "watch_threshold": 0.4,
-        "max_trade_symbols": 10,
-        "max_watch_symbols": 20,
-    })
-    schedule: Dict[str, Any] = field(default_factory=lambda: {
-        "pre_market_scan_enabled": True,
-        "scan_time_minutes_before_open": 10,
-        "auto_update_lists": False,
-        "optimize_after_scan": True,
-        "optimization_days": 365,
-        "optimization_metric": "sharpe_ratio",
-    })
-    criteria: List[Dict[str, Any]] = field(default_factory=lambda: [
-        {"name": "momentum_breakout", "params": {}},
-        {"name": "relative_strength", "params": {"benchmark": "SPY", "period": 20}},
-        {"name": "volume_surge", "params": {"surge_threshold": 1.5}},
-        {"name": "trend_following", "params": {}},
-    ])
+    universe: list[str] = field(default_factory=list)
+    providers: dict[str, Any] = field(
+        default_factory=lambda: {
+            "technical_enabled": True,
+            "fundamental_enabled": False,
+            "sentiment_enabled": False,
+            "insider_enabled": False,
+            "lookback_bars": 200,
+        }
+    )
+    scoring: dict[str, Any] = field(
+        default_factory=lambda: {
+            "weights": {
+                "momentum_breakout": 0.30,
+                "relative_strength": 0.25,
+                "volume_surge": 0.20,
+                "trend_following": 0.25,
+            },
+            "trade_threshold": 0.7,
+            "watch_threshold": 0.4,
+            "max_trade_symbols": 10,
+            "max_watch_symbols": 20,
+        }
+    )
+    schedule: dict[str, Any] = field(
+        default_factory=lambda: {
+            "pre_market_scan_enabled": True,
+            "scan_time_minutes_before_open": 10,
+            "auto_update_lists": False,
+            "optimize_after_scan": True,
+            "optimization_days": 365,
+            "optimization_metric": "sharpe_ratio",
+        }
+    )
+    criteria: list[dict[str, Any]] = field(
+        default_factory=lambda: [
+            {"name": "momentum_breakout", "params": {}},
+            {"name": "relative_strength", "params": {"benchmark": "SPY", "period": 20}},
+            {"name": "volume_surge", "params": {"surge_threshold": 1.5}},
+            {"name": "trend_following", "params": {}},
+        ]
+    )
 
-    def to_engine_config(self) -> Dict[str, Any]:
+    def to_engine_config(self) -> dict[str, Any]:
         """Convert to the dict format expected by ScannerEngine."""
         return {
             "universe_source": self.universe_source,
@@ -305,15 +319,17 @@ class HybridSizingConfig:
         low_confidence_threshold: Confidence < this is "low" tier
         trend_indicators: Which indicators to use for trend detection
     """
+
     enabled: bool = False  # Off by default, opt-in
     high_confidence_threshold: float = 0.7
     low_confidence_threshold: float = 0.5
-    trend_indicators: List[str] = field(default_factory=lambda: ["RSI", "MACD", "SMA_200"])
+    trend_indicators: list[str] = field(default_factory=lambda: ["RSI", "MACD", "SMA_200"])
 
 
 @dataclass
 class TradingConfig:
     """Master configuration container."""
+
     general: GeneralConfig = field(default_factory=GeneralConfig)
     simulation: SimulationConfig = field(default_factory=SimulationConfig)
     alpaca: AlpacaConfig = field(default_factory=AlpacaConfig)
@@ -334,10 +350,10 @@ class TradingConfig:
     scanner: ScannerConfig = field(default_factory=ScannerConfig)
 
     # Raw dict for any custom/unknown fields
-    _raw: Dict[str, Any] = field(default_factory=dict)
+    _raw: dict[str, Any] = field(default_factory=dict)
 
 
-def _dict_to_dataclass(cls: Type[T], data: dict) -> T:
+def _dict_to_dataclass(cls: type[T], data: dict) -> T:
     """Convert a dict to a dataclass, ignoring unknown fields."""
     if data is None:
         return cls()
@@ -393,14 +409,14 @@ def _apply_env_overrides(config: TradingConfig) -> TradingConfig:
     }
 
     # Collect overrides by section
-    section_overrides: Dict[str, Dict[str, Any]] = {}
+    section_overrides: dict[str, dict[str, Any]] = {}
 
     for env_key, env_value in os.environ.items():
         if not env_key.startswith(prefix):
             continue
 
         # Parse: TRADING__SECTION__FIELD → ["SECTION", "FIELD"]
-        parts = env_key[len(prefix):].split("__")
+        parts = env_key[len(prefix) :].split("__")
         if len(parts) != 2:
             continue
 
@@ -473,7 +489,7 @@ def _parse_env_value(value: str) -> Any:
     return value
 
 
-def load_config(config_path: Optional[str] = None) -> TradingConfig:
+def load_config(config_path: str | None = None) -> TradingConfig:
     """
     Load configuration from JSON file.
 
@@ -500,7 +516,7 @@ def load_config(config_path: Optional[str] = None) -> TradingConfig:
             return TradingConfig()
 
     try:
-        with open(config_path, 'r') as f:
+        with open(config_path) as f:
             raw = json.load(f)
 
         config = TradingConfig(
@@ -522,7 +538,7 @@ def load_config(config_path: Optional[str] = None) -> TradingConfig:
             ml_training=_dict_to_dataclass(MLTrainingConfig, raw.get("ml_training")),
             hybrid_sizing=_dict_to_dataclass(HybridSizingConfig, raw.get("hybrid_sizing")),
             scanner=_dict_to_dataclass(ScannerConfig, raw.get("scanner")),
-            _raw=raw
+            _raw=raw,
         )
 
         print(f"[CONFIG] Loaded from {config_path}")
@@ -545,7 +561,7 @@ def load_config(config_path: Optional[str] = None) -> TradingConfig:
 
 
 # Global config instance (lazy loaded)
-_config: Optional[TradingConfig] = None
+_config: TradingConfig | None = None
 
 
 def get_config(reload: bool = False) -> TradingConfig:
@@ -587,15 +603,9 @@ def enable_day_trade_mode() -> TradingConfig:
         Updated TradingConfig instance
     """
     from dataclasses import replace
+
     config = get_config()
-    updated = replace(
-        config,
-        trade_logic=replace(
-            config.trade_logic,
-            swing_mode=False,
-            min_hold_days=0
-        )
-    )
+    updated = replace(config, trade_logic=replace(config.trade_logic, swing_mode=False, min_hold_days=0))
     set_config(updated)
     return updated
 
@@ -608,6 +618,7 @@ def reload_config() -> TradingConfig:
 # =============================================================================
 # Path Helpers - Provide resolved paths for legacy compatibility
 # =============================================================================
+
 
 def get_app_path() -> Path:
     """
@@ -698,20 +709,15 @@ def validate_config(config: TradingConfig) -> tuple[bool, list[str]]:
 
     # Risk config validation
     if not (0.001 <= config.risk.risk_per_trade <= 0.10):
-        errors.append(
-            f"risk_per_trade ({config.risk.risk_per_trade}) must be between 0.1% and 10%"
-        )
+        errors.append(f"risk_per_trade ({config.risk.risk_per_trade}) must be between 0.1% and 10%")
 
     if config.risk.max_holding_pct < config.risk.max_trade_pct:
         errors.append(
-            f"max_holding_pct ({config.risk.max_holding_pct}) must be >= "
-            f"max_trade_pct ({config.risk.max_trade_pct})"
+            f"max_holding_pct ({config.risk.max_holding_pct}) must be >= max_trade_pct ({config.risk.max_trade_pct})"
         )
 
     if config.risk.max_trade_pct > 0.25:
-        errors.append(
-            f"max_trade_pct ({config.risk.max_trade_pct}) exceeds 25% safety limit"
-        )
+        errors.append(f"max_trade_pct ({config.risk.max_trade_pct}) exceeds 25% safety limit")
 
     # Position sizer validation
     if config.position_sizer.max_holding_pct < config.position_sizer.max_trade_pct:
@@ -724,13 +730,11 @@ def validate_config(config: TradingConfig) -> tuple[bool, list[str]]:
     if config.drawdown_monitor.enabled:
         if config.drawdown_monitor.max_portfolio_drawdown > 0.50:
             errors.append(
-                f"max_portfolio_drawdown ({config.drawdown_monitor.max_portfolio_drawdown}) "
-                f"exceeds 50% safety limit"
+                f"max_portfolio_drawdown ({config.drawdown_monitor.max_portfolio_drawdown}) exceeds 50% safety limit"
             )
         if config.drawdown_monitor.max_symbol_drawdown > 0.50:
             errors.append(
-                f"max_symbol_drawdown ({config.drawdown_monitor.max_symbol_drawdown}) "
-                f"exceeds 50% safety limit"
+                f"max_symbol_drawdown ({config.drawdown_monitor.max_symbol_drawdown}) exceeds 50% safety limit"
             )
 
     # Error recovery validation
@@ -757,8 +761,10 @@ config = property(lambda self: get_config())
 # For direct import: from core.config_loader import config
 class _ConfigProxy:
     """Proxy that lazily loads config on first access."""
+
     def __getattr__(self, name):
         return getattr(get_config(), name)
+
 
 config = _ConfigProxy()
 
@@ -767,7 +773,8 @@ config = _ConfigProxy()
 # Factory Functions - Create component instances from config
 # ============================================================================
 
-def create_position_sizer(config: Optional[TradingConfig] = None) -> "KellyPositionSizer":
+
+def create_position_sizer(config: TradingConfig | None = None) -> KellyPositionSizer:
     """
     Create a position sizer instance from config.
 
@@ -786,7 +793,7 @@ def create_position_sizer(config: Optional[TradingConfig] = None) -> "KellyPosit
     return PositionSizerFactory.create_from_config(cfg)
 
 
-def create_drawdown_monitor(config: Optional[TradingConfig] = None) -> Optional["DrawdownMonitor"]:
+def create_drawdown_monitor(config: TradingConfig | None = None) -> DrawdownMonitor | None:
     """
     Create a DrawdownMonitor instance from config.
 
@@ -814,10 +821,7 @@ def create_drawdown_monitor(config: Optional[TradingConfig] = None) -> Optional[
     )
 
 
-def create_trade_approver(
-    config: Optional[TradingConfig] = None,
-    event_handler=None
-) -> "StandardTradeApprover":
+def create_trade_approver(config: TradingConfig | None = None, event_handler=None) -> StandardTradeApprover:
     """
     Create a StandardTradeApprover instance from config.
 
@@ -858,7 +862,7 @@ def create_trade_approver(
     )
 
 
-def create_position_manager(config: Optional[TradingConfig] = None) -> "PositionManager":
+def create_position_manager(config: TradingConfig | None = None) -> PositionManager:
     """
     Create a PositionManager instance from config.
 

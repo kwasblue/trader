@@ -7,20 +7,21 @@ Coverage:
 - SimConfig dataclass
 - SimulationRunner initialization and methods
 """
-import pytest
-import numpy as np
-import pandas as pd
-from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch, AsyncMock
-import asyncio
 
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import numpy as np
+import pandas as pd
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from core.simulator.simulation import compute_atr, classify_regime, SimConfig
+from core.simulator.simulation import SimConfig, classify_regime, compute_atr
 
 
 class TestComputeATR:
@@ -30,12 +31,51 @@ class TestComputeATR:
         """Test basic ATR computation."""
         # Create OHLC data
         data = {
-            'High': [102, 104, 103, 105, 106, 107, 108, 109, 110, 111,
-                     112, 113, 114, 115, 116, 117, 118, 119, 120, 121],
-            'Low': [98, 99, 98, 100, 101, 102, 103, 104, 105, 106,
-                    107, 108, 109, 110, 111, 112, 113, 114, 115, 116],
-            'Close': [100, 102, 101, 103, 104, 105, 106, 107, 108, 109,
-                      110, 111, 112, 113, 114, 115, 116, 117, 118, 119],
+            "High": [
+                102,
+                104,
+                103,
+                105,
+                106,
+                107,
+                108,
+                109,
+                110,
+                111,
+                112,
+                113,
+                114,
+                115,
+                116,
+                117,
+                118,
+                119,
+                120,
+                121,
+            ],
+            "Low": [98, 99, 98, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116],
+            "Close": [
+                100,
+                102,
+                101,
+                103,
+                104,
+                105,
+                106,
+                107,
+                108,
+                109,
+                110,
+                111,
+                112,
+                113,
+                114,
+                115,
+                116,
+                117,
+                118,
+                119,
+            ],
         }
         df = pd.DataFrame(data)
 
@@ -56,9 +96,9 @@ class TestComputeATR:
     def test_compute_atr_insufficient_data(self):
         """Test ATR with insufficient data points."""
         data = {
-            'High': [102, 104, 103],
-            'Low': [98, 99, 98],
-            'Close': [100, 102, 101],
+            "High": [102, 104, 103],
+            "Low": [98, 99, 98],
+            "Close": [100, 102, 101],
         }
         df = pd.DataFrame(data)
 
@@ -70,9 +110,9 @@ class TestComputeATR:
         """Test ATR with exactly period+1 data points."""
         n = 16  # period=14 + 1 for TR calculation + 1
         data = {
-            'High': [100 + i for i in range(n)],
-            'Low': [95 + i for i in range(n)],
-            'Close': [98 + i for i in range(n)],
+            "High": [100 + i for i in range(n)],
+            "Low": [95 + i for i in range(n)],
+            "Close": [98 + i for i in range(n)],
         }
         df = pd.DataFrame(data)
 
@@ -83,12 +123,51 @@ class TestComputeATR:
     def test_compute_atr_lowercase_columns(self):
         """Test ATR with lowercase column names."""
         data = {
-            'high': [102, 104, 103, 105, 106, 107, 108, 109, 110, 111,
-                     112, 113, 114, 115, 116, 117, 118, 119, 120, 121],
-            'low': [98, 99, 98, 100, 101, 102, 103, 104, 105, 106,
-                    107, 108, 109, 110, 111, 112, 113, 114, 115, 116],
-            'close': [100, 102, 101, 103, 104, 105, 106, 107, 108, 109,
-                      110, 111, 112, 113, 114, 115, 116, 117, 118, 119],
+            "high": [
+                102,
+                104,
+                103,
+                105,
+                106,
+                107,
+                108,
+                109,
+                110,
+                111,
+                112,
+                113,
+                114,
+                115,
+                116,
+                117,
+                118,
+                119,
+                120,
+                121,
+            ],
+            "low": [98, 99, 98, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116],
+            "close": [
+                100,
+                102,
+                101,
+                103,
+                104,
+                105,
+                106,
+                107,
+                108,
+                109,
+                110,
+                111,
+                112,
+                113,
+                114,
+                115,
+                116,
+                117,
+                118,
+                119,
+            ],
         }
         df = pd.DataFrame(data)
 
@@ -100,9 +179,9 @@ class TestComputeATR:
         """Test ATR with custom period."""
         n = 30
         data = {
-            'High': [100 + i for i in range(n)],
-            'Low': [95 + i for i in range(n)],
-            'Close': [98 + i for i in range(n)],
+            "High": [100 + i for i in range(n)],
+            "Low": [95 + i for i in range(n)],
+            "Close": [98 + i for i in range(n)],
         }
         df = pd.DataFrame(data)
 
@@ -175,7 +254,7 @@ class TestSimConfig:
 
     def test_simconfig_defaults(self):
         """Test SimConfig with default values."""
-        with patch('core.simulator.simulation.Path.mkdir'):
+        with patch("core.simulator.simulation.Path.mkdir"):
             config = SimConfig(symbols=["AAPL", "MSFT"])
 
         assert config.symbols == ["AAPL", "MSFT"]
@@ -185,7 +264,7 @@ class TestSimConfig:
 
     def test_simconfig_custom_values(self):
         """Test SimConfig with custom values."""
-        with patch('core.simulator.simulation.Path.mkdir'):
+        with patch("core.simulator.simulation.Path.mkdir"):
             config = SimConfig(
                 symbols=["GOOGL"],
                 steps=100,
@@ -201,17 +280,13 @@ class TestSimConfig:
     def test_simconfig_empty_symbols_raises(self):
         """Test that empty symbols list raises error."""
         with pytest.raises(ValueError, match="symbols list cannot be empty"):
-            with patch('core.simulator.simulation.Path.mkdir'):
+            with patch("core.simulator.simulation.Path.mkdir"):
                 SimConfig(symbols=[])
 
     def test_simconfig_trade_log_path(self):
         """Test trade_log_path property."""
-        with patch('core.simulator.simulation.Path.mkdir'):
-            config = SimConfig(
-                symbols=["AAPL"],
-                trade_log_file="test_trades.csv",
-                trade_log_dir="test_logs"
-            )
+        with patch("core.simulator.simulation.Path.mkdir"):
+            config = SimConfig(symbols=["AAPL"], trade_log_file="test_trades.csv", trade_log_dir="test_logs")
 
         assert config.trade_log_path == "test_logs/test_trades.csv"
 
@@ -233,8 +308,8 @@ class TestSimConfig:
         mock_config.drawdown_monitor.max_portfolio_daily_drawdown = 0.08
         mock_config.indicators.atr_period = 14
 
-        with patch('core.simulator.simulation.get_config', return_value=mock_config):
-            with patch('core.simulator.simulation.Path.mkdir'):
+        with patch("core.simulator.simulation.get_config", return_value=mock_config):
+            with patch("core.simulator.simulation.Path.mkdir"):
                 config = SimConfig.from_config_file()
 
         assert config.symbols == ["AAPL"]
@@ -247,7 +322,7 @@ class TestSimulationRunnerInit:
     @pytest.fixture
     def sim_config(self):
         """Create a SimConfig for testing."""
-        with patch('core.simulator.simulation.Path.mkdir'):
+        with patch("core.simulator.simulation.Path.mkdir"):
             return SimConfig(
                 symbols=["AAPL"],
                 steps=10,
@@ -257,20 +332,22 @@ class TestSimulationRunnerInit:
 
     def test_simulation_runner_init(self, sim_config):
         """Test SimulationRunner initialization."""
-        with patch('core.events.eventhandler.get_event_handler') as mock_eh, \
-             patch('core.simulator.simulation.Logger'), \
-             patch('core.simulator.simulation.FileTradeLogger'), \
-             patch('core.simulator.simulation.GBMSimulator'), \
-             patch('core.simulator.simulation.StrategyRoutingManager'), \
-             patch('core.simulator.simulation.DynamicTradeLogicManager'), \
-             patch('core.simulator.simulation.MockBroker'), \
-             patch('core.simulator.simulation.MockExecutor'), \
-             patch('core.simulator.simulation.KellyPositionSizer'), \
-             patch('core.simulator.simulation.MockExecutionEngine'):
-
+        with (
+            patch("core.events.eventhandler.get_event_handler") as mock_eh,
+            patch("core.simulator.simulation.Logger"),
+            patch("core.simulator.simulation.FileTradeLogger"),
+            patch("core.simulator.simulation.GBMSimulator"),
+            patch("core.simulator.simulation.StrategyRoutingManager"),
+            patch("core.simulator.simulation.DynamicTradeLogicManager"),
+            patch("core.simulator.simulation.MockBroker"),
+            patch("core.simulator.simulation.MockExecutor"),
+            patch("core.simulator.simulation.KellyPositionSizer"),
+            patch("core.simulator.simulation.MockExecutionEngine"),
+        ):
             mock_eh.return_value = MagicMock()
 
             from core.simulator.simulation import SimulationRunner
+
             runner = SimulationRunner(sim_config)
 
             assert runner.cfg == sim_config
@@ -283,23 +360,25 @@ class TestSimulationHelpers:
 
     def test_df_from_history_empty(self):
         """Test _df_from_history with empty history."""
-        with patch('core.simulator.simulation.Path.mkdir'):
+        with patch("core.simulator.simulation.Path.mkdir"):
             config = SimConfig(symbols=["AAPL"], steps=1)
 
-        with patch('core.events.eventhandler.get_event_handler') as mock_eh, \
-             patch('core.simulator.simulation.Logger'), \
-             patch('core.simulator.simulation.FileTradeLogger'), \
-             patch('core.simulator.simulation.GBMSimulator'), \
-             patch('core.simulator.simulation.StrategyRoutingManager'), \
-             patch('core.simulator.simulation.DynamicTradeLogicManager'), \
-             patch('core.simulator.simulation.MockBroker'), \
-             patch('core.simulator.simulation.MockExecutor'), \
-             patch('core.simulator.simulation.KellyPositionSizer'), \
-             patch('core.simulator.simulation.MockExecutionEngine'):
-
+        with (
+            patch("core.events.eventhandler.get_event_handler") as mock_eh,
+            patch("core.simulator.simulation.Logger"),
+            patch("core.simulator.simulation.FileTradeLogger"),
+            patch("core.simulator.simulation.GBMSimulator"),
+            patch("core.simulator.simulation.StrategyRoutingManager"),
+            patch("core.simulator.simulation.DynamicTradeLogicManager"),
+            patch("core.simulator.simulation.MockBroker"),
+            patch("core.simulator.simulation.MockExecutor"),
+            patch("core.simulator.simulation.KellyPositionSizer"),
+            patch("core.simulator.simulation.MockExecutionEngine"),
+        ):
             mock_eh.return_value = MagicMock()
 
             from core.simulator.simulation import SimulationRunner
+
             runner = SimulationRunner(config)
 
             # Clear history
@@ -311,34 +390,38 @@ class TestSimulationHelpers:
 
     def test_df_from_history_with_data(self):
         """Test _df_from_history with data."""
-        with patch('core.simulator.simulation.Path.mkdir'):
+        with patch("core.simulator.simulation.Path.mkdir"):
             config = SimConfig(symbols=["AAPL"], steps=1)
 
-        with patch('core.events.eventhandler.get_event_handler') as mock_eh, \
-             patch('core.simulator.simulation.Logger'), \
-             patch('core.simulator.simulation.FileTradeLogger'), \
-             patch('core.simulator.simulation.GBMSimulator'), \
-             patch('core.simulator.simulation.StrategyRoutingManager'), \
-             patch('core.simulator.simulation.DynamicTradeLogicManager'), \
-             patch('core.simulator.simulation.MockBroker'), \
-             patch('core.simulator.simulation.MockExecutor'), \
-             patch('core.simulator.simulation.KellyPositionSizer'), \
-             patch('core.simulator.simulation.MockExecutionEngine'):
-
+        with (
+            patch("core.events.eventhandler.get_event_handler") as mock_eh,
+            patch("core.simulator.simulation.Logger"),
+            patch("core.simulator.simulation.FileTradeLogger"),
+            patch("core.simulator.simulation.GBMSimulator"),
+            patch("core.simulator.simulation.StrategyRoutingManager"),
+            patch("core.simulator.simulation.DynamicTradeLogicManager"),
+            patch("core.simulator.simulation.MockBroker"),
+            patch("core.simulator.simulation.MockExecutor"),
+            patch("core.simulator.simulation.KellyPositionSizer"),
+            patch("core.simulator.simulation.MockExecutionEngine"),
+        ):
             mock_eh.return_value = MagicMock()
 
             from core.simulator.simulation import SimulationRunner
+
             runner = SimulationRunner(config)
 
             # Add test data
-            runner.history["AAPL"].append({
-                "timestamp": datetime.now(timezone.utc),
-                "Open": 150.0,
-                "High": 152.0,
-                "Low": 149.0,
-                "Close": 151.0,
-                "Volume": 1000000,
-            })
+            runner.history["AAPL"].append(
+                {
+                    "timestamp": datetime.now(timezone.utc),
+                    "Open": 150.0,
+                    "High": 152.0,
+                    "Low": 149.0,
+                    "Close": 151.0,
+                    "Volume": 1000000,
+                }
+            )
 
             df = runner._df_from_history("AAPL")
 
@@ -352,29 +435,31 @@ class TestClassifyRegimeMethod:
 
     def test_classify_regime_unknown_missing_data(self):
         """Test regime classification with missing indicator data."""
-        with patch('core.simulator.simulation.Path.mkdir'):
+        with patch("core.simulator.simulation.Path.mkdir"):
             config = SimConfig(symbols=["AAPL"], steps=1)
 
-        with patch('core.events.eventhandler.get_event_handler') as mock_eh, \
-             patch('core.simulator.simulation.Logger'), \
-             patch('core.simulator.simulation.FileTradeLogger'), \
-             patch('core.simulator.simulation.GBMSimulator'), \
-             patch('core.simulator.simulation.StrategyRoutingManager'), \
-             patch('core.simulator.simulation.DynamicTradeLogicManager'), \
-             patch('core.simulator.simulation.MockBroker'), \
-             patch('core.simulator.simulation.MockExecutor'), \
-             patch('core.simulator.simulation.KellyPositionSizer'), \
-             patch('core.simulator.simulation.MockExecutionEngine'):
-
+        with (
+            patch("core.events.eventhandler.get_event_handler") as mock_eh,
+            patch("core.simulator.simulation.Logger"),
+            patch("core.simulator.simulation.FileTradeLogger"),
+            patch("core.simulator.simulation.GBMSimulator"),
+            patch("core.simulator.simulation.StrategyRoutingManager"),
+            patch("core.simulator.simulation.DynamicTradeLogicManager"),
+            patch("core.simulator.simulation.MockBroker"),
+            patch("core.simulator.simulation.MockExecutor"),
+            patch("core.simulator.simulation.KellyPositionSizer"),
+            patch("core.simulator.simulation.MockExecutionEngine"),
+        ):
             mock_eh.return_value = MagicMock()
 
             from core.simulator.simulation import SimulationRunner
+
             runner = SimulationRunner(config)
 
             # Indicators with NaN values
             indicators_row = {
-                'ATR': np.nan,
-                'Close': 150.0,
+                "ATR": np.nan,
+                "Close": 150.0,
             }
 
             regime = runner._classify_regime(indicators_row, [])
@@ -383,23 +468,25 @@ class TestClassifyRegimeMethod:
 
     def test_classify_regime_high_volatility_method(self):
         """Test HIGH_VOLATILITY regime classification."""
-        with patch('core.simulator.simulation.Path.mkdir'):
+        with patch("core.simulator.simulation.Path.mkdir"):
             config = SimConfig(symbols=["AAPL"], steps=1)
 
-        with patch('core.events.eventhandler.get_event_handler') as mock_eh, \
-             patch('core.simulator.simulation.Logger'), \
-             patch('core.simulator.simulation.FileTradeLogger'), \
-             patch('core.simulator.simulation.GBMSimulator'), \
-             patch('core.simulator.simulation.StrategyRoutingManager'), \
-             patch('core.simulator.simulation.DynamicTradeLogicManager'), \
-             patch('core.simulator.simulation.MockBroker'), \
-             patch('core.simulator.simulation.MockExecutor'), \
-             patch('core.simulator.simulation.KellyPositionSizer'), \
-             patch('core.simulator.simulation.MockExecutionEngine'):
-
+        with (
+            patch("core.events.eventhandler.get_event_handler") as mock_eh,
+            patch("core.simulator.simulation.Logger"),
+            patch("core.simulator.simulation.FileTradeLogger"),
+            patch("core.simulator.simulation.GBMSimulator"),
+            patch("core.simulator.simulation.StrategyRoutingManager"),
+            patch("core.simulator.simulation.DynamicTradeLogicManager"),
+            patch("core.simulator.simulation.MockBroker"),
+            patch("core.simulator.simulation.MockExecutor"),
+            patch("core.simulator.simulation.KellyPositionSizer"),
+            patch("core.simulator.simulation.MockExecutionEngine"),
+        ):
             mock_eh.return_value = MagicMock()
 
             from core.simulator.simulation import SimulationRunner
+
             runner = SimulationRunner(config)
 
             # ATR history with stable values
@@ -408,9 +495,9 @@ class TestClassifyRegimeMethod:
 
             # High ATR current value
             indicators_row = {
-                'ATR': 5.0,  # Way above mean + std
-                'Close': 150.0,
-                'RSI': 50.0,
+                "ATR": 5.0,  # Way above mean + std
+                "Close": 150.0,
+                "RSI": 50.0,
             }
 
             regime = runner._classify_regime(indicators_row, runner.atr_hist["AAPL"])
@@ -423,23 +510,25 @@ class TestSimulationStop:
 
     def test_stop_sets_flag(self):
         """Test that stop() sets the stop flag."""
-        with patch('core.simulator.simulation.Path.mkdir'):
+        with patch("core.simulator.simulation.Path.mkdir"):
             config = SimConfig(symbols=["AAPL"], steps=1)
 
-        with patch('core.events.eventhandler.get_event_handler') as mock_eh, \
-             patch('core.simulator.simulation.Logger'), \
-             patch('core.simulator.simulation.FileTradeLogger'), \
-             patch('core.simulator.simulation.GBMSimulator'), \
-             patch('core.simulator.simulation.StrategyRoutingManager'), \
-             patch('core.simulator.simulation.DynamicTradeLogicManager'), \
-             patch('core.simulator.simulation.MockBroker'), \
-             patch('core.simulator.simulation.MockExecutor'), \
-             patch('core.simulator.simulation.KellyPositionSizer'), \
-             patch('core.simulator.simulation.MockExecutionEngine'):
-
+        with (
+            patch("core.events.eventhandler.get_event_handler") as mock_eh,
+            patch("core.simulator.simulation.Logger"),
+            patch("core.simulator.simulation.FileTradeLogger"),
+            patch("core.simulator.simulation.GBMSimulator"),
+            patch("core.simulator.simulation.StrategyRoutingManager"),
+            patch("core.simulator.simulation.DynamicTradeLogicManager"),
+            patch("core.simulator.simulation.MockBroker"),
+            patch("core.simulator.simulation.MockExecutor"),
+            patch("core.simulator.simulation.KellyPositionSizer"),
+            patch("core.simulator.simulation.MockExecutionEngine"),
+        ):
             mock_eh.return_value = MagicMock()
 
             from core.simulator.simulation import SimulationRunner
+
             runner = SimulationRunner(config)
 
             assert runner._stop_requested is False
@@ -454,7 +543,7 @@ class TestSimConfigHistoricalData:
 
     def test_simconfig_historical_data_defaults(self):
         """Test SimConfig historical data options default to False."""
-        with patch('core.simulator.simulation.Path.mkdir'):
+        with patch("core.simulator.simulation.Path.mkdir"):
             config = SimConfig(symbols=["AAPL"])
 
         assert config.use_historical_data is False
@@ -463,12 +552,12 @@ class TestSimConfigHistoricalData:
 
     def test_simconfig_historical_data_enabled(self):
         """Test SimConfig with historical data enabled."""
-        with patch('core.simulator.simulation.Path.mkdir'):
+        with patch("core.simulator.simulation.Path.mkdir"):
             config = SimConfig(
                 symbols=["AAPL", "MSFT"],
                 use_historical_data=True,
                 historical_data_path="custom/path",
-                historical_start_index=50
+                historical_start_index=50,
             )
 
         assert config.use_historical_data is True
@@ -484,11 +573,46 @@ class TestHistoricalDataSimulator:
         """Create a sample historical data file."""
         data = {
             "bars": [
-                {"Date": "2024-01-08T10:00:00", "Open": 150.0, "High": 151.0, "Low": 149.0, "Close": 150.5, "Volume": 1000},
-                {"Date": "2024-01-08T10:01:00", "Open": 150.5, "High": 152.0, "Low": 150.0, "Close": 151.0, "Volume": 1100},
-                {"Date": "2024-01-08T10:02:00", "Open": 151.0, "High": 153.0, "Low": 150.5, "Close": 152.0, "Volume": 1200},
-                {"Date": "2024-01-08T10:03:00", "Open": 152.0, "High": 154.0, "Low": 151.0, "Close": 153.0, "Volume": 1300},
-                {"Date": "2024-01-08T10:04:00", "Open": 153.0, "High": 155.0, "Low": 152.0, "Close": 154.0, "Volume": 1400},
+                {
+                    "Date": "2024-01-08T10:00:00",
+                    "Open": 150.0,
+                    "High": 151.0,
+                    "Low": 149.0,
+                    "Close": 150.5,
+                    "Volume": 1000,
+                },
+                {
+                    "Date": "2024-01-08T10:01:00",
+                    "Open": 150.5,
+                    "High": 152.0,
+                    "Low": 150.0,
+                    "Close": 151.0,
+                    "Volume": 1100,
+                },
+                {
+                    "Date": "2024-01-08T10:02:00",
+                    "Open": 151.0,
+                    "High": 153.0,
+                    "Low": 150.5,
+                    "Close": 152.0,
+                    "Volume": 1200,
+                },
+                {
+                    "Date": "2024-01-08T10:03:00",
+                    "Open": 152.0,
+                    "High": 154.0,
+                    "Low": 151.0,
+                    "Close": 153.0,
+                    "Volume": 1300,
+                },
+                {
+                    "Date": "2024-01-08T10:04:00",
+                    "Open": 153.0,
+                    "High": 155.0,
+                    "Low": 152.0,
+                    "Close": 154.0,
+                    "Volume": 1400,
+                },
             ]
         }
 
@@ -497,6 +621,7 @@ class TestHistoricalDataSimulator:
 
         file_path = proc_data / "proc_AAPL_file.json"
         import json
+
         file_path.write_text(json.dumps(data))
 
         return tmp_path / "proc_data"
@@ -505,12 +630,7 @@ class TestHistoricalDataSimulator:
         """Test HistoricalDataSimulator initialization."""
         from core.simulator.historical_simulator import HistoricalDataSimulator
 
-        sim = HistoricalDataSimulator(
-            symbols=["AAPL"],
-            data_path=str(sample_data_file),
-            loop_data=True,
-            start_index=0
-        )
+        sim = HistoricalDataSimulator(symbols=["AAPL"], data_path=str(sample_data_file), loop_data=True, start_index=0)
 
         assert "AAPL" in sim.data
         assert len(sim.data["AAPL"]) == 5
@@ -520,14 +640,10 @@ class TestHistoricalDataSimulator:
         """Test generating bars from historical data."""
         from core.simulator.historical_simulator import HistoricalDataSimulator
 
-        sim = HistoricalDataSimulator(
-            symbols=["AAPL"],
-            data_path=str(sample_data_file),
-            start_index=0
-        )
+        sim = HistoricalDataSimulator(symbols=["AAPL"], data_path=str(sample_data_file), start_index=0)
 
         # Mock the event bus to avoid event loop issues
-        with patch.object(sim, 'bus') as mock_bus:
+        with patch.object(sim, "bus") as mock_bus:
             mock_bus.emit = AsyncMock()
 
             bar1 = sim.generate_bar("AAPL")
@@ -543,13 +659,9 @@ class TestHistoricalDataSimulator:
         """Test updating all symbols at once."""
         from core.simulator.historical_simulator import HistoricalDataSimulator
 
-        sim = HistoricalDataSimulator(
-            symbols=["AAPL"],
-            data_path=str(sample_data_file),
-            start_index=0
-        )
+        sim = HistoricalDataSimulator(symbols=["AAPL"], data_path=str(sample_data_file), start_index=0)
 
-        with patch.object(sim, 'bus') as mock_bus:
+        with patch.object(sim, "bus") as mock_bus:
             mock_bus.emit = AsyncMock()
 
             bars = sim.update_all()
@@ -563,14 +675,9 @@ class TestHistoricalDataSimulator:
         """Test looping when data is exhausted."""
         from core.simulator.historical_simulator import HistoricalDataSimulator
 
-        sim = HistoricalDataSimulator(
-            symbols=["AAPL"],
-            data_path=str(sample_data_file),
-            loop_data=True,
-            start_index=0
-        )
+        sim = HistoricalDataSimulator(symbols=["AAPL"], data_path=str(sample_data_file), loop_data=True, start_index=0)
 
-        with patch.object(sim, 'bus') as mock_bus:
+        with patch.object(sim, "bus") as mock_bus:
             mock_bus.emit = AsyncMock()
 
             # Read all 5 bars
@@ -589,10 +696,10 @@ class TestHistoricalDataSimulator:
         sim = HistoricalDataSimulator(
             symbols=["AAPL"],
             data_path=str(sample_data_file),
-            start_index=2  # Skip first 2 bars
+            start_index=2,  # Skip first 2 bars
         )
 
-        with patch.object(sim, 'bus') as mock_bus:
+        with patch.object(sim, "bus") as mock_bus:
             mock_bus.emit = AsyncMock()
 
             bar = sim.generate_bar("AAPL")
@@ -612,7 +719,7 @@ class TestHistoricalDataSimulator:
         data = {
             "candles": [
                 {"datetime": 1704700000000, "open": 150.0, "high": 151.0, "low": 149.0, "close": 150.5, "volume": 1000},
-                {"datetime": 1704700060000, "open": 150.5, "high": 152.0, "low": 150.0, "close": 151.0, "volume": 1100}
+                {"datetime": 1704700060000, "open": 150.5, "high": 152.0, "low": 150.0, "close": 151.0, "volume": 1100},
             ]
         }
 
@@ -621,15 +728,11 @@ class TestHistoricalDataSimulator:
 
         from core.simulator.historical_simulator import HistoricalDataSimulator
 
-        sim = HistoricalDataSimulator(
-            symbols=["AAPL"],
-            data_path=str(raw_data),
-            start_index=0
-        )
+        sim = HistoricalDataSimulator(symbols=["AAPL"], data_path=str(raw_data), start_index=0)
 
         assert "AAPL" in sim.data
 
-        with patch.object(sim, 'bus') as mock_bus:
+        with patch.object(sim, "bus") as mock_bus:
             mock_bus.emit = AsyncMock()
 
             bar = sim.generate_bar("AAPL")
@@ -649,36 +752,45 @@ class TestSimulationRunnerWithHistoricalData:
 
         data = {
             "bars": [
-                {"Date": "2024-01-08T10:00:00", "Open": 150.0, "High": 151.0, "Low": 149.0, "Close": 150.5, "Volume": 1000}
-            ] * 100  # 100 identical bars for simplicity
+                {
+                    "Date": "2024-01-08T10:00:00",
+                    "Open": 150.0,
+                    "High": 151.0,
+                    "Low": 149.0,
+                    "Close": 150.5,
+                    "Volume": 1000,
+                }
+            ]
+            * 100  # 100 identical bars for simplicity
         }
 
         file_path = proc_data / "proc_AAPL_file.json"
         file_path.write_text(json.dumps(data))
 
-        with patch('core.simulator.simulation.Path.mkdir'):
+        with patch("core.simulator.simulation.Path.mkdir"):
             config = SimConfig(
                 symbols=["AAPL"],
                 steps=10,
                 use_historical_data=True,
                 historical_data_path=str(proc_data),
-                historical_start_index=0
+                historical_start_index=0,
             )
 
-        with patch('core.events.eventhandler.get_event_handler') as mock_eh, \
-             patch('core.simulator.simulation.Logger'), \
-             patch('core.simulator.simulation.FileTradeLogger'), \
-             patch('core.simulator.simulation.StrategyRoutingManager'), \
-             patch('core.simulator.simulation.DynamicTradeLogicManager'), \
-             patch('core.simulator.simulation.MockBroker'), \
-             patch('core.simulator.simulation.MockExecutor'), \
-             patch('core.simulator.simulation.KellyPositionSizer'), \
-             patch('core.simulator.simulation.MockExecutionEngine'):
-
+        with (
+            patch("core.events.eventhandler.get_event_handler") as mock_eh,
+            patch("core.simulator.simulation.Logger"),
+            patch("core.simulator.simulation.FileTradeLogger"),
+            patch("core.simulator.simulation.StrategyRoutingManager"),
+            patch("core.simulator.simulation.DynamicTradeLogicManager"),
+            patch("core.simulator.simulation.MockBroker"),
+            patch("core.simulator.simulation.MockExecutor"),
+            patch("core.simulator.simulation.KellyPositionSizer"),
+            patch("core.simulator.simulation.MockExecutionEngine"),
+        ):
             mock_eh.return_value = MagicMock()
 
-            from core.simulator.simulation import SimulationRunner
             from core.simulator.historical_simulator import HistoricalDataSimulator
+            from core.simulator.simulation import SimulationRunner
 
             runner = SimulationRunner(config)
 

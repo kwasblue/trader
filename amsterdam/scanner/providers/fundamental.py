@@ -1,6 +1,7 @@
 """
 Fundamental data provider — stub for future implementation.
 """
+
 from __future__ import annotations
 
 from scanner.providers.base import BaseDataProvider, ProviderData

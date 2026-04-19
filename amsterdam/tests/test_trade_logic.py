@@ -3,14 +3,15 @@ Test suite for trade logic and decision making.
 
 Tests trade gate, trade logic manager, and decision logic.
 """
-import sys
+
 import os
+import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import json
 import unittest
-from unittest.mock import Mock, MagicMock, patch
-from datetime import datetime
+from unittest.mock import patch
 
 
 class TestTradeGate(unittest.TestCase):
@@ -21,12 +22,7 @@ class TestTradeGate(unittest.TestCase):
         try:
             from core.logic.trade_gate import TradeGate
 
-            gate = TradeGate(
-                max_layers=2,
-                min_bars_between_layers=3,
-                regime_min_persist_bars=2,
-                flip_cooldown_bars=1
-            )
+            gate = TradeGate(max_layers=2, min_bars_between_layers=3, regime_min_persist_bars=2, flip_cooldown_bars=1)
 
             self.assertEqual(gate.max_layers, 2)
             self.assertEqual(gate.min_bars_between_layers, 3)
@@ -76,20 +72,21 @@ class TestTradeLogicManager(unittest.TestCase):
         self.mock_config = {
             "AAPL": {
                 "normal": {"trade_logic_class": "default", "params": {}},
-                "high_volatility": {"trade_logic_class": "conservative", "params": {"max_position": 0.5}}
+                "high_volatility": {"trade_logic_class": "conservative", "params": {"max_position": 0.5}},
             }
         }
 
     def test_trade_logic_manager_loads_config(self):
         """TradeLogicManager should load config from file."""
         import tempfile
+
         try:
             from core.logic.trade_logic_manager import DynamicTradeLogicManager
 
             # Use a temp directory to avoid read-only filesystem issues
             with tempfile.TemporaryDirectory() as tmpdir:
                 config_path = os.path.join(tmpdir, "config.json")
-                with open(config_path, 'w') as f:
+                with open(config_path, "w") as f:
                     json.dump(self.mock_config, f)
 
                 manager = DynamicTradeLogicManager(config_path)
@@ -103,9 +100,9 @@ class TestTradeLogicManager(unittest.TestCase):
             from core.logic.trade_logic_manager import DynamicTradeLogicManager
 
             # Test that we can instantiate without a file (should use defaults)
-            with patch('builtins.open', side_effect=FileNotFoundError):
+            with patch("builtins.open", side_effect=FileNotFoundError):
                 try:
-                    manager = DynamicTradeLogicManager("/nonexistent.json")
+                    DynamicTradeLogicManager("/nonexistent.json")
                 except FileNotFoundError:
                     pass  # Expected behavior
         except ImportError:
@@ -178,17 +175,14 @@ class TestDrawdownMonitor(unittest.TestCase):
         try:
             from core.drawdown_monitor import DrawdownMonitor
 
-            monitor = DrawdownMonitor(
-                max_symbol_drawdown=0.12,
-                max_portfolio_drawdown=0.15
-            )
+            monitor = DrawdownMonitor(max_symbol_drawdown=0.12, max_portfolio_drawdown=0.15)
 
             self.assertEqual(monitor.max_symbol_drawdown, 0.12)
             self.assertEqual(monitor.max_portfolio_drawdown, 0.15)
         except ImportError:
             self.skipTest("DrawdownMonitor not found")
 
-    @patch('asyncio.create_task')
+    @patch("asyncio.create_task")
     def test_drawdown_calculation(self, mock_create_task):
         """DrawdownMonitor should calculate drawdown correctly."""
         try:
@@ -209,5 +203,5 @@ class TestDrawdownMonitor(unittest.TestCase):
             self.skipTest("DrawdownMonitor not found or method missing")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

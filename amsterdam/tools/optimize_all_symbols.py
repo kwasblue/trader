@@ -29,7 +29,7 @@ async def main():
     import argparse
 
     parser = argparse.ArgumentParser(
-        description='Optimize all symbols in your trade list',
+        description="Optimize all symbols in your trade list",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -47,39 +47,21 @@ Examples:
 
   # Specific strategies only
   python tools/optimize_all_symbols.py --strategies rsi,sma,momentum --save
-        """
+        """,
     )
 
+    parser.add_argument("--strategies", help="Comma-separated strategies to test (default: all)")
+    parser.add_argument("--timeframes", default="5min,15min,30min,1hour,day", help="Comma-separated timeframes to test")
+    parser.add_argument("--days", type=int, default=750, help="Days of historical data (default: 750)")
     parser.add_argument(
-        '--strategies',
-        help='Comma-separated strategies to test (default: all)'
+        "--metric",
+        default="sharpe_ratio",
+        choices=["sharpe_ratio", "total_return", "win_rate"],
+        help="Ranking metric (default: sharpe_ratio)",
     )
-    parser.add_argument(
-        '--timeframes',
-        default='5min,15min,30min,1hour,day',
-        help='Comma-separated timeframes to test'
-    )
-    parser.add_argument(
-        '--days', type=int, default=750,
-        help='Days of historical data (default: 750)'
-    )
-    parser.add_argument(
-        '--metric', default='sharpe_ratio',
-        choices=['sharpe_ratio', 'total_return', 'win_rate'],
-        help='Ranking metric (default: sharpe_ratio)'
-    )
-    parser.add_argument(
-        '--save', action='store_true',
-        help='Save to config/strategy_routing.json'
-    )
-    parser.add_argument(
-        '--dry-run', action='store_true',
-        help='Preview symbols without running optimization'
-    )
-    parser.add_argument(
-        '--output',
-        help='Custom output path for config file'
-    )
+    parser.add_argument("--save", action="store_true", help="Save to config/strategy_routing.json")
+    parser.add_argument("--dry-run", action="store_true", help="Preview symbols without running optimization")
+    parser.add_argument("--output", help="Custom output path for config file")
 
     args = parser.parse_args()
 
@@ -112,27 +94,27 @@ Examples:
         if args.strategies:
             print(f"  Strategies: {args.strategies}")
         else:
-            print(f"  Strategies: all available")
+            print("  Strategies: all available")
         return 0
 
     # Confirm if not saving
     if not args.save:
         print("\n⚠️  WARNING: Results will not be saved (use --save to save)")
         response = input("\nContinue? [y/N]: ")
-        if response.lower() not in ('y', 'yes'):
+        if response.lower() not in ("y", "yes"):
             print("Cancelled.")
             return 0
 
     # Parse strategies
     strategies = None
     if args.strategies:
-        strategies = [s.strip() for s in args.strategies.split(',')]
+        strategies = [s.strip() for s in args.strategies.split(",")]
 
     # Parse timeframes
-    timeframes = [tf.strip() for tf in args.timeframes.split(',')]
+    timeframes = [tf.strip() for tf in args.timeframes.split(",")]
 
     print("\n" + "=" * 80)
-    print(f"STARTING OPTIMIZATION")
+    print("STARTING OPTIMIZATION")
     print("=" * 80)
     print(f"Symbols: {len(symbols)}")
     print(f"Timeframes: {timeframes}")
@@ -141,22 +123,15 @@ Examples:
     if strategies:
         print(f"Strategies: {strategies}")
     else:
-        print(f"Strategies: all available")
+        print("Strategies: all available")
     print("=" * 80)
 
     # Create optimizer
-    optimizer = UnifiedOptimizer(
-        symbols=symbols,
-        strategies=strategies,
-        timeframes=timeframes
-    )
+    optimizer = UnifiedOptimizer(symbols=symbols, strategies=strategies, timeframes=timeframes)
 
     # Run optimization
     try:
-        await optimizer.run_optimization(
-            days=args.days,
-            metric=args.metric
-        )
+        await optimizer.run_optimization(days=args.days, metric=args.metric)
 
         # Print summary
         optimizer.print_summary()
@@ -164,9 +139,9 @@ Examples:
         # Save if requested
         if args.save:
             config_path = optimizer.save_config(config_path=args.output)
-            print(f"\n{'='*80}")
+            print(f"\n{'=' * 80}")
             print(f"✅ SAVED TO: {config_path}")
-            print(f"{'='*80}")
+            print(f"{'=' * 80}")
             print("\nOptimization complete! Next steps:")
             print("  1. Review the config file:")
             print(f"     cat {config_path}")
@@ -185,10 +160,11 @@ Examples:
     except Exception as e:
         print(f"\n\n❌ ERROR: {e}")
         import traceback
+
         traceback.print_exc()
         return 1
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     exit_code = asyncio.run(main())
     sys.exit(exit_code)

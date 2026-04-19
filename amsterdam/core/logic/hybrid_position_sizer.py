@@ -31,17 +31,18 @@ Usage:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Any, Optional
+from typing import Any
 
 
 @dataclass
 class HybridSizingResult:
     """Result of hybrid position sizing calculation."""
-    base_multiplier: float      # 0.0 to 1.0
-    confidence: float           # Signal confidence
-    trend: str                  # "bullish", "bearish", "neutral"
-    aligned: bool               # Signal aligned with trend?
-    reason: str                 # Human-readable explanation
+
+    base_multiplier: float  # 0.0 to 1.0
+    confidence: float  # Signal confidence
+    trend: str  # "bullish", "bearish", "neutral"
+    aligned: bool  # Signal aligned with trend?
+    reason: str  # Human-readable explanation
 
 
 class HybridPositionSizer:
@@ -64,20 +65,16 @@ class HybridPositionSizer:
 
     # Position size multipliers
     # Key: (confidence_tier, aligned) -> multiplier
-    MATRIX: Dict[tuple, float] = {
-        ("high", True): 1.0,    # High confidence + with trend = full size
-        ("high", False): 0.5,   # High confidence + against trend = half size
-        ("med", True): 0.6,     # Medium confidence + with trend = 60%
-        ("med", False): 0.25,   # Medium confidence + against trend = 25%
-        ("low", True): 0.3,     # Low confidence + with trend = 30%
-        ("low", False): 0.0,    # Low confidence + against trend = NO TRADE
+    MATRIX: dict[tuple, float] = {
+        ("high", True): 1.0,  # High confidence + with trend = full size
+        ("high", False): 0.5,  # High confidence + against trend = half size
+        ("med", True): 0.6,  # Medium confidence + with trend = 60%
+        ("med", False): 0.25,  # Medium confidence + against trend = 25%
+        ("low", True): 0.3,  # Low confidence + with trend = 30%
+        ("low", False): 0.0,  # Low confidence + against trend = NO TRADE
     }
 
-    def __init__(
-        self,
-        enabled: bool = True,
-        config: Optional[Dict[str, Any]] = None
-    ):
+    def __init__(self, enabled: bool = True, config: dict[str, Any] | None = None):
         """
         Initialize the hybrid position sizer.
 
@@ -92,16 +89,13 @@ class HybridPositionSizer:
         self.config = config or {}
         self.high_threshold = self.config.get("high_confidence_threshold", 0.7)
         self.low_threshold = self.config.get("low_confidence_threshold", 0.5)
-        self.trend_indicators = self.config.get(
-            "trend_indicators",
-            ["RSI", "MACD", "SMA_200"]
-        )
+        self.trend_indicators = self.config.get("trend_indicators", ["RSI", "MACD", "SMA_200"])
 
     def calculate(
         self,
         signal: int,
         confidence: float,
-        daily_context: Optional[Dict[str, Any]] = None,
+        daily_context: dict[str, Any] | None = None,
     ) -> HybridSizingResult:
         """
         Calculate position size multiplier based on confidence and trend.
@@ -121,7 +115,7 @@ class HybridPositionSizer:
                 confidence=confidence,
                 trend="neutral",
                 aligned=True,
-                reason="Hybrid sizing disabled"
+                reason="Hybrid sizing disabled",
             )
 
         # Determine daily trend from indicators
@@ -164,7 +158,7 @@ class HybridPositionSizer:
         else:
             return "low"
 
-    def _get_trend(self, daily_context: Optional[Dict[str, Any]]) -> str:
+    def _get_trend(self, daily_context: dict[str, Any] | None) -> str:
         """
         Determine daily trend from indicators.
 
@@ -188,7 +182,7 @@ class HybridPositionSizer:
         bearish = 0
 
         # RSI indicator
-        rsi = daily_context.get('RSI')
+        rsi = daily_context.get("RSI")
         if rsi is not None:
             if rsi > 50:
                 bullish += 1
@@ -196,8 +190,8 @@ class HybridPositionSizer:
                 bearish += 1
 
         # MACD vs Signal
-        macd = daily_context.get('MACD')
-        macd_signal = daily_context.get('MACD_Signal')
+        macd = daily_context.get("MACD")
+        macd_signal = daily_context.get("MACD_Signal")
         if macd is not None and macd_signal is not None:
             if macd > macd_signal:
                 bullish += 1
@@ -205,8 +199,8 @@ class HybridPositionSizer:
                 bearish += 1
 
         # Price vs SMA_200
-        close = daily_context.get('Close')
-        sma_200 = daily_context.get('SMA_200')
+        close = daily_context.get("Close")
+        sma_200 = daily_context.get("SMA_200")
         if close is not None and sma_200 is not None:
             if close > sma_200:
                 bullish += 1
@@ -247,14 +241,7 @@ class HybridPositionSizer:
             return True
         return False
 
-    def _build_reason(
-        self,
-        tier: str,
-        confidence: float,
-        aligned: bool,
-        trend: str,
-        multiplier: float
-    ) -> str:
+    def _build_reason(self, tier: str, confidence: float, aligned: bool, trend: str, multiplier: float) -> str:
         """
         Build human-readable explanation for sizing decision.
 
@@ -278,7 +265,7 @@ class HybridPositionSizer:
         self,
         signal: int,
         confidence: float,
-        daily_context: Optional[Dict[str, Any]] = None,
+        daily_context: dict[str, Any] | None = None,
     ) -> bool:
         """
         Quick check if a trade should be taken (multiplier > 0).
@@ -296,7 +283,7 @@ class HybridPositionSizer:
         result = self.calculate(signal, confidence, daily_context)
         return result.base_multiplier > 0.0
 
-    def get_daily_trend(self, daily_context: Optional[Dict[str, Any]]) -> str:
+    def get_daily_trend(self, daily_context: dict[str, Any] | None) -> str:
         """
         Public method to get daily trend.
 

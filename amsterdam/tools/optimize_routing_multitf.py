@@ -16,12 +16,12 @@ Usage:
     python tools/optimize_routing_multitf.py --dry-run
 """
 
-import sys
-import json
 import argparse
-from pathlib import Path
+import json
+import sys
 from collections import Counter
-from typing import Dict, List, Any, Optional
+from pathlib import Path
+from typing import Any
 
 # Ensure project root is in path
 ROOT = Path(__file__).resolve().parents[1]
@@ -29,28 +29,20 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from dotenv import load_dotenv
+
 load_dotenv(ROOT / ".env")
 
+from core.backtest.regime_backtest import REGIME_TYPES, RegimeBacktester
 from core.unified_data_pipeline import UnifiedDataPipeline
-from core.backtest.regime_backtest import RegimeBacktester, REGIME_TYPES
 
-
-DEFAULT_STRATEGIES = [
-    "sma", "ema", "macd", "rsi", "bollinger",
-    "momentum", "meanreversion", "stochastic"
-]
+DEFAULT_STRATEGIES = ["sma", "ema", "macd", "rsi", "bollinger", "momentum", "meanreversion", "stochastic"]
 
 DEFAULT_TIMEFRAMES = ["5min", "15min", "30min"]
 
 # Strategy categories for hybrid sizing decision
-TREND_FOLLOWING_STRATEGIES = {
-    "sma", "ema", "macd", "momentum", "adx",
-    "ichimoku", "psar", "donchian", "breakout"
-}
+TREND_FOLLOWING_STRATEGIES = {"sma", "ema", "macd", "momentum", "adx", "ichimoku", "psar", "donchian", "breakout"}
 
-MEAN_REVERSION_STRATEGIES = {
-    "rsi", "bollinger", "stochastic", "meanreversion", "vwap"
-}
+MEAN_REVERSION_STRATEGIES = {"rsi", "bollinger", "stochastic", "meanreversion", "vwap"}
 
 
 def should_use_hybrid(strategy: str) -> bool:
@@ -81,7 +73,7 @@ def determine_hybrid_config(routing: dict) -> dict:
             if isinstance(regime_data, str):
                 strategy = regime_data
             elif isinstance(regime_data, dict):
-                strategy = regime_data.get('strategy', '')
+                strategy = regime_data.get("strategy", "")
             else:
                 continue
 
@@ -105,12 +97,12 @@ def determine_hybrid_config(routing: dict) -> dict:
 def optimize_symbol_with_timeframes(
     symbol: str,
     pipeline: UnifiedDataPipeline,
-    strategies: List[str],
-    timeframes: List[str],
+    strategies: list[str],
+    timeframes: list[str],
     days: int,
     metric: str,
     verbose: bool = True,
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """
     Optimize a symbol across multiple timeframes.
 
@@ -118,13 +110,13 @@ def optimize_symbol_with_timeframes(
     Returns optimal configuration with timeframe per regime.
     """
     if verbose:
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"  Optimizing {symbol}")
         print(f"  Timeframes: {', '.join(timeframes)}")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
 
     # Results storage: timeframe -> regime -> strategy -> metrics
-    all_results: Dict[str, Dict[str, Dict[str, Any]]] = {}
+    all_results: dict[str, dict[str, dict[str, Any]]] = {}
 
     # Test each timeframe
     for timeframe in timeframes:
@@ -137,7 +129,7 @@ def optimize_symbol_with_timeframes(
 
             if data is None or data.empty:
                 if verbose:
-                    print(f"    ✗ No data available")
+                    print("    ✗ No data available")
                 continue
 
             # Limit to recent days
@@ -161,12 +153,12 @@ def optimize_symbol_with_timeframes(
 
                 for strategy_name, strategy_result in result.strategy_results[regime].items():
                     all_results[timeframe][regime][strategy_name] = {
-                        'sharpe_ratio': strategy_result.sharpe_ratio,
-                        'total_return': strategy_result.total_return,
-                        'win_rate': strategy_result.win_rate,
-                        'num_trades': strategy_result.num_trades,
-                        'max_drawdown': strategy_result.max_drawdown,
-                        'profit_factor': strategy_result.profit_factor,
+                        "sharpe_ratio": strategy_result.sharpe_ratio,
+                        "total_return": strategy_result.total_return,
+                        "win_rate": strategy_result.win_rate,
+                        "num_trades": strategy_result.num_trades,
+                        "max_drawdown": strategy_result.max_drawdown,
+                        "profit_factor": strategy_result.profit_factor,
                     }
 
             if verbose:
@@ -197,31 +189,26 @@ def optimize_symbol_with_timeframes(
                 # Get metric value
                 metric_value = metrics.get(metric, 0)
 
-                candidates.append({
-                    'timeframe': timeframe,
-                    'strategy': strategy,
-                    'metric_value': metric_value,
-                    'metrics': metrics
-                })
+                candidates.append(
+                    {"timeframe": timeframe, "strategy": strategy, "metric_value": metric_value, "metrics": metrics}
+                )
 
         if not candidates:
             continue
 
         # Find best combination
-        best = max(candidates, key=lambda x: x['metric_value'])
+        best = max(candidates, key=lambda x: x["metric_value"])
 
-        best_config[regime] = {
-            'strategy': best['strategy'],
-            'timeframe': best['timeframe']
-        }
+        best_config[regime] = {"strategy": best["strategy"], "timeframe": best["timeframe"]}
 
         if verbose:
-            print(f"  {regime:<18}: {best['strategy']:<15} @ {best['timeframe']:<6} "
-                  f"({metric}={best['metric_value']:.2f})")
+            print(
+                f"  {regime:<18}: {best['strategy']:<15} @ {best['timeframe']:<6} ({metric}={best['metric_value']:.2f})"
+            )
 
     # Add default (use normal regime as default)
-    if 'normal' in best_config:
-        best_config['default'] = best_config['normal'].copy()
+    if "normal" in best_config:
+        best_config["default"] = best_config["normal"].copy()
 
     return {symbol: best_config} if best_config else None
 
@@ -247,12 +234,14 @@ Examples:
     )
 
     parser.add_argument(
-        "-s", "--symbols",
+        "-s",
+        "--symbols",
         default=None,
         help="Comma-separated symbols (default: all available)",
     )
     parser.add_argument(
-        "-d", "--days",
+        "-d",
+        "--days",
         type=int,
         default=750,
         help="Days of historical data (default: 750 = ~2 years)",
@@ -268,7 +257,8 @@ Examples:
         help="Comma-separated strategies to test",
     )
     parser.add_argument(
-        "-m", "--metric",
+        "-m",
+        "--metric",
         default="sharpe_ratio",
         choices=["sharpe_ratio", "total_return", "win_rate"],
         help="Metric for ranking (default: sharpe_ratio)",
@@ -279,7 +269,8 @@ Examples:
         help="Don't save config (just show results)",
     )
     parser.add_argument(
-        "-o", "--output",
+        "-o",
+        "--output",
         default=None,
         help="Output file (default: config/strategy_routing.json)",
     )
@@ -302,7 +293,7 @@ Examples:
         if not symbols:
             routing_path = ROOT / "config" / "strategy_routing.json"
             if routing_path.exists():
-                with open(routing_path, "r") as f:
+                with open(routing_path) as f:
                     existing_routing = json.load(f)
                 symbols = [s for s in existing_routing.keys() if s != "default"]
                 if symbols:
@@ -343,11 +334,7 @@ Examples:
         import asyncio
 
         async def fetch():
-            await pipeline.update_symbols(
-                symbols=symbols,
-                timeframes=timeframes,
-                days=args.days
-            )
+            await pipeline.update_symbols(symbols=symbols, timeframes=timeframes, days=args.days)
 
         asyncio.run(fetch())
         print("✓ Data fetching complete")
@@ -384,27 +371,18 @@ Examples:
 
             for symbol_config in all_results.values():
                 if regime in symbol_config:
-                    regime_configs.append((
-                        symbol_config[regime]['strategy'],
-                        symbol_config[regime]['timeframe']
-                    ))
+                    regime_configs.append((symbol_config[regime]["strategy"], symbol_config[regime]["timeframe"]))
 
             if regime_configs:
                 # Most common (strategy, timeframe) combination
                 most_common = Counter(regime_configs).most_common(1)[0][0]
-                default_config[regime] = {
-                    'strategy': most_common[0],
-                    'timeframe': most_common[1]
-                }
+                default_config[regime] = {"strategy": most_common[0], "timeframe": most_common[1]}
 
         # Overall default
-        if 'normal' in default_config:
-            default_config['default'] = default_config['normal'].copy()
+        if "normal" in default_config:
+            default_config["default"] = default_config["normal"].copy()
         else:
-            default_config['default'] = {
-                'strategy': 'momentum',
-                'timeframe': timeframes[0]
-            }
+            default_config["default"] = {"strategy": "momentum", "timeframe": timeframes[0]}
 
         combined_routing["default"] = default_config
     else:
@@ -441,9 +419,9 @@ Examples:
                 return f"{regime_data.get('strategy', '?'):<10}@{regime_data.get('timeframe', '?')}"
             return str(regime_data)
 
-        low_vol = format_regime(config.get('low_volatility', '?'))
-        normal = format_regime(config.get('normal', '?'))
-        high_vol = format_regime(config.get('high_volatility', '?'))
+        low_vol = format_regime(config.get("low_volatility", "?"))
+        normal = format_regime(config.get("normal", "?"))
+        high_vol = format_regime(config.get("high_volatility", "?"))
         use_hyb = "YES" if hybrid_config.get(symbol, {}).get("enabled", False) else "NO"
 
         print(f"{symbol:<8} {low_vol:<20} {normal:<20} {high_vol:<20} {use_hyb:<8}")

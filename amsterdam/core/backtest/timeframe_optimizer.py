@@ -27,24 +27,22 @@ from __future__ import annotations
 
 import asyncio
 import json
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Any
-from datetime import datetime, timedelta
-from dataclasses import dataclass, asdict
-import pandas as pd
+from typing import Any
 
-from loggers.logger import Logger
 from core.unified_data_pipeline import UnifiedDataPipeline
-from core.backtest.regime_backtest import calculate_atr, classify_regime
+from loggers.logger import Logger
 
 
 @dataclass
 class BacktestResult:
     """Results from a single backtest run."""
+
     symbol: str
     strategy: str
     timeframe: str
-    regime: Optional[str] = None
+    regime: str | None = None
 
     # Performance metrics
     total_return: float = 0.0
@@ -66,12 +64,7 @@ class BacktestResult:
     def __post_init__(self):
         """Calculate composite score for ranking."""
         # Weighted score: Sharpe (40%) + Return (30%) + Win Rate (20%) + Calmar (10%)
-        self.score = (
-            self.sharpe_ratio * 0.4 +
-            self.total_return * 0.3 +
-            self.win_rate * 0.2 +
-            self.calmar_ratio * 0.1
-        )
+        self.score = self.sharpe_ratio * 0.4 + self.total_return * 0.3 + self.win_rate * 0.2 + self.calmar_ratio * 0.1
 
 
 class TimeframeOptimizer:
@@ -84,11 +77,11 @@ class TimeframeOptimizer:
 
     def __init__(
         self,
-        symbols: List[str],
-        timeframes: List[str],
-        strategies: List[str],
-        regimes: Optional[List[str]] = None,
-        data_pipeline: Optional[UnifiedDataPipeline] = None
+        symbols: list[str],
+        timeframes: list[str],
+        strategies: list[str],
+        regimes: list[str] | None = None,
+        data_pipeline: UnifiedDataPipeline | None = None,
     ):
         """
         Initialize optimizer.
@@ -103,19 +96,14 @@ class TimeframeOptimizer:
         self.symbols = symbols
         self.timeframes = timeframes
         self.strategies = strategies
-        self.regimes = regimes or ['overall']
+        self.regimes = regimes or ["overall"]
 
         self.pipeline = data_pipeline or UnifiedDataPipeline()
 
-        self.logger = Logger(
-            "timeframe_optimizer.log",
-            "TimeframeOptimizer",
-            propagate=True,
-            level=10
-        ).get_logger()
+        self.logger = Logger("timeframe_optimizer.log", "TimeframeOptimizer", propagate=True, level=10).get_logger()
 
         # Results storage
-        self.results: List[BacktestResult] = []
+        self.results: list[BacktestResult] = []
 
         self.logger.info(
             f"TimeframeOptimizer initialized: {len(symbols)} symbols × "
@@ -123,11 +111,8 @@ class TimeframeOptimizer:
         )
 
     async def run_optimization(
-        self,
-        days: int = 750,
-        min_bars: int = 100,
-        regime_aware: bool = True
-    ) -> List[BacktestResult]:
+        self, days: int = 750, min_bars: int = 100, regime_aware: bool = True
+    ) -> list[BacktestResult]:
         """
         Run optimization across all combinations.
 
@@ -159,15 +144,10 @@ class TimeframeOptimizer:
             for timeframe in self.timeframes:
                 for strategy in self.strategies:
                     completed += 1
-                    self.logger.info(
-                        f"[{completed}/{total_tests}] Testing {symbol} / "
-                        f"{strategy} / {timeframe}"
-                    )
+                    self.logger.info(f"[{completed}/{total_tests}] Testing {symbol} / {strategy} / {timeframe}")
 
                     try:
-                        result = await self._run_backtest(
-                            symbol, timeframe, strategy, min_bars
-                        )
+                        result = await self._run_backtest(symbol, timeframe, strategy, min_bars)
 
                         if result:
                             self.results.append(result)
@@ -177,12 +157,10 @@ class TimeframeOptimizer:
                                 f"Score: {result.score:.2f}"
                             )
                         else:
-                            self.logger.warning(f"  ✗ Insufficient data")
+                            self.logger.warning("  ✗ Insufficient data")
 
                     except Exception as e:
-                        self.logger.exception(
-                            f"  ✗ Error: {e}"
-                        )
+                        self.logger.exception(f"  ✗ Error: {e}")
 
         self.logger.info("=" * 80)
         self.logger.info(f"Optimization complete: {len(self.results)} results")
@@ -217,21 +195,11 @@ class TimeframeOptimizer:
             # Fetch missing data
             for tf, symbols in timeframes_to_fetch.items():
                 self.logger.info(f"Fetching {tf} data for {len(symbols)} symbols...")
-                await self.pipeline.update_symbols(
-                    symbols=symbols,
-                    timeframes=[tf],
-                    days=days
-                )
+                await self.pipeline.update_symbols(symbols=symbols, timeframes=[tf], days=days)
         else:
             self.logger.info("All required data already available")
 
-    async def _run_backtest(
-        self,
-        symbol: str,
-        timeframe: str,
-        strategy: str,
-        min_bars: int
-    ) -> Optional[BacktestResult]:
+    async def _run_backtest(self, symbol: str, timeframe: str, strategy: str, min_bars: int) -> BacktestResult | None:
         """
         Run backtest for a single combination.
 
@@ -258,11 +226,11 @@ class TimeframeOptimizer:
                 strategy_name=strategy,
                 data=bars,
                 config={
-                    'initial_capital': 10000,
-                    'position_sizing': 'volatility_scaled',
-                    'stop_loss_atr': 2.0,
-                    'take_profit_atr': 3.0,
-                }
+                    "initial_capital": 10000,
+                    "position_sizing": "volatility_scaled",
+                    "stop_loss_atr": 2.0,
+                    "take_profit_atr": 3.0,
+                },
             )
 
             metrics = runner.run()
@@ -272,17 +240,17 @@ class TimeframeOptimizer:
                 symbol=symbol,
                 strategy=strategy,
                 timeframe=timeframe,
-                total_return=metrics.get('total_return', 0.0),
-                sharpe_ratio=metrics.get('sharpe_ratio', 0.0),
-                sortino_ratio=metrics.get('sortino_ratio', 0.0),
-                max_drawdown=metrics.get('max_drawdown', 0.0),
-                win_rate=metrics.get('win_rate', 0.0),
-                profit_factor=metrics.get('profit_factor', 0.0),
-                num_trades=metrics.get('num_trades', 0),
-                avg_win=metrics.get('avg_win', 0.0),
-                avg_loss=metrics.get('avg_loss', 0.0),
-                calmar_ratio=metrics.get('calmar_ratio', 0.0),
-                bars_tested=len(bars)
+                total_return=metrics.get("total_return", 0.0),
+                sharpe_ratio=metrics.get("sharpe_ratio", 0.0),
+                sortino_ratio=metrics.get("sortino_ratio", 0.0),
+                max_drawdown=metrics.get("max_drawdown", 0.0),
+                win_rate=metrics.get("win_rate", 0.0),
+                profit_factor=metrics.get("profit_factor", 0.0),
+                num_trades=metrics.get("num_trades", 0),
+                avg_win=metrics.get("avg_win", 0.0),
+                avg_loss=metrics.get("avg_loss", 0.0),
+                calmar_ratio=metrics.get("calmar_ratio", 0.0),
+                bars_tested=len(bars),
             )
 
             return result
@@ -291,12 +259,7 @@ class TimeframeOptimizer:
             self.logger.exception(f"Backtest failed: {e}")
             return None
 
-    def find_best_timeframe(
-        self,
-        symbol: str,
-        strategy: str,
-        regime: Optional[str] = None
-    ) -> Optional[str]:
+    def find_best_timeframe(self, symbol: str, strategy: str, regime: str | None = None) -> str | None:
         """
         Find best timeframe for a symbol/strategy combination.
 
@@ -309,10 +272,7 @@ class TimeframeOptimizer:
             Best timeframe string or None
         """
         # Filter results for this combination
-        filtered = [
-            r for r in self.results
-            if r.symbol == symbol and r.strategy == strategy
-        ]
+        filtered = [r for r in self.results if r.symbol == symbol and r.strategy == strategy]
 
         if not filtered:
             return None
@@ -324,10 +284,8 @@ class TimeframeOptimizer:
         return filtered[0].timeframe
 
     def generate_routing_config(
-        self,
-        results: Optional[List[BacktestResult]] = None,
-        min_sharpe: float = 0.5
-    ) -> Dict[str, Any]:
+        self, results: list[BacktestResult] | None = None, min_sharpe: float = 0.5
+    ) -> dict[str, Any]:
         """
         Generate optimal routing config from backtest results.
 
@@ -370,43 +328,37 @@ class TimeframeOptimizer:
             # - Low volatility → LONG timeframes (avoid noise/whipsaws)
 
             # High volatility: Best strategy with SHORTER timeframe (fast reaction)
-            high_vol_candidates = [r for r in symbol_results if r.timeframe in ['5min', '15min']]
+            high_vol_candidates = [r for r in symbol_results if r.timeframe in ["5min", "15min"]]
             if high_vol_candidates:
                 best_high_vol = high_vol_candidates[0]
-                config[symbol]['high_volatility'] = {
-                    'strategy': best_high_vol.strategy,
-                    'timeframe': best_high_vol.timeframe
+                config[symbol]["high_volatility"] = {
+                    "strategy": best_high_vol.strategy,
+                    "timeframe": best_high_vol.timeframe,
                 }
 
             # Normal: Best overall strategy (medium timeframes)
-            normal_candidates = [r for r in symbol_results if r.timeframe in ['15min', '30min']]
+            normal_candidates = [r for r in symbol_results if r.timeframe in ["15min", "30min"]]
             if not normal_candidates:
                 normal_candidates = symbol_results  # Fallback to any
 
             if normal_candidates and normal_candidates[0].sharpe_ratio >= min_sharpe:
                 best_normal = normal_candidates[0]
-                config[symbol]['normal'] = {
-                    'strategy': best_normal.strategy,
-                    'timeframe': best_normal.timeframe
-                }
+                config[symbol]["normal"] = {"strategy": best_normal.strategy, "timeframe": best_normal.timeframe}
 
                 # Use as default too
-                config[symbol]['default'] = {
-                    'strategy': best_normal.strategy,
-                    'timeframe': best_normal.timeframe
-                }
+                config[symbol]["default"] = {"strategy": best_normal.strategy, "timeframe": best_normal.timeframe}
 
             # Low volatility: Best strategy with LONGER timeframe (avoid whipsaws)
-            low_vol_candidates = [r for r in symbol_results if r.timeframe in ['30min', '1hour']]
+            low_vol_candidates = [r for r in symbol_results if r.timeframe in ["30min", "1hour"]]
             if low_vol_candidates:
                 best_low_vol = low_vol_candidates[0]
-                config[symbol]['low_volatility'] = {
-                    'strategy': best_low_vol.strategy,
-                    'timeframe': best_low_vol.timeframe
+                config[symbol]["low_volatility"] = {
+                    "strategy": best_low_vol.strategy,
+                    "timeframe": best_low_vol.timeframe,
                 }
 
             # Add use_hybrid flag (could be optimized separately)
-            config[symbol]['use_hybrid'] = False
+            config[symbol]["use_hybrid"] = False
 
             self.logger.info(
                 f"{symbol}: high_vol={config[symbol].get('high_volatility', {}).get('timeframe', 'N/A')} (fast), "
@@ -415,17 +367,11 @@ class TimeframeOptimizer:
             )
 
         # Add global default
-        config['default'] = {
-            'default': {
-                'strategy': 'sma',
-                'timeframe': '15min'
-            },
-            'use_hybrid': False
-        }
+        config["default"] = {"default": {"strategy": "sma", "timeframe": "15min"}, "use_hybrid": False}
 
         return config
 
-    def save_config(self, config: Dict[str, Any], path: str):
+    def save_config(self, config: dict[str, Any], path: str):
         """
         Save routing config to JSON file.
 
@@ -436,7 +382,7 @@ class TimeframeOptimizer:
         path_obj = Path(path)
         path_obj.parent.mkdir(parents=True, exist_ok=True)
 
-        with open(path_obj, 'w') as f:
+        with open(path_obj, "w") as f:
             json.dump(config, f, indent=2)
 
         self.logger.info(f"Saved optimal config to {path}")
@@ -453,7 +399,7 @@ class TimeframeOptimizer:
 
         results_dict = [asdict(r) for r in self.results]
 
-        with open(path_obj, 'w') as f:
+        with open(path_obj, "w") as f:
             json.dump(results_dict, f, indent=2)
 
         self.logger.info(f"Saved detailed results to {path}")
@@ -494,12 +440,13 @@ class TimeframeOptimizer:
 # CLI INTERFACE
 # ============================================================================
 
+
 async def main():
     """Command-line interface for timeframe optimization."""
     import argparse
 
     parser = argparse.ArgumentParser(
-        description='Optimize timeframes for trading strategies',
+        description="Optimize timeframes for trading strategies",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -511,45 +458,22 @@ Examples:
 
   # Full optimization
   python -m core.backtest.timeframe_optimizer --symbols AAPL TSLA --timeframes 5min 15min 30min 1hour --strategies rsi sma meanreversion
-        """
+        """,
     )
 
+    parser.add_argument("--symbols", nargs="+", default=["AAPL", "TSLA", "MSFT"], help="Symbols to optimize")
+    parser.add_argument("--timeframes", nargs="+", default=["5min", "15min", "30min"], help="Timeframes to test")
     parser.add_argument(
-        '--symbols', nargs='+',
-        default=['AAPL', 'TSLA', 'MSFT'],
-        help='Symbols to optimize'
+        "--strategies", nargs="+", default=["rsi", "sma", "meanreversion", "bollinger"], help="Strategies to test"
     )
-    parser.add_argument(
-        '--timeframes', nargs='+',
-        default=['5min', '15min', '30min'],
-        help='Timeframes to test'
-    )
-    parser.add_argument(
-        '--strategies', nargs='+',
-        default=['rsi', 'sma', 'meanreversion', 'bollinger'],
-        help='Strategies to test'
-    )
-    parser.add_argument(
-        '--days', type=int, default=750,
-        help='Days of historical data'
-    )
-    parser.add_argument(
-        '--output', default='config/strategy_routing_optimized.json',
-        help='Output config file'
-    )
-    parser.add_argument(
-        '--results', default='results/optimization_results.json',
-        help='Detailed results file'
-    )
+    parser.add_argument("--days", type=int, default=750, help="Days of historical data")
+    parser.add_argument("--output", default="config/strategy_routing_optimized.json", help="Output config file")
+    parser.add_argument("--results", default="results/optimization_results.json", help="Detailed results file")
 
     args = parser.parse_args()
 
     # Create optimizer
-    optimizer = TimeframeOptimizer(
-        symbols=args.symbols,
-        timeframes=args.timeframes,
-        strategies=args.strategies
-    )
+    optimizer = TimeframeOptimizer(symbols=args.symbols, timeframes=args.timeframes, strategies=args.strategies)
 
     # Run optimization
     results = await optimizer.run_optimization(days=args.days)
@@ -574,5 +498,5 @@ Examples:
     print("=" * 80)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     asyncio.run(main())

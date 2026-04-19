@@ -15,7 +15,6 @@ Usage:
     return strategy
 """
 
-from typing import Optional
 from core.logic.sharpe_filter import SharpeFilter
 
 
@@ -39,12 +38,7 @@ class PositionAwareSharpeFilter:
         """
         self.sharpe_filter = SharpeFilter(min_sharpe=min_sharpe)
 
-    def should_trade(
-        self,
-        symbol: str,
-        regime: str,
-        is_in_position: bool = False
-    ) -> bool:
+    def should_trade(self, symbol: str, regime: str, is_in_position: bool = False) -> bool:
         """
         Check if trading should be allowed.
 
@@ -67,7 +61,7 @@ class PositionAwareSharpeFilter:
         # Block new entries if Sharpe too low
         return self.sharpe_filter.should_trade(symbol, regime)
 
-    def get_sharpe(self, symbol: str, regime: str) -> Optional[float]:
+    def get_sharpe(self, symbol: str, regime: str) -> float | None:
         """Get Sharpe ratio."""
         return self.sharpe_filter.get_sharpe(symbol, regime)
 

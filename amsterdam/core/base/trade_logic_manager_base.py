@@ -18,13 +18,12 @@ DEPRECATED NAMES (backwards compatibility):
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
-from typing import Optional, Dict, Any, Tuple, TYPE_CHECKING
-from datetime import datetime, timedelta, timezone
 import logging
+from abc import ABC, abstractmethod
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING, Any
 
 from core.enums import OrderSide
-from core.tracing import trace
 
 if TYPE_CHECKING:
     from core.contracts.types import SignalContext
@@ -77,7 +76,7 @@ class TradeApprover(ABC):
         else:
             logger.info(f"Trade blocked: {reason}")
     """
-    
+
     def __init__(self, **kwargs):
         """
         Initialize trade logic manager.
@@ -92,26 +91,26 @@ class TradeApprover(ABC):
                 - min_signal_strength: Minimum signal confidence
         """
         self.params = dict(kwargs)
-        self.cooldown_seconds = kwargs.get('cooldown_seconds', 300)  # 5 min default
-        self.cooldown_bars = kwargs.get('cooldown_bars', 5)  # 5 bars default
-        self.cooldown_mode = kwargs.get('cooldown_mode', 'time')  # 'time', 'bars', or 'both'
-        self.max_positions = kwargs.get('max_positions', 10)
-        self.allow_after_hours = kwargs.get('allow_after_hours', False)
+        self.cooldown_seconds = kwargs.get("cooldown_seconds", 300)  # 5 min default
+        self.cooldown_bars = kwargs.get("cooldown_bars", 5)  # 5 bars default
+        self.cooldown_mode = kwargs.get("cooldown_mode", "time")  # 'time', 'bars', or 'both'
+        self.max_positions = kwargs.get("max_positions", 10)
+        self.allow_after_hours = kwargs.get("allow_after_hours", False)
 
         # Track bars since last trade per symbol (for bar-based cooldown)
-        self._bars_since_trade: Dict[str, int] = {}
-    
+        self._bars_since_trade: dict[str, int] = {}
+
     # ========================================================================
     # ABSTRACT METHODS - CORE LOGIC
     # ========================================================================
-    
+
     @abstractmethod
     def should_trade(
         self,
-        context: "SignalContext",
-        state: "SymbolState",
+        context: SignalContext,
+        state: SymbolState,
         account_positions: int = 0,
-    ) -> Tuple[bool, Optional[str]]:
+    ) -> tuple[bool, str | None]:
         """
         Determine if trade should be executed.
 
@@ -152,73 +151,56 @@ class TradeApprover(ABC):
                 logger.info(f"Trade blocked: {reason}")
         """
         pass
-    
+
     @abstractmethod
-    def can_enter_position(
-        self,
-        symbol: str,
-        state: Any,
-        side: OrderSide,
-        **kwargs
-    ) -> Tuple[bool, Optional[str]]:
+    def can_enter_position(self, symbol: str, state: Any, side: OrderSide, **kwargs) -> tuple[bool, str | None]:
         """
         Check if new position can be opened.
-        
+
         Validates entry conditions like:
         - Not already in position
         - Position limit not exceeded
         - Cooldown period elapsed
         - Market conditions suitable
-        
+
         Args:
             symbol: Trading symbol
             state: Symbol state
             side: Order side (BUY or SELL)
             **kwargs: Additional context
-            
+
         Returns:
             (can_enter, reason) tuple
         """
         pass
-    
+
     @abstractmethod
-    def can_exit_position(
-        self,
-        symbol: str,
-        state: Any,
-        side: OrderSide,
-        **kwargs
-    ) -> Tuple[bool, Optional[str]]:
+    def can_exit_position(self, symbol: str, state: Any, side: OrderSide, **kwargs) -> tuple[bool, str | None]:
         """
         Check if position can be closed.
-        
+
         Validates exit conditions like:
         - Actually in position
         - Exit side matches position (sell long, buy short)
         - Minimum hold time elapsed
         - Exit conditions met
-        
+
         Args:
             symbol: Trading symbol
             state: Symbol state
             side: Order side (BUY to close short, SELL to close long)
             **kwargs: Additional context
-            
+
         Returns:
             (can_exit, reason) tuple
         """
         pass
-    
+
     # ========================================================================
     # OPTIONAL METHODS - SPECIFIC CHECKS
     # ========================================================================
-    
-    def check_cooldown(
-        self,
-        symbol: str,
-        state: Any,
-        current_time: Optional[datetime] = None
-    ) -> Tuple[bool, Optional[str]]:
+
+    def check_cooldown(self, symbol: str, state: Any, current_time: datetime | None = None) -> tuple[bool, str | None]:
         """
         Check if cooldown period has elapsed (supports time, bars, or both modes).
 
@@ -231,15 +213,15 @@ class TradeApprover(ABC):
             (is_allowed, reason) tuple
         """
         # Bar-based cooldown check
-        if self.cooldown_mode in ('bars', 'both'):
+        if self.cooldown_mode in ("bars", "both"):
             bars_elapsed = self._bars_since_trade.get(symbol, self.cooldown_bars + 1)
             if bars_elapsed < self.cooldown_bars:
                 remaining = self.cooldown_bars - bars_elapsed
                 return False, f"Cooldown active ({remaining} bars remaining)"
 
         # Time-based cooldown check
-        if self.cooldown_mode in ('time', 'both'):
-            if hasattr(state, 'last_trade_time') and state.last_trade_time is not None:
+        if self.cooldown_mode in ("time", "both"):
+            if hasattr(state, "last_trade_time") and state.last_trade_time is not None:
                 current_time = current_time or datetime.now(timezone.utc)
                 time_since_last = (current_time - state.last_trade_time).total_seconds()
 
@@ -268,7 +250,7 @@ class TradeApprover(ABC):
         """
         self._bars_since_trade[symbol] = 0
 
-    def reset_bar_cooldown(self, symbol: Optional[str] = None) -> None:
+    def reset_bar_cooldown(self, symbol: str | None = None) -> None:
         """
         Reset bar cooldown counter.
 
@@ -279,157 +261,139 @@ class TradeApprover(ABC):
             self._bars_since_trade.clear()
         elif symbol in self._bars_since_trade:
             del self._bars_since_trade[symbol]
-    
-    def check_position_limit(
-        self,
-        current_positions: int,
-        max_positions: Optional[int] = None
-    ) -> Tuple[bool, Optional[str]]:
+
+    def check_position_limit(self, current_positions: int, max_positions: int | None = None) -> tuple[bool, str | None]:
         """
         Check if position limit allows new position.
-        
+
         Args:
             current_positions: Number of current positions
             max_positions: Maximum allowed (uses default if None)
-            
+
         Returns:
             (is_allowed, reason) tuple
         """
         max_pos = max_positions or self.max_positions
-        
+
         if current_positions >= max_pos:
             return False, f"Position limit reached ({current_positions}/{max_pos})"
-        
+
         return True, None
-    
-    def check_market_hours(
-        self,
-        market_open: bool,
-        allow_after_hours: Optional[bool] = None
-    ) -> Tuple[bool, Optional[str]]:
+
+    def check_market_hours(self, market_open: bool, allow_after_hours: bool | None = None) -> tuple[bool, str | None]:
         """
         Check if trading allowed based on market hours.
-        
+
         Args:
             market_open: Whether market is currently open
             allow_after_hours: Override default setting
-            
+
         Returns:
             (is_allowed, reason) tuple
         """
         allow = allow_after_hours if allow_after_hours is not None else self.allow_after_hours
-        
+
         if not market_open and not allow:
             return False, "Market closed (after-hours trading disabled)"
-        
+
         return True, None
-    
+
     def check_signal_strength(
-        self,
-        signal: int,
-        signal_strength: Optional[float] = None,
-        min_strength: float = 0.0
-    ) -> Tuple[bool, Optional[str]]:
+        self, signal: int, signal_strength: float | None = None, min_strength: float = 0.0
+    ) -> tuple[bool, str | None]:
         """
         Check if signal is strong enough.
-        
+
         Args:
             signal: Raw signal value
             signal_strength: Signal confidence (0-1)
             min_strength: Minimum required strength
-            
+
         Returns:
             (is_allowed, reason) tuple
         """
         if signal == 0:
             return False, "Hold signal (no action)"
-        
+
         if signal_strength is not None and signal_strength < min_strength:
             return False, f"Signal too weak ({signal_strength:.2f} < {min_strength:.2f})"
-        
+
         return True, None
-    
-    def check_regime_compatibility(
-        self,
-        regime: str,
-        allowed_regimes: Optional[list] = None
-    ) -> Tuple[bool, Optional[str]]:
+
+    def check_regime_compatibility(self, regime: str, allowed_regimes: list | None = None) -> tuple[bool, str | None]:
         """
         Check if current regime is suitable for trading.
-        
+
         Args:
             regime: Current market regime
             allowed_regimes: List of regimes to trade in (None = all)
-            
+
         Returns:
             (is_allowed, reason) tuple
         """
         if allowed_regimes is None:
             return True, None
-        
+
         if regime not in allowed_regimes:
             return False, f"Regime '{regime}' not in allowed list"
-        
+
         return True, None
-    
+
     # ========================================================================
     # HELPER METHODS
     # ========================================================================
-    
+
     def is_in_position(self, state: Any) -> bool:
         """Check if currently in position."""
-        if not hasattr(state, 'current_position'):
+        if not hasattr(state, "current_position"):
             return False
         return state.current_position != 0
-    
+
     def is_long(self, state: Any) -> bool:
         """Check if currently long."""
-        if not hasattr(state, 'current_position'):
+        if not hasattr(state, "current_position"):
             return False
         return state.current_position > 0
-    
+
     def is_short(self, state: Any) -> bool:
         """Check if currently short."""
-        if not hasattr(state, 'current_position'):
+        if not hasattr(state, "current_position"):
             return False
         return state.current_position < 0
-    
+
     def is_flat(self, state: Any) -> bool:
         """Check if currently flat (no position)."""
         return not self.is_in_position(state)
-    
-    def get_position_side(self, state: Any) -> Optional[str]:
+
+    def get_position_side(self, state: Any) -> str | None:
         """Get current position side."""
         if self.is_long(state):
             return "long"
         elif self.is_short(state):
             return "short"
         return None
-    
+
     # ========================================================================
     # UTILITY METHODS
     # ========================================================================
-    
+
     def get_param(self, key: str, default: Any = None) -> Any:
         """Get configuration parameter."""
         return self.params.get(key, default)
-    
+
     def set_param(self, key: str, value: Any) -> None:
         """Set configuration parameter."""
         self.params[key] = value
-    
+
     def __repr__(self) -> str:
-        return (
-            f"{self.__class__.__name__}("
-            f"cooldown={self.cooldown_seconds}s, "
-            f"max_positions={self.max_positions})"
-        )
+        return f"{self.__class__.__name__}(cooldown={self.cooldown_seconds}s, max_positions={self.max_positions})"
 
 
 # ============================================================================
 # DEPRECATED ALIAS - For backwards compatibility only
 # ============================================================================
 import warnings
+
 
 class TradeLogicManagerBase(TradeApprover):
     """
@@ -440,11 +404,9 @@ class TradeLogicManagerBase(TradeApprover):
 
     def __init__(self, *args, **kwargs):
         warnings.warn(
-            "TradeLogicManagerBase is deprecated. Use TradeApprover instead.",
-            DeprecationWarning,
-            stacklevel=2
+            "TradeLogicManagerBase is deprecated. Use TradeApprover instead.", DeprecationWarning, stacklevel=2
         )
         super().__init__(*args, **kwargs)
 
 
-__all__ = ['TradeApprover', 'TradeLogicManagerBase']
+__all__ = ["TradeApprover", "TradeLogicManagerBase"]

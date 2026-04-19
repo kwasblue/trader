@@ -5,10 +5,10 @@ Provides grid search and other optimization methods for strategy parameters.
 """
 
 import logging
-from typing import Dict, List, Any
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from itertools import product
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -16,21 +16,22 @@ logger = logging.getLogger(__name__)
 @dataclass
 class OptimizationResult:
     """Result of parameter optimization."""
-    best_params: Dict[str, Any]
+
+    best_params: dict[str, Any]
     best_metric: float
-    all_results: List[Dict[str, Any]]
+    all_results: list[dict[str, Any]]
     metric_name: str
 
 
 def grid_search(
     data,
     strategy_name: str,
-    param_grid: Dict[str, List[Any]],
-    metric: str = 'sharpe_ratio',
+    param_grid: dict[str, list[Any]],
+    metric: str = "sharpe_ratio",
     initial_capital: float = 10000,
     transaction_cost: float = 0.001,
     n_jobs: int = 1,
-    verbose: bool = True
+    verbose: bool = True,
 ) -> OptimizationResult:
     """
     Grid search over strategy parameters.
@@ -73,33 +74,29 @@ def grid_search(
             metrics = bt.get_metrics(portfolio_df)
 
             # Calculate the target metric
-            if metric == 'sharpe_ratio':
-                metric_value = metrics.get('sharpe_ratio', -999)
-            elif metric == 'total_return':
-                metric_value = metrics.get('total_return', -999)
-            elif metric == 'sortino_ratio':
-                metric_value = metrics.get('sortino_ratio', -999)
-            elif metric == 'max_drawdown':
+            if metric == "sharpe_ratio":
+                metric_value = metrics.get("sharpe_ratio", -999)
+            elif metric == "total_return":
+                metric_value = metrics.get("total_return", -999)
+            elif metric == "sortino_ratio":
+                metric_value = metrics.get("sortino_ratio", -999)
+            elif metric == "max_drawdown":
                 # Negate so higher is better
-                metric_value = -metrics.get('max_drawdown', 1)
+                metric_value = -metrics.get("max_drawdown", 1)
             else:
                 metric_value = metrics.get(metric, -999)
 
             # Convert metrics to performance dict format for compatibility
             performance = {
-                'Sharpe Ratio': metrics.get('sharpe_ratio', 0),
-                'Sortino Ratio': metrics.get('sortino_ratio', 0),
-                'Max Drawdown': metrics.get('max_drawdown', 0),
-                'Total Return': metrics.get('total_return', 0),
-                'Win Rate': metrics.get('win_rate', 0),
-                'Profit Factor': metrics.get('profit_factor', 0)
+                "Sharpe Ratio": metrics.get("sharpe_ratio", 0),
+                "Sortino Ratio": metrics.get("sortino_ratio", 0),
+                "Max Drawdown": metrics.get("max_drawdown", 0),
+                "Total Return": metrics.get("total_return", 0),
+                "Win Rate": metrics.get("win_rate", 0),
+                "Profit Factor": metrics.get("profit_factor", 0),
             }
 
-            return {
-                'params': params,
-                'metric_value': metric_value,
-                'performance': performance
-            }
+            return {"params": params, "metric_value": metric_value, "performance": performance}
         except Exception as e:
             if verbose:
                 logger.warning(f"Error with params {params}: {e}")
@@ -125,30 +122,27 @@ def grid_search(
         raise ValueError("No valid results from optimization")
 
     # Find best
-    best = max(results, key=lambda x: x['metric_value'])
+    best = max(results, key=lambda x: x["metric_value"])
 
     if verbose:
         logger.info(f"Best {metric}: {best['metric_value']:.4f}")
         logger.info(f"Best params: {best['params']}")
 
     return OptimizationResult(
-        best_params=best['params'],
-        best_metric=best['metric_value'],
-        all_results=results,
-        metric_name=metric
+        best_params=best["params"], best_metric=best["metric_value"], all_results=results, metric_name=metric
     )
 
 
 def random_search(
     data,
     strategy_name: str,
-    param_distributions: Dict[str, Any],
+    param_distributions: dict[str, Any],
     n_iter: int = 100,
-    metric: str = 'sharpe_ratio',
+    metric: str = "sharpe_ratio",
     initial_capital: float = 10000,
     transaction_cost: float = 0.001,
     verbose: bool = True,
-    seed: int = None
+    seed: int = None,
 ) -> OptimizationResult:
     """
     Random search over strategy parameters.
@@ -170,6 +164,7 @@ def random_search(
         OptimizationResult with best params and all results
     """
     import numpy as np
+
     from core.backtest.backtester import VectorizedBacktester
 
     if seed is not None:
@@ -199,11 +194,7 @@ def random_search(
             metrics = bt.get_metrics(portfolio_df)
             metric_value = metrics.get(metric, -999)
 
-            results.append({
-                'params': params,
-                'metric_value': metric_value,
-                'performance': metrics
-            })
+            results.append({"params": params, "metric_value": metric_value, "performance": metrics})
 
             if verbose and (i + 1) % 10 == 0:
                 logger.info(f"  Completed {i + 1}/{n_iter}")
@@ -216,15 +207,12 @@ def random_search(
     if not results:
         raise ValueError("No valid results from optimization")
 
-    best = max(results, key=lambda x: x['metric_value'])
+    best = max(results, key=lambda x: x["metric_value"])
 
     if verbose:
         logger.info(f"Best {metric}: {best['metric_value']:.4f}")
         logger.info(f"Best params: {best['params']}")
 
     return OptimizationResult(
-        best_params=best['params'],
-        best_metric=best['metric_value'],
-        all_results=results,
-        metric_name=metric
+        best_params=best["params"], best_metric=best["metric_value"], all_results=results, metric_name=metric
     )

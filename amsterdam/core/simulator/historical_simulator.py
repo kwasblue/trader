@@ -22,13 +22,13 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import datetime, timezone, UTC
+from datetime import UTC, datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Any
 
-from loggers.logger import Logger
+from core.contracts.events import EVENT_NEW_BAR, EVENT_PRICE_UPDATE
 from core.events.eventhandler import get_event_handler
-from core.contracts.events import EVENT_PRICE_UPDATE, EVENT_NEW_BAR
+from loggers.logger import Logger
 
 
 class HistoricalDataSimulator:
@@ -45,7 +45,7 @@ class HistoricalDataSimulator:
 
     def __init__(
         self,
-        symbols: List[str],
+        symbols: list[str],
         data_path: str = "data/data_storage/proc_data",
         loop_data: bool = True,
         start_index: int = 0,
@@ -68,18 +68,16 @@ class HistoricalDataSimulator:
 
         # Logger
         self.logger = Logger(
-            log_file="historical_simulator.log",
-            logger_name="HistoricalSimulator",
-            propagate=True
+            log_file="historical_simulator.log", logger_name="HistoricalSimulator", propagate=True
         ).get_logger()
 
         # Event bus for price/bar events
         self.bus = get_event_handler()
 
         # Load data for each symbol
-        self.data: Dict[str, List[Dict[str, Any]]] = {}
-        self.indices: Dict[str, int] = {}
-        self.price_state: Dict[str, float] = {}
+        self.data: dict[str, list[dict[str, Any]]] = {}
+        self.indices: dict[str, int] = {}
+        self.price_state: dict[str, float] = {}
 
         for symbol in symbols:
             bars = self._load_symbol_data(symbol)
@@ -88,18 +86,13 @@ class HistoricalDataSimulator:
                 self.indices[symbol] = min(start_index, len(bars) - 1)
                 # Initialize price state from first bar
                 self.price_state[symbol] = bars[self.indices[symbol]]["Close"]
-                self.logger.info(
-                    f"Loaded {len(bars)} bars for {symbol}, "
-                    f"starting at index {self.indices[symbol]}"
-                )
+                self.logger.info(f"Loaded {len(bars)} bars for {symbol}, starting at index {self.indices[symbol]}")
             else:
                 self.logger.warning(f"No data found for {symbol}")
 
-        self.logger.info(
-            f"HistoricalDataSimulator initialized: {len(self.data)} symbols loaded"
-        )
+        self.logger.info(f"HistoricalDataSimulator initialized: {len(self.data)} symbols loaded")
 
-    def _load_symbol_data(self, symbol: str) -> List[Dict[str, Any]]:
+    def _load_symbol_data(self, symbol: str) -> list[dict[str, Any]]:
         """
         Load historical bars for a symbol from JSON file.
 
@@ -132,10 +125,10 @@ class HistoricalDataSimulator:
         self.logger.warning(f"No data file found for {symbol}")
         return []
 
-    def _parse_json_file(self, filepath: Path, symbol: str) -> List[Dict[str, Any]]:
+    def _parse_json_file(self, filepath: Path, symbol: str) -> list[dict[str, Any]]:
         """Parse a JSON data file and return list of bars."""
         try:
-            with open(filepath, "r") as f:
+            with open(filepath) as f:
                 data = json.load(f)
 
             # Handle different JSON structures
@@ -162,15 +155,17 @@ class HistoricalDataSimulator:
                     # Epoch milliseconds
                     ts = datetime.fromtimestamp(ts / 1000, tz=timezone.utc).isoformat()
 
-                normalized.append({
-                    "Date": ts,
-                    "Open": float(bar.get("Open") or bar.get("open", 0)),
-                    "High": float(bar.get("High") or bar.get("high", 0)),
-                    "Low": float(bar.get("Low") or bar.get("low", 0)),
-                    "Close": float(bar.get("Close") or bar.get("close", 0)),
-                    "Volume": int(bar.get("Volume") or bar.get("volume", 0)),
-                    "symbol": symbol,
-                })
+                normalized.append(
+                    {
+                        "Date": ts,
+                        "Open": float(bar.get("Open") or bar.get("open", 0)),
+                        "High": float(bar.get("High") or bar.get("high", 0)),
+                        "Low": float(bar.get("Low") or bar.get("low", 0)),
+                        "Close": float(bar.get("Close") or bar.get("close", 0)),
+                        "Volume": int(bar.get("Volume") or bar.get("volume", 0)),
+                        "symbol": symbol,
+                    }
+                )
 
             return normalized
 
@@ -178,7 +173,7 @@ class HistoricalDataSimulator:
             self.logger.error(f"Failed to load {filepath}: {e}")
             return []
 
-    def generate_bar(self, symbol: str) -> Dict[str, Any]:
+    def generate_bar(self, symbol: str) -> dict[str, Any]:
         """
         Get the next historical bar for a symbol.
 
@@ -262,7 +257,7 @@ class HistoricalDataSimulator:
 
         return bar
 
-    def update_all(self) -> Dict[str, Dict[str, Any]]:
+    def update_all(self) -> dict[str, dict[str, Any]]:
         """
         Generate new bars for all tracked symbols.
 

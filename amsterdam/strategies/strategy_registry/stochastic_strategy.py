@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from typing import Optional, List
+
 from core.base.base_strategy import BaseStrategy
 
 
@@ -17,27 +17,29 @@ class StochasticStrategy(BaseStrategy):
         data["%D"] = data["%K"].rolling(window=d_window).mean()
 
         data["Signal"] = np.where(
-            (data["%K"].shift(1) < data["%D"].shift(1)) & (data["%K"] > data["%D"]) & (data["%K"] < oversold), 1,
+            (data["%K"].shift(1) < data["%D"].shift(1)) & (data["%K"] > data["%D"]) & (data["%K"] < oversold),
+            1,
             np.where(
-                (data["%K"].shift(1) > data["%D"].shift(1)) & (data["%K"] < data["%D"]) & (data["%K"] > overbought), -1,
-                0
-            )
+                (data["%K"].shift(1) > data["%D"].shift(1)) & (data["%K"] < data["%D"]) & (data["%K"] > overbought),
+                -1,
+                0,
+            ),
         )
 
         if data.empty or "Signal" not in data.columns:
             return 0
         return int(data["Signal"].iloc[-1])
 
-    def generate_signals_vectorized(self, data: pd.DataFrame) -> Optional[List[int]]:
+    def generate_signals_vectorized(self, data: pd.DataFrame) -> list[int] | None:
         """Vectorized Stochastic Oscillator signal generation for fast backtesting."""
         k_window = self.params.get("k_window", 14)
         d_window = self.params.get("d_window", 3)
         oversold = self.params.get("oversold", 20)
         overbought = self.params.get("overbought", 80)
 
-        high = data['High'] if 'High' in data.columns else data['high']
-        low = data['Low'] if 'Low' in data.columns else data['low']
-        close = data['Close'] if 'Close' in data.columns else data['close']
+        high = data["High"] if "High" in data.columns else data["high"]
+        low = data["Low"] if "Low" in data.columns else data["low"]
+        close = data["Close"] if "Close" in data.columns else data["close"]
 
         # Calculate %K and %D
         lowest_low = low.rolling(window=k_window).min()
@@ -51,11 +53,9 @@ class StochasticStrategy(BaseStrategy):
 
         # Generate signals: buy on bullish crossover in oversold, sell on bearish crossover in overbought
         signals = np.where(
-            (k_prev < d_prev) & (k > d) & (k < oversold), 1,
-            np.where(
-                (k_prev > d_prev) & (k < d) & (k > overbought), -1,
-                0
-            )
+            (k_prev < d_prev) & (k > d) & (k < oversold),
+            1,
+            np.where((k_prev > d_prev) & (k < d) & (k > overbought), -1, 0),
         )
 
         # No signal during warmup

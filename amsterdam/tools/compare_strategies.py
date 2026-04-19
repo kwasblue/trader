@@ -21,9 +21,9 @@ Usage:
     python tools/compare_strategies.py --list
 """
 
-import sys
 import argparse
 import asyncio
+import sys
 from pathlib import Path
 
 # Ensure project root is in path
@@ -70,7 +70,6 @@ def list_strategies_cmd():
     from core.backtest.unified_backtest_runner import (
         list_available_strategies,
         list_categories,
-        get_strategy_category,
     )
 
     strategies = list_available_strategies()
@@ -179,10 +178,7 @@ def compare_categories_cmd(args):
         avg_sharpe = cat_data.get("avg_sharpe", 0)
         best_strat = cat_data.get("best_strategy", "-")
 
-        print(
-            f"{cat.replace('_', ' ').title():<20} {avg_return:>+11.1%} "
-            f"{avg_sharpe:>12.2f} {best_strat:>18}"
-        )
+        print(f"{cat.replace('_', ' ').title():<20} {avg_return:>+11.1%} {avg_sharpe:>12.2f} {best_strat:>18}")
 
     print("-" * 70)
     print(f"\nBest Category: {result.best_category.replace('_', ' ').title()}")
@@ -222,12 +218,10 @@ def compare_hybrid_cmd(args):
     from core.backtest.unified_backtest_runner import get_strategy_category
 
     tf_improved = sum(
-        1 for s in strategies
-        if get_strategy_category(s) == "trend_following" and result.improvements.get(s, 0) > 0
+        1 for s in strategies if get_strategy_category(s) == "trend_following" and result.improvements.get(s, 0) > 0
     )
     mr_improved = sum(
-        1 for s in strategies
-        if get_strategy_category(s) == "mean_reversion" and result.improvements.get(s, 0) > 0
+        1 for s in strategies if get_strategy_category(s) == "mean_reversion" and result.improvements.get(s, 0) > 0
     )
 
     print("INSIGHT:")
@@ -326,7 +320,8 @@ Examples:
         help="Stock symbol to analyze (e.g., AAPL)",
     )
     parser.add_argument(
-        "-s", "--strategies",
+        "-s",
+        "--strategies",
         default="sma,ema,macd,rsi",
         help="Comma-separated strategies to compare (default: sma,ema,macd,rsi)",
     )
@@ -351,13 +346,15 @@ Examples:
         help="Run full comparison (strategies, categories, hybrid)",
     )
     parser.add_argument(
-        "-d", "--days",
+        "-d",
+        "--days",
         type=int,
         default=365,
         help="Days of historical data (default: 365)",
     )
     parser.add_argument(
-        "-m", "--metric",
+        "-m",
+        "--metric",
         default="sharpe_ratio",
         choices=["sharpe_ratio", "total_return", "sortino_ratio", "win_rate"],
         help="Metric for ranking (default: sharpe_ratio)",
@@ -375,7 +372,8 @@ Examples:
         help="Transaction cost fraction (default: 0.001)",
     )
     parser.add_argument(
-        "-o", "--output",
+        "-o",
+        "--output",
         default=None,
         help="Output file for report (.md or .json)",
     )
@@ -411,6 +409,7 @@ Examples:
     except Exception as e:
         print(f"\nError: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
 

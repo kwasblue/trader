@@ -1,8 +1,10 @@
 # tools/replay_from_trades.py
 from __future__ import annotations
+
 import csv
-from datetime import datetime
 from collections import defaultdict
+from datetime import datetime
+
 
 def replay_equity_from_trades(
     csv_path: str,
@@ -17,13 +19,13 @@ def replay_equity_from_trades(
     """
     # state
     cash = float(starting_cash)
-    pos_qty = defaultdict(int)          # symbol -> signed qty (long>0, short<0)
-    pos_avg = defaultdict(float)        # symbol -> avg price
-    last_px = defaultdict(float)        # symbol -> last seen trade price
+    pos_qty = defaultdict(int)  # symbol -> signed qty (long>0, short<0)
+    pos_avg = defaultdict(float)  # symbol -> avg price
+    last_px = defaultdict(float)  # symbol -> last seen trade price
 
     # load rows (sorted by time)
     rows = []
-    with open(csv_path, newline='') as f:
+    with open(csv_path, newline="") as f:
         r = csv.DictReader(f)
         for row in r:
             # parse what we need
@@ -96,10 +98,10 @@ def replay_equity_from_trades(
     # action mapping
     # enter_long = buy, exit_long = sell; enter_short = sell, exit_short = buy
     for row in rows:
-        sym   = row["symbol"]
-        act   = row["action"]
-        px    = row["price"]
-        qty   = row["quantity"]
+        sym = row["symbol"]
+        act = row["action"]
+        px = row["price"]
+        qty = row["quantity"]
         notes = (row.get("notes") or "").strip().lower()
 
         if act == "enter_long":
@@ -112,7 +114,11 @@ def replay_equity_from_trades(
             buy(sym, qty, px)
         elif act == "partial_exit":
             # use notes to decide side if present, else infer from position sign
-            side = "long" if "long" in notes else ("short" if "short" in notes else ("long" if pos_qty[sym] > 0 else "short"))
+            side = (
+                "long"
+                if "long" in notes
+                else ("short" if "short" in notes else ("long" if pos_qty[sym] > 0 else "short"))
+            )
             if side == "long":
                 sell(sym, qty, px)
             else:
@@ -125,8 +131,11 @@ def replay_equity_from_trades(
     final_eq = mtm_equity()
     snapshot = {
         "cash": cash,
-        "positions": {s: {"qty": pos_qty[s], "avg": pos_avg[s], "last": (final_prices or last_px)[s]}
-                      for s in pos_qty.keys() if pos_qty[s] != 0},
-        "equity": final_eq
+        "positions": {
+            s: {"qty": pos_qty[s], "avg": pos_avg[s], "last": (final_prices or last_px)[s]}
+            for s in pos_qty.keys()
+            if pos_qty[s] != 0
+        },
+        "equity": final_eq,
     }
     return snapshot

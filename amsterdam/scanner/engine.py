@@ -1,22 +1,23 @@
 """
 ScannerEngine — orchestrates the stock screening pipeline.
 """
+
 from __future__ import annotations
 
 import logging
 import time
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any
 
+from scanner.criteria.base import BaseCriterion, create_criterion
+from scanner.providers.base import BaseDataProvider, ProviderData
+from scanner.providers.fundamental import FundamentalProvider
+from scanner.providers.insider import InsiderProvider
+from scanner.providers.sentiment import SentimentProvider
+from scanner.providers.technical import TechnicalProvider
 from scanner.result import ScanReport, SymbolScore
 from scanner.scorer import SymbolScorer
 from scanner.universe import get_universe
-from scanner.providers.base import BaseDataProvider, ProviderData
-from scanner.providers.technical import TechnicalProvider
-from scanner.providers.fundamental import FundamentalProvider
-from scanner.providers.sentiment import SentimentProvider
-from scanner.providers.insider import InsiderProvider
-from scanner.criteria.base import BaseCriterion, create_criterion
 
 logger = logging.getLogger(__name__)
 
@@ -24,12 +25,12 @@ logger = logging.getLogger(__name__)
 class ScannerEngine:
     """Central orchestrator for the stock scanning pipeline."""
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: dict[str, Any] | None = None):
         self._config = config or {}
-        self._providers: Dict[str, BaseDataProvider] = {}
-        self._criteria: List[BaseCriterion] = []
-        self._scorer: Optional[SymbolScorer] = None
-        self._last_report: Optional[ScanReport] = None
+        self._providers: dict[str, BaseDataProvider] = {}
+        self._criteria: list[BaseCriterion] = []
+        self._scorer: SymbolScorer | None = None
+        self._last_report: ScanReport | None = None
 
         self._init_providers()
         self._init_criteria()
@@ -68,12 +69,15 @@ class ScannerEngine:
         import scanner.criteria.momentum  # noqa: F401
         import scanner.criteria.trend  # noqa: F401
 
-        criteria_configs = self._config.get("criteria", [
-            {"name": "momentum_breakout", "params": {}},
-            {"name": "relative_strength", "params": {"benchmark": "SPY", "period": 20}},
-            {"name": "volume_surge", "params": {"surge_threshold": 1.5}},
-            {"name": "trend_following", "params": {}},
-        ])
+        criteria_configs = self._config.get(
+            "criteria",
+            [
+                {"name": "momentum_breakout", "params": {}},
+                {"name": "relative_strength", "params": {"benchmark": "SPY", "period": 20}},
+                {"name": "volume_surge", "params": {"surge_threshold": 1.5}},
+                {"name": "trend_following", "params": {}},
+            ],
+        )
 
         for cfg in criteria_configs:
             try:
@@ -86,12 +90,15 @@ class ScannerEngine:
 
     def _init_scorer(self):
         scoring_cfg = self._config.get("scoring", {})
-        weights = scoring_cfg.get("weights", {
-            "momentum_breakout": 0.30,
-            "relative_strength": 0.25,
-            "volume_surge": 0.20,
-            "trend_following": 0.25,
-        })
+        weights = scoring_cfg.get(
+            "weights",
+            {
+                "momentum_breakout": 0.30,
+                "relative_strength": 0.25,
+                "volume_surge": 0.20,
+                "trend_following": 0.25,
+            },
+        )
         self._scorer = SymbolScorer(
             weights=weights,
             trade_threshold=scoring_cfg.get("trade_threshold", 0.7),
@@ -102,7 +109,7 @@ class ScannerEngine:
 
     def scan(
         self,
-        symbols: Optional[List[str]] = None,
+        symbols: list[str] | None = None,
         update_lists: bool = False,
     ) -> ScanReport:
         """
@@ -116,7 +123,7 @@ class ScannerEngine:
             ScanReport with ranked results
         """
         start_time = time.time()
-        errors: List[str] = []
+        errors: list[str] = []
 
         # 1. Resolve universe
         if symbols is not None:
@@ -136,7 +143,7 @@ class ScannerEngine:
         all_fetch_symbols = list(set(universe) | extra_symbols)
 
         # 3. Fetch data from all providers
-        provider_data: Dict[str, Dict[str, ProviderData]] = {}
+        provider_data: dict[str, dict[str, ProviderData]] = {}
         for name, provider in self._providers.items():
             try:
                 batch = provider.fetch_batch(all_fetch_symbols)
@@ -146,7 +153,7 @@ class ScannerEngine:
                 logger.error(f"Provider {name} failed: {e}")
 
         # 4. Score each symbol
-        scores: List[SymbolScore] = []
+        scores: list[SymbolScore] = []
         for symbol in universe:
             try:
                 symbol_score = self._score_symbol(symbol, provider_data)
@@ -179,11 +186,11 @@ class ScannerEngine:
     def _score_symbol(
         self,
         symbol: str,
-        provider_data: Dict[str, Dict[str, ProviderData]],
+        provider_data: dict[str, dict[str, ProviderData]],
     ) -> SymbolScore:
         """Run all criteria against a symbol and compute composite score."""
         # Build per-symbol provider data view
-        symbol_providers: Dict[str, ProviderData] = {}
+        symbol_providers: dict[str, ProviderData] = {}
         for provider_name, batch in provider_data.items():
             if symbol in batch:
                 symbol_providers[provider_name] = batch[symbol]
@@ -196,7 +203,7 @@ class ScannerEngine:
                         symbol_providers[f"{provider_name}_{bench}"] = batch[bench]
 
         # Evaluate each criterion
-        criteria_scores: Dict[str, float] = {}
+        criteria_scores: dict[str, float] = {}
         for criterion in self._criteria:
             try:
                 score = criterion.evaluate(symbol, symbol_providers)
@@ -206,7 +213,7 @@ class ScannerEngine:
                 criteria_scores[criterion.name] = 0.0
 
         # Extract metadata for display
-        metadata: Dict[str, Any] = {"symbol": symbol}
+        metadata: dict[str, Any] = {"symbol": symbol}
         tech_data = symbol_providers.get("technical")
         if tech_data:
             for key in ["close", "RSI", "volume", "avg_volume_20", "MACD", "SMA", "ATR"]:
@@ -215,12 +222,12 @@ class ScannerEngine:
 
         return self._scorer.score(symbol, criteria_scores, metadata)
 
-    def _apply_to_lists(self, report: ScanReport) -> Dict[str, str]:
+    def _apply_to_lists(self, report: ScanReport) -> dict[str, str]:
         """Apply scan results to SymbolListManager. Additive only — never removes."""
         from core.symbol_list_manager import get_list_manager
 
         manager = get_list_manager()
-        actions: Dict[str, str] = {}
+        actions: dict[str, str] = {}
 
         for result in report.results:
             if result.recommendation == "skip":
@@ -247,10 +254,10 @@ class ScannerEngine:
 
     def optimize_strategies(
         self,
-        symbols: Optional[List[str]] = None,
+        symbols: list[str] | None = None,
         days: int = 365,
         metric: str = "sharpe_ratio",
-    ) -> Dict[str, Dict[str, str]]:
+    ) -> dict[str, dict[str, str]]:
         """
         Run regime-aware backtest optimization on symbols to find best strategies.
 
@@ -279,7 +286,7 @@ class ScannerEngine:
 
         # Reuse the technical provider's data if available, otherwise load fresh
         tech_provider = self._providers.get("technical")
-        results: Dict[str, Dict[str, str]] = {}
+        results: dict[str, dict[str, str]] = {}
 
         for symbol in symbols:
             try:
@@ -295,6 +302,7 @@ class ScannerEngine:
                 if data is None or data.empty:
                     try:
                         from core.unified_data_pipeline import UnifiedDataPipeline
+
                         pipeline = UnifiedDataPipeline()
                         data = pipeline.load_symbol_data(symbol, timeframe="day")
                     except Exception:
@@ -324,16 +332,16 @@ class ScannerEngine:
         return results
 
     @property
-    def last_report(self) -> Optional[ScanReport]:
+    def last_report(self) -> ScanReport | None:
         return self._last_report
 
 
 # --- Singleton ---
 
-_scanner_engine: Optional[ScannerEngine] = None
+_scanner_engine: ScannerEngine | None = None
 
 
-def get_scanner(config: Optional[Dict[str, Any]] = None) -> ScannerEngine:
+def get_scanner(config: dict[str, Any] | None = None) -> ScannerEngine:
     """Get or create the singleton ScannerEngine."""
     global _scanner_engine
     if _scanner_engine is None or config is not None:

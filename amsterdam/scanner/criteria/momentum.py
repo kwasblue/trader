@@ -1,20 +1,20 @@
 """
 Momentum-based screening criteria.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Dict
 
 import pandas as pd
 
-from scanner.providers.base import ProviderData
 from scanner.criteria.base import BaseCriterion, register_criterion
+from scanner.providers.base import ProviderData
 
 logger = logging.getLogger(__name__)
 
 
-def _safe_get(data: Dict, key: str, default=None):
+def _safe_get(data: dict, key: str, default=None):
     val = data.get(key, default)
     if val is not None and pd.notna(val):
         return float(val)
@@ -40,7 +40,7 @@ class MomentumBreakout(BaseCriterion):
     def name(self) -> str:
         return "momentum_breakout"
 
-    def evaluate(self, symbol: str, provider_data: Dict[str, ProviderData]) -> float:
+    def evaluate(self, symbol: str, provider_data: dict[str, ProviderData]) -> float:
         tech = provider_data.get("technical")
         if not tech or tech.dataframe is None or tech.dataframe.empty:
             return 0.0
@@ -97,7 +97,7 @@ class RelativeStrength(BaseCriterion):
     def name(self) -> str:
         return "relative_strength"
 
-    def evaluate(self, symbol: str, provider_data: Dict[str, ProviderData]) -> float:
+    def evaluate(self, symbol: str, provider_data: dict[str, ProviderData]) -> float:
         tech = provider_data.get("technical")
         bench_data = provider_data.get(f"technical_{self._benchmark}")
 
@@ -143,7 +143,7 @@ class VolumeSurge(BaseCriterion):
     def name(self) -> str:
         return "volume_surge"
 
-    def evaluate(self, symbol: str, provider_data: Dict[str, ProviderData]) -> float:
+    def evaluate(self, symbol: str, provider_data: dict[str, ProviderData]) -> float:
         tech = provider_data.get("technical")
         if not tech:
             return 0.0
