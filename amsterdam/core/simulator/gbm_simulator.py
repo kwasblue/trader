@@ -1,7 +1,7 @@
 import asyncio
 import math
 import random
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 import numpy as np
 
@@ -127,7 +127,7 @@ class GBMSimulator:
         self.price_state[symbol] = close
 
         bar = {
-            "timestamp": datetime.now(UTC),
+            "timestamp": datetime.now(timezone.utc),
             "symbol": symbol,
             "open": round(open_, 2),
             "high": round(high, 2),

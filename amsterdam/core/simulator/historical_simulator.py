@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import UTC, datetime, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -215,9 +215,9 @@ class HistoricalDataSimulator:
             try:
                 timestamp = datetime.fromisoformat(ts.replace("Z", "+00:00"))
             except ValueError:
-                timestamp = datetime.now(UTC)
+                timestamp = datetime.now(timezone.utc)
         else:
-            timestamp = datetime.now(UTC)
+            timestamp = datetime.now(timezone.utc)
 
         # Build bar in GBMSimulator format
         bar = {
