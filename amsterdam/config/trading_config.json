@@ -219,5 +219,21 @@
       {"name": "volume_surge", "params": {"surge_threshold": 1.5}},
       {"name": "trend_following", "params": {}}
     ]
+  },
+
+  "streaming": {
+    "bar_interval_ms": 60000,
+    "ensemble_enabled": false,
+    "ensemble_strategies": ["sma", "rsi", "macd", "momentum"],
+    "ensemble_mode": "weighted",
+    "ensemble_weights": {
+      "sma": 0.25,
+      "rsi": 0.25,
+      "macd": 0.25,
+      "momentum": 0.25
+    },
+    "ensemble_threshold": 0.6,
+    "max_quotes_per_second": 1000,
+    "quote_buffer_size": 10000
   }
 }

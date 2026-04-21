@@ -172,7 +172,7 @@ def cli():
 
 @cli.command()
 @click.option("--symbols", "-s", default=None, help="Comma-separated symbols (e.g., AAPL,MSFT)")
-@click.option("--broker", "-b", type=click.Choice(["alpaca", "schwab"]), default="alpaca", help="Broker to use")
+@click.option("--broker", "-b", type=click.Choice(["alpaca", "schwab", "hybrid"]), default="alpaca", help="Broker to use (hybrid = Schwab data + Alpaca execution)")
 @click.option("--dry-run", is_flag=True, help="Run without executing real trades")
 @click.option("--daemon", "-d", is_flag=True, default=True, help="Run as background daemon (default: True)")
 @click.option("--foreground", "-f", is_flag=True, help="Run in foreground (not as daemon)")
@@ -184,6 +184,7 @@ def start(symbols, broker, dry_run, daemon, foreground):
         amsterdam start                           # Start as daemon (default)
         amsterdam start -s AAPL,MSFT              # Specific symbols
         amsterdam start --broker schwab           # Use Schwab
+        amsterdam start --broker hybrid           # Schwab data + Alpaca execution
         amsterdam start --dry-run                 # No real trades
         amsterdam start --foreground              # Run in foreground
     """
@@ -364,7 +365,7 @@ def status(positions, lists, show_all):
 
 @cli.command()
 @click.option("--symbols", "-s", default=None, help="Comma-separated symbols")
-@click.option("--broker", "-b", type=click.Choice(["alpaca", "schwab"]), default="alpaca", help="Broker to use")
+@click.option("--broker", "-b", type=click.Choice(["alpaca", "schwab", "hybrid"]), default="alpaca", help="Broker to use (hybrid = Schwab data + Alpaca execution)")
 @click.option("--dry-run", is_flag=True, help="Run without executing real trades")
 @click.pass_context
 def restart(ctx, symbols, broker, dry_run):

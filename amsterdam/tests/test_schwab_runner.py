@@ -178,47 +178,79 @@ class TestCanonicalizeSchwabChartBar:
 class TestBarBucket:
     """Tests for bar bucket ID calculation."""
 
+    def _create_mock_runner(self, bar_interval_ms=60000):
+        """Create a mock runner for testing _bar_bucket."""
+        from unittest.mock import MagicMock
+
+        from core.schwab_runner import SchwabLiveRunner
+
+        # Create instance without __init__
+        runner = object.__new__(SchwabLiveRunner)
+
+        # Mock the config attribute that _bar_bucket uses
+        mock_config = MagicMock()
+        mock_config.streaming.bar_interval_ms = bar_interval_ms
+        runner.config = mock_config
+
+        return runner
+
     def test_bar_bucket_60_second_default(self):
         """Test 60-second bar bucketing."""
-        from core.schwab_runner import SchwabLiveRunner
+        runner = self._create_mock_runner(bar_interval_ms=60000)
 
         # Two timestamps 30 seconds apart should be in same bucket
         ts1 = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
         ts2 = datetime(2024, 1, 1, 12, 0, 30, tzinfo=timezone.utc)
 
-        bucket1 = SchwabLiveRunner._bar_bucket(ts1)
-        bucket2 = SchwabLiveRunner._bar_bucket(ts2)
+        bucket1 = runner._bar_bucket(ts1)
+        bucket2 = runner._bar_bucket(ts2)
 
         assert bucket1 == bucket2
 
     def test_bar_bucket_different_minutes(self):
         """Test that different minutes get different buckets."""
-        from core.schwab_runner import SchwabLiveRunner
+        runner = self._create_mock_runner(bar_interval_ms=60000)
 
         ts1 = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
         ts2 = datetime(2024, 1, 1, 12, 1, 0, tzinfo=timezone.utc)
 
-        bucket1 = SchwabLiveRunner._bar_bucket(ts1)
-        bucket2 = SchwabLiveRunner._bar_bucket(ts2)
+        bucket1 = runner._bar_bucket(ts1)
+        bucket2 = runner._bar_bucket(ts2)
 
         assert bucket1 != bucket2
         assert bucket2 == bucket1 + 1  # Consecutive buckets
 
     def test_bar_bucket_custom_timeframe(self):
         """Test custom timeframe bucketing (e.g., 5-minute bars)."""
-        from core.schwab_runner import SchwabLiveRunner
+        runner = self._create_mock_runner(bar_interval_ms=60000)
 
         ts1 = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
         ts2 = datetime(2024, 1, 1, 12, 4, 59, tzinfo=timezone.utc)
         ts3 = datetime(2024, 1, 1, 12, 5, 0, tzinfo=timezone.utc)
 
-        # 5-minute bars (300 seconds)
-        bucket1 = SchwabLiveRunner._bar_bucket(ts1, timeframe_sec=300)
-        bucket2 = SchwabLiveRunner._bar_bucket(ts2, timeframe_sec=300)
-        bucket3 = SchwabLiveRunner._bar_bucket(ts3, timeframe_sec=300)
+        # 5-minute bars (300 seconds) - use override parameter
+        bucket1 = runner._bar_bucket(ts1, timeframe_sec=300)
+        bucket2 = runner._bar_bucket(ts2, timeframe_sec=300)
+        bucket3 = runner._bar_bucket(ts3, timeframe_sec=300)
 
         assert bucket1 == bucket2  # Same 5-min bucket
         assert bucket2 != bucket3  # Different 5-min buckets
+
+    def test_bar_bucket_configurable_interval(self):
+        """Test that bar interval from config is used."""
+        # Create runner with 500ms (0.5 second) bars
+        runner = self._create_mock_runner(bar_interval_ms=500)
+
+        ts1 = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        ts2 = datetime(2024, 1, 1, 12, 0, 0, 400000, tzinfo=timezone.utc)  # +400ms
+        ts3 = datetime(2024, 1, 1, 12, 0, 0, 600000, tzinfo=timezone.utc)  # +600ms
+
+        bucket1 = runner._bar_bucket(ts1)
+        bucket2 = runner._bar_bucket(ts2)
+        bucket3 = runner._bar_bucket(ts3)
+
+        assert bucket1 == bucket2  # Same 500ms bucket
+        assert bucket1 != bucket3  # Different 500ms bucket
 
 
 class TestBarAggregation:

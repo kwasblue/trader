@@ -1,15 +1,18 @@
+import asyncio
 import json
+import time
+from datetime import datetime, timezone
+from typing import Any, Callable, Dict, Optional
+
 import requests
 import websockets
-from data.streaming.authenticator import Authenticator
-from loggers.logger import Logger
+
 from core.config_loader import get_logs_path
-from data.streaming.schwab_client import SchwabClient
-from core.events.eventhandler import EventHandler, get_event_handler
 from core.contracts.events import EVENT_PRICE_UPDATE
-import asyncio
-from typing import Callable, Dict, Optional, Any
-from datetime import datetime, timezone
+from core.events.eventhandler import EventHandler, get_event_handler
+from data.streaming.authenticator import Authenticator
+from data.streaming.schwab_client import SchwabClient
+from loggers.logger import Logger
 
 
 class SchwabStreamingClient():
@@ -48,6 +51,10 @@ class SchwabStreamingClient():
         # Running state
         self._running = False
         self._symbols: list = []
+
+        # Token refresh task (runs alongside streaming)
+        self._token_refresh_task: asyncio.Task | None = None
+        self._token_refresh_interval: int = 60  # Check every 60 seconds
 
     def set_quote_callback(self, callback: Callable):
         """
@@ -284,15 +291,69 @@ class SchwabStreamingClient():
                 self.streaming_logger.exception(f"Reconnection failed: {e}")
                 continue
 
+    async def _token_refresh_loop(self):
+        """
+        Background task to keep access token fresh.
+
+        Runs alongside the WebSocket stream and periodically checks/renews
+        the access token before it expires (Schwab tokens expire in 30 minutes).
+        """
+        self.streaming_logger.info("Token refresh loop started")
+        while self._running:
+            try:
+                # Use the authenticator's built-in token check and renewal
+                token_data = self.authenticator._read_token_file()
+                if not token_data:
+                    self.streaming_logger.warning("No token file found")
+                    await asyncio.sleep(self._token_refresh_interval)
+                    continue
+
+                # Check and renew access token if expired or close to expiring
+                if self.authenticator._is_access_token_expired(token_data):
+                    self.streaming_logger.info("Access token expired, renewing...")
+                    result = await self.authenticator.renew_access()
+                    if result is True:
+                        self.streaming_logger.info("Access token renewed successfully")
+                    else:
+                        self.streaming_logger.error(f"Token renewal failed: {result}")
+                else:
+                    # Log time until expiration for debugging
+                    access_time = token_data.get("access_time", 0)
+                    expires_in = token_data.get("expires_in", 1800)
+                    remaining = (access_time + expires_in) - time.time()
+                    if remaining < 300:  # Less than 5 minutes
+                        self.streaming_logger.info(f"Token expires in {remaining:.0f}s, renewing proactively...")
+                        result = await self.authenticator.renew_access()
+                        if result is True:
+                            self.streaming_logger.info("Proactive token renewal successful")
+
+                await asyncio.sleep(self._token_refresh_interval)
+
+            except asyncio.CancelledError:
+                self.streaming_logger.info("Token refresh loop cancelled")
+                break
+            except Exception as e:
+                self.streaming_logger.exception(f"Error in token refresh loop: {e}")
+                await asyncio.sleep(self._token_refresh_interval)
+
+        self.streaming_logger.info("Token refresh loop stopped")
+
     async def run(self, symbols):
         """
         Run the streaming client with automatic reconnection.
+
+        Also starts a background token refresh task to keep the access token
+        fresh while streaming.
 
         Args:
             symbols: List of symbols to stream
         """
         self._running = True
         self._symbols = symbols
+
+        # Start token refresh task in background
+        self._token_refresh_task = asyncio.create_task(self._token_refresh_loop())
+        self.streaming_logger.info("Started background token refresh task")
 
         while self._running:
             try:
@@ -306,17 +367,37 @@ class SchwabStreamingClient():
             else:
                 break
 
+        # Stop token refresh task when stream ends
+        if self._token_refresh_task and not self._token_refresh_task.done():
+            self._token_refresh_task.cancel()
+            try:
+                await self._token_refresh_task
+            except asyncio.CancelledError:
+                pass
+
         self.streaming_logger.info("Streaming client stopped")
 
     async def stop(self):
-        """Stop the streaming client."""
+        """Stop the streaming client and token refresh task."""
         self._running = False
+
+        # Cancel token refresh task
+        if self._token_refresh_task and not self._token_refresh_task.done():
+            self._token_refresh_task.cancel()
+            try:
+                await self._token_refresh_task
+            except asyncio.CancelledError:
+                pass
+            self._token_refresh_task = None
+
+        # Close websocket connection
         if self.connection:
             try:
                 await self.connection.close()
             except Exception:
                 pass
-        self.streaming_logger.info("Stop requested")
+
+        self.streaming_logger.info("Stop requested - streaming and token refresh stopped")
 
     def get_quote(self, symbol: str) -> Optional[Dict]:
         """

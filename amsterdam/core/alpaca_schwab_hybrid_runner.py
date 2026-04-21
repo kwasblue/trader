@@ -150,7 +150,10 @@ class AlpacaSchwabHybridRunner(BaseLiveRunner):
 
     async def _start_streaming(self) -> asyncio.Task:
         """Start Schwab data stream."""
-        return asyncio.create_task(self._schwab_stream_broker.start_stream())
+        # start_stream() creates an internal task and returns immediately
+        await self._schwab_stream_broker.start_stream()
+        # Return the actual streaming task so main_loop can monitor it
+        return self._schwab_stream_broker._stream_task
 
     async def _disconnect_broker(self) -> None:
         """Disconnect from both Alpaca and Schwab."""

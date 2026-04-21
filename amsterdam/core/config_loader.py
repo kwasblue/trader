@@ -327,6 +327,36 @@ class HybridSizingConfig:
 
 
 @dataclass
+class StreamingConfig:
+    """Configuration for real-time streaming and bar aggregation."""
+
+    # Bar aggregation interval in milliseconds
+    # Lower = faster signals but more CPU; Higher = slower but more stable
+    bar_interval_ms: int = 60000  # Default: 60 seconds (1 minute bars)
+
+    # Ensemble voting configuration
+    ensemble_enabled: bool = False  # Enable multi-strategy ensemble voting
+    ensemble_strategies: list[str] = field(
+        default_factory=lambda: ["sma", "rsi", "macd", "momentum"]
+    )
+    ensemble_mode: str = "majority"  # "majority", "unanimous", "weighted", "any"
+    ensemble_weights: dict[str, float] = field(
+        default_factory=lambda: {
+            "sma": 0.25,
+            "rsi": 0.25,
+            "macd": 0.25,
+            "momentum": 0.25,
+        }
+    )
+    # Minimum agreement threshold for weighted mode (0.0 to 1.0)
+    ensemble_threshold: float = 0.6
+
+    # Quote processing
+    max_quotes_per_second: int = 1000  # Rate limit for quote processing
+    quote_buffer_size: int = 10000  # Max queued quotes before dropping
+
+
+@dataclass
 class TradingConfig:
     """Master configuration container."""
 
@@ -348,6 +378,7 @@ class TradingConfig:
     ml_training: MLTrainingConfig = field(default_factory=MLTrainingConfig)
     hybrid_sizing: HybridSizingConfig = field(default_factory=HybridSizingConfig)
     scanner: ScannerConfig = field(default_factory=ScannerConfig)
+    streaming: StreamingConfig = field(default_factory=StreamingConfig)
 
     # Raw dict for any custom/unknown fields
     _raw: dict[str, Any] = field(default_factory=dict)
@@ -538,6 +569,7 @@ def load_config(config_path: str | None = None) -> TradingConfig:
             ml_training=_dict_to_dataclass(MLTrainingConfig, raw.get("ml_training")),
             hybrid_sizing=_dict_to_dataclass(HybridSizingConfig, raw.get("hybrid_sizing")),
             scanner=_dict_to_dataclass(ScannerConfig, raw.get("scanner")),
+            streaming=_dict_to_dataclass(StreamingConfig, raw.get("streaming")),
             _raw=raw,
         )
 

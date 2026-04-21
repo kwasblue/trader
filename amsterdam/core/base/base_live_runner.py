@@ -307,6 +307,18 @@ class BaseLiveRunner(ABC):
             self.logger.info(f"Strategy quality filter enabled: min_sharpe={min_sharpe}")
 
         self.router = StrategyRoutingManager(str(ROOT / "config" / "strategy_routing.json"), min_sharpe=min_sharpe)
+
+        # Ensemble voter (optional - uses multiple strategies and combines signals)
+        self.ensemble_voter = None
+        if self.config.streaming.ensemble_enabled:
+            from core.logic.ensemble_voter import create_ensemble_voter_from_config
+            self.ensemble_voter = create_ensemble_voter_from_config(self.config)
+            if self.ensemble_voter:
+                self.logger.info(
+                    f"Ensemble voting enabled: {self.ensemble_voter.mode} mode, "
+                    f"strategies={self.ensemble_voter.strategy_names}"
+                )
+
         self.executor = LiveExecutor(broker=self.broker)
         # Create PositionManager with config values (min_bars_to_hold, swing_mode, etc.)
         self.position_manager = create_position_manager(self.config)
@@ -576,9 +588,20 @@ class BaseLiveRunner(ABC):
 
         self.logger.info(f"EOD close complete: {closed_count} positions closed")
 
-    @staticmethod
-    def _bar_bucket(ts: datetime, timeframe_sec: int = 60) -> int:
-        """Calculate bar bucket ID for deduplication."""
+    def _bar_bucket(self, ts: datetime, timeframe_sec: int | None = None) -> int:
+        """
+        Calculate bar bucket ID for deduplication.
+
+        Args:
+            ts: Timestamp to bucket
+            timeframe_sec: Override timeframe in seconds. If None, uses config.
+
+        Returns:
+            Bar bucket ID (integer)
+        """
+        if timeframe_sec is None:
+            # Use config value (convert ms to seconds)
+            timeframe_sec = self.config.streaming.bar_interval_ms / 1000
         return int(ts.timestamp() // timeframe_sec)
 
     def _df_from_history(self, symbol: str) -> pd.DataFrame:
@@ -782,15 +805,32 @@ class BaseLiveRunner(ABC):
 
         # Strategy & signal - use NumpyBarBuffer for efficient DataFrame conversion
         df = self.np_buffers[symbol].to_dataframe()
-        strategy = self.router.get_strategy(symbol, regime)
-        strategy_name = type(strategy).__name__
-        try:
-            # Use traced wrapper for full execution tracing
-            raw_signal = strategy.generate_signal_traced(df)
-            signal = int(raw_signal if isinstance(raw_signal, (int, float)) else getattr(raw_signal, "signal", 0))
-        except Exception as e:
-            self.logger.exception(f"[{symbol}] Strategy error in {strategy_name}: {e}")
-            signal = 0
+
+        # Use ensemble voting if enabled, otherwise single strategy
+        if self.ensemble_voter:
+            try:
+                vote_result = self.ensemble_voter.vote(df)
+                signal = vote_result.signal
+                strategy_name = f"Ensemble({vote_result.mode})"
+                self.logger.debug(
+                    f"[{symbol}] Ensemble vote: {vote_result.details} "
+                    f"(signals: {vote_result.strategy_signals})"
+                )
+            except Exception as e:
+                self.logger.exception(f"[{symbol}] Ensemble voting error: {e}")
+                signal = 0
+                strategy_name = "Ensemble(error)"
+        else:
+            # Single strategy mode
+            strategy = self.router.get_strategy(symbol, regime)
+            strategy_name = type(strategy).__name__
+            try:
+                # Use traced wrapper for full execution tracing
+                raw_signal = strategy.generate_signal_traced(df)
+                signal = int(raw_signal if isinstance(raw_signal, (int, float)) else getattr(raw_signal, "signal", 0))
+            except Exception as e:
+                self.logger.exception(f"[{symbol}] Strategy error in {strategy_name}: {e}")
+                signal = 0
 
         # Trade gate context
         self.trade_gate.on_new_bar(symbol, bar_id, regime)

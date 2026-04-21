@@ -31,6 +31,7 @@ from core.config_loader import (
     RiskConfig,
     SchwabConfig,
     SimulationConfig,
+    StreamingConfig,
     TradeLogicConfig,
     TradingConfig,
     _dict_to_dataclass,
@@ -143,6 +144,23 @@ class TestDataclasses:
         assert config.post_market_delay_minutes == 5
         assert config.dry_run is False
 
+    def test_streaming_config_defaults(self):
+        """Test StreamingConfig default values."""
+        config = StreamingConfig()
+        assert config.bar_interval_ms == 60000
+        assert config.ensemble_enabled is False
+        assert config.ensemble_strategies == ["sma", "rsi", "macd", "momentum"]
+        assert config.ensemble_mode == "majority"
+        assert config.ensemble_weights == {
+            "sma": 0.25,
+            "rsi": 0.25,
+            "macd": 0.25,
+            "momentum": 0.25,
+        }
+        assert config.ensemble_threshold == 0.6
+        assert config.max_quotes_per_second == 1000
+        assert config.quote_buffer_size == 10000
+
 
 class TestDictToDataclass:
     """Tests for _dict_to_dataclass helper."""
@@ -246,6 +264,11 @@ class TestLoadConfig:
             "gui": {"update_interval_ms": 500},
             "logging": {"console_enabled": False},
             "autotrader": {"dry_run": True},
+            "streaming": {
+                "bar_interval_ms": 500,
+                "ensemble_enabled": True,
+                "ensemble_mode": "weighted",
+            },
         }
         config_file.write_text(json.dumps(config_data))
 
@@ -264,6 +287,9 @@ class TestLoadConfig:
         assert config.gui.update_interval_ms == 500
         assert config.logging.console_enabled is False
         assert config.autotrader.dry_run is True
+        assert config.streaming.bar_interval_ms == 500
+        assert config.streaming.ensemble_enabled is True
+        assert config.streaming.ensemble_mode == "weighted"
 
 
 class TestGetConfig:
