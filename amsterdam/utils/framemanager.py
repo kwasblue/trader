@@ -1,86 +1,166 @@
+"""Thread-safe singleton registry for pandas DataFrames."""
+
+from __future__ import annotations
+
 import threading
+from collections.abc import Iterator, MutableMapping
+from enum import Enum
 
 import pandas as pd
 
 
-class DataFrameManager:
-    _instance = None
-    _lock = threading.Lock()  # Lock for thread safety
+class AddStrategy(str, Enum):
+    """How to handle a key collision when adding a DataFrame."""
 
-    def __new__(cls, *args, **kwargs):
-        # Implementing Singleton pattern
-        with cls._lock:
-            if cls._instance is None:
-                cls._instance = super().__new__(cls, *args, **kwargs)
-                cls._instance.dataframes = {}
+    OVERWRITE = "overwrite"
+    APPEND = "append"
+    IGNORE = "ignore"
+    RAISE = "raise"
+    UNIQUE = "unique"
+
+
+class DataFrameManager(MutableMapping[str, pd.DataFrame]):
+    """
+    Thread-safe in-memory registry of pandas DataFrames keyed by string.
+
+    Implemented as a process-wide singleton: every call to DataFrameManager()
+    returns the same instance with shared state. Supports dict-like access
+    (manager["key"], "key" in manager, len(manager), iteration).
+    """
+
+    _instance: DataFrameManager | None = None
+    _singleton_lock = threading.Lock()
+
+    def __new__(cls) -> DataFrameManager:
+        # Double-checked locking: avoid taking the lock on the hot path
+        # once the instance has been created.
+        if cls._instance is None:
+            with cls._singleton_lock:
+                if cls._instance is None:
+                    instance = super().__new__(cls)
+                    instance._init_state()
+                    cls._instance = instance
         return cls._instance
 
-    def __init__(self):
-        """Initializes only once for the singleton instance"""
-        if not hasattr(self, "_initialized"):  # Prevent re-initialization
-            self._initialized = True
-            self.dataframes = {}
+    def _init_state(self) -> None:
+        """One-time state setup. Called from __new__, never from __init__."""
+        self._dataframes: dict[str, pd.DataFrame] = {}
+        self._lock = threading.RLock()
 
-    def add_dataframe(self, key, dataframe, strategy="overwrite"):
+    # ------------------------------------------------------------------
+    # Core API
+    # ------------------------------------------------------------------
+
+    def add(
+        self,
+        key: str,
+        dataframe: pd.DataFrame,
+        strategy: AddStrategy | str = AddStrategy.OVERWRITE,
+    ) -> str:
         """
-        Add a DataFrame to the manager, handling duplicates based on the chosen strategy.
+        Add a DataFrame, returning the key it was actually stored under.
+
+        The returned key matters for AddStrategy.UNIQUE, which may suffix
+        the key to avoid collisions.
         """
-        with self._lock:
-            if key in self.dataframes:
-                if strategy == "overwrite":
-                    self.dataframes[key] = dataframe
-                elif strategy == "append":
-                    self.dataframes[key] = pd.concat([self.dataframes[key], dataframe], ignore_index=True)
-                elif strategy == "ignore":
-                    pass  # Keep the existing DataFrame
-                elif strategy == "raise":
-                    raise KeyError(f"Key '{key}' already exists in the DataFrameManager.")
-                elif strategy == "unique":
-                    new_key = f"{key}_{len(self.dataframes)}"
-                    self.dataframes[new_key] = dataframe
-                else:
-                    raise ValueError(f"Unknown strategy: {strategy}")
-            else:
-                self.dataframes[key] = dataframe
+        strategy = AddStrategy(strategy)
 
-    def get_dataframe(self, key: str):
-        """Retrieve a DataFrame by its key."""
         with self._lock:
-            if key not in self.dataframes:
+            if key not in self._dataframes:
+                self._dataframes[key] = dataframe
+                return key
+
+            if strategy is AddStrategy.OVERWRITE:
+                self._dataframes[key] = dataframe
+                return key
+            if strategy is AddStrategy.APPEND:
+                self._dataframes[key] = pd.concat(
+                    [self._dataframes[key], dataframe], ignore_index=True
+                )
+                return key
+            if strategy is AddStrategy.IGNORE:
+                return key
+            if strategy is AddStrategy.RAISE:
+                raise KeyError(f"Key '{key}' already exists.")
+            if strategy is AddStrategy.UNIQUE:
+                suffix = 1
+                new_key = f"{key}_{suffix}"
+                while new_key in self._dataframes:
+                    suffix += 1
+                    new_key = f"{key}_{suffix}"
+                self._dataframes[new_key] = dataframe
+                return new_key
+
+            # Unreachable — Enum coercion above would have raised.
+            raise ValueError(f"Unhandled strategy: {strategy}")
+
+    def get(self, key: str, default: pd.DataFrame | None = None) -> pd.DataFrame | None:
+        """Retrieve a DataFrame by key, or return default if missing."""
+        with self._lock:
+            return self._dataframes.get(key, default)
+
+    def describe(self, key: str) -> pd.DataFrame:
+        """Return df.describe() for the stored DataFrame."""
+        with self._lock:
+            if key not in self._dataframes:
                 raise KeyError(f"No DataFrame found with key '{key}'.")
-            return pd.DataFrame.from_dict(self.dataframes[key])
+            return self._dataframes[key].describe()
 
-    def remove_dataframe(self, key: str):
-        """Remove a DataFrame by its key."""
+    def keys(self) -> list[str]:  # type: ignore[override]
+        """Snapshot list of all keys."""
         with self._lock:
-            if key in self.dataframes:
-                del self.dataframes[key]
-            else:
-                raise KeyError(f"No DataFrame found with key '{key}'.")
+            return list(self._dataframes.keys())
 
-    def list_keys(self) -> list:
-        """List all the keys of stored DataFrames."""
+    def clear(self) -> None:
+        """Remove all stored DataFrames."""
         with self._lock:
-            return list(self.dataframes.keys())
+            self._dataframes.clear()
 
-    def clear_all(self):
-        """Remove all DataFrames from the manager."""
-        with self._lock:
-            self.dataframes.clear()
+    # ------------------------------------------------------------------
+    # MutableMapping protocol — gives us dict-like access for free
+    # ------------------------------------------------------------------
 
-    def size(self) -> int:
-        """Get the number of DataFrames currently stored."""
+    def __getitem__(self, key: str) -> pd.DataFrame:
         with self._lock:
-            return len(self.dataframes)
+            if key not in self._dataframes:
+                raise KeyError(key)
+            return self._dataframes[key]
 
-    def has_key(self, key: str) -> bool:
-        """Check if a DataFrame exists for a given key."""
+    def __setitem__(self, key: str, value: pd.DataFrame) -> None:
         with self._lock:
-            return key in self.dataframes
+            self._dataframes[key] = value
 
-    def describe(self, key: str) -> str:
-        """Get a summary of a stored DataFrame."""
+    def __delitem__(self, key: str) -> None:
         with self._lock:
-            if key not in self.dataframes:
-                raise KeyError(f"No DataFrame found with key '{key}'.")
-            return self.dataframes[key].describe()
+            if key not in self._dataframes:
+                raise KeyError(key)
+            del self._dataframes[key]
+
+    def __iter__(self) -> Iterator[str]:
+        # Snapshot to avoid "dict changed size during iteration" under threading.
+        with self._lock:
+            return iter(list(self._dataframes.keys()))
+
+    def __len__(self) -> int:
+        with self._lock:
+            return len(self._dataframes)
+
+    def __contains__(self, key: object) -> bool:
+        with self._lock:
+            return key in self._dataframes
+
+    def __repr__(self) -> str:
+        with self._lock:
+            keys = list(self._dataframes.keys())
+            total_rows = sum(len(df) for df in self._dataframes.values())
+        return f"DataFrameManager(keys={keys}, total_rows={total_rows})"
+
+    # ------------------------------------------------------------------
+    # Test helper — only use in tests.
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def _reset_singleton(cls) -> None:
+        """Drop the singleton instance. Intended for test isolation only."""
+        with cls._singleton_lock:
+            cls._instance = None
